@@ -92,6 +92,15 @@ describe("tenant-scoped query boundary", () => {
     expect(result.blockedCrossTenantUpdate).toEqual([]);
   });
 
+  it("revokes tenant context immediately for a suspended membership", async () => {
+    await adminPool.query("UPDATE memberships SET status = 'SUSPENDED' WHERE user_id = $1", ["user-a"]);
+    await expect(
+      withTenantContext(appDb, "user-a", tenantA, async (tx, context) =>
+        listTenantOutlets(tx, context),
+      ),
+    ).rejects.toBeInstanceOf(TenantContextDeniedError);
+  });
+
   it("rejects a client-supplied tenant candidate without a matching membership", async () => {
     await expect(
       withTenantContext(appDb, "user-a", tenantB, async (tx, context) =>

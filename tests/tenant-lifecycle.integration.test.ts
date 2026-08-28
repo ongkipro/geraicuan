@@ -78,6 +78,10 @@ describe("super-admin tenant lifecycle", () => {
         tenantId: "not-a-uuid",
       }),
     ).rejects.toBeInstanceOf(TenantLifecycleDeniedError);
+    await adminPool.query("UPDATE users SET status = 'SUSPENDED' WHERE id = $1", ["super-user"]);
+    await expect(
+      executeTenantLifecycle(appDb, { userId: "super-user" }, "create", { name: "Denied" }),
+    ).rejects.toBeInstanceOf(TenantLifecycleDeniedError);
 
 
     const audits = await adminPool.query(
@@ -87,6 +91,7 @@ describe("super-admin tenant lifecycle", () => {
       { actor_id: null, action: "TENANT_CREATED", outcome: "DENIED" },
       { actor_id: "tenant-user", action: "TENANT_CREATED", outcome: "DENIED" },
       { actor_id: "super-user", action: "TENANT_SUSPENDED", outcome: "DENIED" },
+      { actor_id: "super-user", action: "TENANT_CREATED", outcome: "DENIED" },
     ]);
   });
 

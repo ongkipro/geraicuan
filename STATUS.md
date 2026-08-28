@@ -23,13 +23,13 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1 and T-2 are complete with local R3 delivery evidence. T-15 is next because
-its Better Auth session binding is the request-facing prerequisite for later CMS
-and provider tasks.
+T-1, T-2, and T-15 are complete with local R3 delivery evidence. T-3 is next:
+server-only Mengantar credential resolution with private-outlet preference and
+platform-default fallback.
 
 ## Active work
 
-T-15 — Implement role-specific CMS authentication.
+T-3 — Configure Mengantar credential resolution.
 
 ## Verification evidence
 
@@ -39,7 +39,13 @@ T-15 — Implement role-specific CMS authentication.
   integration assertions passed for lifecycle transitions, denial audit records,
   RLS attribution, and platform-role visibility. `pnpm lint` and `pnpm build`
   passed. Independent security review passed with no blocking/high finding.
+- 2026-08-28 T-15: fresh PostgreSQL 16 applied migrations 0000–0006; ten
+  integration assertions passed for active tenant/user/member authorization.
+  Browser checks covered both public login entries, generic invalid credentials,
+  successful email/password sign-in, authenticated tenant scope, and anonymous
+  CMS redirects. `pnpm lint` and `pnpm build` passed with the required trusted
+  proxy test contract. Independent security review passed.
 
 ## Next verified action
 
-Implement T-15 Better Auth session binding and role-specific CMS authorization.
+Implement T-3 Mengantar credential resolution with sanitized fixtures only.

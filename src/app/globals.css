@@ -1,1 +1,36 @@
 @import "tailwindcss";
+
+:root {
+  color: #172033;
+  background: #f5f7fa;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.auth-card {
+  width: min(100%, 27rem);
+  padding: 2rem;
+  background: #fff;
+  border: 1px solid #d9e0ea;
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 32px rgb(23 32 51 / 10%);
+}
+
+.auth-card label, .auth-card input, .auth-card button { display: block; width: 100%; }
+.auth-card label { margin-top: 1rem; font-weight: 600; }
+.auth-card input { margin-top: 0.4rem; padding: 0.65rem; border: 1px solid #778397; border-radius: 0.35rem; }
+.auth-card button { margin-top: 1.5rem; padding: 0.7rem; border: 0; border-radius: 0.35rem; background: #0e4aa5; color: #fff; font-weight: 700; cursor: pointer; }
+.auth-card button:disabled { background: #e8ebf0; color: #3f4757; cursor: wait; }
+.auth-card a { color: #0e4aa5; }
+.auth-card [role="alert"] { margin-top: 1rem; padding: 0.75rem; color: #8b1e1e; background: #fff1f1; border-radius: 0.35rem; }
+:focus-visible { outline: 3px solid #f0a500; outline-offset: 3px; }

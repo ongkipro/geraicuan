@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  bigint,
   check,
   foreignKey,
   index,
   jsonb,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -18,6 +20,8 @@ export const tenantStatuses = [
   "SUSPENDED",
   "ARCHIVED",
 ] as const;
+export const identityStatuses = ["ACTIVE", "SUSPENDED"] as const;
+
 
 export const membershipRoles = ["TENANT_ADMIN", "OPERATOR"] as const;
 
@@ -37,12 +41,72 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  status: text("status", { enum: identityStatuses }).notNull().default("ACTIVE"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("sessions_user_id_idx").on(table.userId)],
+);
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    issuer: text("issuer").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("accounts_issuer_account_id_unique").on(table.issuer, table.accountId),
+    index("accounts_user_id_idx").on(table.userId),
+  ],
+);
+
+export const verifications = pgTable("verifications", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const rateLimits = pgTable("rate_limits", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
 
 export const tenants = pgTable(
@@ -78,6 +142,7 @@ export const memberships = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     role: text("role", { enum: membershipRoles }).notNull(),
+    status: text("status", { enum: identityStatuses }).notNull().default("ACTIVE"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -92,6 +157,7 @@ export const memberships = pgTable(
       "memberships_role_valid",
       sql`role IN ('TENANT_ADMIN', 'OPERATOR')`,
     ),
+    check("memberships_status_valid", sql`status IN ('ACTIVE', 'SUSPENDED')`),
   ],
 );
 export const outlets = pgTable(

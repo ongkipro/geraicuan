@@ -49,11 +49,14 @@ export async function withTenantContext<T>(
         role: schema.memberships.role,
       })
       .from(schema.memberships)
+      .innerJoin(schema.users, eq(schema.memberships.userId, schema.users.id))
       .innerJoin(schema.tenants, eq(schema.memberships.tenantId, schema.tenants.id))
       .where(
         and(
           eq(schema.memberships.userId, principalId),
           eq(schema.tenants.status, "ACTIVE"),
+          eq(schema.memberships.status, "ACTIVE"),
+          eq(schema.users.status, "ACTIVE"),
           requestedTenantId
             ? eq(schema.memberships.tenantId, requestedTenantId)
             : undefined,

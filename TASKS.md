@@ -23,7 +23,7 @@
   - Dependencies: T-1
   - Done when: An authorized platform super-admin can create, suspend, and reactivate a tenant; an unauthenticated or tenant-scoped actor is denied; all outcomes are audit-recorded.
 
-- [ ] **T-15 — Implement role-specific CMS authentication**
+- [x] **T-15 — Implement role-specific CMS authentication**
   - Primary requirement: PR-13
   - Constraints: TD-8, IAM-1, IAM-2, IAM-3, TEN-1, SEC-2
   - Dependencies: T-1

@@ -70,12 +70,20 @@ export async function executeTenantLifecycle(
 
     const isSuperAdmin = principal
       ? await tx
-          .select({ userId: schema.platformRoles.userId })
+          .select({
+            userId: schema.platformRoles.userId,
+            userStatus: schema.users.status,
+          })
           .from(schema.platformRoles)
+          .innerJoin(schema.users, eq(schema.platformRoles.userId, schema.users.id))
           .where(eq(schema.platformRoles.userId, principal.userId))
           .limit(1)
       : [];
-    if (!principal || isSuperAdmin.length !== 1) {
+    if (
+      !principal
+      || isSuperAdmin.length !== 1
+      || isSuperAdmin[0].userStatus !== "ACTIVE"
+    ) {
       await appendAudit(
         tx,
         principal?.userId,

@@ -31,3 +31,15 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   visibility; the runtime rejects superuser and BYPASSRLS connection roles.
 - Fresh PostgreSQL 16 migration plus `pnpm test:integration` (7 assertions),
   `pnpm lint`, and `pnpm build` passed.
+
+## 2026-08-28 — T-15 role-specific CMS authentication
+
+- Added Better Auth 1.7.2 PostgreSQL persistence, database-backed sign-in rate
+  limits, public tenant/super-admin login entries, and server-side CMS guards.
+- Public registration is disabled. Platform/tenant roles and active
+  user/membership/tenant status are re-resolved server-side for every CMS route.
+- Production requires declared trusted proxy CIDRs before IP-based rate limiting
+  can start; status checks are also enforced by PostgreSQL RLS migration 0006.
+- Fresh PostgreSQL 16 migration plus `pnpm test:integration` (10 assertions),
+  `pnpm lint`, `pnpm build`, browser auth checks, and independent security
+  review passed.
