@@ -1,0 +1,63 @@
+# PRD: GeraiCUAN
+
+## Document Control
+- Status: Draft — decision pending acceptance
+- Accountable owner: Paduka Ongki
+- Updated: 2026-08-28
+- Source: User product direction; Mengantar Public API docs retrieved 2026-08-28
+
+## Product Decision
+GeraiCUAN is a free multi-tenant SaaS CMS for Indonesian shipping outlets. The only public product surface is a sales page; all operational workflows are inside authenticated CMS Admin. Any number of isolated tenants may use the platform; each tenant operates its own outlets and private Mengantar connection, while the platform Super Admin monitors the service. The MVP creates single or bulk shipments, uses an outlet default pickup point, obtains Mengantar AWBs, prints labels, and maintains an operational ledger.
+
+## Scope
+**In:** public sales page; separate Tenant and Super Admin login entry points; unlimited free tenant/onboarding lifecycle; tenant and outlet setup; per-tenant private Mengantar configuration with platform-default environment fallback; reusable tenant-scoped sender/recipient directory; individual/bulk intake; sender, recipient, package, declared value, COD/non-COD; account-specific Mengantar estimates; provider-returned insurance/shipping values; provider AWB; 100x150mm label; Super Admin and tenant analytics with professional date filters; operational financial ledger and reconciliation; Super Admin monitoring and tenant management.
+
+**Out:** subscriptions/billing, custom domains/white-labeling, inventory, custom courier rates or insurance calculations, courier handover manifests.
+
+## Actors
+| Actor | Goal | Tenant relationship |
+|---|---|---|
+| Super Admin | Provision tenants and monitor platform/tenant operational health | Platform-global |
+| Tenant Admin | Configure outlet, private integration, and reusable contacts | Tenant administrator |
+| Operator | Create, submit, print shipments, and reuse permitted contacts | Tenant member |
+| Sender/recipient | Shipment data subjects, not CMS users | Tenant shipment parties |
+
+## Requirements
+| ID | Statement | Priority | Acceptance | Status |
+|---|---|---|---|---|
+| PR-1 | When a Super Admin provisions, suspends, or reactivates a tenant, the system shall enforce the resulting tenant lifecycle without exposing other tenants. | Must | Authorized Super Admin succeeds; tenant user is denied; suspension blocks tenant operations. | Accepted |
+| PR-2 | When a Tenant Admin configures an outlet, the system shall store a default Mengantar pickup address and server-side credential reference scoped to that tenant. | Must | Another tenant cannot read/change it; credential never reaches browser/logs. | Accepted |
+| PR-3 | When an Operator submits one shipment draft, the system shall validate sender, recipient, selected destination, package, declared value, and COD/non-COD inputs before estimation. | Must | Invalid data prevents submission with field errors. | Accepted |
+| PR-4 | When an Operator imports a bulk shipment file, the system shall report row-level validation failures and create drafts only for valid rows. | Must | Invalid rows create no shipment. | Accepted |
+| PR-5 | When a valid draft has origin, destination, weight, and payment data, the system shall show account-specific Mengantar services and provider-returned shipping/insurance values, hide unsupported routes, and disable unsupported COD. | Must | `unsupported` services hidden; `unsupported_cod` blocks COD; no custom shipping/insurance price calculation. | Accepted |
+| PR-6 | When an Operator explicitly confirms estimated drafts, the system shall automatically push the relevant batch to Mengantar server-side and persist the provider result and lifecycle state. | Must | No second manual push exists; provider `cnote_no` is stored only on successful issuance; dynamic-AWB requests serialize per account. | Accepted |
+| PR-7 | When Mengantar returns an AWB, the system shall render a printable 100x150mm label containing the provider AWB, courier, sender, recipient, package, COD/non-COD and provider pricing details, and record print/reprint history. | Must | Browser print preview includes provider AWB and correct tenant data. | Accepted |
+| PR-8 | When a non-COD Mengantar batch returns unpaid without an AWB, the system shall mark it awaiting payment and allow a Tenant Admin to recover it with Mengantar pay-unpaid after the tenant has funded its Mengantar balance. | Must | Recovery persists returned AWBs; unauthorized/cross-tenant retry is denied. | Accepted |
+| PR-9 | When an Operator selects COD on a COD-eligible provider service, the system shall set the provider COD amount to declared goods value + Mengantar shipping fee + GeraiCUAN COD service fee + VAT, with service fee = 3% of goods value + shipping fee and VAT = 11% of that service fee. | Must | For IDR, round each fee component half-up to a whole rupiah and persist all four components; a deterministic fixture verifies the final COD amount. | Accepted |
+| PR-10 | When an outlet has an active private Mengantar configuration, the system shall use that tenant-owned configuration for all provider calls; otherwise it shall use only the platform default Mengantar environment configuration. | Must | Resolver preference is covered by tests; neither secret source is returned to browser, logs, or another tenant. | Accepted |
+| PR-11 | When a Super Admin opens platform monitoring, the system shall provide filtered aggregate and per-tenant operational visibility for tenant lifecycle, outlets, memberships, shipment lifecycle, provider health, queue/unpaid/error states, usage, and audit events without exposing credentials or unnecessary shipment PII. | Must | Dashboard filters are URL-addressable; aggregate and tenant views have consistent counts; secret/PII redaction tests pass. | Accepted |
+| PR-12 | When a Tenant Admin or permitted Operator saves a sender or recipient, the system shall maintain a tenant-scoped reusable contact directory with one or more addresses that can prefill future shipment forms without altering historical shipment label snapshots. | Must | Contact searches never cross tenants; updates affect new drafts only; a contact can be selected as sender, recipient, or both. | Accepted |
+| PR-13 | When a person signs in through Tenant Login or Super Admin Login, the system shall authenticate them and route them only to the CMS scope authorized by their server-side role. | Must | A Super Admin reaches platform admin only; tenant roles reach only their tenant CMS; suspended users/tenants and unauthorized roles are denied. | Accepted |
+| PR-14 | The public web surface shall be a sales page that explains GeraiCUAN and links to the appropriate login entry points; shipment, contact, finance, analytics, and provider controls shall not be publicly accessible. | Must | An unauthenticated browser can view the sales page but gets no operational data or actions. | Accepted |
+| PR-15 | When a Super Admin or Tenant Admin opens analytics or monitoring, the system shall provide professional timezone-aware date-range filters and role-appropriate operational/financial metrics with aggregate, trend, table, empty, loading, and error states. | Must | Preset and custom ranges are URL-addressable; metrics use the same displayed timezone and date boundaries. | Accepted |
+| PR-16 | When shipment, provider payment, or reconciliation state changes, the system shall append immutable tenant-scoped operational ledger entries and provide filtered daily/monthly reconciliation reports. | Must | COD principal is distinguished from fee revenue; provider cost, COD service fee, VAT, unpaid/recovery, and adjustments are traceable to source records. | Accepted |
+
+## Non-functional Requirements
+| ID | Requirement | Evidence |
+|---|---|---|
+| NFR-1 | Every tenant-owned read/write must use authenticated tenant context and deny mismatched tenant access. | Cross-tenant integration tests. |
+| NFR-2 | Mengantar credentials, credential-bearing URLs, and recipient PII must be redacted from client payloads and application logs. | Log-redaction and API-boundary tests. |
+| NFR-3 | Estimate and order endpoints must rate-limit retries per tenant/user without queueing concurrent dynamic-AWB batches. | Integration tests and telemetry. |
+| NFR-4 | Operational UI supports Indonesian (`id-ID`), keyboard operation, loading/error/empty states, and 100x150mm print media. | Browser and accessibility checks. |
+
+## Decisions and Evidence
+| ID | Decision/evidence | Owner | Status |
+|---|---|---|---|
+| D-1 | Use Better Auth with PostgreSQL, email/password, invitation-only tenant membership, server-side role checks, secure cookies, CSRF protection, and database-backed rate limiting. | Paduka Ongki | Accepted |
+| D-2 | Deploy containerized Next.js and PostgreSQL through Coolify; production secrets remain Coolify environment secrets. | Paduka Ongki | Accepted |
+| D-3 | Use Chromium desktop print support for 100x150mm labels; native printer service is out of scope. | Paduka Ongki | Accepted |
+| E-1 | Sanitized live non-mutating Mengantar address/estimate/performance probes on 2026-08-28 returned HTTP 200; 15 estimate couriers and no insurance fields. Insurance fee stays unimplemented until Mengantar exposes a documented response/payload. | Engineering owner | Observed |
+| D-4 | Retain operational shipment, ledger, and audit records for five years; archived reusable contacts are deleted after 90 days unless referenced by retained shipment snapshots. This is a product retention policy, not a legal-compliance determination. | Paduka Ongki | Accepted |
+
+## Cross-document Contract
+Data: `05-DATA-MODEL.md`; tenant isolation: `06-TENANT-ISOLATION.md`; authorization: `07-IAM-RBAC-ABAC.md`; provider flow: `03-TECHNICAL-DESIGN.md`; controls: `12-SECURITY-ARCHITECTURE.md`; tasks: `TASKS.md`.

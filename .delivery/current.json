@@ -1,0 +1,14 @@
+{
+  "activeRun": null,
+  "lastRun": {
+    "finishedAt": "2026-08-28T09:09:21Z",
+    "result": "BLOCKED",
+    "runId": "RUN-20260828T085113Z-b7165920"
+  },
+  "observedHead": null,
+  "observedState": "PLANNED",
+  "project": "geraicuan",
+  "schemaVersion": 1,
+  "statusAuthority": "STATUS.md",
+  "updatedAt": "2026-08-28T09:09:21Z"
+}

@@ -1,0 +1,45 @@
+{
+  "project": {
+    "name": "GeraiCUAN",
+    "slug": "geraicuan",
+    "stage": "planning",
+    "summary": "A multi-tenant SaaS CMS for Indonesian shipping outlets to create individual or bulk shipments, obtain Mengantar AWBs, and print shipping labels."
+  },
+  "capabilities": {
+    "persistence": true,
+    "schema-migration": true,
+    "maintained-deployment": true
+  },
+  "market": {
+    "countries": ["ID"],
+    "locales": ["id-ID"],
+    "data_subjects": ["tenant owners", "tenant staff", "senders", "recipients"]
+  },
+  "architecture": {
+    "stack": {
+      "web": "Next.js App Router",
+      "database": "PostgreSQL",
+      "orm": "Drizzle",
+      "integration": "Mengantar Public API"
+    },
+    "tenancy": "Multi-tenant; a platform super administrator manages tenants and tenant administrators operate their own outlets.",
+    "external_services": ["Mengantar Public API"]
+  },
+  "scope": {
+    "in": [
+      "single shipment creation",
+      "bulk shipment creation",
+      "sender, recipient, package, COD, and declared-value capture",
+      "provider-priced shipping and insurance display",
+      "default Mengantar pickup address per tenant outlet",
+      "provider-generated AWB and label printing",
+      "super-admin tenant management"
+    ],
+    "out": [
+      "SaaS billing and subscriptions",
+      "custom domains or white labeling",
+      "warehouse inventory",
+      "custom courier rate or insurance pricing"
+    ]
+  }
+}
