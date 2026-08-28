@@ -63,3 +63,15 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   owned by the login routes.
 - Desktop and mobile browser checks verified the public surface, links, and
   responsive accessibility targets. `pnpm lint` and `pnpm build` passed.
+
+## 2026-08-28 — T-4 individual shipment draft
+
+- Added an additive draft-detail relation and immutable sender/recipient party
+  snapshots, preserving pre-existing bare shipment lifecycle rows.
+- The Server Action derives tenant/user scope from the authenticated session,
+  validates all submission fields before its transaction, verifies the selected
+  outlet belongs to the active tenant and is configured, and inserts the
+  shipment, detail, and parties atomically under RLS.
+- Fresh PostgreSQL 16 migrations, 15 integration assertions, browser validation
+  and successful PRG/no-JavaScript submission checks, `pnpm lint`, and
+  `pnpm build` passed.

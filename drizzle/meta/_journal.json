@@ -57,6 +57,13 @@
       "when": 1787915878459,
       "tag": "0007_flaky_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787929048360,
+      "tag": "0008_greedy_chimera",
+      "breakpoints": true
     }
   ]
 }

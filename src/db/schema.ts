@@ -35,6 +35,8 @@ export const shipmentStatuses = [
   "FAILED",
 ] as const;
 
+export const shipmentPartyRoles = ["SENDER", "RECIPIENT"] as const;
+
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -238,6 +240,94 @@ export const shipments = pgTable(
         'FAILED'
       )`,
     ),
+  ],
+);
+
+export const shipmentDrafts = pgTable(
+  "shipment_drafts",
+  {
+    shipmentId: uuid("shipment_id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    destinationAreaId: text("destination_area_id").notNull(),
+    destinationAreaLabel: text("destination_area_label").notNull(),
+    packageContent: text("package_content").notNull(),
+    packageWeightGrams: integer("package_weight_grams").notNull(),
+    packageQuantity: integer("package_quantity").notNull(),
+    packageLengthCm: integer("package_length_cm"),
+    packageWidthCm: integer("package_width_cm"),
+    packageHeightCm: integer("package_height_cm"),
+    declaredValueIdr: integer("declared_value_idr").notNull(),
+    isCod: boolean("is_cod").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "shipment_drafts_shipment_tenant_fkey",
+      columns: [table.shipmentId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.tenantId],
+    }).onDelete("restrict"),
+    index("shipment_drafts_tenant_idx").on(table.tenantId),
+    check(
+      "shipment_drafts_destination_area_id_valid",
+      sql`char_length(btrim(destination_area_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "shipment_drafts_destination_area_label_not_blank",
+      sql`char_length(btrim(destination_area_label)) > 0`,
+    ),
+    check(
+      "shipment_drafts_package_content_not_blank",
+      sql`char_length(btrim(package_content)) > 0`,
+    ),
+    check(
+      "shipment_drafts_package_weight_grams_positive",
+      sql`package_weight_grams > 0`,
+    ),
+    check("shipment_drafts_package_quantity_positive", sql`package_quantity > 0`),
+    check(
+      "shipment_drafts_package_dimensions_valid",
+      sql`(package_length_cm IS NULL AND package_width_cm IS NULL AND package_height_cm IS NULL)
+        OR (package_length_cm > 0 AND package_width_cm > 0 AND package_height_cm > 0)`,
+    ),
+    check(
+      "shipment_drafts_declared_value_idr_nonnegative",
+      sql`declared_value_idr >= 0`,
+    ),
+    check(
+      "shipment_drafts_cod_declared_value_positive",
+      sql`NOT is_cod OR declared_value_idr > 0`,
+    ),
+  ],
+);
+
+export const shipmentParties = pgTable(
+  "shipment_parties",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    role: text("role", { enum: shipmentPartyRoles }).notNull(),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    address: text("address").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "shipment_parties_shipment_tenant_fkey",
+      columns: [table.shipmentId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.tenantId],
+    }).onDelete("restrict"),
+    unique("shipment_parties_shipment_role_key").on(table.shipmentId, table.role),
+    index("shipment_parties_tenant_shipment_idx").on(table.tenantId, table.shipmentId),
+    check(
+      "shipment_parties_role_valid",
+      sql`role IN ('SENDER', 'RECIPIENT')`,
+    ),
+    check("shipment_parties_name_not_blank", sql`char_length(btrim(name)) > 0`),
+    check("shipment_parties_phone_not_blank", sql`char_length(btrim(phone)) > 0`),
+    check("shipment_parties_address_not_blank", sql`char_length(btrim(address)) > 0`),
   ],
 );
 

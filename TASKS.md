@@ -43,7 +43,7 @@
 
 ## Phase 2: Shipment preparation
 
-- [ ] **T-4 — Build validated individual shipment draft**
+- [x] **T-4 — Build validated individual shipment draft**
   - Primary requirement: PR-3
   - Constraints: TEN-2, IAM-3, PRIV-1, UX-1
   - Dependencies: T-1, T-3

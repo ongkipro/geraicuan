@@ -23,12 +23,12 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1, T-2, T-15, T-3, and T-16 are complete with verified delivery evidence.
-Foundation dependencies are satisfied; T-4 is next.
+T-1, T-2, T-15, T-3, T-16, and T-4 are complete with verified delivery evidence.
+Shipment foundation dependencies are satisfied; T-5 is next.
 
 ## Active work
 
-T-4 — Build validated individual shipment draft.
+T-5 — Build bulk shipment intake validation.
 
 ## Verification evidence
 
@@ -51,7 +51,12 @@ T-4 — Build validated individual shipment draft.
 - 2026-08-28 T-16: browser verified the static public page at desktop and
   mobile widths, its two login entry links, no operational controls/data path,
   one H1, no horizontal overflow, and 44px minimum interactive targets.
+- 2026-08-28 T-4: fresh PostgreSQL 16 applied migrations 0000–0008;
+  15 integration assertions proved draft persistence, immutable parties, input
+  rejection, and cross-tenant outlet denial. Browser checks proved invalid
+  server validation, PRG success, responsive layout, and a no-JavaScript
+  submission. `pnpm lint` and `pnpm build` passed.
 
 ## Next verified action
 
-Begin T-4 validated individual shipment draft.
+Begin T-5 bulk shipment intake validation.
