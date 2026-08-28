@@ -11,13 +11,13 @@
 
 ## Phase 1: Platform foundation
 
-- [ ] **T-1 — Create tenancy schema and tenant context**
+- [x] **T-1 — Create tenancy schema and tenant context**
   - Primary requirement: PR-1
   - Constraints: TEN-1, TEN-2, IAM-1, IAM-2, IAM-3, SEC-2
   - Dependencies: None
   - Done when: Apply the PostgreSQL migration, then execute an integration test proving tenant-owned queries cannot return another tenant's outlet or shipment records.
 
-- [ ] **T-2 — Implement super-admin tenant lifecycle**
+- [x] **T-2 — Implement super-admin tenant lifecycle**
   - Primary requirement: PR-1
   - Constraints: IAM-1, TEN-1, TEN-2, SEC-2, OBS-1
   - Dependencies: T-1

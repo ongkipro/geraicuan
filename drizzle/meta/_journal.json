@@ -8,6 +8,20 @@
       "when": 1787906764693,
       "tag": "0000_daily_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787908732590,
+      "tag": "0001_massive_sinister_six",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787909488262,
+      "tag": "0002_tranquil_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

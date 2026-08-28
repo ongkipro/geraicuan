@@ -4,6 +4,7 @@ import {
   check,
   foreignKey,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -148,5 +149,52 @@ export const shipments = pgTable(
         'FAILED'
       )`,
     ),
+  ],
+);
+
+export const platformRoles = pgTable(
+  "platform_roles",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "restrict" }),
+    role: text("role", { enum: ["SUPER_ADMIN"] }).notNull().default("SUPER_ADMIN"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  () => [check("platform_roles_role_valid", sql`role = 'SUPER_ADMIN'`)],
+);
+
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    actorId: text("actor_id").references(() => users.id, { onDelete: "restrict" }),
+    actorRole: text("actor_role", { enum: ["SUPER_ADMIN", "TENANT_MEMBER"] }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, {
+      onDelete: "restrict",
+    }),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    outcome: text("outcome", { enum: ["SUCCESS", "DENIED"] }).notNull(),
+    fromStatus: text("from_status", { enum: tenantStatuses }),
+    toStatus: text("to_status", { enum: tenantStatuses }),
+    correlationId: uuid("correlation_id").defaultRandom().notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("audit_events_actor_created_idx").on(table.actorId, table.createdAt),
+    index("audit_events_tenant_created_idx").on(table.tenantId, table.createdAt),
+    check("audit_events_target_type_valid", sql`target_type = 'TENANT'`),
+    check(
+      "audit_events_action_valid",
+      sql`action IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED')`,
+    ),
+    check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),
   ],
 );

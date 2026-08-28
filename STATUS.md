@@ -2,12 +2,12 @@
 
 Updated: 2026-08-28
 Status: Active
-State: BLOCKED
+State: IMPLEMENTING
 Review-Risk: R3
-Independent-Review: PENDING_BOUNDARY
+Independent-Review: PASS
 Primary-Worker: Main
-Independent-Reviewer: TenantIsolationSecurityReview
-Independent-Review-Head: UNSET
+Independent-Reviewer: LifecycleFinalSecurityReview
+Independent-Review-Head: UNCOMMITTED
 
 ## Delivery state machine
 
@@ -23,32 +23,23 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1 implementation is present and locally verified, but it has no eligible
-delivery-ledger `PASS` boundary. No task completion claim is recorded.
-
+T-1 and T-2 are complete with local R3 delivery evidence. T-15 is next because
+its Better Auth session binding is the request-facing prerequisite for later CMS
+and provider tasks.
 
 ## Active work
 
-T-1 — Create tenancy schema and tenant context.
-
-
-## Blockers
-
-The repository has no Git commit and all T-1 files were already untracked when
-the R3 delivery run began. `delivery-ledger check-boundary` classifies the work
-as pre-existing and refuses `PASS`. Resume by establishing an approved bootstrap
-commit, then start a fresh T-1 delivery run with a clean base.
-
+T-15 — Implement role-specific CMS authentication.
 
 ## Verification evidence
 
-- 2026-08-28: Fresh isolated PostgreSQL 16 (`geraicuan_test`) applied
-  `drizzle/0000_daily_drax.sql`; `pnpm test:integration` passed 4 tenant/RLS
-  assertions; `pnpm lint` and `pnpm build` passed.
-- This is local implementation evidence only. The delivery boundary is BLOCKED.
-
+- 2026-08-28 T-1: fresh PostgreSQL 16 migration, tenant isolation integration,
+  lint, build, and independent security review passed.
+- 2026-08-28 T-2: fresh PostgreSQL 16 applied migrations 0000–0002; seven
+  integration assertions passed for lifecycle transitions, denial audit records,
+  RLS attribution, and platform-role visibility. `pnpm lint` and `pnpm build`
+  passed. Independent security review passed with no blocking/high finding.
 
 ## Next verified action
 
-Obtain approval to create the initial bootstrap commit, then reopen T-1 from the
-committed base and complete its R3 boundary review.
+Implement T-15 Better Auth session binding and role-specific CMS authorization.
