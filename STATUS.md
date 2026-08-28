@@ -23,13 +23,12 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1, T-2, T-15, and T-3 are complete with local R3 delivery evidence. T-16
-is next: the public GeraiCUAN sales page with login entry points and no
-operational data.
+T-1, T-2, T-15, T-3, and T-16 are complete with verified delivery evidence.
+Foundation dependencies are satisfied; T-4 is next.
 
 ## Active work
 
-T-16 — Build public GeraiCUAN sales page.
+T-4 — Build validated individual shipment draft.
 
 ## Verification evidence
 
@@ -49,7 +48,10 @@ T-16 — Build public GeraiCUAN sales page.
   credential resolution precedence, platform fallback, tenant-admin-only
   configuration, and cross-tenant denial integration checks passed. `pnpm lint`
   and `pnpm build` passed. Independent security review passed.
+- 2026-08-28 T-16: browser verified the static public page at desktop and
+  mobile widths, its two login entry links, no operational controls/data path,
+  one H1, no horizontal overflow, and 44px minimum interactive targets.
 
 ## Next verified action
 
-Build T-16 public GeraiCUAN sales page with browser evidence.
+Begin T-4 validated individual shipment draft.

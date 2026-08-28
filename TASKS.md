@@ -35,7 +35,7 @@
   - Dependencies: T-1
   - Done when: A tenant administrator configures one outlet default pickup address and a complete private credential reference; a resolver test proves private configuration wins and a missing private configuration uses only the platform environment defaults, without exposing either source.
 
-- [ ] **T-16 — Build public GeraiCUAN sales page**
+- [x] **T-16 — Build public GeraiCUAN sales page**
   - Primary requirement: PR-14
   - Constraints: TD-8, SEC-2, UX-1
   - Dependencies: T-15

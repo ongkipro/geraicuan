@@ -53,3 +53,13 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   incomplete, non-HTTPS, foreign, or tampered configurations fail closed.
 - Fresh PostgreSQL 16 migration plus 13 integration assertions, `pnpm lint`,
   `pnpm build`, and independent security review passed.
+
+## 2026-08-28 — T-16 public sales page
+
+- Replaced the generated placeholder with a static Indonesian GeraiCUAN sales
+  page that explains the product and provides tenant/super-admin login entries.
+- The page intentionally has no CMS availability lookup, session, database
+  access, fetch, form, or operational data path; login availability remains
+  owned by the login routes.
+- Desktop and mobile browser checks verified the public surface, links, and
+  responsive accessibility targets. `pnpm lint` and `pnpm build` passed.
