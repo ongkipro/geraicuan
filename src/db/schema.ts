@@ -168,6 +168,8 @@ export const outlets = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
+    defaultPickupAddressId: text("default_pickup_address_id"),
+    defaultOriginAreaId: text("default_origin_area_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -179,6 +181,27 @@ export const outlets = pgTable(
     unique("outlets_id_tenant_key").on(table.id, table.tenantId),
     index("outlets_tenant_idx").on(table.tenantId),
     check("outlets_name_not_blank", sql`char_length(btrim(name)) > 0`),
+  ],
+);
+
+export const mengantarConnections = pgTable(
+  "mengantar_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "restrict" })
+      .unique(),
+    secretReference: text("secret_reference").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("mengantar_connections_outlet_tenant_key").on(table.outletId, table.tenantId),
+    check("mengantar_connections_secret_reference_not_blank", sql`char_length(btrim(secret_reference)) > 0`),
   ],
 );
 export const shipments = pgTable(

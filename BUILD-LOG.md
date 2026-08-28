@@ -43,3 +43,13 @@ Record only durable implementation changes, validation evidence, and gotchas tha
 - Fresh PostgreSQL 16 migration plus `pnpm test:integration` (10 assertions),
   `pnpm lint`, `pnpm build`, browser auth checks, and independent security
   review passed.
+
+## 2026-08-28 — T-3 Mengantar credential resolution
+
+- Added tenant/outlet-scoped private connection references and default pickup
+  metadata. Stored references are deterministically server-derived; plaintext
+  credentials never enter PostgreSQL.
+- Private managed credentials win over complete platform environment defaults;
+  incomplete, non-HTTPS, foreign, or tampered configurations fail closed.
+- Fresh PostgreSQL 16 migration plus 13 integration assertions, `pnpm lint`,
+  `pnpm build`, and independent security review passed.

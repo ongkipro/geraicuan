@@ -29,7 +29,7 @@
   - Dependencies: T-1
   - Done when: Browser and integration tests prove Tenant Login only opens the authorized tenant CMS, Super Admin Login only opens platform admin, and suspended users/tenants cannot use either operational surface.
 
-- [ ] **T-3 — Configure private and default Mengantar resolution**
+- [x] **T-3 — Configure private and default Mengantar resolution**
   - Primary requirement: PR-10
   - Constraints: PR-2, TD-5, TEN-2, IAM-2, SEC-1, SEC-2, PRIV-1
   - Dependencies: T-1

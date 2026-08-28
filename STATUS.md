@@ -23,13 +23,13 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1, T-2, and T-15 are complete with local R3 delivery evidence. T-3 is next:
-server-only Mengantar credential resolution with private-outlet preference and
-platform-default fallback.
+T-1, T-2, T-15, and T-3 are complete with local R3 delivery evidence. T-16
+is next: the public GeraiCUAN sales page with login entry points and no
+operational data.
 
 ## Active work
 
-T-3 — Configure Mengantar credential resolution.
+T-16 — Build public GeraiCUAN sales page.
 
 ## Verification evidence
 
@@ -45,7 +45,11 @@ T-3 — Configure Mengantar credential resolution.
   successful email/password sign-in, authenticated tenant scope, and anonymous
   CMS redirects. `pnpm lint` and `pnpm build` passed with the required trusted
   proxy test contract. Independent security review passed.
+- 2026-08-28 T-3: fresh PostgreSQL 16 applied migrations 0000–0007; private
+  credential resolution precedence, platform fallback, tenant-admin-only
+  configuration, and cross-tenant denial integration checks passed. `pnpm lint`
+  and `pnpm build` passed. Independent security review passed.
 
 ## Next verified action
 
-Implement T-3 Mengantar credential resolution with sanitized fixtures only.
+Build T-16 public GeraiCUAN sales page with browser evidence.
