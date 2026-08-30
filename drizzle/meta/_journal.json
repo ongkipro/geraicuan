@@ -64,6 +64,83 @@
       "when": 1787929048360,
       "tag": "0008_greedy_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787936840069,
+      "tag": "0009_equal_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787980314010,
+      "tag": "0010_shipment_estimates",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787986063664,
+      "tag": "0011_shipment_cod_totals",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787989100000,
+      "tag": "0012_cod_totals_latest_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787989200000,
+      "tag": "0013_opposite_microchip",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787992218522,
+      "tag": "0014_unusual_shocker",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788080000166,
+      "tag": "0015_unique_wendell_rand",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788081548257,
+      "tag": "0016_signed_reconciliation_totals",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788082494441,
+      "tag": "0017_deep_dreaming_celestial",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788083393236,
+      "tag": "0018_platform_monitoring_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788086850922,
+      "tag": "0019_smart_gunslinger",
+      "breakpoints": true
     }
   ]
 }

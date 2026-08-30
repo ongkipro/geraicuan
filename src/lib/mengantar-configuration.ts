@@ -54,13 +54,5 @@ export async function configureMengantarConnection(
       })
       .where(eq(schema.outlets.id, input.outletId));
 
-    const secretReference = mengantarSecretReference(context.tenantId, outlet[0].id);
-    await tx
-      .insert(schema.mengantarConnections)
-      .values({ tenantId: context.tenantId, outletId: outlet[0].id, secretReference })
-      .onConflictDoUpdate({
-        target: schema.mengantarConnections.outletId,
-        set: { secretReference, updatedAt: new Date() },
-      });
   });
 }

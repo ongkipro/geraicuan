@@ -23,12 +23,13 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1, T-2, T-15, T-3, T-16, and T-4 are complete with verified delivery evidence.
-Shipment foundation dependencies are satisfied; T-5 is next.
+T-1, T-2, T-15, T-3, T-16, T-4, T-5, T-6, and T-13 are complete with
+verified delivery evidence. T-11 awaits an authorized GitHub push and hosted CI
+run; its local migration/release checks passed.
 
 ## Active work
 
-T-5 — Build bulk shipment intake validation.
+No implementation task is active.
 
 ## Verification evidence
 
@@ -56,7 +57,36 @@ T-5 — Build bulk shipment intake validation.
   rejection, and cross-tenant outlet denial. Browser checks proved invalid
   server validation, PRG success, responsive layout, and a no-JavaScript
   submission. `pnpm lint` and `pnpm build` passed.
+- 2026-08-28 T-5: CSV parser tests and a fresh PostgreSQL 16 integration
+  suite (20 assertions) passed; the suite proved valid-row-only tenant draft
+  persistence and tenant/actor import rate limiting. `pnpm lint` and
+  `pnpm build` passed. Browser route access was not independently exercised
+  because the local fixture session could not be authenticated.
 
-## Next verified action
+- 2026-08-28 T-13: fresh PostgreSQL 16 migration through `0009`, contact
+  directory integration assertions, `pnpm lint`, and `pnpm build` passed.
+  Authenticated browser checks created a contact, added a second address, and
+  searched/selected it from a draft with masked picker results. A contact edit
+  between selection and save was server-re-resolved into the immutable party
+  snapshot. Independent security review passed after the snapshot repair.
 
-Begin T-5 bulk shipment intake validation.
+- 2026-08-28 T-11: local PostgreSQL 16 verified both an empty-database
+  migration chain and a representative pre-release fixture upgrade retaining a
+  tenant, outlet, shipment, and two shipment parties. Tenant-isolation
+  integration tests (22 assertions), lint, and build passed. The unpushed
+  least-privilege GitHub Actions workflow awaits a hosted run.
+
+- 2026-08-29 T-6: one user-approved sandbox non-COD estimate returned HTTP
+  200 and was captured only as a sanitized fixture. Migration `0010` persists
+  immutable, tenant-scoped estimate snapshots and services. Fixture tests prove
+  unsupported services are omitted, provider `price` is preserved without
+  custom price calculation, absent/blocked COD support is unavailable, and
+  re-estimates remain append-only. Fresh PostgreSQL 16 migration, 27 integration
+  assertions, `pnpm lint`, `pnpm build`, and independent security review passed.
+  The authenticated estimate panel could not be browser-exercised because no
+  approved local authenticated fixture session was available; the protected
+  route correctly redirected anonymous access to tenant login.
+
+Continue with T-12, which now has its required persisted provider estimate
+snapshots. T-11 still requires explicit authorization for a commit and push;
+no provider request, secret access, commit, or push occurs without approval.

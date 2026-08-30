@@ -3,7 +3,11 @@ import { Pool } from "pg";
 
 import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
-import { configureMengantarConnection, MengantarConfigurationDeniedError } from "@/lib/mengantar-configuration";
+import {
+  configureMengantarConnection,
+  mengantarSecretReference,
+  MengantarConfigurationDeniedError,
+} from "@/lib/mengantar-configuration";
 import { resolveMengantarCredentials } from "@/lib/mengantar-credentials";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -56,6 +60,10 @@ describe("Mengantar credential resolution", () => {
       pickupAddressId: "private-pickup",
       originAreaId: "private-origin",
     });
+    await adminPool.query(
+      "INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference) VALUES ($1, $2, $3)",
+      [tenantA, outletA, mengantarSecretReference(tenantA, outletA)],
+    );
 
     await withTenantContext(db, "admin-a", tenantA, async (tx, context) => {
       const resolved = await resolveMengantarCredentials(tx, context, outletA, async (reference) => {

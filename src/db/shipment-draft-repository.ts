@@ -9,10 +9,10 @@ export class OutletUnavailableError extends Error {
   }
 }
 
-export async function createShipmentDraft(
+export async function requireConfiguredShipmentOutlet(
   tx: TenantTransaction,
   context: TenantContext,
-  input: ShipmentDraftInput,
+  outletId: string,
 ) {
   const outlet = await tx
     .select({
@@ -21,7 +21,7 @@ export async function createShipmentDraft(
       id: outlets.id,
     })
     .from(outlets)
-    .where(and(eq(outlets.id, input.outletId), eq(outlets.tenantId, context.tenantId)))
+    .where(and(eq(outlets.id, outletId), eq(outlets.tenantId, context.tenantId)))
     .limit(1);
 
   if (
@@ -32,9 +32,18 @@ export async function createShipmentDraft(
     throw new OutletUnavailableError();
   }
 
+  return outlet[0].id;
+}
+
+export async function createShipmentDraft(
+  tx: TenantTransaction,
+  context: TenantContext,
+  input: ShipmentDraftInput,
+) {
+  const outletId = await requireConfiguredShipmentOutlet(tx, context, input.outletId);
   const created = await tx
     .insert(shipments)
-    .values({ outletId: outlet[0].id, tenantId: context.tenantId })
+    .values({ outletId, tenantId: context.tenantId })
     .returning({ id: shipments.id });
 
   const shipment = created[0];

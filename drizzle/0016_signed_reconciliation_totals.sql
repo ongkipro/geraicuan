@@ -1,0 +1,2 @@
+ALTER TABLE "reconciliation_runs" DROP CONSTRAINT "reconciliation_runs_totals_nonnegative";--> statement-breakpoint
+ALTER TABLE "reconciliation_runs" ADD CONSTRAINT "reconciliation_runs_source_total_nonnegative" CHECK (source_total_idr >= 0);

@@ -75,3 +75,59 @@ Record only durable implementation changes, validation evidence, and gotchas tha
 - Fresh PostgreSQL 16 migrations, 15 integration assertions, browser validation
   and successful PRG/no-JavaScript submission checks, `pnpm lint`, and
   `pnpm build` passed.
+
+## 2026-08-28 — T-5 bulk shipment intake validation
+
+- Added a bounded server-side CSV parser with an authenticated template download,
+  exact Indonesian headers, UTF-8/quoted-field support, 256 KB/100-row limits,
+  and PII-safe row errors.
+- CSV preview performs no writes. Confirmation revalidates selected hidden rows
+  server-side and creates all selected tenant-scoped drafts in one transaction.
+  Import attempts are atomically rate-limited by tenant and authenticated actor.
+- Fresh PostgreSQL 16 migrations, 20 integration assertions, `pnpm lint`, and
+  `pnpm build` passed. The authenticated browser fixture could not be completed,
+  so no browser-flow claim is recorded.
+
+## 2026-08-28 — T-13 reusable tenant contact directory
+
+- Added tenant-scoped contacts and reusable multiple addresses with composite
+  tenant keys, forced RLS, and active membership checks. Contact changes never
+  link to or mutate historical shipment parties.
+- Tenant users can create, search, update, and select active sender/recipient
+  contacts. Tenant Admins can archive contacts; picker results mask phone
+  numbers and omit full addresses until an explicit selection.
+- Draft save re-resolves the selected server-scoped contact. It writes its
+  current values only when the operator did not manually change the selected
+  fields, preserving deliberate edits while preventing stale automatic values.
+- Fresh PostgreSQL 16 migration through `0009`, `pnpm test:integration` (22
+  assertions), `pnpm lint`, `pnpm build`, authenticated browser workflow, and
+  independent security review passed.
+
+## 2026-08-28 — T-11 migration and release rollback validation
+
+- Added an unprivileged pull-request/main CI workflow that provisions isolated
+  PostgreSQL databases, verifies the empty migration chain and representative
+  pre-release fixture upgrade, then runs migrations, integration tests, lint,
+  and build.
+- Added a repeatable `pnpm test:migration-upgrade` check. It preserves and
+  asserts a representative tenant, outlet, shipment, and immutable party
+  records across the newest migration, and verifies the latest contact RLS
+  policy exists.
+- Documented the append-only migration recovery path: additive forward fixes
+  are the default; Git rollback is not database rollback; restore needs an
+  approved backup recovery decision.
+- Local PostgreSQL 16 verification and independent CI review passed. Hosted CI
+  evidence remains pending an authorized commit and push.
+
+## 2026-08-29 — T-6 provider estimates
+
+- Added Mengantar account-estimate retrieval with tenant/actor rate limiting,
+  an HTTPS-only bounded adapter, provider `price` mapping, and fail-closed COD
+  eligibility when the provider omits or blocks the flag.
+- Added immutable tenant-scoped estimate snapshots/services in migration `0010`;
+  re-estimates append a new snapshot without mutating prior provider values.
+- The approved sandbox non-COD estimate returned HTTP 200; only a sanitized
+  contract fixture is retained. No order was created.
+- Fresh PostgreSQL 16 migration, 27 integration assertions, lint, build, and
+  independent security review passed. Authenticated browser exercise remains
+  unavailable without an approved local fixture session.

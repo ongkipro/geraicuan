@@ -61,7 +61,7 @@ function readText(formData: FormData, field: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizePhone(value: string) {
+export function normalizePartyPhone(value: string) {
   if (!/^[+0-9()\s-]+$/.test(value)) {
     return null;
   }
@@ -128,8 +128,8 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     }
   }
 
-  const senderPhone = normalizePhone(raw.senderPhone);
-  const recipientPhone = normalizePhone(raw.recipientPhone);
+  const senderPhone = normalizePartyPhone(raw.senderPhone);
+  const recipientPhone = normalizePartyPhone(raw.recipientPhone);
   if (!senderPhone) errors.senderPhone = "Nomor telepon pengirim tidak valid.";
   if (!recipientPhone) errors.recipientPhone = "Nomor telepon penerima tidak valid.";
 

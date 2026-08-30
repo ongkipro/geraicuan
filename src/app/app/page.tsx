@@ -1,10 +1,13 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { DraftEstimatePanel } from "@/app/app/draft-estimate-panel";
 import { ShipmentDraftForm } from "@/app/app/shipment-draft-form";
 import { FocusRegion } from "@/app/app/focus-region";
 import { db } from "@/db/client";
+import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { outlets, shipmentDrafts, shipments } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
@@ -45,7 +48,7 @@ export default async function TenantCmsBoundary({ searchParams }: TenantCmsPageP
 
     const savedDraft = requestedDraftId && UUID_PATTERN.test(requestedDraftId)
       ? await tx
-          .select({ id: shipments.id })
+          .select({ id: shipments.id, isCod: shipmentDrafts.isCod, status: shipments.status })
           .from(shipments)
           .innerJoin(
             shipmentDrafts,
@@ -58,18 +61,24 @@ export default async function TenantCmsBoundary({ searchParams }: TenantCmsPageP
             and(
               eq(shipments.id, requestedDraftId),
               eq(shipments.tenantId, context.tenantId),
-              eq(shipments.status, "DRAFT"),
+              inArray(shipments.status, ["DRAFT", "ESTIMATED"]),
             ),
           )
           .limit(1)
       : [];
 
-    return { configuredOutlets, savedDraft: savedDraft[0] };
+    const saved = savedDraft[0];
+    const estimateSnapshot = saved
+      ? await loadLatestEstimateSnapshot(tx, context, saved.id)
+      : null;
+    return { configuredOutlets, estimateSnapshot, savedDraft: saved };
   });
 
   return (
     <main className="ship-shell">
-      <a className="sales-skip" href="#form-kiriman">Lewati ke formulir</a>
+      <a className="sales-skip" href={data.savedDraft ? "#estimasi-draf" : "#form-kiriman"}>
+        {data.savedDraft ? "Lewati ke estimasi" : "Lewati ke formulir"}
+      </a>
       <header className="ship-header">
         <p className="ship-wordmark">GeraiCUAN</p>
         <p>{principal.role === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"}</p>
@@ -77,16 +86,39 @@ export default async function TenantCmsBoundary({ searchParams }: TenantCmsPageP
       <section className="ship-intro">
         <p className="sales-eyebrow">KIRIMAN BARU</p>
         <h1>Buat draf kiriman</h1>
-        <p>Simpan detail pengiriman sebelum perkiraan layanan dan biaya tersedia.</p>
+        <p>Simpan detail pengiriman, lalu muat estimasi layanan dari Mengantar.</p>
+        <a className="sales-secondary" href="/app/impor">Impor massal (CSV)</a>
+        <Link className="sales-secondary" href="/app/kontak">Direktori kontak</Link>
+        <Link className="sales-secondary" href="/app/label">Label &amp; cetak</Link>
+        {principal.role === "TENANT_ADMIN" ? (
+          <Link className="sales-secondary" href="/app/analitik">
+            Analitik kiriman
+          </Link>
+        ) : null}
       </section>
 
       {data.savedDraft ? (
         <FocusRegion className="ship-success" role="status">
           <h2>Draf kiriman tersimpan.</h2>
-          <p>Nomor draf: {data.savedDraft.id.slice(0, 8).toUpperCase()} · <strong>DRAFT</strong></p>
-          <p>Perkiraan layanan dan biaya belum tersedia pada tahap ini.</p>
+          <p>Nomor draf: {data.savedDraft.id.slice(0, 8).toUpperCase()} · <strong>{data.savedDraft.status}</strong></p>
+          <p>Estimasi layanan dapat dimuat di bawah tanpa membuat pesanan ke penyedia.</p>
           <a className="sales-secondary" href="/app">Buat draf berikutnya</a>
         </FocusRegion>
+      ) : null}
+
+      {data.savedDraft ? (
+        <DraftEstimatePanel
+          draftId={data.savedDraft.id}
+          isCod={data.savedDraft.isCod}
+          snapshot={
+            data.estimateSnapshot
+              ? {
+                  retrievedAt: data.estimateSnapshot.retrievedAt.toISOString(),
+                  services: data.estimateSnapshot.services,
+                }
+              : null
+          }
+        />
       ) : null}
 
       {data.configuredOutlets.length === 0 ? (

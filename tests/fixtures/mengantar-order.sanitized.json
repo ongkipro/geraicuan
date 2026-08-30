@@ -1,0 +1,38 @@
+{
+  "contract": "Mengantar POST /order sanitized fixture",
+  "paid": {
+    "response": {
+      "success": true,
+      "data": [
+        {
+          "order_id": "SANITIZED-ORDER-0001",
+          "isPaid": true,
+          "cnote_no": "SANITIZED-CNOTE-0001"
+        },
+        {
+          "order_id": "SANITIZED-ORDER-0002",
+          "isPaid": true,
+          "cnote_no": "SANITIZED-CNOTE-0002"
+        }
+      ]
+    }
+  },
+  "unpaid": {
+    "response": {
+      "success": true,
+      "data": [
+        {
+          "order_id": "SANITIZED-ORDER-UNPAID",
+          "isPaid": false,
+          "cnote_no": null
+        }
+      ]
+    }
+  },
+  "ambiguous": {
+    "response": {
+      "success": true,
+      "data": []
+    }
+  }
+}

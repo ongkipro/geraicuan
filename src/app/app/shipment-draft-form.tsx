@@ -1,9 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useCallback, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 
-import { saveShipmentDraft, type ShipmentDraftActionState } from "@/app/app/actions";
+import {
+  saveShipmentDraft,
+  searchRecipientShipmentContacts,
+  searchSenderShipmentContacts,
+  selectShipmentContact,
+  type ShipmentContactRole,
+  type ShipmentContactSearchActionState,
+  type ShipmentContactSelection,
+  type ShipmentContactSelectionActionState,
+  type ShipmentDraftActionState,
+} from "@/app/app/actions";
 
 type Outlet = { id: string; name: string };
 
@@ -22,6 +32,154 @@ function FieldError({ error, id }: { error?: string; id: string }) {
   return error ? <p className="ship-field-error" id={id}>{error}</p> : null;
 }
 
+function setFormField(form: HTMLFormElement, name: string, value: string) {
+  const field = form.elements.namedItem(name);
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+    field.value = value;
+  }
+}
+
+type ContactPickerProps = {
+  onSelect: (selection: ShipmentContactSelection) => void;
+  role: ShipmentContactRole;
+  saveError?: string;
+};
+
+function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
+  const searchServerAction = role === "SENDER"
+    ? searchSenderShipmentContacts
+    : searchRecipientShipmentContacts;
+  const [searchState, searchAction, searchPending] = useActionState<
+    ShipmentContactSearchActionState,
+    FormData
+  >(searchServerAction, {});
+  const [selectionState, selectionAction, selectionPending] = useActionState<
+    ShipmentContactSelectionActionState,
+    FormData
+  >(selectShipmentContact, {});
+  const prefix = role === "SENDER" ? "sender" : "recipient";
+  const partyLabel = role === "SENDER" ? "pengirim" : "penerima";
+  const searchBelongsToPicker = searchState.role === undefined || searchState.role === role;
+  const results = searchState.role === role ? searchState.results ?? [] : [];
+  const searchError = searchBelongsToPicker ? searchState.error : undefined;
+  const searchMessage = searchBelongsToPicker ? searchState.message : undefined;
+  const selection = selectionState.selection?.role === role
+    ? selectionState.selection
+    : undefined;
+  const searchHintId = `${prefix}-contact-search-hint`;
+  const searchErrorId = `${prefix}-contact-search-error`;
+  const resultsId = `${prefix}-contact-results`;
+
+  useEffect(() => {
+    if (selection) onSelect(selection);
+  }, [onSelect, selection]);
+
+  return (
+    <div
+      aria-busy={searchPending || selectionPending}
+      aria-describedby={saveError ? `${prefix}ContactSelection-error` : undefined}
+      className="ship-payment"
+      id={`${prefix}ContactSelection`}
+      tabIndex={-1}
+    >
+      <label htmlFor={`${prefix}ContactQuery`}>Gunakan kontak tersimpan (opsional)</label>
+      <div className="ship-pair">
+        <input
+          aria-controls={resultsId}
+          aria-describedby={searchError ? `${searchHintId} ${searchErrorId}` : searchHintId}
+          aria-invalid={Boolean(searchError)}
+          autoComplete="off"
+          id={`${prefix}ContactQuery`}
+          maxLength={80}
+          name={`${prefix}ContactQuery`}
+          placeholder={`Cari nama atau nomor ${partyLabel}`}
+          type="search"
+        />
+        <button
+          aria-controls={resultsId}
+          className="sales-secondary"
+          disabled={searchPending || selectionPending}
+          onClick={(event) => {
+            const form = event.currentTarget.form;
+            if (form) searchAction(new FormData(form));
+          }}
+          type="button"
+        >
+          {searchPending ? "Mencari…" : "Cari kontak"}
+        </button>
+      </div>
+      <p className="bulk-hint" id={searchHintId}>
+        Masukkan minimal 2 karakter. Hasil hanya menampilkan kontak aktif untuk peran ini.
+      </p>
+      {searchError ? (
+        <p className="ship-field-error" id={searchErrorId} role="alert">{searchError}</p>
+      ) : null}
+      {searchMessage ? <p className="bulk-hint" role="status">{searchMessage}</p> : null}
+      {results.length > 0 ? (
+        <>
+          <p className="bulk-hint" id={`${resultsId}-label`}>
+            Pilih alamat kontak untuk menyalin data ke isian {partyLabel}.
+          </p>
+          <ul
+            aria-labelledby={`${resultsId}-label`}
+            className="contact-addresses"
+            id={resultsId}
+          >
+            {results.map((result) => (
+              <li key={`${result.contactId}:${result.addressId}`}>
+                <button
+                  className="sales-secondary"
+                  disabled={searchPending || selectionPending}
+                  onClick={() => {
+                    const formData = new FormData();
+                    formData.set("contactSelection", `${role}:${result.contactId}:${result.addressId}`);
+                    selectionAction(formData);
+                  }}
+                  type="button"
+                >
+                  <strong>{result.name}</strong>
+                  {" · "}
+                  {result.phoneMasked}
+                  {" · "}
+                  {result.addressLabel}
+                  {" · "}
+                  {result.destinationAreaLabel ?? "Area belum disimpan"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {selectionState.error ? (
+        <p className="ship-field-error" role="alert">{selectionState.error}</p>
+      ) : null}
+      {selection ? (
+        <>
+          <input name={`${prefix}ContactId`} type="hidden" value={selection.contactId} />
+          <input name={`${prefix}ContactAddressId`} type="hidden" value={selection.addressId} />
+          <input name={`${prefix}ContactSnapshotName`} type="hidden" value={selection.name} />
+          <input name={`${prefix}ContactSnapshotPhone`} type="hidden" value={selection.phone} />
+          <input name={`${prefix}ContactSnapshotAddress`} type="hidden" value={selection.address} />
+          <input
+            name={`${prefix}ContactSnapshotDestinationAreaId`}
+            type="hidden"
+            value={selection.destinationAreaId ?? ""}
+          />
+          <input
+            name={`${prefix}ContactSnapshotDestinationAreaLabel`}
+            type="hidden"
+            value={selection.destinationAreaLabel ?? ""}
+          />
+          <p className="bulk-hint" role="status">
+            Kontak diterapkan. Isian manual tetap dapat diubah.
+          </p>
+        </>
+      ) : null}
+      <FieldError error={saveError} id={`${prefix}ContactSelection-error`} />
+    </div>
+  );
+}
+
 export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraftFormProps) {
   const [state, formAction, pending] = useActionState<ShipmentDraftActionState, FormData>(
     saveShipmentDraft,
@@ -33,12 +191,59 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraf
   const fieldError = (field: string) => errors[field];
   const describedBy = (field: string) => (fieldError(field) ? `${field}-error` : undefined);
   const errorSummaryRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const recipientAreaSelectionRef = useRef<{ id: string; label: string } | null>(null);
+  const applySenderSelection = useCallback((selection: ShipmentContactSelection) => {
+    const form = formRef.current;
+    if (!form) return;
+    setFormField(form, "senderName", selection.name);
+    setFormField(form, "senderPhone", selection.phone);
+    setFormField(form, "senderAddress", selection.address);
+  }, []);
+  const applyRecipientSelection = useCallback((selection: ShipmentContactSelection) => {
+    const form = formRef.current;
+    if (!form) return;
+    setFormField(form, "recipientName", selection.name);
+    setFormField(form, "recipientPhone", selection.phone);
+    setFormField(form, "recipientAddress", selection.address);
+
+    if (!selection.destinationAreaId || !selection.destinationAreaLabel) return;
+    const areaIdField = form.elements.namedItem("destinationAreaId");
+    const areaLabelField = form.elements.namedItem("destinationAreaLabel");
+    if (
+      !(areaIdField instanceof HTMLInputElement) ||
+      !(areaLabelField instanceof HTMLInputElement)
+    ) {
+      return;
+    }
+    const previousSelection = recipientAreaSelectionRef.current;
+    const targetIsBlank = areaIdField.value.trim() === "" && areaLabelField.value.trim() === "";
+    const targetWasSelectionSet = previousSelection !== null &&
+      areaIdField.value === previousSelection.id &&
+      areaLabelField.value === previousSelection.label;
+    if (targetIsBlank || targetWasSelectionSet) {
+      areaIdField.value = selection.destinationAreaId;
+      areaLabelField.value = selection.destinationAreaLabel;
+      recipientAreaSelectionRef.current = {
+        id: selection.destinationAreaId,
+        label: selection.destinationAreaLabel,
+      };
+    } else {
+      recipientAreaSelectionRef.current = null;
+    }
+  }, []);
   useEffect(() => {
     if (state.errors) errorSummaryRef.current?.focus();
   }, [state]);
 
   return (
-    <form action={formAction} aria-busy={pending} className="ship-form" id="form-kiriman">
+    <form
+      action={formAction}
+      aria-busy={pending}
+      className="ship-form"
+      id="form-kiriman"
+      ref={formRef}
+    >
       {errorEntries.length > 0 ? (
         <section className="ship-error-summary" ref={errorSummaryRef} role="alert" tabIndex={-1}>
           <h2>Periksa {errorEntries.length} isian berikut</h2>
@@ -52,6 +257,11 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraf
 
       <fieldset className="ship-group">
         <legend>Pengirim</legend>
+        <ContactPicker
+          onSelect={applySenderSelection}
+          role="SENDER"
+          saveError={fieldError("senderContactSelection")}
+        />
         <div className="ship-pair">
           <label htmlFor="senderName">Nama pengirim
             <input aria-describedby={describedBy("senderName")} aria-invalid={Boolean(fieldError("senderName"))} autoFocus={autoFocusFirstField && !state.errors} defaultValue={values.senderName} id="senderName" name="senderName" required />
@@ -70,6 +280,11 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraf
 
       <fieldset className="ship-group">
         <legend>Penerima</legend>
+        <ContactPicker
+          onSelect={applyRecipientSelection}
+          role="RECIPIENT"
+          saveError={fieldError("recipientContactSelection")}
+        />
         <div className="ship-pair">
           <label htmlFor="recipientName">Nama penerima
             <input aria-describedby={describedBy("recipientName")} aria-invalid={Boolean(fieldError("recipientName"))} defaultValue={values.recipientName} id="recipientName" name="recipientName" required />
@@ -86,11 +301,11 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraf
         </label>
         <div className="ship-pair">
           <label htmlFor="destinationAreaLabel">Area tujuan
-            <input aria-describedby={describedBy("destinationAreaLabel")} aria-invalid={Boolean(fieldError("destinationAreaLabel"))} defaultValue={values.destinationAreaLabel} id="destinationAreaLabel" name="destinationAreaLabel" required />
+            <input aria-describedby={describedBy("destinationAreaLabel")} aria-invalid={Boolean(fieldError("destinationAreaLabel"))} defaultValue={values.destinationAreaLabel} id="destinationAreaLabel" name="destinationAreaLabel" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
             <FieldError error={fieldError("destinationAreaLabel")} id="destinationAreaLabel-error" />
           </label>
           <label htmlFor="destinationAreaId">ID area tujuan
-            <input aria-describedby={describedBy("destinationAreaId")} aria-invalid={Boolean(fieldError("destinationAreaId"))} defaultValue={values.destinationAreaId} id="destinationAreaId" name="destinationAreaId" required />
+            <input aria-describedby={describedBy("destinationAreaId")} aria-invalid={Boolean(fieldError("destinationAreaId"))} defaultValue={values.destinationAreaId} id="destinationAreaId" name="destinationAreaId" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
             <FieldError error={fieldError("destinationAreaId")} id="destinationAreaId-error" />
           </label>
         </div>

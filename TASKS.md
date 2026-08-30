@@ -49,26 +49,26 @@
   - Dependencies: T-1, T-3
   - Done when: An operator saves a valid tenant-scoped draft with sender, recipient, package, declared value, and COD/non-COD data; invalid phone, address selection, package, or COD values prevent submission and preserve no invalid shipment.
 
-- [ ] **T-5 — Build bulk shipment intake validation**
+- [x] **T-5 — Build bulk shipment intake validation**
   - Primary requirement: PR-4
   - Constraints: TEN-2, IAM-3, PRIV-1, UX-2, RATE-1
   - Dependencies: T-4
   - Done when: A tenant operator uploads a documented CSV template, receives row-level validation errors without order creation, and can create only the valid rows as tenant-scoped drafts.
 
-- [ ] **T-6 — Fetch provider estimates and enforce COD eligibility**
+- [x] **T-6 — Fetch provider estimates and enforce COD eligibility**
   - Primary requirement: PR-5
   - Constraints: TD-2, SEC-1, RATE-1, OBS-2
   - Dependencies: T-4
   - Done when: A server integration test using a Mengantar contract fixture displays only supported services, disables COD when `unsupported_cod` is true, and persists provider-returned shipping and insurance values without custom price calculation.
 
 
-- [ ] **T-12 — Calculate and persist COD collection totals**
+- [x] **T-12 — Calculate and persist COD collection totals**
   - Primary requirement: PR-9
   - Constraints: PR-5, TD-2, DATA-3, TEN-2
   - Dependencies: T-6
   - Done when: A deterministic IDR test proves that goods Rp100.000 plus Mengantar shipping Rp10.000 produces service fee Rp3.300, VAT Rp363, and provider COD amount Rp113.663; unsupported COD remains unselectable.
 
-- [ ] **T-13 — Build tenant reusable contact directory**
+- [x] **T-13 — Build tenant reusable contact directory**
   - Primary requirement: PR-12
   - Constraints: TD-6, DATA-1, TEN-2, IAM-2, IAM-3, PRIV-1
   - Dependencies: T-1

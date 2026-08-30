@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: geraicuan_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d geraicuan_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/geraicuan_test
+      APP_DATABASE_URL: postgresql://geraicuan_test_runtime@127.0.0.1:5432/geraicuan_test
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-at-least-32
+      BETTER_AUTH_TRUSTED_PROXY_CIDRS: 127.0.0.1/32
+      BETTER_AUTH_URL: http://localhost:3000
+      MIGRATION_CHECK_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/geraicuan_migration_check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Create least-privileged application role
+        run: node -e "const {Client}=require('pg');const client=new Client({connectionString:'postgresql://postgres@127.0.0.1:5432/postgres'});(async()=>{await client.connect();await client.query('CREATE ROLE geraicuan_test_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS');await client.end()})().catch(error=>{console.error(error);process.exit(1)})"
+      - name: Create isolated migration-check database
+        run: node -e "const {Client}=require('pg');const client=new Client({connectionString:'postgresql://postgres@127.0.0.1:5432/postgres'});(async()=>{await client.connect();await client.query('CREATE DATABASE geraicuan_migration_check');await client.end()})().catch(error=>{console.error(error);process.exit(1)})"
+      - name: Verify empty and representative migration paths
+        run: pnpm test:migration-upgrade
+      - name: Apply current migrations to integration database
+        run: pnpm db:migrate
+      - name: Verify tenant isolation and application behavior
+        run: pnpm test:integration
+      - name: Lint and build
+        run: |
+          pnpm lint
+          pnpm build

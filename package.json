@@ -9,11 +9,13 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "test:integration": "vitest run --config vitest.integration.config.mts"
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "test:migration-upgrade": "node scripts/verify-migration-upgrade.mjs"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.2",
     "better-auth": "^1.7.2",
+    "csv-parse": "7.0.2",
     "drizzle-orm": "^0.45.2",
     "next": "16.3.3",
     "pg": "^8.23.0",

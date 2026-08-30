@@ -1,16 +1,12 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
-import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { MonitoringView } from "@/app/platform/_components/monitoring-view";
 
-export default async function PlatformCmsPage() {
-  try {
-    await requireCmsScope("platform");
-  } catch (error) {
-    if (error instanceof CmsAuthorizationDeniedError) {
-      redirect("/login/super-admin");
-    }
-    throw error;
-  }
+export const metadata: Metadata = { robots: { index: false } };
+export const dynamic = "force-dynamic";
 
-  return <main><h1>CMS Platform</h1><p>Akses Super Admin aktif.</p></main>;
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
+
+export default async function PlatformPage({ searchParams }: Props) {
+  return <MonitoringView kind="overview" rawParams={await searchParams} route="/platform" />;
 }

@@ -1,0 +1,36 @@
+{
+  "contract": "Mengantar POST /order/pay-unpaid sanitized fixture",
+  "issued": {
+    "response": {
+      "success": true,
+      "data": {
+        "batch_id": "SANITIZED-ORDER-UNPAID",
+        "courier": "JNE",
+        "cnote_no": ["SANITIZED-CNOTE-RECOVERED-0001"]
+      }
+    }
+  },
+  "ambiguous": {
+    "response": {
+      "success": true,
+      "data": {
+        "batch_id": "SANITIZED-ORDER-UNPAID",
+        "courier": "JNE",
+        "cnote_no": [
+          "SANITIZED-CNOTE-AMBIGUOUS-0001",
+          "SANITIZED-CNOTE-AMBIGUOUS-0002"
+        ]
+      }
+    }
+  },
+  "wrongBatch": {
+    "response": {
+      "success": true,
+      "data": {
+        "batch_id": "SANITIZED-OTHER-BATCH",
+        "courier": "JNE",
+        "cnote_no": ["SANITIZED-CNOTE-UNMAPPED-0001"]
+      }
+    }
+  }
+}
