@@ -1,13 +1,13 @@
 # Status — geraicuan
 
-Updated: 2026-08-28
+Updated: 2026-08-30
 Status: Active
-State: IMPLEMENTING
+State: PRODUCTION_READY
 Review-Risk: R3
 Independent-Review: PASS
 Primary-Worker: Main
-Independent-Reviewer: LifecycleFinalSecurityReview
-Independent-Review-Head: UNCOMMITTED
+Independent-Reviewer: Independent task security reviewers
+Independent-Review-Head: b737a874c51cad87c60839760e1bc48014608450
 
 ## Delivery state machine
 
@@ -23,9 +23,9 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1, T-2, T-15, T-3, T-16, T-4, T-5, T-6, and T-13 are complete with
-verified delivery evidence. T-11 awaits an authorized GitHub push and hosted CI
-run; its local migration/release checks passed.
+T-1 through T-18 are complete with verified delivery evidence. Hosted CI run
+`33308954008` passed on `b737a874c51cad87c60839760e1bc48014608450`. Deployment
+remains explicitly unapproved.
 
 ## Active work
 
@@ -70,11 +70,12 @@ No implementation task is active.
   between selection and save was server-re-resolved into the immutable party
   snapshot. Independent security review passed after the snapshot repair.
 
-- 2026-08-28 T-11: local PostgreSQL 16 verified both an empty-database
-  migration chain and a representative pre-release fixture upgrade retaining a
-  tenant, outlet, shipment, and two shipment parties. Tenant-isolation
-  integration tests (22 assertions), lint, and build passed. The unpushed
-  least-privilege GitHub Actions workflow awaits a hosted run.
+- 2026-08-30 T-7 through T-10, T-12, T-14, T-17, and T-18: focused
+  integration evidence, lint/build, and independent reviews passed. Migrations
+  `0011`–`0019` are additive and verified locally.
+- 2026-08-30 T-11: hosted GitHub Actions run `33308954008` passed empty and
+  representative migration upgrades, integration tests, lint, and build on
+  commit `b737a874c51cad87c60839760e1bc48014608450`.
 
 - 2026-08-29 T-6: one user-approved sandbox non-COD estimate returned HTTP
   200 and was captured only as a sanitized fixture. Migration `0010` persists
@@ -87,6 +88,4 @@ No implementation task is active.
   approved local authenticated fixture session was available; the protected
   route correctly redirected anonymous access to tenant login.
 
-Continue with T-12, which now has its required persisted provider estimate
-snapshots. T-11 still requires explicit authorization for a commit and push;
-no provider request, secret access, commit, or push occurs without approval.
+No implementation task is active. Deployment remains an explicit approval gate.

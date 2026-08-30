@@ -76,37 +76,37 @@
 
 ## Phase 3: Resi and label
 
-- [ ] **T-7 — Create serialized Mengantar order batches**
+- [x] **T-7 — Create serialized Mengantar order batches**
   - Primary requirement: PR-6
   - Constraints: TD-3, SEC-1, TEN-2, OBS-2, RATE-1
   - Dependencies: T-5, T-6
   - Done when: A contract test proves individual and bulk drafts become one provider batch per courier/pickup context, dynamic-AWB courier requests are serialized per account, duplicate submission is idempotent, and returned `cnote_no` values are persisted as provider AWBs.
 
-- [ ] **T-8 — Recover unpaid non-COD provider batches**
+- [x] **T-8 — Recover unpaid non-COD provider batches**
   - Primary requirement: PR-8
   - Constraints: TD-4, SEC-1, TEN-2, IAM-2, OBS-2
   - Dependencies: T-7
   - Done when: A test fixture with `isPaid:false` and no AWB leaves the shipment awaiting payment; an authorized retry invokes `pay-unpaid`, persists returned AWBs, and rejects any cross-tenant retry.
 
-- [ ] **T-9 — Render and record provider AWB labels**
+- [x] **T-9 — Render and record provider AWB labels**
   - Primary requirement: PR-7
   - Constraints: TEN-2, IAM-3, PRIV-1, UX-3, OBS-3
   - Dependencies: T-7
   - Done when: A browser test prints a 100x150mm label using the provider AWB, selected courier, sender, recipient, package, COD/non-COD, and provider insurance data; each print/reprint increments a tenant-scoped history record.
 
-- [ ] **T-14 — Build Super Admin operations monitoring**
+- [x] **T-14 — Build Super Admin operations monitoring**
   - Primary requirement: PR-11
   - Constraints: TD-7, IAM-1, OBS-1, OBS-2, OBS-4, SEC-1, SEC-2
   - Dependencies: T-1, T-2, T-3, T-7
   - Done when: A browser and integration check show filtered global/per-tenant counts, provider/queue/unpaid/error health, usage, and audit records with URL-addressable filters, selected timezone, and no credentials or unnecessary PII.
 
-- [ ] **T-17 — Add timezone-safe analytics filters**
+- [x] **T-17 — Add timezone-safe analytics filters**
   - Primary requirement: PR-15
   - Constraints: TD-9, IAM-1, IAM-2, OBS-4, UX-1
   - Dependencies: T-7, T-8
   - Done when: Browser and integration checks prove URL-addressable preset/custom ranges, identical timezone boundaries across KPI/trend/table views, and tenant scope enforcement.
 
-- [ ] **T-18 — Implement tenant operational ledger**
+- [x] **T-18 — Implement tenant operational ledger**
   - Primary requirement: PR-16
   - Constraints: TD-10, DATA-4, TEN-2, IAM-1, IAM-2, SEC-2
   - Dependencies: T-7, T-8, T-12
@@ -114,13 +114,13 @@
 
 ## Phase 4: Production readiness
 
-- [ ] **T-10 — Add tenant-safe telemetry and abuse limits**
+- [x] **T-10 — Add tenant-safe telemetry and abuse limits**
   - Primary requirement: PR-6
   - Constraints: OBS-1, OBS-2, OBS-3, RATE-1, SEC-1, PRIV-1
   - Dependencies: T-7
   - Done when: A smoke test emits structured, redacted shipment lifecycle events with tenant and correlation IDs, while rate-limit tests reject abusive estimate/order retries without leaking PII or credentials.
 
-- [ ] **T-11 — Validate migration and release rollback path**
+- [x] **T-11 — Validate migration and release rollback path**
   - Primary requirement: PR-1
   - Constraints: DEL-1, MIG-1, TEN-2, SEC-2
   - Dependencies: T-1, T-2

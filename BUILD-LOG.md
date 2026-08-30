@@ -117,7 +117,9 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   are the default; Git rollback is not database rollback; restore needs an
   approved backup recovery decision.
 - Local PostgreSQL 16 verification and independent CI review passed. Hosted CI
-  evidence remains pending an authorized commit and push.
+  run [33308954008](https://github.com/ongkipro/geraicuan/actions/runs/33308954008)
+  passed on commit `b737a874c51cad87c60839760e1bc48014608450`, proving the
+  empty and representative migration paths, tenant isolation, lint, and build.
 
 ## 2026-08-29 — T-6 provider estimates
 
@@ -131,3 +133,16 @@ Record only durable implementation changes, validation evidence, and gotchas tha
 - Fresh PostgreSQL 16 migration, 27 integration assertions, lint, build, and
   independent security review passed. Authenticated browser exercise remains
   unavailable without an approved local fixture session.
+
+## 2026-08-30 — Resi, operations, and production readiness
+
+- Migrations `0011`–`0019` add immutable COD totals, serialized provider
+  batches and unpaid recovery, print history, signed operational ledger,
+  platform monitoring views, and tenant/actor shipment abuse limits.
+- Focused integration contracts cover AWB authority, tenant isolation,
+  recovery, label print history, analytics timezone ranges, operational ledger
+  reconciliation, platform monitoring, telemetry redaction, and isolated
+  rate-limit windows. Independent reviews passed after the signed-reconciliation
+  and shared-rate-limit defects were corrected.
+- Hosted CI run `33308954008` passed the migration upgrade check, integration
+  suite, lint, and production build. No provider order was created.
