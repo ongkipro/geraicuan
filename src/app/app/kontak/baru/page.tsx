@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ContactForm } from "@/app/app/kontak/contact-form";
+import { PageContainer } from "@/components/cms/page-container";
+import { PageHeader } from "@/components/cms/page-header";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -16,5 +17,5 @@ export default async function NewContactPage() {
     throw error;
   }
 
-  return <main className="ship-shell"><a className="sales-skip" href="#form-kontak">Lewati ke formulir kontak</a><header className="ship-header"><p className="ship-wordmark">GeraiCUAN</p><Link href="/app/kontak">Kembali ke direktori</Link></header><section className="ship-intro"><p className="sales-eyebrow">KONTAK BARU</p><h1>Buat kontak</h1><p>Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya.</p></section><ContactForm /></main>;
+  return <PageContainer width="form"><PageHeader description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya." eyebrow="Data" title="Buat kontak" /><ContactForm /></PageContainer>;
 }

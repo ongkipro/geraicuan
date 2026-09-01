@@ -71,6 +71,8 @@ export class OrderBatchUnavailableError extends Error {
   }
 }
 
+export const PROVIDER_BATCH_CLAIM_STALE_AFTER_SECONDS = 120;
+
 export function deriveProviderAccountKey(accountIdentity: string): string {
   if (!accountIdentity.trim()) throw new OrderBatchUnavailableError();
   return createHash("sha256").update(accountIdentity, "utf8").digest("hex");
@@ -261,12 +263,16 @@ async function loadAndLockSelections(
 type ExistingConfirmationRow = {
   batchId: string;
   status: (typeof providerBatches.$inferSelect)["status"];
+  orderStatus: (typeof providerOrderSnapshots.$inferSelect)["status"];
+  shipmentStatus: (typeof shipments.$inferSelect)["status"];
+  submissionAttemptedAt: Date | null;
+  batchOrderCount: number;
   outletId: string;
   pickupAddressId: string;
   courier: string;
   credentialSource: (typeof providerBatches.$inferSelect)["credentialSource"];
   providerAccountKey: string;
-};
+} & SelectedOrderRow;
 
 async function loadExistingConfirmationBatches(
   tx: TenantTransaction,
@@ -291,11 +297,40 @@ async function loadExistingConfirmationBatches(
     SELECT
       batch.id AS "batchId",
       batch.status,
+      batch.submission_attempted_at AS "submissionAttemptedAt",
+      (
+        SELECT count(*)::int
+        FROM provider_order_snapshots AS batch_member
+        WHERE batch_member.batch_id = batch.id
+          AND batch_member.tenant_id = batch.tenant_id
+      ) AS "batchOrderCount",
       batch.outlet_id AS "outletId",
-      batch.pickup_address_id AS "pickupAddressId",
       batch.courier,
       batch.credential_source AS "credentialSource",
-      batch.provider_account_key AS "providerAccountKey"
+      batch.provider_account_key AS "providerAccountKey",
+      shipment.id AS "shipmentId",
+      shipment.status AS "shipmentStatus",
+      outlet.default_pickup_address_id AS "pickupAddressId",
+      provider_order.estimate_snapshot_id AS "estimateSnapshotId",
+      provider_order.estimate_service_id AS "estimateServiceId",
+      provider_order.provider_service AS "providerService",
+      provider_order.status AS "orderStatus",
+      provider_order.currency,
+      provider_order.shipping_amount_idr AS "shippingAmountIdr",
+      provider_order.insurance_amount_idr AS "insuranceAmountIdr",
+      draft.destination_area_id AS "destinationAreaId",
+      draft.package_content AS "packageContent",
+      draft.package_weight_grams AS "weightGrams",
+      draft.package_quantity AS "quantity",
+      draft.declared_value_idr AS "declaredValueIdr",
+      draft.is_cod AS "isCod",
+      provider_order.provider_cod_amount_idr AS "providerCodAmountIdr",
+      sender.name AS "senderName",
+      sender.phone AS "senderPhone",
+      sender.address AS "senderAddress",
+      recipient.name AS "recipientName",
+      recipient.phone AS "recipientPhone",
+      recipient.address AS "recipientAddress"
     FROM requested
     JOIN provider_order_snapshots AS provider_order
       ON provider_order.shipment_id = requested."shipmentId"
@@ -305,24 +340,104 @@ async function loadExistingConfirmationBatches(
     JOIN provider_batches AS batch
       ON batch.id = provider_order.batch_id
       AND batch.tenant_id = provider_order.tenant_id
+    JOIN shipments AS shipment
+      ON shipment.id = provider_order.shipment_id
+      AND shipment.tenant_id = provider_order.tenant_id
+    JOIN outlets AS outlet
+      ON outlet.id = batch.outlet_id
+      AND outlet.tenant_id = batch.tenant_id
+      AND outlet.default_pickup_address_id = batch.pickup_address_id
+    JOIN shipment_drafts AS draft
+      ON draft.shipment_id = shipment.id
+      AND draft.tenant_id = shipment.tenant_id
+    JOIN shipment_parties AS sender
+      ON sender.shipment_id = shipment.id
+      AND sender.tenant_id = shipment.tenant_id
+      AND sender.role = 'SENDER'
+    JOIN shipment_parties AS recipient
+      ON recipient.shipment_id = shipment.id
+      AND recipient.tenant_id = shipment.tenant_id
+      AND recipient.role = 'RECIPIENT'
   `);
   if (existing.rows.length === 0) return null;
   if (existing.rows.length !== confirmations.length) throw new OrderBatchUnavailableError();
 
-  const batches = new Map<string, ExistingConfirmationRow>();
-  for (const row of existing.rows) batches.set(row.batchId, row);
-  return [...batches.values()].map((batch) => ({
-    id: batch.batchId,
-    created: false,
-    status: batch.status,
-    tenantId: context.tenantId,
-    outletId: batch.outletId,
-    pickupAddressId: batch.pickupAddressId,
-    courier: batch.courier,
-    credentialSource: batch.credentialSource,
-    providerAccountKey: batch.providerAccountKey,
-    orders: [],
-  }));
+  const submittingBatchIds = [...new Set(
+    existing.rows
+      .filter((row) => row.status === "SUBMITTING")
+      .map((row) => row.batchId),
+  )];
+  let recoveredStaleClaim = false;
+  for (const batchId of submittingBatchIds) {
+    recoveredStaleClaim = await markStaleProviderBatchUnknown(
+      tx,
+      context,
+      batchId,
+      "ORDER_SUBMISSION_INTERRUPTED",
+    ) || recoveredStaleClaim;
+  }
+  if (recoveredStaleClaim) {
+    return loadExistingConfirmationBatches(tx, context, confirmations);
+  }
+
+  const batches = new Map<string, ExistingConfirmationRow[]>();
+  for (const row of existing.rows) {
+    const rows = batches.get(row.batchId);
+    if (rows) rows.push(row);
+    else batches.set(row.batchId, [row]);
+  }
+  return [...batches.values()].map((rows) => {
+    const batch = rows[0]!;
+    const resumable = batch.status === "SUBMISSION_QUEUED"
+      && batch.submissionAttemptedAt === null;
+    if (
+      (batch.status === "SUBMISSION_QUEUED" && !resumable)
+      || (resumable && (
+        batch.batchOrderCount !== rows.length
+        || rows.some(
+          (row) => row.orderStatus !== "SUBMISSION_QUEUED"
+            || row.shipmentStatus !== "SUBMISSION_QUEUED",
+        )
+      ))
+    ) {
+      throw new OrderBatchUnavailableError();
+    }
+
+    return {
+      id: batch.batchId,
+      created: false,
+      status: batch.status,
+      tenantId: context.tenantId,
+      outletId: batch.outletId,
+      pickupAddressId: batch.pickupAddressId,
+      courier: batch.courier,
+      credentialSource: batch.credentialSource,
+      providerAccountKey: batch.providerAccountKey,
+      orders: resumable
+        ? rows
+            .sort((left, right) => left.shipmentId.localeCompare(right.shipmentId))
+            .map((row) => ({
+              shipmentId: row.shipmentId,
+              pickupAddressId: row.pickupAddressId,
+              courier: batch.courier,
+              providerService: row.providerService,
+              senderName: row.senderName,
+              senderPhone: row.senderPhone,
+              senderAddress: row.senderAddress,
+              recipientName: row.recipientName,
+              recipientPhone: row.recipientPhone,
+              recipientAddress: row.recipientAddress,
+              destinationAreaId: row.destinationAreaId,
+              packageContent: row.packageContent,
+              weightGrams: row.weightGrams,
+              quantity: row.quantity,
+              declaredValueIdr: row.declaredValueIdr,
+              isCod: row.isCod,
+              providerCodAmountIdr: row.providerCodAmountIdr,
+            }))
+        : [],
+    };
+  });
 }
 
 export async function prepareProviderBatches(
@@ -332,7 +447,16 @@ export async function prepareProviderBatches(
   resolveProviderAccountKey: ProviderAccountKeyResolver,
 ): Promise<PreparedProviderBatch[]> {
   const existing = await loadExistingConfirmationBatches(tx, context, confirmations);
-  if (existing) return existing;
+  if (existing) {
+    for (const batch of existing) {
+      if (batch.orders.length === 0) continue;
+      const providerAccountKey = await resolveProviderAccountKey(batch);
+      if (providerAccountKey !== batch.providerAccountKey) {
+        throw new OrderBatchUnavailableError();
+      }
+    }
+    return existing;
+  }
   const selected = await loadAndLockSelections(tx, context, confirmations);
   const groups = new Map<string, SelectedOrderRow[]>();
 
@@ -580,6 +704,102 @@ export async function markProviderBatchUnknown(
   }
 }
 
+export async function markStaleProviderBatchUnknown(
+  tx: TenantTransaction,
+  context: TenantContext,
+  batchId: string,
+  safeErrorCode: string,
+): Promise<boolean> {
+  const lockedBatch = await tx.execute<{ id: string }>(sql`
+    SELECT id
+    FROM ${providerBatches}
+    WHERE id = ${batchId}
+      AND tenant_id = ${context.tenantId}
+      AND status = 'SUBMITTING'
+      AND submission_attempted_at <= now() - (${PROVIDER_BATCH_CLAIM_STALE_AFTER_SECONDS} * interval '1 second')
+    FOR UPDATE
+  `);
+  if (lockedBatch.rows.length === 0) return false;
+
+  const members = await tx.execute<{
+    shipmentId: string;
+    status: (typeof providerOrderSnapshots.$inferSelect)["status"];
+  }>(sql`
+    SELECT shipment_id AS "shipmentId", status
+    FROM ${providerOrderSnapshots}
+    WHERE batch_id = ${batchId}
+      AND tenant_id = ${context.tenantId}
+    ORDER BY position
+    FOR UPDATE
+  `);
+  if (members.rows.length === 0) throw new OrderBatchUnavailableError();
+
+  const terminalStatuses = new Set(["ISSUED", "AWAITING_UPSTREAM_PAYMENT"]);
+  if (members.rows.every((member) => terminalStatuses.has(member.status))) {
+    await tx
+      .update(providerBatches)
+      .set({
+        status: "COMPLETED",
+        safeErrorCode: null,
+        completedAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(providerBatches.id, batchId),
+          eq(providerBatches.tenantId, context.tenantId),
+          eq(providerBatches.status, "SUBMITTING"),
+        ),
+      );
+    return true;
+  }
+  if (members.rows.some((member) => !terminalStatuses.has(member.status)
+    && member.status !== "SUBMISSION_QUEUED")) {
+    throw new OrderBatchUnavailableError();
+  }
+
+  await tx
+    .update(providerBatches)
+    .set({ status: "SUBMISSION_UNKNOWN", safeErrorCode, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(providerBatches.id, batchId),
+        eq(providerBatches.tenantId, context.tenantId),
+        eq(providerBatches.status, "SUBMITTING"),
+      ),
+    );
+  const unresolvedMembers = members.rows.filter(
+    (member) => member.status === "SUBMISSION_QUEUED",
+  );
+  await tx
+    .update(providerOrderSnapshots)
+    .set({
+      status: "SUBMISSION_UNKNOWN",
+      safeResponseCode: safeErrorCode,
+      resolvedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(providerOrderSnapshots.batchId, batchId),
+        eq(providerOrderSnapshots.tenantId, context.tenantId),
+        eq(providerOrderSnapshots.status, "SUBMISSION_QUEUED"),
+      ),
+    );
+  if (unresolvedMembers.length > 0) {
+    await tx
+      .update(shipments)
+      .set({ status: "SUBMISSION_UNKNOWN", updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(shipments.tenantId, context.tenantId),
+          eq(shipments.status, "SUBMISSION_QUEUED"),
+          inArray(shipments.id, unresolvedMembers.map((member) => member.shipmentId)),
+        ),
+      );
+  }
+  return true;
+}
+
 export async function completeProviderOrder(
   tx: TenantTransaction,
   context: TenantContext,
@@ -587,15 +807,16 @@ export async function completeProviderOrder(
   result: ProviderOrderResult,
 ) {
   const [batch] = await tx
-    .select({ status: providerBatches.status })
-    .from(providerBatches)
+    .update(providerBatches)
+    .set({ submissionAttemptedAt: sql`now()`, updatedAt: sql`now()` })
     .where(
       and(
         eq(providerBatches.id, batchId),
         eq(providerBatches.tenantId, context.tenantId),
+        eq(providerBatches.status, "SUBMITTING"),
       ),
     )
-    .limit(1);
+    .returning({ status: providerBatches.status });
   if (batch?.status !== "SUBMITTING") throw new OrderBatchUnavailableError();
 
   const orders = await tx

@@ -1,0 +1,28 @@
+{
+  "capability": "reviewer",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "outlet.readiness.corrective-verification",
+  "model": "gpt-5.6-sol",
+  "provider": "openai-codex",
+  "reasoningEffort": "max",
+  "recordedAt": "2026-09-01T00:18:25Z",
+  "result": "PASS",
+  "risk": "R4",
+  "runId": "RUN-20260901T001550Z-d5289561",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "admin-product-ux",
+    "application-security",
+    "full-stack-development",
+    "mengantar-api",
+    "nextjs-development",
+    "postgres-drizzle",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "7222dd855e890606d5c2c51500afa3a5e9c173f367abe8b845d689b7046e1c03",
+  "verificationFailed": false,
+  "worker": "task"
+}

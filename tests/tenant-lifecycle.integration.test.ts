@@ -7,6 +7,7 @@ import {
   TenantLifecycleDeniedError,
 } from "@/db/tenant-lifecycle";
 import * as schema from "@/db/schema";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -24,8 +25,7 @@ const appPool = new Pool({ connectionString: appDatabaseUrl });
 const appDb = drizzle({ client: appPool, schema });
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query("CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app");
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
   await adminPool.query(
     "TRUNCATE audit_events, platform_roles, shipments, outlets, memberships, tenants, users CASCADE",
   );
@@ -38,7 +38,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await adminPool.query("TRUNCATE audit_events, platform_roles, shipments, outlets, memberships, tenants, users CASCADE");
-  await adminPool.query("DROP ROLE geraicuan_test_runtime");
   await Promise.all([adminPool.end(), appPool.end()]);
 });
 

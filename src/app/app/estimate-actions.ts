@@ -14,9 +14,12 @@ import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import {
   MengantarConfigurationError,
   resolveMengantarCredentials,
-  type ManagedSecretLoader,
 } from "@/lib/mengantar-credentials";
 import { fetchMengantarEstimate, MengantarEstimateError } from "@/lib/mengantar-estimate";
+import {
+  isSanctionedEstimateFixtureEnabled,
+  loadSanctionedEstimateFixture,
+} from "@/lib/sanctioned-estimate-fixture";
 import {
   createShipmentCorrelationId,
   emitShipmentLifecycleEvent,
@@ -27,10 +30,6 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export type ShipmentEstimateActionState = {
   error?: string;
   unconfigured?: boolean;
-};
-
-const unavailableManagedSecretLoader: ManagedSecretLoader = async () => {
-  throw new MengantarConfigurationError();
 };
 
 async function requireTenantPrincipal() {
@@ -104,11 +103,13 @@ export async function loadShipmentEstimate(
       principal.tenantId,
       async (tx, context) => {
         const draft = await loadDraftEstimateInput(tx, context, shipmentId);
+        if (isSanctionedEstimateFixtureEnabled()) {
+          return { draft, resolved: null };
+        }
         const resolved = await resolveMengantarCredentials(
           tx,
           context,
           draft.outletId,
-          unavailableManagedSecretLoader,
         );
         return { draft, resolved };
       },
@@ -116,7 +117,7 @@ export async function loadShipmentEstimate(
     estimateScope = {
       ...verifiedContext,
       outletId: prepared.draft.outletId,
-      credentialSource: prepared.resolved.source,
+      credentialSource: prepared.resolved?.source ?? "platform_default",
     };
 
     const estimateRequest = {
@@ -124,14 +125,13 @@ export async function loadShipmentEstimate(
       originAreaId: prepared.draft.originAreaId,
       weightGrams: prepared.draft.weightGrams,
     };
-    const services = await fetchMengantarEstimate(
-      prepared.resolved.credentials,
-      estimateRequest,
-    );
+    const services = prepared.resolved
+      ? await fetchMengantarEstimate(prepared.resolved.credentials, estimateRequest)
+      : await loadSanctionedEstimateFixture();
 
     await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
       appendEstimateSnapshot(tx, context, shipmentId, {
-        credentialSource: prepared.resolved.source,
+        credentialSource: prepared.resolved?.source ?? "platform_default",
         destinationAreaId: prepared.draft.destinationAreaId,
         isCodRequested: prepared.draft.isCod,
         originAreaId: prepared.draft.originAreaId,
@@ -177,5 +177,5 @@ export async function loadShipmentEstimate(
     throw error;
   }
 
-  redirect(`/app?draft=${shipmentId}`);
+  redirect(`/app/pengiriman/baru?draft=${shipmentId}`);
 }

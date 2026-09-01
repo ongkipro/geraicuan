@@ -18,3 +18,5 @@ if (appDatabaseUrl === process.env.DATABASE_URL) {
 const pool = new Pool({ connectionString: appDatabaseUrl });
 
 export const db = drizzle({ client: pool, schema });
+
+export { pool as dbPool };

@@ -1,0 +1,27 @@
+{
+  "capability": "full-stack-development",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "contact-directory-detail-address-archive-matrix",
+  "model": "codex-gpt-5",
+  "provider": "openai-codex",
+  "reasoningEffort": "unavailable",
+  "recordedAt": "2026-08-31T22:37:19Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260831T221534Z-a1314382",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "admin-product-ux",
+    "application-security",
+    "full-stack-development",
+    "mengantar-api",
+    "nextjs-development",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "c9860462bc11a40a5c74140aeec5f6edb745f718d3305c0862100ff00f9c637d",
+  "verificationFailed": false,
+  "worker": "root-codex"
+}

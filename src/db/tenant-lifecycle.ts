@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import "server-only";
 
@@ -22,6 +22,18 @@ export class TenantLifecycleDeniedError extends Error {
   }
 }
 
+export class TenantLifecycleInputError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class TenantLifecycleAttemptConflictError extends Error {
+  constructor() {
+    super("The lifecycle attempt identifier was already used for different input.");
+  }
+}
+
 function actionName(action: TenantLifecycleAction) {
   return `TENANT_${action === "create" ? "CREATED" : action === "suspend" ? "SUSPENDED" : "REACTIVATED"}` as const;
 }
@@ -36,6 +48,7 @@ async function appendAudit(
   targetId: string | undefined,
   fromStatus: (typeof schema.tenantStatuses)[number] | undefined,
   toStatus: (typeof schema.tenantStatuses)[number] | undefined,
+  metadata: { attemptId: string; fingerprint: string } | undefined,
 ) {
   await tx.insert(schema.auditEvents).values({
     actorId,
@@ -47,14 +60,60 @@ async function appendAudit(
     outcome,
     fromStatus,
     toStatus,
+    metadata,
   });
+}
+
+function lifecycleFingerprint(
+  action: TenantLifecycleAction,
+  input: { name?: string; tenantId?: string; expectedName?: string },
+) {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      action,
+      expectedName: input.expectedName?.trim() ?? null,
+      name: input.name?.trim() ?? null,
+      tenantId: input.tenantId ?? null,
+    }))
+    .digest("hex");
+}
+
+async function loadAttemptReceipt(
+  tx: Transaction,
+  actorId: string,
+  action: TenantLifecycleAction,
+  attemptId: string,
+) {
+  const receipt = await tx.execute<{
+    fingerprint: string | null;
+    outcome: "SUCCESS" | "DENIED";
+    target_id: string;
+    to_status: (typeof schema.tenantStatuses)[number] | null;
+  }>(sql`
+    SELECT
+      metadata ->> 'fingerprint' AS fingerprint,
+      outcome,
+      target_id,
+      to_status
+    FROM audit_events
+    WHERE actor_id = ${actorId}
+      AND action = ${actionName(action)}
+      AND metadata ->> 'attemptId' = ${attemptId}
+    LIMIT 1
+  `);
+  return receipt.rows[0];
 }
 
 export async function executeTenantLifecycle(
   db: Database,
   principal: VerifiedPrincipal | undefined,
   action: TenantLifecycleAction,
-  input: { name?: string; tenantId?: string },
+  input: {
+    attemptId?: string;
+    name?: string;
+    tenantId?: string;
+    expectedName?: string;
+  },
 ) {
   const result = await db.transaction(async (tx) => {
     const role = await tx.execute<{ rolsuper: boolean; rolbypassrls: boolean }>(
@@ -68,7 +127,7 @@ export async function executeTenantLifecycle(
       sql`select set_config('app.user_id', ${principal?.userId ?? ""}, true)`,
     );
 
-    const isSuperAdmin = principal
+    const platformRole = principal
       ? await tx
           .select({
             userId: schema.platformRoles.userId,
@@ -81,17 +140,18 @@ export async function executeTenantLifecycle(
       : [];
     if (
       !principal
-      || isSuperAdmin.length !== 1
-      || isSuperAdmin[0].userStatus !== "ACTIVE"
+      || platformRole.length !== 1
+      || platformRole[0].userStatus !== "ACTIVE"
     ) {
       await appendAudit(
         tx,
         principal?.userId,
-        principal ? "TENANT_MEMBER" : null,
+        platformRole.length === 1 ? "SUPER_ADMIN" : principal ? "TENANT_MEMBER" : null,
         action,
         "DENIED",
         undefined,
         input.tenantId,
+        undefined,
         undefined,
         undefined,
       );
@@ -107,6 +167,34 @@ export async function executeTenantLifecycle(
       throw new Error("Platform authorization context was not established.");
     }
 
+    const attemptId = input.attemptId ?? randomUUID();
+    if (!UUID_PATTERN.test(attemptId)) {
+      throw new TenantLifecycleInputError("Lifecycle attempt identifier is invalid.");
+    }
+
+    const fingerprint = lifecycleFingerprint(action, input);
+    const attempt = { attemptId, fingerprint };
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${actor.userId}:${attemptId}`}, 0))`,
+    );
+    const receipt = await loadAttemptReceipt(
+      tx,
+      actor.userId,
+      action,
+      attemptId,
+    );
+    if (receipt) {
+      if (receipt.fingerprint !== fingerprint) {
+        throw new TenantLifecycleAttemptConflictError();
+      }
+      if (receipt.outcome === "DENIED" || !receipt.to_status) {
+        return { denied: true } as const;
+      }
+      return {
+        tenant: { id: receipt.target_id, status: receipt.to_status },
+      };
+    }
+
     if (input.tenantId && !UUID_PATTERN.test(input.tenantId)) {
       await appendAudit(
         tx,
@@ -118,15 +206,15 @@ export async function executeTenantLifecycle(
         input.tenantId,
         undefined,
         undefined,
+        attempt,
       );
       return { denied: true } as const;
     }
 
-
     if (action === "create") {
       const name = input.name?.trim();
-      if (!name) {
-        throw new Error("Tenant name is required.");
+      if (!name || name.length > 120 || /[\u0000-\u001f\u007f]/u.test(name)) {
+        throw new TenantLifecycleInputError("Tenant name is invalid.");
       }
 
       const tenant = { id: randomUUID(), status: "ACTIVE" as const };
@@ -135,24 +223,67 @@ export async function executeTenantLifecycle(
         name,
         status: tenant.status,
       });
-      await appendAudit(tx, actor.userId, "SUPER_ADMIN", action, "SUCCESS", tenant.id, tenant.id, undefined, tenant.status);
+      await appendAudit(
+        tx,
+        actor.userId,
+        "SUPER_ADMIN",
+        action,
+        "SUCCESS",
+        tenant.id,
+        tenant.id,
+        undefined,
+        tenant.status,
+        attempt,
+      );
       return { tenant };
     }
 
     if (!input.tenantId) {
-      throw new Error("Tenant ID is required.");
+      throw new TenantLifecycleInputError("Tenant ID is required.");
     }
 
     const transition = action === "suspend"
       ? { from: "ACTIVE" as const, to: "SUSPENDED" as const }
       : { from: "SUSPENDED" as const, to: "ACTIVE" as const };
+    const targetResult = await tx.execute<{
+      id: string;
+      name: string;
+      status: (typeof schema.tenantStatuses)[number];
+    }>(sql`
+      SELECT id, name, status
+      FROM tenants
+      WHERE id = ${input.tenantId}::uuid
+      FOR UPDATE
+    `);
+    const target = targetResult.rows[0];
+
+    if (
+      !target
+      || target.status !== transition.from
+      || (input.expectedName !== undefined
+        && input.expectedName.trim() !== target.name)
+    ) {
+      await appendAudit(
+        tx,
+        actor.userId,
+        "SUPER_ADMIN",
+        action,
+        "DENIED",
+        target?.id,
+        input.tenantId,
+        target?.status,
+        transition.to,
+        attempt,
+      );
+      return { denied: true } as const;
+    }
+
     const update = await tx.execute(
       sql`UPDATE tenants
         SET status = ${transition.to}, updated_at = now()
-        WHERE id = ${input.tenantId}::uuid
+        WHERE id = ${target.id}::uuid
           AND status = ${transition.from}`,
     );
-
     if (update.rowCount !== 1) {
       await appendAudit(
         tx,
@@ -160,16 +291,28 @@ export async function executeTenantLifecycle(
         "SUPER_ADMIN",
         action,
         "DENIED",
-        undefined,
-        input.tenantId,
-        undefined,
-        undefined,
+        target.id,
+        target.id,
+        target.status,
+        transition.to,
+        attempt,
       );
       return { denied: true } as const;
     }
 
-    const tenant = { id: input.tenantId, status: transition.to };
-    await appendAudit(tx, actor.userId, "SUPER_ADMIN", action, "SUCCESS", tenant.id, tenant.id, transition.from, tenant.status);
+    const tenant = { id: target.id, status: transition.to };
+    await appendAudit(
+      tx,
+      actor.userId,
+      "SUPER_ADMIN",
+      action,
+      "SUCCESS",
+      tenant.id,
+      tenant.id,
+      transition.from,
+      tenant.status,
+      attempt,
+    );
     return { tenant };
   });
 

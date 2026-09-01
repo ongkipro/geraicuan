@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { contactAddresses, contacts } from "@/db/schema";
@@ -14,6 +14,27 @@ export class ContactArchiveDeniedError extends Error {
   constructor() {
     super("Only tenant administrators can archive contacts.");
   }
+}
+
+export class ContactAddressLabelConflictError extends Error {
+  constructor() {
+    super("Contact address label is already in use.");
+  }
+}
+
+function isContactAddressLabelConflict(error: unknown) {
+  let current = error;
+  for (let depth = 0; depth < 3 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { cause?: unknown; code?: unknown; constraint?: unknown };
+    if (
+      candidate.code === "23505" &&
+      candidate.constraint === "contact_addresses_contact_label_key"
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
 }
 
 export async function createContact(
@@ -50,6 +71,7 @@ export async function listContacts(
   tx: TenantTransaction,
   context: TenantContext,
   query: string,
+  status: "active" | "archived" = "active",
 ) {
   return tx
     .select({
@@ -64,11 +86,27 @@ export async function listContacts(
     .where(
       and(
         eq(contacts.tenantId, context.tenantId),
-        isNull(contacts.archivedAt),
+        status === "archived" ? isNotNull(contacts.archivedAt) : isNull(contacts.archivedAt),
         query ? or(ilike(contacts.name, `%${query}%`), ilike(contacts.phone, `%${query}%`)) : undefined,
       ),
     )
     .orderBy(asc(contacts.name), asc(contacts.createdAt));
+}
+
+export async function countActiveContacts(
+  tx: TenantTransaction,
+  context: TenantContext,
+) {
+  const [row] = await tx
+    .select({ total: count() })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.tenantId, context.tenantId),
+        isNull(contacts.archivedAt),
+      ),
+    );
+  return row?.total ?? 0;
 }
 
 export async function getContact(
@@ -126,25 +164,54 @@ export async function addContactAddress(
     "address" | "addressLabel" | "destinationAreaId" | "destinationAreaLabel"
   >,
 ) {
-  const contact = await getContact(tx, context, contactId);
-  if (!contact || contact.archivedAt) throw new ContactUnavailableError();
-  const currentAddresses = await listContactAddresses(tx, context, contactId);
-  if (currentAddresses.filter((address) => !address.archivedAt).length >= 20) {
+  const [contact] = await tx
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.id, contactId),
+        eq(contacts.tenantId, context.tenantId),
+        isNull(contacts.archivedAt),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!contact) throw new ContactUnavailableError();
+
+  const [addressCount] = await tx
+    .select({ total: count() })
+    .from(contactAddresses)
+    .where(
+      and(
+        eq(contactAddresses.contactId, contactId),
+        eq(contactAddresses.tenantId, context.tenantId),
+        isNull(contactAddresses.archivedAt),
+      ),
+    );
+  if ((addressCount?.total ?? 0) >= 20) {
     throw new ContactUnavailableError();
   }
-  const created = await tx
-    .insert(contactAddresses)
-    .values({
-      address: input.address,
-      contactId,
-      destinationAreaId: input.destinationAreaId,
-      destinationAreaLabel: input.destinationAreaLabel,
-      isPrimary: currentAddresses.every((address) => address.archivedAt),
-      label: input.addressLabel,
-      tenantId: context.tenantId,
-    })
-    .returning({ id: contactAddresses.id });
-  return created[0]?.id;
+
+  try {
+    const created = await tx
+      .insert(contactAddresses)
+      .values({
+        address: input.address,
+        contactId,
+        destinationAreaId: input.destinationAreaId,
+        destinationAreaLabel: input.destinationAreaLabel,
+        isPrimary: (addressCount?.total ?? 0) === 0,
+        label: input.addressLabel,
+        tenantId: context.tenantId,
+      })
+      .returning({ id: contactAddresses.id });
+    return created[0]?.id;
+  } catch (error) {
+    if (isContactAddressLabelConflict(error)) {
+      throw new ContactAddressLabelConflictError();
+    }
+    throw error;
+  }
 }
 
 export async function updateContact(
@@ -156,7 +223,13 @@ export async function updateContact(
   const updated = await tx
     .update(contacts)
     .set({ ...input, updatedAt: new Date() })
-    .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, context.tenantId)))
+    .where(
+      and(
+        eq(contacts.id, contactId),
+        eq(contacts.tenantId, context.tenantId),
+        isNull(contacts.archivedAt),
+      ),
+    )
     .returning({ id: contacts.id });
   if (updated.length !== 1) throw new ContactUnavailableError();
 }
@@ -171,6 +244,8 @@ export async function resolveActiveContactAddress(
   const rows = await tx
     .select({
       address: contactAddresses.address,
+      addressUpdatedAt: contactAddresses.updatedAt,
+      contactUpdatedAt: contacts.updatedAt,
       destinationAreaId: contactAddresses.destinationAreaId,
       destinationAreaLabel: contactAddresses.destinationAreaLabel,
       isRecipient: contacts.isRecipient,
@@ -195,7 +270,8 @@ export async function resolveActiveContactAddress(
         isNull(contactAddresses.archivedAt),
       ),
     )
-    .limit(1);
+    .limit(1)
+    .for("share", { of: [contacts, contactAddresses] });
   const row = rows[0];
   if (!row || (role === "SENDER" ? !row.isSender : !row.isRecipient)) {
     throw new ContactUnavailableError();

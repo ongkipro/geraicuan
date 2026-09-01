@@ -5,10 +5,16 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  claimProviderBatch,
+  completeProviderBatch,
+  completeProviderOrder,
   deriveProviderAccountKey,
+  markStaleProviderBatchUnknown,
+  prepareProviderBatches,
   type OrderConfirmation,
 } from "@/db/order-batch-repository";
 import * as schema from "@/db/schema";
+import { checkShipmentStaleOperation } from "@/db/shipment-stale-operation-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import {
   orchestrateFixtureBackedMengantarOrders,
@@ -22,6 +28,7 @@ import {
   enforceEstimateRateLimit,
 } from "@/lib/estimate-rate-limit";
 import { OrderRateLimitedError } from "@/lib/order-rate-limit";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 import type { ShipmentLifecycleEvent } from "@/lib/shipment-telemetry";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
@@ -161,10 +168,7 @@ beforeAll(async () => {
   fixture = JSON.parse(
     await readFile(new URL("./fixtures/mengantar-order.sanitized.json", import.meta.url), "utf8"),
   ) as OrderFixture;
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 });
 
 beforeEach(async () => {
@@ -198,6 +202,255 @@ afterAll(async () => {
 });
 
 describe("fixture-backed Mengantar order orchestration", () => {
+  it("resumes a persisted unattempted queue exactly once", async () => {
+    const confirmation = await seedEstimatedShipment(90, tenantA, outletA, "JNE");
+    await withTenantContext(appDb, "order-user-a", tenantA, (tx, context) =>
+      prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+
+    let calls = 0;
+    const result = await orchestrateFixtureBackedMengantarOrders(
+      input([confirmation], {
+        async submit() {
+          calls += 1;
+          return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+        },
+      }),
+    );
+    const duplicate = await orchestrateFixtureBackedMengantarOrders(
+      input([confirmation], {
+        async submit() {
+          calls += 1;
+          return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+        },
+      }),
+    );
+
+    expect(result.batches).toEqual([
+      expect.objectContaining({ created: false, submitted: true, status: "COMPLETED" }),
+    ]);
+    expect(duplicate.batches).toEqual([
+      expect.objectContaining({ created: false, submitted: false, status: "COMPLETED" }),
+    ]);
+    expect(calls).toBe(1);
+  });
+
+  it("moves a stale crash-after-claim batch to unknown without another provider call", async () => {
+    const confirmation = await seedEstimatedShipment(91, tenantA, outletA, "JNE");
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared) throw new Error("Expected a prepared provider batch.");
+    expect(await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => claimProviderBatch(tx, context, prepared.id),
+    )).toBe(true);
+    await adminPool.query(
+      "UPDATE provider_batches SET submission_attempted_at = now() - interval '10 minutes' WHERE id = $1",
+      [prepared.id],
+    );
+
+    const result = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => checkShipmentStaleOperation(
+        tx,
+        context,
+        confirmation.shipmentId,
+      ),
+    );
+
+    expect(result).toBe("UPDATED");
+    const state = await adminPool.query<{
+      batch_status: string;
+      order_status: string;
+      shipment_status: string;
+      safe_error_code: string | null;
+    }>(`
+      SELECT batch.status AS batch_status,
+        provider_order.status AS order_status,
+        shipment.status AS shipment_status,
+        batch.safe_error_code
+      FROM provider_batches AS batch
+      JOIN provider_order_snapshots AS provider_order ON provider_order.batch_id = batch.id
+      JOIN shipments AS shipment ON shipment.id = provider_order.shipment_id
+      WHERE batch.id = $1
+    `, [prepared.id]);
+    expect(state.rows[0]).toEqual({
+      batch_status: "SUBMISSION_UNKNOWN",
+      order_status: "SUBMISSION_UNKNOWN",
+      shipment_status: "SUBMISSION_UNKNOWN",
+      safe_error_code: "ORDER_SUBMISSION_INTERRUPTED",
+    });
+  });
+
+  it("serializes stale recovery behind active order completion without splitting state", async () => {
+    const confirmation = await seedEstimatedShipment(92, tenantA, outletA, "JNE");
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared) throw new Error("Expected a prepared provider batch.");
+    expect(await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => claimProviderBatch(tx, context, prepared.id),
+    )).toBe(true);
+    await adminPool.query(
+      "UPDATE provider_batches SET submission_attempted_at = now() - interval '10 minutes' WHERE id = $1",
+      [prepared.id],
+    );
+
+    const blocker = await adminPool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT id FROM provider_batches WHERE id = $1 FOR UPDATE", [prepared.id]);
+    try {
+      const completion = withTenantContext(
+        appDb,
+        "order-user-a",
+        tenantA,
+        (tx, context) => completeProviderOrder(tx, context, prepared.id, {
+          shipmentId: confirmation.shipmentId,
+          providerOrderId: "SANITIZED-ORDER-RACE",
+          isPaid: true,
+          cnoteNo: "SANITIZED-AWB-RACE",
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const staleRecovery = withTenantContext(
+        appDb,
+        "order-user-a",
+        tenantA,
+        (tx, context) => markStaleProviderBatchUnknown(
+          tx,
+          context,
+          prepared.id,
+          "ORDER_SUBMISSION_INTERRUPTED",
+        ),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await blocker.query("COMMIT");
+
+      await expect(completion).resolves.toBeUndefined();
+      await expect(staleRecovery).resolves.toBe(false);
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      blocker.release();
+    }
+    await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => completeProviderBatch(tx, context, prepared.id),
+    );
+
+    const state = await adminPool.query<{
+      batch_status: string;
+      order_status: string;
+      shipment_status: string;
+    }>(`
+      SELECT batch.status AS batch_status,
+        provider_order.status AS order_status,
+        shipment.status AS shipment_status
+      FROM provider_batches AS batch
+      JOIN provider_order_snapshots AS provider_order ON provider_order.batch_id = batch.id
+      JOIN shipments AS shipment ON shipment.id = provider_order.shipment_id
+      WHERE batch.id = $1
+    `, [prepared.id]);
+    expect(state.rows[0]).toEqual({
+      batch_status: "COMPLETED",
+      order_status: "ISSUED",
+      shipment_status: "ISSUED",
+    });
+  });
+
+  it("finalizes a stale batch when the last provider member committed before process death", async () => {
+    const confirmation = await seedEstimatedShipment(93, tenantA, outletA, "JNE");
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared) throw new Error("Expected a prepared provider batch.");
+    await withTenantContext(appDb, "order-user-a", tenantA, async (tx, context) => {
+      expect(await claimProviderBatch(tx, context, prepared.id)).toBe(true);
+      await completeProviderOrder(tx, context, prepared.id, {
+        shipmentId: confirmation.shipmentId,
+        providerOrderId: "SANITIZED-ORDER-FINALIZE",
+        isPaid: true,
+        cnoteNo: "SANITIZED-AWB-FINALIZE",
+      });
+    });
+    await adminPool.query(
+      "UPDATE provider_batches SET submission_attempted_at = now() - interval '10 minutes' WHERE id = $1",
+      [prepared.id],
+    );
+
+    await expect(withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => markStaleProviderBatchUnknown(
+        tx,
+        context,
+        prepared.id,
+        "ORDER_SUBMISSION_INTERRUPTED",
+      ),
+    )).resolves.toBe(true);
+
+    const state = await adminPool.query<{
+      batch_status: string;
+      order_status: string;
+      shipment_status: string;
+      safe_error_code: string | null;
+    }>(`
+      SELECT batch.status AS batch_status,
+        provider_order.status AS order_status,
+        shipment.status AS shipment_status,
+        batch.safe_error_code
+      FROM provider_batches AS batch
+      JOIN provider_order_snapshots AS provider_order ON provider_order.batch_id = batch.id
+      JOIN shipments AS shipment ON shipment.id = provider_order.shipment_id
+      WHERE batch.id = $1
+    `, [prepared.id]);
+    expect(state.rows[0]).toEqual({
+      batch_status: "COMPLETED",
+      order_status: "ISSUED",
+      shipment_status: "ISSUED",
+      safe_error_code: null,
+    });
+  });
+
   it("resolves transport per immutable outlet/source/account binding and keeps confirmations idempotent", async () => {
     const confirmations = await Promise.all([
       seedEstimatedShipment(1, tenantA, outletA, "JT"),
@@ -491,6 +744,70 @@ describe("fixture-backed Mengantar order orchestration", () => {
       providerOrderId: null,
       cnoteNo: null,
     });
+  });
+
+  it("rejects oversized or control-bearing provider identifiers without persisting raw values", async () => {
+    const cases = [
+      {
+        sequence: 91,
+        data: {
+          order_id: "A".repeat(161),
+          isPaid: true,
+          cnote_no: "SANITIZED-CNOTE-SAFE",
+        },
+      },
+      {
+        sequence: 92,
+        data: {
+          order_id: "SANITIZED-ORDER-SAFE",
+          isPaid: true,
+          cnote_no: "SANITIZED-CNOTE\nCANARY",
+        },
+      },
+      {
+        sequence: 93,
+        data: {
+          order_id: "https://credential-bearing.example.test/order",
+          isPaid: true,
+          cnote_no: "SANITIZED-CNOTE-SAFE",
+        },
+      },
+    ];
+
+    for (const candidate of cases) {
+      const confirmation = await seedEstimatedShipment(
+        candidate.sequence,
+        tenantA,
+        outletA,
+        "JNE",
+      );
+      const result = await orchestrateFixtureBackedMengantarOrders(
+        input([confirmation], {
+          async submit() {
+            return { success: true, data: [candidate.data] };
+          },
+        }),
+      );
+      expect(result.batches[0]?.status).toBe("SUBMISSION_UNKNOWN");
+    }
+
+    const snapshots = await adminDb
+      .select({
+        cnoteNo: schema.providerOrderSnapshots.cnoteNo,
+        providerOrderId: schema.providerOrderSnapshots.providerOrderId,
+        status: schema.providerOrderSnapshots.status,
+      })
+      .from(schema.providerOrderSnapshots);
+    expect(snapshots).toHaveLength(3);
+    expect(snapshots).toEqual(
+      expect.arrayContaining(
+        cases.map(() => ({
+          cnoteNo: null,
+          providerOrderId: null,
+          status: "SUBMISSION_UNKNOWN",
+        })),
+      ),
+    );
   });
 
   it("marks ambiguous submissions unknown and never retries them", async () => {

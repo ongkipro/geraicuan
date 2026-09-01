@@ -2,7 +2,12 @@ import "server-only";
 
 import { and, eq } from "drizzle-orm";
 
+import {
+  loadManagedMengantarApiKey,
+  ManagedMengantarSecretUnavailableError,
+} from "@/db/managed-secret-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import { mengantarSecretReference } from "@/db/outlet-readiness-repository";
 import * as schema from "@/db/schema";
 
 export type MengantarCredentials = {
@@ -11,8 +16,6 @@ export type MengantarCredentials = {
   originAreaId: string;
   pickupAddressId: string;
 };
-
-export type ManagedSecretLoader = (reference: string) => Promise<MengantarCredentials>;
 
 export class MengantarConfigurationError extends Error {
   constructor() {
@@ -32,6 +35,8 @@ function requireCompleteCredentials(value: MengantarCredentials) {
     !value.apiKey.trim()
     || baseUrl.protocol !== "https:"
     || !baseUrl.hostname
+    || Boolean(baseUrl.username)
+    || Boolean(baseUrl.password)
     || !value.originAreaId.trim()
     || !value.pickupAddressId.trim()
   ) {
@@ -50,14 +55,40 @@ function platformCredentials(): MengantarCredentials {
   });
 }
 
+export function assertPlatformDefaultMengantarCredentialsComplete() {
+  platformCredentials();
+}
+
+function platformBaseUrl() {
+  const value = process.env.MENGANTAR_BASE_URL ?? "";
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(value);
+  } catch {
+    throw new MengantarConfigurationError();
+  }
+  if (
+    baseUrl.protocol !== "https:"
+    || !baseUrl.hostname
+    || Boolean(baseUrl.username)
+    || Boolean(baseUrl.password)
+  ) {
+    throw new MengantarConfigurationError();
+  }
+  return value;
+}
+
 export async function resolveMengantarCredentials(
   tx: TenantTransaction,
   context: TenantContext,
   outletId: string,
-  loadSecret: ManagedSecretLoader,
 ): Promise<{ credentials: MengantarCredentials; source: "private" | "platform_default" }> {
   const outlet = await tx
-    .select({ id: schema.outlets.id })
+    .select({
+      defaultOriginAreaId: schema.outlets.defaultOriginAreaId,
+      defaultPickupAddressId: schema.outlets.defaultPickupAddressId,
+      id: schema.outlets.id,
+    })
     .from(schema.outlets)
     .where(
       and(
@@ -82,15 +113,32 @@ export async function resolveMengantarCredentials(
     .limit(1);
 
   if (connection.length === 1) {
-    const expectedReference = `managed://mengantar/${context.tenantId}/${outlet[0].id}`;
+    const expectedReference = mengantarSecretReference(context.tenantId, outlet[0].id);
     if (connection[0].secretReference !== expectedReference) {
       throw new MengantarConfigurationError();
     }
 
-    return {
-      credentials: requireCompleteCredentials(await loadSecret(expectedReference)),
-      source: "private",
-    };
+    try {
+      return {
+        credentials: requireCompleteCredentials({
+          apiKey: await loadManagedMengantarApiKey(
+            tx,
+            context,
+            outlet[0].id,
+            expectedReference,
+          ),
+          baseUrl: platformBaseUrl(),
+          originAreaId: outlet[0].defaultOriginAreaId ?? "",
+          pickupAddressId: outlet[0].defaultPickupAddressId ?? "",
+        }),
+        source: "private",
+      };
+    } catch (error) {
+      if (error instanceof ManagedMengantarSecretUnavailableError) {
+        throw new MengantarConfigurationError();
+      }
+      throw error;
+    }
   }
 
   return { credentials: platformCredentials(), source: "platform_default" };

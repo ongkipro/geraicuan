@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { parse } from "csv-parse/sync";
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
 
@@ -62,7 +64,11 @@ type BulkFileErrorCode =
   | "row_limit"
   | "syntax";
 
-export type BulkFileError = { code: BulkFileErrorCode; message: string };
+export type BulkFileError = {
+  code: BulkFileErrorCode;
+  field: "csv" | "outletId";
+  message: string;
+};
 export type BulkRowError = {
   field: (typeof BULK_TEMPLATE_HEADERS)[number];
   message: string;
@@ -78,8 +84,18 @@ export type BulkShipmentPreview = {
   validRows: BulkValidRow[];
 };
 
+export function deriveBulkRowSubmissionId(submissionId: string, row: number) {
+  const bytes = createHash("sha256")
+    .update(`geraicuan:bulk:${submissionId}:${row}`)
+    .digest();
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const value = bytes.toString("hex");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20, 32)}`;
+}
+
 function fileError(code: BulkFileErrorCode, message: string): BulkFileError {
-  return { code, message };
+  return { code, field: "csv", message };
 }
 
 function isExpectedHeader(row: string[]) {

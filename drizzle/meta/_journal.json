@@ -141,6 +141,48 @@
       "when": 1788086850922,
       "tag": "0019_smart_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788094679671,
+      "tag": "0020_tenant_member_governance",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788094817025,
+      "tag": "0021_platform_tenant_finance_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788221124089,
+      "tag": "0022_outlet_settings_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788222340276,
+      "tag": "0023_member_governance_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788223270651,
+      "tag": "0024_platform_lifecycle_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788230331640,
+      "tag": "0025_happy_captain_midlands",
+      "breakpoints": true
     }
   ]
 }

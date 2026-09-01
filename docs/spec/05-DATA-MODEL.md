@@ -11,6 +11,8 @@
 | `memberships` | Yes | User role in one tenant: `TENANT_ADMIN` or `OPERATOR`. |
 | `outlets` | Yes | Tenant shipment origin and operational pickup identity. |
 | `mengantar_connections` | Yes | Outlet private credential reference, masked metadata, default pickup/origin IDs, and `private`/`platform_default` resolution state; never plaintext secrets. |
+| `managed_secret_payloads` | Yes | Server-only authenticated-encryption envelope for an outlet's private Mengantar API key, keyed by canonical purpose/reference and encryption-key version; never plaintext or browser-readable metadata. |
+| `mengantar_location_cache` | No | Optional bounded cache of provider-authoritative area/pickup identifiers and Indonesian display hierarchy, created only after an accepted address-search contract proves caching is needed. |
 | `contacts` | Yes | Reusable sender/recipient directory entry with role tags and normalized contact details. |
 | `contact_addresses` | Yes | One or more reusable addresses for a contact, including selected Mengantar address metadata. |
 | `shipment_parties` | Yes | Immutable sender/recipient contact snapshots used for provider payload and label history. |
@@ -41,6 +43,12 @@ Store currency as `IDR` and all amounts as whole integer rupiah. Persist user-de
 | Non-COD unpaid | Mark awaiting upstream payment; no AWB/print and no paid-cost entry until provider confirms recovery. |
 | Pay-unpaid success | Persist AWB, append non-COD upstream-payment cost, then allow print. |
 | Reconciliation variance | Preserve source totals and append an adjustment/reconciliation entry; never mutate prior ledger entries. |
+
+## DATA-6 — Managed credential invariant
+`mengantar_connections` stores no ciphertext or secret fragment. Each active private connection resolves exactly one purpose-bound encrypted payload for the same tenant and outlet. The envelope stores ciphertext, nonce, authentication tag, key version, and timestamps; authenticated additional data binds purpose, tenant, outlet, and canonical reference so rows cannot be replayed across scope. Replacement is transactional and never exposes the prior value. Removing a private connection is allowed only after the platform default is complete and records a redacted audit outcome.
+
+## DATA-7 — Provider location invariant
+Persist provider IDs together with their last accepted human-readable label at operational snapshot boundaries. A cached area row is never sufficient evidence that an ID remains supported; estimate/order behavior remains authoritative. Do not seed or import a kecamatan dataset until TD-16 accepts its provider contract, refresh policy, and expiry behavior.
 
 ## ERD
 ```mermaid

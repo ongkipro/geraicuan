@@ -9,6 +9,7 @@ import {
   withTenantContext,
 } from "@/db/tenant-context";
 import * as schema from "@/db/schema";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -35,10 +36,7 @@ const shipmentA = "00000000-0000-0000-0000-000000000021";
 const shipmentB = "00000000-0000-0000-0000-000000000022";
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 
   await adminPool.query("TRUNCATE shipments, outlets, memberships, tenants, users CASCADE");
   await adminPool.query(
@@ -65,7 +63,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await adminPool.query("TRUNCATE shipments, outlets, memberships, tenants, users CASCADE");
-  await adminPool.query("DROP ROLE geraicuan_test_runtime");
   await Promise.all([adminPool.end(), appPool.end()]);
 });
 

@@ -10,10 +10,14 @@ import {
 import {
   estimateCredentialSources,
   identityStatuses,
+  ledgerEntryTypes,
+  ledgerFinancialClasses,
   membershipRoles,
   providerBatchStatuses,
   providerOrderStatuses,
   providerUnpaidRecoveryStatuses,
+  reconciliationCadences,
+  reconciliationStatuses,
   shipmentStatuses,
   tenantStatuses,
 } from "@/db/schema";
@@ -148,6 +152,40 @@ export const platformMonitoringAuditEvent = pgView(
     outcome: text("outcome", { enum: ["SUCCESS", "DENIED"] }).notNull(),
     fromStatus: text("from_status", { enum: tenantStatuses }),
     toStatus: text("to_status", { enum: tenantStatuses }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+).existing();
+
+export const platformMonitoringLedgerHourly = pgView(
+  "platform_monitoring_ledger_hourly",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    effectiveHour: timestamp("effective_hour", { withTimezone: true }).notNull(),
+    entryType: text("entry_type", { enum: ledgerEntryTypes }).notNull(),
+    financialClass: text("financial_class", {
+      enum: ledgerFinancialClasses,
+    }).notNull(),
+    entryCount: bigint("entry_count", { mode: "number" }).notNull(),
+    amountIdr: bigint("amount_idr", { mode: "number" }).notNull(),
+  },
+).existing();
+
+export const platformMonitoringReconciliationLatest = pgView(
+  "platform_monitoring_reconciliation_latest",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    cadence: text("cadence", { enum: reconciliationCadences }).notNull(),
+    reconciledEntryType: text("reconciled_entry_type", {
+      enum: ledgerEntryTypes,
+    }).notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    sourceTotalIdr: bigint("source_total_idr", { mode: "number" }).notNull(),
+    ledgerTotalIdr: bigint("ledger_total_idr", { mode: "number" }).notNull(),
+    varianceIdr: bigint("variance_idr", { mode: "number" }).notNull(),
+    status: text("status", { enum: reconciliationStatuses }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
 ).existing();

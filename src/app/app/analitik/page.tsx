@@ -1,517 +1,246 @@
+import { CircleAlert, Download, PackageOpen } from "lucide-react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { CSSProperties } from "react";
+import { Suspense } from "react";
 
+import {
+  AnalyticsCourierRegion,
+  AnalyticsCourierSkeleton,
+  AnalyticsReconciliationRegion,
+  AnalyticsReconciliationSkeleton,
+  AnalyticsShipmentRegion,
+  AnalyticsShipmentSkeleton,
+  AnalyticsSummaryRegion,
+  AnalyticsSummarySkeleton,
+  AnalyticsTrendRegion,
+  AnalyticsTrendSkeleton,
+  type AnalyticsResolvedRegionProps,
+} from "@/app/app/analitik/analytics-regions";
+import { AnalyticsFilterFields } from "@/app/app/analitik/analytics-filter-fields";
+import { AnalyticsFilterSheet } from "@/app/app/analitik/analytics-filter-sheet";
+import { EmptyState } from "@/components/cms/empty-state";
+import { PageContainer } from "@/components/cms/page-container";
+import { PageHeader } from "@/components/cms/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import {
   countTenantShipments,
-  loadShipmentKpis,
+  loadAnalyticsFilterOptions,
+  loadCourierPerformance,
+  loadShipmentKpiComparison,
   loadShipmentPage,
   loadShipmentTrend,
-  type ShipmentRow,
+  type ShipmentKpiComparison,
 } from "@/db/analytics-repository";
+import { summarizeLatestReconciliationVariances } from "@/db/ledger-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { buildAnalyticsDecisionContext } from "@/lib/analytics-decision-context";
+import { parseTenantAnalyticsQuery, type TenantAnalyticsIssue } from "@/lib/analytics-filters";
 import {
   ANALYTICS_PRESETS,
   ANALYTICS_TIMEZONES,
   analyticsIssueMessage,
-  buildTrendBuckets,
-  formatInZone,
-  formatRangeLabel,
   parseAnalyticsRange,
-  parsePageNumber,
-  serializeAnalyticsRange,
-  type AnalyticsRange,
 } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { DATA_STALE_AFTER_MS } from "@/lib/data-freshness";
+import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
+import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER, type UiAuditScenario } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
 const PAGE_SIZE = 50;
-const countFormatter = new Intl.NumberFormat("id-ID");
-const idrFormatter = new Intl.NumberFormat("id-ID", {
-  currency: "IDR",
-  maximumFractionDigits: 0,
-  style: "currency",
-});
-
-const statusPresentation: Record<
-  ShipmentRow["status"],
-  { label: string; tone: "neutral" | "ok" | "warn" | "danger" }
-> = {
-  DRAFT: { label: "Draf", tone: "neutral" },
-  ESTIMATED: { label: "Diestimasi", tone: "neutral" },
-  SUBMISSION_QUEUED: { label: "Antre kirim", tone: "neutral" },
-  SUBMISSION_UNKNOWN: { label: "Perlu rekonsiliasi", tone: "danger" },
-  ISSUED: { label: "Resi terbit", tone: "ok" },
-  AWAITING_UPSTREAM_PAYMENT: {
-    label: "Menunggu pembayaran",
-    tone: "warn",
-  },
-  FAILED: { label: "Gagal", tone: "danger" },
-};
 
 type AnalyticsPageProps = {
-  searchParams: Promise<
-    Record<string, string | string[] | undefined>
-  >;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function paginationHref(range: AnalyticsRange, page: number): string {
-  const params = serializeAnalyticsRange(range);
-  params.set("halaman", String(page));
+type FilterChip = { href: string; label: string };
+
+function withoutFilter(query: URLSearchParams, key: "basis" | "kurir" | "outlet" | "rentang" | "status" | "tz") {
+  const params = new URLSearchParams(query);
+  params.delete("halaman");
+  if (key === "rentang") {
+    params.set("rentang", "30-hari");
+    params.delete("dari");
+    params.delete("sampai");
+  } else if (key === "tz") {
+    params.set("tz", "Asia/Jakarta");
+  } else if (key === "basis") {
+    params.delete("basis");
+  } else {
+    params.delete(key);
+  }
   return `/app/analitik?${params.toString()}`;
 }
 
-export default async function AnalyticsPage({
-  searchParams,
-}: AnalyticsPageProps) {
+function tenantAnalyticsIssueMessage(issue: TenantAnalyticsIssue) {
+  switch (issue) {
+    case "outlet_tidak_dikenal": return "Outlet tidak tersedia pada tenant ini. Filter ditolak.";
+    case "kurir_tidak_dikenal": return "Kurir tidak tersedia pada tenant ini. Filter ditolak.";
+    case "status_tidak_dikenal": return "Lifecycle tidak dikenali. Filter ditolak.";
+    case "basis_tidak_dikenal": return "Basis tabel tidak dikenali. Filter ditolak.";
+    default: return analyticsIssueMessage(issue);
+  }
+}
+
+function delayResult<T>(promise: Promise<T>, delayMs: number) {
+  return promise.then((value) => new Promise<T>((resolve) => {
+    setTimeout(() => resolve(value), delayMs);
+  }));
+}
+
+function auditRegionPromise<T>(promise: Promise<T>, scenario: UiAuditScenario | null, region: "courier" | "shipment" | "summary" | "trend") {
+  if (scenario === "analytics-trend-error" && region === "trend") {
+    return promise.then(() => { throw new Error("Intentional development-only analytics trend-region failure."); });
+  }
+  if (scenario !== "analytics-stream") return promise;
+  const delayByRegion = { summary: 600, trend: 1_200, courier: 1_800, shipment: 2_400 };
+  return delayResult(promise, delayByRegion[region]);
+}
+
+function auditSummaryPromise(promise: Promise<ShipmentKpiComparison>, scenario: UiAuditScenario | null) {
+  const transformed = promise.then((value) => scenario === "analytics-stale" ? {
+    ...value,
+    eventGeneratedAt: new Date(
+      value.eventGeneratedAt.getTime() - DATA_STALE_AFTER_MS - 60_000,
+    ),
+    backlogSnapshot: {
+      ...value.backlogSnapshot,
+      asOf: new Date(value.backlogSnapshot.asOf.getTime() - DATA_STALE_AFTER_MS - 60_000),
+    },
+  } : value);
+  return auditRegionPromise(transformed, scenario, "summary");
+}
+
+export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
   let principal;
   try {
     principal = await requireCmsScope("tenant");
   } catch (error) {
-    if (error instanceof CmsAuthorizationDeniedError) {
-      redirect("/login/tenant");
-    }
+    if (error instanceof CmsAuthorizationDeniedError) redirect("/login/tenant");
     throw error;
   }
-
-  if (principal.scope !== "tenant") {
-    redirect("/login/tenant");
-  }
+  if (principal.scope !== "tenant") redirect("/login/tenant");
 
   if (principal.role !== "TENANT_ADMIN") {
-    return (
-      <main className="ship-shell an-shell">
-        <header className="ship-header">
-          <p className="ship-wordmark">GeraiCUAN</p>
-          <p>Operator tenant</p>
-        </header>
-        <section className="ship-intro">
-          <p className="sales-eyebrow">ANALITIK KIRIMAN</p>
-          <h1>Ringkasan operasional</h1>
-          <p>
-            Ringkasan kiriman dan nilai COD tenant pada rentang terpilih.
-          </p>
-        </section>
-        <section className="ship-blocked" role="status">
-          <h2>Analitik tersedia untuk Tenant Admin.</h2>
-          <p>
-            Hubungi Tenant Admin tenant Anda untuk melihat ringkasan
-            operasional.
-          </p>
-          <Link className="sales-secondary" href="/app">
-            Kembali ke draf kiriman
-          </Link>
-        </section>
-      </main>
-    );
+    redirect("/app");
   }
 
   const now = new Date();
-  const rawParams = await searchParams;
-  const range = parseAnalyticsRange(rawParams, now);
-  const parsedPage = parsePageNumber(rawParams.halaman);
-  const requestedOffset = (parsedPage.page - 1) * PAGE_SIZE;
-
-  const data = await withTenantContext(
-    db,
-    principal.userId,
-    principal.tenantId,
-    async (tx, context) => {
-      const kpis = await loadShipmentKpis(tx, context, range);
-      const trend = await loadShipmentTrend(tx, context, range);
-      const shipmentPage = await loadShipmentPage(tx, context, range, {
-        limit: PAGE_SIZE,
-        offset: requestedOffset,
-      });
-      const tenantShipmentCount = await countTenantShipments(tx, context);
-      return { kpis, trend, shipmentPage, tenantShipmentCount };
-    },
-  );
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(data.shipmentPage.totalCount / PAGE_SIZE),
-  );
-  const page = Math.min(parsedPage.page, totalPages);
-  const issues = [...range.issues, ...parsedPage.issues];
-  const { periodLabel, timezoneLabel, presetLabel } =
-    formatRangeLabel(range);
-  const todayLocalDate = parseAnalyticsRange(
-    { rentang: "hari-ini", tz: range.timezone },
+  const auditScenarioPromise = process.env.NODE_ENV === "development"
+    ? headers().then((values) => parseUiAuditScenarioForRoute(
+        values.get(UI_AUDIT_HEADER),
+        "/app/analitik",
+      ))
+    : Promise.resolve(null);
+  const [rawParams, baseData, auditScenario] = await Promise.all([
+    searchParams,
+    withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => ({
+      filterOptions: await loadAnalyticsFilterOptions(tx, context),
+      tenantShipmentCount: await countTenantShipments(tx, context),
+    })),
+    auditScenarioPromise,
+  ]);
+  if (auditScenario === "analytics-page-error") {
+    throw new Error("Intentional development-only analytics page failure.");
+  }
+  const auditForcesRegionReads = auditScenario === "analytics-stale"
+    || auditScenario === "analytics-stream"
+    || auditScenario === "analytics-trend-error";
+  const tenantShipmentCount = auditScenario === "analytics-first-run"
+    ? 0
+    : auditForcesRegionReads
+      ? Math.max(1, baseData.tenantShipmentCount)
+      : baseData.tenantShipmentCount;
+  const parsed = parseTenantAnalyticsQuery(rawParams, {
+    knownCouriers: baseData.filterOptions.couriers,
+    knownOutletIds: baseData.filterOptions.outlets.map((outlet) => outlet.id),
     now,
-  ).startDate;
-  const isNotDefault =
-    range.presetId !== "30-hari" ||
-    range.timezone !== "Asia/Jakarta" ||
-    range.issues.length > 0;
+  });
+  const { eventBasis, filters, page: requestedPage, range } = parsed.query;
+  const decisionContext = buildAnalyticsDecisionContext(range);
+  const canonicalQuery = new URLSearchParams(parsed.canonicalQuery);
+  canonicalQuery.delete("halaman");
+  const canonicalQueryString = canonicalQuery.toString();
+  const exportHref = `/app/analitik/export.csv?${canonicalQueryString}`;
+  const selectedOutlet = baseData.filterOptions.outlets.find((outlet) => outlet.id === filters.outletId);
+  const activeDimensionCount = Number(Boolean(filters.outletId)) + Number(Boolean(filters.courier)) + Number(Boolean(filters.lifecycleStatus));
+  const activeCount = activeDimensionCount + Number(range.presetId !== "30-hari") + Number(range.timezone !== "Asia/Jakarta") + Number(eventBasis !== "created");
+  const chips: FilterChip[] = [];
+  if (range.presetId !== "30-hari") chips.push({ href: withoutFilter(canonicalQuery, "rentang"), label: `Periode: ${ANALYTICS_PRESETS.find((item) => item.id === range.presetId)?.label ?? decisionContext.periodLabel}` });
+  if (range.timezone !== "Asia/Jakarta") chips.push({ href: withoutFilter(canonicalQuery, "tz"), label: `Zona: ${ANALYTICS_TIMEZONES.find((item) => item.id === range.timezone)?.label ?? range.timezone}` });
+  if (selectedOutlet) chips.push({ href: withoutFilter(canonicalQuery, "outlet"), label: `Outlet: ${selectedOutlet.name}` });
+  if (filters.courier) chips.push({ href: withoutFilter(canonicalQuery, "kurir"), label: `Kurir: ${filters.courier}` });
+  if (filters.lifecycleStatus) chips.push({ href: withoutFilter(canonicalQuery, "status"), label: `Lifecycle: ${SHIPMENT_STATUS_PRESENTATION[filters.lifecycleStatus].label}` });
+  if (eventBasis !== "created") chips.push({ href: withoutFilter(canonicalQuery, "basis"), label: `Basis: ${eventBasis === "issued" ? "Resi terbit" : eventBasis === "outcome" ? "Outcome provider" : "Pengecualian saat ini"}` });
 
-  const trendByKey = new Map(
-    data.trend.map((point) => [point.key, point] as const),
-  );
-  const trendRows = buildTrendBuckets(range).map((bucket) => ({
-    ...bucket,
-    createdCount: trendByKey.get(bucket.key)?.createdCount ?? 0,
-    issuedCount: trendByKey.get(bucket.key)?.issuedCount ?? 0,
-  }));
-  const maxTrendCreated = Math.max(
-    0,
-    ...trendRows.map(({ createdCount }) => createdCount),
-  );
-  const issuedPercentage =
-    data.kpis.createdCount === 0
-      ? null
-      : Math.round(
-          (data.kpis.issuedCount / data.kpis.createdCount) * 100,
-        );
+  const filterValues = {
+    courier: filters.courier,
+    endDate: range.lastIncludedDate,
+    eventBasis,
+    lifecycleStatus: filters.lifecycleStatus,
+    outletId: filters.outletId,
+    presetId: range.presetId,
+    startDate: range.startDate,
+    timezone: range.timezone,
+  };
+  const todayLocalDate = parseAnalyticsRange({ rentang: "hari-ini", tz: range.timezone }, now).startDate;
+  const regionContext: AnalyticsResolvedRegionProps = {
+    activeDimensionCount,
+    canonicalQuery: canonicalQueryString,
+    eventBasis,
+    periodLabel: decisionContext.periodLabel,
+    previousPeriodLabel: decisionContext.previousPeriodLabel,
+    range,
+    role: principal.role,
+    timezoneLabel: decisionContext.timezoneLabel,
+  };
+
+  const reads = parsed.filterRejected || tenantShipmentCount === 0 ? null : (() => {
+    const comparison = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadShipmentKpiComparison(tx, context, decisionContext.currentRange, decisionContext.previousRange, filters));
+    const reconciliationVariance = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => summarizeLatestReconciliationVariances(tx, context));
+    const summary = auditSummaryPromise(comparison, auditScenario);
+    const trend = auditRegionPromise(withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadShipmentTrend(tx, context, range, filters)), auditScenario, "trend");
+    const shipment = auditRegionPromise(withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadShipmentPage(tx, context, range, { limit: PAGE_SIZE, offset: (requestedPage - 1) * PAGE_SIZE }, filters, eventBasis)), auditScenario, "shipment");
+    const courier = auditRegionPromise(withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadCourierPerformance(tx, context, range, filters)), auditScenario, "courier");
+    return { comparison, courier, reconciliationVariance, shipment, summary, trend };
+  })();
 
   return (
-    <main className="ship-shell an-shell">
-      <a className="sales-skip" href="#hasil-analitik">
-        Lewati ke hasil analitik
-      </a>
-      <header className="ship-header">
-        <p className="ship-wordmark">GeraiCUAN</p>
-        <p>Tenant Admin</p>
-      </header>
-      <section className="ship-intro">
-        <p className="sales-eyebrow">ANALITIK KIRIMAN</p>
-        <h1>Ringkasan operasional</h1>
-        <p>
-          Ringkasan kiriman dan nilai COD tenant Anda pada rentang terpilih.
-          Semua angka memakai zona waktu yang dipilih.
-        </p>
-        <Link className="sales-secondary" href="/app">
-          Kembali ke draf kiriman
-        </Link>
-      </section>
+    <PageContainer width="wide">
+      <PageHeader actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah." focusTargetId="analytics-page-heading" title="Analitik" />
 
-      <details className="an-filters" open>
-        <summary>Filter periode</summary>
-        <form className="an-filter-body" method="get">
-          <label htmlFor="rentang">
-            Periode
-            <select
-              defaultValue={range.presetId}
-              id="rentang"
-              name="rentang"
-            >
-              {ANALYTICS_PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label htmlFor="dari">
-            Dari tanggal
-            <input
-              aria-describedby="kustom-hint"
-              defaultValue={range.startDate}
-              id="dari"
-              max={todayLocalDate}
-              name="dari"
-              type="date"
-            />
-          </label>
-          <label htmlFor="sampai">
-            Sampai tanggal
-            <input
-              aria-describedby="kustom-hint"
-              defaultValue={range.lastIncludedDate}
-              id="sampai"
-              max={todayLocalDate}
-              name="sampai"
-              type="date"
-            />
-            <span className="bulk-hint" id="kustom-hint">
-              Dipakai saat memilih Rentang khusus.
-            </span>
-          </label>
-          <label htmlFor="tz">
-            Zona waktu
-            <select defaultValue={range.timezone} id="tz" name="tz">
-              {ANALYTICS_TIMEZONES.map((timezone) => (
-                <option key={timezone.id} value={timezone.id}>
-                  {timezone.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="an-filter-actions">
-            <button className="sales-primary ship-submit" type="submit">
-              Terapkan
-            </button>
-            <button
-              className="sales-secondary ship-submit"
-              name="khusus"
-              type="submit"
-              value="1"
-            >
-              Terapkan rentang khusus
-            </button>
-            {isNotDefault ? (
-              <Link className="sales-secondary" href="/app/analitik">
-                Setel ulang
-              </Link>
-            ) : null}
-          </div>
-        </form>
-      </details>
+      <Card className="hidden md:flex" size="sm">
+        <CardHeader className="border-b"><CardTitle>Filter analitik</CardTitle><CardDescription>Satu filter untuk KPI, tren, tabel, dan ekspor.</CardDescription></CardHeader>
+        <CardContent><form action="/app/analitik" className="space-y-4" method="get"><AnalyticsFilterFields key={canonicalQueryString} layout="desktop" options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} /><p className="text-xs leading-5 text-muted-foreground">Tanggal awal dan akhir dipakai saat memilih Rentang khusus. Menerapkan filter selalu kembali ke halaman pertama.</p><div className="flex flex-wrap justify-end gap-2"><Button type="submit">Terapkan filter</Button>{activeCount > 0 ? <Button asChild variant="ghost"><Link href="/app/analitik">Reset semua</Link></Button> : null}</div></form></CardContent>
+      </Card>
 
-      <p
-        aria-live="polite"
-        className="an-period"
-        id="hasil-analitik"
-        role="status"
-      >
-        Periode: <strong>{periodLabel}</strong> · {timezoneLabel} ·{" "}
-        {presetLabel}. Dihitung dari waktu kiriman dibuat.
-      </p>
+      <div className="flex flex-wrap items-center gap-2 md:hidden"><AnalyticsFilterSheet key={canonicalQueryString} activeCount={activeCount} options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} />{activeCount > 0 ? <Button asChild className="min-h-11" variant="ghost"><Link href="/app/analitik">Reset semua</Link></Button> : null}</div>
 
-      {issues.length > 0 ? (
-        <section className="ship-blocked" role="status">
-          <h2>Filter disesuaikan.</h2>
-          <ul>
-            {issues.map((issue, index) => (
-              <li key={`${issue}-${index}`}>
-                {analyticsIssueMessage(issue)}
-              </li>
-            ))}
-          </ul>
-          <p>
-            Menampilkan {presetLabel} dalam {timezoneLabel}.
-          </p>
-        </section>
-      ) : null}
+      <section aria-labelledby="period-context-title" className="flex flex-col gap-2 border-y py-3 text-sm sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-medium text-foreground" id="period-context-title">{decisionContext.periodLabel}</h2><p className="text-muted-foreground">{decisionContext.timezoneLabel} / {decisionContext.presetLabel}. Created memakai waktu pembuatan; issued memakai waktu AWB provider.</p></div><p aria-live="polite" className="text-muted-foreground" id="hasil-analitik" role="status">Dibandingkan dengan <strong className="font-medium text-foreground">{decisionContext.previousPeriodLabel}</strong> / {decisionContext.timezoneLabel}.</p></section>
 
-      {data.tenantShipmentCount === 0 ? (
-        <section className="ship-blocked" role="status">
-          <h2>Belum ada kiriman.</h2>
-          <p>
-            Analitik terisi setelah draf pertama dibuat dan resi diterbitkan.
-          </p>
-          <Link className="sales-primary" href="/app">
-            Buat draf kiriman
-          </Link>
-        </section>
-      ) : data.kpis.createdCount === 0 ? (
-        <section className="ship-blocked" role="status">
-          <h2>Tidak ada kiriman pada {periodLabel}.</h2>
-          <p>
-            Kiriman tercatat pada periode lain. Perluas rentang untuk
-            melihatnya.
-          </p>
-          <Link
-            className="sales-secondary"
-            href={`/app/analitik?rentang=30-hari&tz=${encodeURIComponent(range.timezone)}`}
-          >
-            Lihat 30 hari terakhir
-          </Link>
-        </section>
-      ) : (
+      {chips.length > 0 ? <section aria-label="Filter aktif" className="flex flex-wrap items-center gap-2"><Badge variant="secondary">Filter aktif: {activeCount}</Badge>{chips.map((chip) => <Button asChild className="min-h-11 md:min-h-8" key={chip.label} size="sm" variant="outline"><Link href={chip.href}>{chip.label}<span aria-hidden="true">×</span></Link></Button>)}</section> : null}
+
+      {parsed.issues.length > 0 ? <Alert variant={parsed.filterRejected ? "destructive" : "default"}><CircleAlert aria-hidden="true" /><AlertTitle>{parsed.filterRejected ? "Filter ditolak" : "Filter disesuaikan"}</AlertTitle><AlertDescription><ul className="list-disc pl-5">{parsed.issues.map((issue, index) => <li key={`${issue}-${index}`}>{tenantAnalyticsIssueMessage(issue)}</li>)}</ul>{parsed.filterRejected ? <div className="mt-3"><Button asChild variant="outline"><Link href="/app/analitik">Kembali ke filter aman</Link></Button></div> : null}</AlertDescription></Alert> : null}
+
+      {parsed.filterRejected ? null : tenantShipmentCount === 0 ? (
+        <EmptyState action={<Button asChild className="min-h-11"><Link href="/app/pengiriman/baru">Buat draf kiriman</Link></Button>} description="Analitik terisi setelah draf pertama dibuat dan resi diterbitkan." icon={PackageOpen} title="Belum ada kiriman" />
+      ) : reads ? (
         <>
-          <section className="an-section">
-            <h2>Ringkasan</h2>
-            <dl className="an-kpis">
-              <div>
-                <dt>Kiriman dibuat</dt>
-                <dd>{countFormatter.format(data.kpis.createdCount)}</dd>
-              </div>
-              <div>
-                <dt>Resi terbit</dt>
-                <dd>
-                  {countFormatter.format(data.kpis.issuedCount)}
-                  {issuedPercentage === null ? null : (
-                    <small>
-                      {issuedPercentage}% dari kiriman dibuat
-                    </small>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>Menunggu pembayaran</dt>
-                <dd>
-                  {countFormatter.format(
-                    data.kpis.awaitingPaymentCount,
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>Perlu tindakan</dt>
-                <dd>
-                  {countFormatter.format(data.kpis.needsActionCount)}
-                  <small>Gagal atau perlu rekonsiliasi</small>
-                </dd>
-              </div>
-            </dl>
-            <dl className="an-kpis">
-              <div>
-                <dt>Ongkir provider</dt>
-                <dd>{idrFormatter.format(data.kpis.providerShippingIdr)}</dd>
-              </div>
-              <div>
-                <dt>Biaya layanan COD</dt>
-                <dd>{idrFormatter.format(data.kpis.codServiceFeeIdr)}</dd>
-              </div>
-              <div>
-                <dt>PPN biaya layanan</dt>
-                <dd>{idrFormatter.format(data.kpis.codVatIdr)}</dd>
-              </div>
-              <div>
-                <dt>Dana COD ditagihkan</dt>
-                <dd>
-                  {idrFormatter.format(data.kpis.codPrincipalIdr)}
-                  <small>Titipan penerima, bukan pendapatan.</small>
-                </dd>
-              </div>
-            </dl>
-            <p className="an-money-note">
-              Nilai dihitung dari kiriman berstatus Resi terbit pada rentang
-              ini, bukan kas yang sudah diterima. Rekonsiliasi buku besar
-              berada di halaman terpisah.
-            </p>
-          </section>
-
-          <section className="an-section">
-            <h2>
-              Tren {range.granularity === "harian" ? "harian" : "bulanan"}
-            </h2>
-            <div
-              aria-label="Tabel tren kiriman"
-              className="an-scroll"
-              role="region"
-              tabIndex={0}
-            >
-              <table className="bulk-table an-trend">
-                <caption>
-                  Tren {range.granularity === "harian" ? "harian" : "bulanan"}
-                  {" · "}
-                  {periodLabel} · {timezoneLabel}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      {range.granularity === "harian" ? "Tanggal" : "Bulan"}
-                    </th>
-                    <th scope="col">Kiriman dibuat</th>
-                    <th scope="col">Resi terbit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trendRows.map((row) => (
-                    <tr key={row.key}>
-                      <th scope="row">{row.label}</th>
-                      <td
-                        className="an-num an-cell-bar"
-                        style={
-                          {
-                            "--v":
-                              maxTrendCreated === 0
-                                ? 0
-                                : row.createdCount / maxTrendCreated,
-                          } as CSSProperties
-                        }
-                      >
-                        {countFormatter.format(row.createdCount)}
-                      </td>
-                      <td className="an-num">
-                        {countFormatter.format(row.issuedCount)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="an-section">
-            <h2>Kiriman</h2>
-            <div
-              aria-label="Tabel kiriman"
-              className="an-scroll"
-              role="region"
-              tabIndex={0}
-            >
-              <table className="bulk-table an-table">
-                <caption>
-                  Kiriman dibuat pada {periodLabel} ({timezoneLabel})
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Dibuat</th>
-                    <th scope="col">Kiriman</th>
-                    <th scope="col">Outlet</th>
-                    <th scope="col">Kurir</th>
-                    <th scope="col">Layanan</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">AWB</th>
-                    <th scope="col">Nilai COD</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.shipmentPage.rows.map((row) => {
-                    const status = statusPresentation[row.status];
-                    return (
-                      <tr key={row.shipmentId}>
-                        <td>
-                          {formatInZone(row.createdAt, range.timezone)}
-                        </td>
-                        <th scope="row">
-                          {row.shipmentId.slice(0, 8).toUpperCase()}
-                        </th>
-                        <td>{row.outletName}</td>
-                        <td>{row.courier ?? "—"}</td>
-                        <td>{row.providerService ?? "—"}</td>
-                        <td>
-                          <span
-                            className={`an-status an-status-${status.tone}`}
-                          >
-                            {status.label}
-                          </span>
-                        </td>
-                        <td>{row.cnoteNo ?? "—"}</td>
-                        <td className="an-num">
-                          {row.isCod && row.providerCodAmountIdr !== null
-                            ? idrFormatter.format(
-                                row.providerCodAmountIdr,
-                              )
-                            : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <nav
-              aria-label="Navigasi halaman kiriman"
-              className="an-pager"
-            >
-              <span>
-                Halaman {page} dari {totalPages} ·{" "}
-                {countFormatter.format(data.shipmentPage.totalCount)} kiriman
-              </span>
-              {page > 1 ? (
-                <Link href={paginationHref(range, page - 1)}>
-                  Sebelumnya
-                </Link>
-              ) : (
-                <span aria-hidden="true">Sebelumnya</span>
-              )}
-              {page < totalPages ? (
-                <Link href={paginationHref(range, page + 1)}>
-                  Berikutnya
-                </Link>
-              ) : (
-                <span aria-hidden="true">Berikutnya</span>
-              )}
-            </nav>
-          </section>
+          <span aria-live="polite" className="sr-only">Analitik dimuat per bagian.</span>
+          <Suspense fallback={<AnalyticsSummarySkeleton />}><AnalyticsSummaryRegion context={regionContext} promise={reads.summary} /></Suspense>
+          <Suspense fallback={<AnalyticsReconciliationSkeleton />}><AnalyticsReconciliationRegion promise={reads.reconciliationVariance} /></Suspense>
+          <Suspense fallback={<AnalyticsTrendSkeleton />}><AnalyticsTrendRegion context={regionContext} promise={reads.trend} /></Suspense>
+          <Suspense fallback={<AnalyticsCourierSkeleton />}><AnalyticsCourierRegion context={regionContext} promise={reads.courier} /></Suspense>
+          <Suspense fallback={<AnalyticsShipmentSkeleton />}><AnalyticsShipmentRegion comparisonPromise={reads.comparison} context={regionContext} promise={reads.shipment} requestedPage={requestedPage} /></Suspense>
         </>
-      )}
-    </main>
+      ) : null}
+    </PageContainer>
   );
 }

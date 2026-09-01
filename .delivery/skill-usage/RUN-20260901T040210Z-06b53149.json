@@ -1,0 +1,22 @@
+{
+  "capability": "integration-review",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "corrective-verification",
+  "model": "gpt-5.6",
+  "provider": "openai-codex",
+  "reasoningEffort": "xhigh",
+  "recordedAt": "2026-09-01T04:03:03Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T040210Z-06b53149",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "application-security",
+    "native-first",
+    "postgres-drizzle",
+    "testing-engineering"
+  ],
+  "usageHash": "9b0dc1f2e97493b209279d118dc6148f6713bc39fc011875de26154ed147d9e9",
+  "verificationFailed": false,
+  "worker": "codex"
+}

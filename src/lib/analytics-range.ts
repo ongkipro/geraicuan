@@ -346,6 +346,23 @@ export function parseAnalyticsRange(
   );
 }
 
+export function previousAnalyticsRange(
+  range: AnalyticsRange,
+): AnalyticsRange {
+  const start = parseCalendarDate(range.startDate);
+  if (!start) {
+    throw new RangeError("Analytics range start date is invalid.");
+  }
+
+  return makeRange(
+    "kustom",
+    resolvedTimezone(range.timezone),
+    addCalendarDays(start, -range.spanDays),
+    start,
+    [],
+  );
+}
+
 export function serializeAnalyticsRange(
   range: AnalyticsRange,
 ): URLSearchParams {

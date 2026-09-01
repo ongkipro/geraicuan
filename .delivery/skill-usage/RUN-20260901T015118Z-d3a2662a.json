@@ -1,0 +1,21 @@
+{
+  "capability": "testing-engineering",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "integration-runtime-role-lifecycle-corrective",
+  "model": "gpt-5.6-sol",
+  "provider": "openai-codex",
+  "reasoningEffort": "xhigh",
+  "recordedAt": "2026-09-01T01:56:46Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T015118Z-d3a2662a",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "application-security",
+    "postgres-drizzle",
+    "testing-engineering"
+  ],
+  "usageHash": "be2246c869408ec6ddfe0cab47d966725cf1fbf99d9bf181122f1ce2a24bf238",
+  "verificationFailed": false,
+  "worker": "parent"
+}

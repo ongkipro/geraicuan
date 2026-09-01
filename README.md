@@ -1,34 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GeraiCUAN
 
-## Getting Started
+Tenant shipping operations and Super Admin platform monitoring are implemented with
+Next.js App Router, PostgreSQL, Drizzle, and Better Auth.
 
-First, run the development server:
+## Local development
+
+The local database runs in Docker and is bound to `127.0.0.1:55433` only. Its
+named volume persists across `docker compose down` / `up` unless explicitly
+removed. Do not use this configuration or its local fixture accounts in
+production.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+
+export POSTGRES_PASSWORD='choose-a-local-database-password'
+docker compose up -d db
+
+export DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:55433/geraicuan_test"
+export APP_DATABASE_URL='postgresql://geraicuan_test_runtime:admin123@127.0.0.1:55433/geraicuan_test'
+export DEV_HOST='localhost' # Set to the LAN/Tailscale IP when opening from another device.
+export DEV_ORIGIN="http://${DEV_HOST}:3000"
+export BETTER_AUTH_URL="$DEV_ORIGIN"
+export BETTER_AUTH_TRUSTED_ORIGINS="$DEV_ORIGIN"
+export NEXT_ALLOWED_DEV_ORIGINS="$DEV_HOST"
+export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
+export DEV_LOCAL_PASSWORD='admin123'
+export GERAICUAN_ENABLE_DEMO_LOGIN_HINT='1'
+
+pnpm db:migrate
+pnpm db:seed-local
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `$DEV_ORIGIN`. When using a LAN/Tailscale address, set `DEV_HOST` to that
+address before starting Next.js; this permits development assets and Better Auth
+origin checks for the same explicit host.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Local fixture accounts
 
-## Learn More
+| Role | Email | Password | Expected destination |
+| --- | --- | --- | --- |
+| Tenant Admin | `tenant@geraicuan.com` | `admin123` | `/app` |
+| Operator | `operator@geraicuan.com` | `admin123` | `/app` |
+| Super Admin | `super@geraicuan.com` | `admin123` | `/platform` |
 
-To learn more about Next.js, take a look at the following resources:
+`pnpm db:seed-local` only accepts a database at
+`127.0.0.1/geraicuan_test`. It refreshes the local fixture users and the
+runtime role password from `DEV_LOCAL_PASSWORD`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment host boundary
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The future production entry points are intentionally role-specific:
 
-## Deploy on Vercel
+- Tenant CMS: `https://app.namadomain.com`
+- Super Admin CMS: `https://cuan.namadomain.com`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Host routing improves entry-point clarity but does not replace server-side role
+and tenant authorization. Configure Better Auth trusted origins and cookies for
+only these exact hosts; do not enable cross-subdomain cookie sharing by default.

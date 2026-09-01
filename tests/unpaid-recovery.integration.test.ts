@@ -19,6 +19,7 @@ import {
   type MengantarPayUnpaidTransportBinding,
   type MengantarPayUnpaidTransportLookup,
 } from "@/lib/mengantar-unpaid-recovery";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -194,15 +195,12 @@ beforeAll(async () => {
       "utf8",
     ),
   ) as RecoveryFixture;
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 });
 
 beforeEach(async () => {
   await adminPool.query(
-    "TRUNCATE rate_limits, provider_unpaid_recoveries, provider_order_snapshots, provider_batches, shipment_cod_totals, shipment_estimate_services, shipment_estimate_snapshots, shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
+    "TRUNCATE shipment_rate_limits, rate_limits, provider_unpaid_recoveries, provider_order_snapshots, provider_batches, shipment_cod_totals, shipment_estimate_services, shipment_estimate_snapshots, shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
   );
   await adminPool.query(
     `INSERT INTO users (id, name, email) VALUES
@@ -575,6 +573,46 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
       safeResponseCode: "PAY_UNPAID_BATCH_CORRELATION_UNKNOWN",
     });
     expect(payCalls).toBe(1);
+  });
+
+  it.each([
+    "https://provider.invalid/cnote",
+    "CNOTE-OK\nINJECTED",
+  ])("rejects an unsafe provider cnote without persisting it: %s", async (unsafeCnote) => {
+    const { batchId } = await createAwaitingBatch(9, adminA, tenantA, outletA);
+    const issued = recoveryFixture.issued.response as {
+      success: true;
+      data: { batch_id: string; courier: string; cnote_no: string[] };
+    };
+    const response = {
+      success: true,
+      data: { ...issued.data, cnote_no: [unsafeCnote] },
+    };
+    const result = await orchestrateFixtureBackedMengantarUnpaidRecovery(
+      recoveryInput(batchId, adminA, tenantA, {
+        async payUnpaid() {
+          return response;
+        },
+      }),
+    );
+
+    expect(result.recoveries).toMatchObject([
+      { submitted: true, status: "PAYMENT_UNKNOWN" },
+    ]);
+    const [snapshot] = await adminDb
+      .select({ cnoteNo: schema.providerOrderSnapshots.cnoteNo })
+      .from(schema.providerOrderSnapshots);
+    expect(snapshot?.cnoteNo).toBeNull();
+    const [recovery] = await adminDb
+      .select({
+        status: schema.providerUnpaidRecoveries.status,
+        safeResponseCode: schema.providerUnpaidRecoveries.safeResponseCode,
+      })
+      .from(schema.providerUnpaidRecoveries);
+    expect(recovery).toEqual({
+      status: "PAYMENT_UNKNOWN",
+      safeResponseCode: "PAY_UNPAID_RESPONSE_IDENTIFIER_UNSAFE",
+    });
   });
 
   it("keeps the pay-unpaid fixture free of credentials, URLs, and personal data", async () => {

@@ -1,0 +1,19 @@
+{
+  "capability": "full-stack-development",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "shipment-draft-contact-estimation-matrix",
+  "model": "codex-gpt-5",
+  "provider": "openai-codex",
+  "reasoningEffort": "unavailable: runtime does not expose reasoning effort",
+  "recordedAt": "2026-08-31T21:40:24Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260831T205737Z-20521568",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "full-stack-development"
+  ],
+  "usageHash": "834e397227019d6f6776dccc7155f50062c35a7b5f3a9c80746763e599cf6522",
+  "verificationFailed": false,
+  "worker": "root-codex"
+}

@@ -1,0 +1,19 @@
+{
+  "capability": "vision",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "label.print",
+  "model": "gpt-5.6-sol",
+  "provider": "openai-codex",
+  "reasoningEffort": "max",
+  "recordedAt": "2026-08-31T23:16:35Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260831T223741Z-d5e393a4",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "full-stack-development"
+  ],
+  "usageHash": "41a95e50e666692fdd2c6e22c853b4c7095e7e056ad3d42e57f06d6611fb07f6",
+  "verificationFailed": false,
+  "worker": "task"
+}

@@ -4,15 +4,15 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  appendBlockedPrintEvent,
-  appendPrintEvent,
-  LabelUnavailableError,
+  appendPrintAttempt,
   listPrintableShipments,
   listPrintEvents,
   loadPrintableLabel,
+  PrintAttemptConflictError,
 } from "@/db/label-print-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 import {
   formatDimensions,
   formatWeight,
@@ -50,6 +50,10 @@ function fixtureIds(sequence: number) {
     batchId: `00000000-0000-0000-0013-${suffix}`,
     providerOrderSnapshotId: `00000000-0000-0000-0014-${suffix}`,
   };
+}
+
+function printAttemptId(sequence: number) {
+  return `00000000-0000-0000-0020-${sequence.toString(16).padStart(12, "0")}`;
 }
 
 type SeedStatus = "ISSUED" | "AWAITING_UPSTREAM_PAYMENT";
@@ -180,10 +184,7 @@ async function inTenantA<T>(
 }
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 });
 
 beforeEach(async () => {
@@ -218,7 +219,6 @@ afterAll(async () => {
   await adminPool.query(
     "TRUNCATE print_events, provider_unpaid_recoveries, provider_order_snapshots, provider_batches, shipment_cod_totals, shipment_estimate_services, shipment_estimate_snapshots, shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
   );
-  await adminPool.query("DROP ROLE geraicuan_test_runtime");
   await Promise.all([adminPool.end(), appPool.end()]);
 });
 
@@ -273,11 +273,14 @@ describe("tenant-scoped AWB labels", () => {
     const fixture = await seedProviderShipment({ sequence: 2 });
 
     const first = await inTenantA((tx, context) =>
-      appendPrintEvent(tx, context, fixture.shipmentId),
+      appendPrintAttempt(tx, context, fixture.shipmentId, printAttemptId(1)),
     );
     const second = await inTenantA((tx, context) =>
-      appendPrintEvent(tx, context, fixture.shipmentId),
+      appendPrintAttempt(tx, context, fixture.shipmentId, printAttemptId(2)),
     );
+    if (first.outcome !== "PRINTED" || second.outcome !== "PRINTED") {
+      throw new Error("Expected printable fixture to record printed events.");
+    }
     expect([first.sequence, second.sequence]).toEqual([1, 2]);
     expect(first.awb).toBe(fixture.awb);
 
@@ -324,19 +327,78 @@ describe("tenant-scoped AWB labels", () => {
     expect(persisted).toHaveLength(2);
   });
 
-  it("allocates distinct sequences for concurrent prints", async () => {
+  it("allocates contiguous sequences for more than two concurrent prints", async () => {
     const fixture = await seedProviderShipment({ sequence: 3 });
 
-    const events = await Promise.all([
+    const events = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        inTenantA((tx, context) =>
+          appendPrintAttempt(
+            tx,
+            context,
+            fixture.shipmentId,
+            printAttemptId(10 + index),
+          ),
+        )),
+    );
+
+    expect(events.every((event) => event.outcome === "PRINTED")).toBe(true);
+    expect(events.map((event) =>
+      event.outcome === "PRINTED" ? event.sequence : 0
+    ).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("replays one print attempt exactly across duplicate and stale lifecycle requests", async () => {
+    const fixture = await seedProviderShipment({ sequence: 30 });
+    const attemptId = printAttemptId(30);
+
+    const concurrent = await Promise.all([
       inTenantA((tx, context) =>
-        appendPrintEvent(tx, context, fixture.shipmentId),
+        appendPrintAttempt(tx, context, fixture.shipmentId, attemptId),
       ),
       inTenantA((tx, context) =>
-        appendPrintEvent(tx, context, fixture.shipmentId),
+        appendPrintAttempt(tx, context, fixture.shipmentId, attemptId),
       ),
     ]);
+    expect(concurrent).toHaveLength(2);
+    expect(concurrent[0]).toEqual(concurrent[1]);
+    expect(concurrent[0]).toMatchObject({ outcome: "PRINTED", sequence: 1 });
 
-    expect(events.map((event) => event.sequence).sort()).toEqual([1, 2]);
+    await adminPool.query(
+      "UPDATE provider_order_snapshots SET status = 'FAILED', cnote_no = NULL WHERE id = $1",
+      [fixture.providerOrderSnapshotId],
+    );
+    await adminPool.query(
+      "UPDATE shipments SET status = 'FAILED' WHERE id = $1",
+      [fixture.shipmentId],
+    );
+
+    const staleReplay = await inTenantA((tx, context) =>
+      appendPrintAttempt(tx, context, fixture.shipmentId, attemptId),
+    );
+    expect(staleReplay).toEqual(concurrent[0]);
+    const persisted = await adminDb
+      .select()
+      .from(schema.printEvents)
+      .where(eq(schema.printEvents.shipmentId, fixture.shipmentId));
+    expect(persisted).toHaveLength(1);
+  });
+
+  it("rejects reuse of a print attempt id for different immutable semantics", async () => {
+    const firstFixture = await seedProviderShipment({ sequence: 31 });
+    const secondFixture = await seedProviderShipment({ sequence: 32 });
+    const attemptId = printAttemptId(31);
+
+    await inTenantA((tx, context) =>
+      appendPrintAttempt(tx, context, firstFixture.shipmentId, attemptId),
+    );
+    await expect(inTenantA((tx, context) =>
+      appendPrintAttempt(tx, context, secondFixture.shipmentId, attemptId),
+    )).rejects.toBeInstanceOf(PrintAttemptConflictError);
+
+    const persisted = await adminDb.select().from(schema.printEvents);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].shipmentId).toBe(firstFixture.shipmentId);
   });
 
   it("blocks unpaid labels and records a non-print audit event", async () => {
@@ -345,22 +407,29 @@ describe("tenant-scoped AWB labels", () => {
       status: "AWAITING_UPSTREAM_PAYMENT",
     });
 
-    const reason = await inTenantA(async (tx, context) => {
-      try {
-        await appendPrintEvent(tx, context, fixture.shipmentId);
-        throw new Error("Expected unpaid label to be unavailable.");
-      } catch (error) {
-        if (!(error instanceof LabelUnavailableError)) throw error;
-        await appendBlockedPrintEvent(
-          tx,
-          context,
-          fixture.shipmentId,
-          error.reason,
-        );
-        return error.reason;
-      }
+    const attemptId = printAttemptId(40);
+    const blocked = await inTenantA((tx, context) =>
+      appendPrintAttempt(tx, context, fixture.shipmentId, attemptId),
+    );
+    expect(blocked).toMatchObject({
+      outcome: "BLOCKED",
+      reason: "AWAITING_UPSTREAM_PAYMENT",
     });
-    expect(reason).toBe("AWAITING_UPSTREAM_PAYMENT");
+    expect(await inTenantA((tx, context) =>
+      appendPrintAttempt(tx, context, fixture.shipmentId, attemptId),
+    )).toEqual(blocked);
+
+    await adminPool.query(
+      "UPDATE provider_order_snapshots SET status = 'ISSUED', is_paid = true, cnote_no = 'JNE-RECOVERED-000040' WHERE id = $1",
+      [fixture.providerOrderSnapshotId],
+    );
+    await adminPool.query(
+      "UPDATE shipments SET status = 'ISSUED' WHERE id = $1",
+      [fixture.shipmentId],
+    );
+    expect(await inTenantA((tx, context) =>
+      appendPrintAttempt(tx, context, fixture.shipmentId, attemptId),
+    )).toEqual(blocked);
 
     const events = await adminDb
       .select()

@@ -1,0 +1,19 @@
+{
+  "capability": "full-stack-development",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "dashboard-analytics-state-matrix",
+  "model": "codex-gpt-5",
+  "provider": "openai-codex",
+  "reasoningEffort": "unavailable: runtime does not expose reasoning effort",
+  "recordedAt": "2026-08-31T20:08:59Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260831T191304Z-0aaf287c",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "full-stack-development"
+  ],
+  "usageHash": "a91dcc2afa5dd643d2965ecea3fc4bd89c61f3ce5871e575a47eb0ff50deb58e",
+  "verificationFailed": false,
+  "worker": "root-codex"
+}

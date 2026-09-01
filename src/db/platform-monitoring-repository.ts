@@ -117,9 +117,24 @@ export type BatchRow = {
 
 const EMPTY = sql``;
 const asNumber = (value: unknown) => Number(value ?? 0);
+const SAFE_CODE_PATTERN = /^[A-Z][A-Z0-9_-]{0,79}$/;
 function asDate(value: unknown): Date | null {
   if (value === null || value === undefined) return null;
   return value instanceof Date ? value : new Date(String(value));
+}
+
+function safeOperationalCode(value: unknown) {
+  if (typeof value !== "string") return null;
+  return SAFE_CODE_PATTERN.test(value) ? value : "REDACTED";
+}
+
+export async function readPlatformClock(tx: PlatformTransaction): Promise<Date> {
+  const result = await tx.execute<{ now: Date }>(
+    sql`select transaction_timestamp() as now`,
+  );
+  const now = asDate(result.rows[0]?.now);
+  if (!now) throw new Error("Platform database clock is unavailable.");
+  return now;
 }
 
 function scopeClause(alias: string, scope: PlatformScope) {
@@ -182,7 +197,8 @@ export async function readPlatformHealth(
       SELECT count(*)::text AS count, min(o.created_at) AS oldest_at,
         count(distinct o.tenant_id)::text AS affected,
         (SELECT count(*)::text FROM ${platformMonitoringUnpaidRecovery} r
-          WHERE r.status IN ('PAYMENT_QUEUED', 'PAYING') ${rScope}) AS recovering
+          JOIN ${platformMonitoringProviderBatch} rb ON rb.id = r.batch_id AND rb.tenant_id = r.tenant_id
+          WHERE r.status IN ('PAYMENT_QUEUED', 'PAYING') ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}) AS recovering
       FROM ${platformMonitoringProviderOrder} o
       JOIN ${platformMonitoringProviderBatch} b ON b.id = o.batch_id AND b.tenant_id = o.tenant_id
       WHERE o.status = 'AWAITING_UPSTREAM_PAYMENT' ${oScope} ${bOutlet} ${bCourier}`),
@@ -196,12 +212,14 @@ export async function readPlatformHealth(
         WHERE o.status='SUBMISSION_UNKNOWN' ${oScope} ${bOutlet} ${bCourier}
         UNION ALL
         SELECT r.tenant_id, coalesce(r.attempted_at, r.created_at)
-        FROM ${platformMonitoringUnpaidRecovery} r WHERE r.status='PAYMENT_UNKNOWN' ${rScope}
+        FROM ${platformMonitoringUnpaidRecovery} r
+        JOIN ${platformMonitoringProviderBatch} rb ON rb.id = r.batch_id AND rb.tenant_id = r.tenant_id
+        WHERE r.status='PAYMENT_UNKNOWN' ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}
       )
       SELECT
         (SELECT count(*)::text FROM ${platformMonitoringProviderBatch} b WHERE b.status='SUBMISSION_UNKNOWN' ${bScope} ${bOutlet} ${bCourier}) AS batches,
         (SELECT count(*)::text FROM ${platformMonitoringProviderOrder} o JOIN ${platformMonitoringProviderBatch} b ON b.id=o.batch_id AND b.tenant_id=o.tenant_id WHERE o.status='SUBMISSION_UNKNOWN' ${oScope} ${bOutlet} ${bCourier}) AS orders,
-        (SELECT count(*)::text FROM ${platformMonitoringUnpaidRecovery} r WHERE r.status='PAYMENT_UNKNOWN' ${rScope}) AS recoveries,
+        (SELECT count(*)::text FROM ${platformMonitoringUnpaidRecovery} r JOIN ${platformMonitoringProviderBatch} rb ON rb.id=r.batch_id AND rb.tenant_id=r.tenant_id WHERE r.status='PAYMENT_UNKNOWN' ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}) AS recoveries,
         min(at) AS oldest_at, count(distinct tenant_id)::text AS affected FROM unknowns`),
     tx.execute<{ total: string; failed: string; oldest_at: Date | null; affected: string; recent_code_peak: string; has_critical_code: boolean }>(sql`
       SELECT count(*)::text AS total,
@@ -285,7 +303,7 @@ export async function readPlatformHealth(
       oldestMs: asDate(failureRaw?.oldest_at) ? now.getTime() - asDate(failureRaw?.oldest_at)!.getTime() : null,
       affectedTenants: asNumber(failureRaw?.affected),
       share: failureShare,
-      codes: codeRows.rows.map((row) => ({ code: row.code, count: asNumber(row.count) })),
+      codes: codeRows.rows.map((row) => ({ code: safeOperationalCode(row.code) ?? "TANPA_KODE", count: asNumber(row.count) })),
       severity: failureShare > PLATFORM_HEALTH_THRESHOLDS.failureCriticalShare || asNumber(failureRaw?.recent_code_peak) >= PLATFORM_HEALTH_THRESHOLDS.failureRecentCodeCount || Boolean(failureRaw?.has_critical_code) ? "kritis" : failureShare > PLATFORM_HEALTH_THRESHOLDS.failureAttentionShare ? "perhatian" : "normal",
     },
     latency: {
@@ -293,7 +311,7 @@ export async function readPlatformHealth(
       p95Seconds: latencyRaw?.p95 === null || latencyRaw?.p95 === undefined ? null : Number(latencyRaw.p95),
       byCourier: latencyByCourier.rows.map((row) => ({ courier: row.courier, p50Seconds: Number(row.p50), p95Seconds: Number(row.p95) })),
     },
-    accounts: accountsResult.rows.map((row) => ({ bucket: asNumber(row.bucket), courier: row.courier, waiting: asNumber(row.waiting), oldestMs: Math.max(0, now.getTime() - asDate(row.oldest_at)!.getTime()) })),
+    accounts: accountsResult.rows.map((row, index) => ({ bucket: index + 1, courier: row.courier, waiting: asNumber(row.waiting), oldestMs: Math.max(0, now.getTime() - asDate(row.oldest_at)!.getTime()) })),
   };
 }
 
@@ -333,11 +351,11 @@ export async function readPlatformCounts(tx: PlatformTransaction, filters: Platf
       (SELECT count(*) FROM ${platformMonitoringProviderBatch} b WHERE b.status='FAILED' AND b.created_at>=${start} AND b.created_at<${end} ${bScope} ${bOutlet} ${courier}) failed_batches,
       (SELECT count(*) FROM ${platformMonitoringProviderOrder} o JOIN ${platformMonitoringProviderBatch} b ON b.id=o.batch_id AND b.tenant_id=o.tenant_id WHERE o.status='ISSUED' AND o.created_at>=${start} AND o.created_at<${end} ${oScope} ${oOutlet} ${courier}) issued,
       (SELECT count(*) FROM ${platformMonitoringProviderOrder} o JOIN ${platformMonitoringProviderBatch} b ON b.id=o.batch_id AND b.tenant_id=o.tenant_id WHERE o.status='AWAITING_UPSTREAM_PAYMENT' AND o.created_at>=${start} AND o.created_at<${end} ${oScope} ${oOutlet} ${courier}) unpaid,
-      (SELECT count(*) FROM ${platformMonitoringUnpaidRecovery} r WHERE r.status='COMPLETED' AND r.created_at>=${start} AND r.created_at<${end} ${rScope}) recoveries,
+      (SELECT count(*) FROM ${platformMonitoringUnpaidRecovery} r JOIN ${platformMonitoringProviderBatch} rb ON rb.id=r.batch_id AND rb.tenant_id=r.tenant_id WHERE r.status='COMPLETED' AND r.created_at>=${start} AND r.created_at<${end} ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}) recoveries,
       (SELECT count(*) FROM ${platformMonitoringEstimate} e WHERE e.created_at>=${start} AND e.created_at<${end} ${scopeClause("e", filters.scope)} ${outletClause("e", filters.outletId)}) estimates,
       (SELECT count(*) FROM ${platformMonitoringProviderBatch} b WHERE b.status='SUBMISSION_UNKNOWN' AND b.created_at>=${start} AND b.created_at<${end} ${bScope} ${bOutlet} ${courier})
         + (SELECT count(*) FROM ${platformMonitoringProviderOrder} o JOIN ${platformMonitoringProviderBatch} b ON b.id=o.batch_id AND b.tenant_id=o.tenant_id WHERE o.status='SUBMISSION_UNKNOWN' AND o.created_at>=${start} AND o.created_at<${end} ${oScope} ${oOutlet} ${courier})
-        + (SELECT count(*) FROM ${platformMonitoringUnpaidRecovery} r WHERE r.status='PAYMENT_UNKNOWN' AND r.created_at>=${start} AND r.created_at<${end} ${rScope}) AS unknown
+        + (SELECT count(*) FROM ${platformMonitoringUnpaidRecovery} r JOIN ${platformMonitoringProviderBatch} rb ON rb.id=r.batch_id AND rb.tenant_id=r.tenant_id WHERE r.status='PAYMENT_UNKNOWN' AND r.created_at>=${start} AND r.created_at<${end} ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}) AS unknown
   `);
   const row = result.rows[0] ?? {};
   const outletTotal = asNumber(row.outlets);
@@ -389,7 +407,7 @@ export async function listTenantUsage(tx: PlatformTransaction, filters: Platform
     ss AS (SELECT s.tenant_id,count(*) shipments,max(s.created_at) last_at FROM ${platformMonitoringShipment} s WHERE s.created_at>=${start} AND s.created_at<${end} ${outletClause("s",filters.outletId)} ${filters.status?sql`AND s.status=${filters.status}`:EMPTY} GROUP BY s.tenant_id),
     bs AS (SELECT b.tenant_id,count(*) batches,count(*) FILTER(WHERE b.status='FAILED') failed,count(*) FILTER(WHERE b.status='SUBMISSION_UNKNOWN') unknown,max(b.created_at) last_at FROM ${platformMonitoringProviderBatch} b WHERE b.created_at>=${start} AND b.created_at<${end} ${outletClause("b",filters.outletId)} ${courierClause("b",filters.courier)} GROUP BY b.tenant_id),
     ps AS (SELECT o.tenant_id,count(*) FILTER(WHERE o.status='ISSUED') issued,count(*) FILTER(WHERE o.status='AWAITING_UPSTREAM_PAYMENT') unpaid,count(*) FILTER(WHERE o.status='SUBMISSION_UNKNOWN') unknown,max(o.created_at) last_at FROM ${platformMonitoringProviderOrder} o JOIN ${platformMonitoringProviderBatch} b ON b.id=o.batch_id AND b.tenant_id=o.tenant_id WHERE o.created_at>=${start} AND o.created_at<${end} ${outletClause("b",filters.outletId)} ${courierClause("b",filters.courier)} GROUP BY o.tenant_id),
-    rs AS (SELECT r.tenant_id,count(*) FILTER(WHERE r.status='PAYMENT_UNKNOWN') unknown,max(r.created_at) last_at FROM ${platformMonitoringUnpaidRecovery} r WHERE r.created_at>=${start} AND r.created_at<${end} GROUP BY r.tenant_id)
+    rs AS (SELECT r.tenant_id,count(*) FILTER(WHERE r.status='PAYMENT_UNKNOWN') unknown,max(r.created_at) last_at FROM ${platformMonitoringUnpaidRecovery} r JOIN ${platformMonitoringProviderBatch} rb ON rb.id=r.batch_id AND rb.tenant_id=r.tenant_id WHERE r.created_at>=${start} AND r.created_at<${end} ${outletClause("rb",filters.outletId)} ${courierClause("rb",filters.courier)} GROUP BY r.tenant_id)
     SELECT t.id tenant_id,t.name,t.status,coalesce(os.total,0) outlet_total,coalesce(os.configured,0) outlet_configured,coalesce(ms.members,0) members,coalesce(ss.shipments,0) shipments,coalesce(bs.batches,0) batches,coalesce(ps.issued,0) issued,coalesce(ps.unpaid,0) unpaid,coalesce(bs.failed,0) failed,coalesce(bs.unknown,0)+coalesce(ps.unknown,0)+coalesce(rs.unknown,0) unknown,greatest(ss.last_at,bs.last_at,ps.last_at,rs.last_at) last_activity_at
     FROM ${platformMonitoringTenant} t LEFT JOIN os ON os.tenant_id=t.id LEFT JOIN ms ON ms.tenant_id=t.id LEFT JOIN ss ON ss.tenant_id=t.id LEFT JOIN bs ON bs.tenant_id=t.id LEFT JOIN ps ON ps.tenant_id=t.id LEFT JOIN rs ON rs.tenant_id=t.id
     WHERE true ${tenantWhere} ${queryWhere}
@@ -412,5 +430,17 @@ export async function readTenantDetail(tx:PlatformTransaction,filters:PlatformFi
   const tenant=(await tx.select().from(platformMonitoringTenant).where(eq(platformMonitoringTenant.id,filters.scope.tenantId)).limit(1))[0];if(!tenant)return null;
   const outletRows=await tx.execute<{id:string;name:string;has_pickup:boolean;has_origin:boolean;has_private:boolean;updated_at:Date}>(sql`SELECT o.id,o.name,o.has_pickup,o.has_origin,(c.outlet_id IS NOT NULL) has_private,o.updated_at FROM ${platformMonitoringOutlet} o LEFT JOIN ${platformMonitoringConnectionHealth} c ON c.outlet_id=o.id AND c.tenant_id=o.tenant_id WHERE o.tenant_id=${tenant.id} ${outletClause("o",filters.outletId)} ORDER BY o.name`);
   const batches=await tx.select({id:platformMonitoringProviderBatch.id,courier:platformMonitoringProviderBatch.courier,credentialSource:platformMonitoringProviderBatch.credentialSource,status:platformMonitoringProviderBatch.status,safeErrorCode:platformMonitoringProviderBatch.safeErrorCode,providerAccountBucket:platformMonitoringProviderBatch.providerAccountBucket,submissionAttemptedAt:platformMonitoringProviderBatch.submissionAttemptedAt,completedAt:platformMonitoringProviderBatch.completedAt}).from(platformMonitoringProviderBatch).where(and(eq(platformMonitoringProviderBatch.tenantId,tenant.id),filters.outletId?eq(platformMonitoringProviderBatch.outletId,filters.outletId):undefined,filters.courier?eq(platformMonitoringProviderBatch.courier,filters.courier):undefined,sql`${platformMonitoringProviderBatch.createdAt}>=${filters.range.startInclusive}`,sql`${platformMonitoringProviderBatch.createdAt}<${filters.range.endExclusive}`)).orderBy(sql`${platformMonitoringProviderBatch.createdAt} desc`,sql`${platformMonitoringProviderBatch.id} desc`).limit(25);
-  return {tenant,outlets:outletRows.rows.map(r=>({id:r.id,name:r.name,hasPickup:r.has_pickup,hasOrigin:r.has_origin,hasPrivateConnection:r.has_private,updatedAt:asDate(r.updated_at)!})),batches};
+  const accountBuckets = new Map<number, number>();
+  return {tenant,outlets:outletRows.rows.map(r=>({id:r.id,name:r.name,hasPickup:r.has_pickup,hasOrigin:r.has_origin,hasPrivateConnection:r.has_private,updatedAt:asDate(r.updated_at)!})),batches:batches.map((batch) => {
+    let localBucket = accountBuckets.get(batch.providerAccountBucket);
+    if (!localBucket) {
+      localBucket = accountBuckets.size + 1;
+      accountBuckets.set(batch.providerAccountBucket, localBucket);
+    }
+    return {
+      ...batch,
+      providerAccountBucket: localBucket,
+      safeErrorCode: safeOperationalCode(batch.safeErrorCode),
+    };
+  })};
 }

@@ -13,12 +13,15 @@ import {
   completeUnpaidRecovery,
   markUnpaidRecoveryUnknown,
   prepareUnpaidRecoveries,
+  UnpaidRecoveryDeniedError,
 } from "@/db/unpaid-recovery-repository";
 import {
+  normalizeMengantarProviderIdentifier,
   validateMengantarTransportScope,
   withProviderAccountSerialization,
 } from "@/lib/mengantar-order";
 import type { MengantarTransportScopeBinding } from "@/lib/mengantar-order";
+import { enforceUnpaidRecoveryRateLimit } from "@/lib/order-rate-limit";
 
 export type MengantarPayUnpaidRequest = {
   batch_id: string;
@@ -141,9 +144,27 @@ export function normalizeMengantarPayUnpaidResponse(
     throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_SCHEMA_UNKNOWN");
   }
 
-  const providerBatchId = data.batch_id.trim();
-  const courier = data.courier.trim();
-  if (!providerBatchId || providerBatchId !== expectedProviderBatchId.trim()) {
+  let providerBatchId: string;
+  let courier: string;
+  let cnoteNo: string;
+  try {
+    providerBatchId = normalizeMengantarProviderIdentifier(
+      data.batch_id,
+      "PAY_UNPAID_BATCH_IDENTIFIER_UNSAFE",
+    );
+    courier = normalizeMengantarProviderIdentifier(
+      data.courier,
+      "PAY_UNPAID_COURIER_IDENTIFIER_UNSAFE",
+    );
+    const [candidate] = data.cnote_no;
+    cnoteNo = normalizeMengantarProviderIdentifier(
+      candidate,
+      "PAY_UNPAID_CNOTE_UNSAFE",
+    );
+  } catch {
+    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_IDENTIFIER_UNSAFE");
+  }
+  if (providerBatchId !== expectedProviderBatchId.trim()) {
     throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_BATCH_CORRELATION_UNKNOWN");
   }
   if (
@@ -156,14 +177,6 @@ export function normalizeMengantarPayUnpaidResponse(
     throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_ORDER_CORRELATION_UNKNOWN");
   }
 
-  const [candidate] = data.cnote_no;
-  if (typeof candidate !== "string") {
-    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_SCHEMA_UNKNOWN");
-  }
-  const cnoteNo = candidate.trim();
-  if (!cnoteNo || cnoteNo.length > 160) {
-    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_CNOTE_UNKNOWN");
-  }
   return { providerBatchId, courier, cnoteNo };
 }
 
@@ -198,6 +211,13 @@ async function withTenantContextForRecovery<T>(
 export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
   input: FixtureUnpaidRecoveryInput,
 ): Promise<FixtureUnpaidRecoveryResult> {
+  await withTenantContextForRecovery(input, async (tx, context) => {
+    if (context.role !== "TENANT_ADMIN") {
+      throw new UnpaidRecoveryDeniedError();
+    }
+    await enforceUnpaidRecoveryRateLimit(tx, context);
+  });
+
   const preparedWithBinding = await withTenantContextForRecovery(
     input,
     async (tx, context) => {

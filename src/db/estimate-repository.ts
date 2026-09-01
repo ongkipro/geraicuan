@@ -42,6 +42,7 @@ export type PersistedEstimateService = Omit<
   SupportedEstimateService,
   "insuranceAmountIdr" | "insuranceSourceField"
 > & {
+  estimateServiceId: string;
   insuranceAmountIdr: number | null;
   insuranceSourceField: string | null;
 };
@@ -257,6 +258,7 @@ export async function loadLatestEstimateSnapshot(
 
   const services = await tx
     .select({
+      estimateServiceId: shipmentEstimateServices.id,
       providerService: shipmentEstimateServices.providerService,
       currency: shipmentEstimateServices.currency,
       shippingAmountIdr: shipmentEstimateServices.shippingAmountIdr,

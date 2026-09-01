@@ -69,9 +69,14 @@ async function appendDeniedAccess(db: Database, userId: string) {
   await db.transaction(async (tx) => {
     await assertRestrictedApplicationRole(tx);
     await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
+    const platformRole = await tx
+      .select({ userId: schema.platformRoles.userId })
+      .from(schema.platformRoles)
+      .where(eq(schema.platformRoles.userId, userId))
+      .limit(1);
     await tx.insert(schema.auditEvents).values({
       actorId: userId,
-      actorRole: "TENANT_MEMBER",
+      actorRole: platformRole.length === 1 ? "SUPER_ADMIN" : "TENANT_MEMBER",
       action: "PLATFORM_MONITORING_VIEWED",
       targetType: "PLATFORM",
       targetId: "GLOBAL",
@@ -148,6 +153,10 @@ export async function recordPlatformMonitoringAccess(
     const tenantId = input.scope === "tenant" ? input.tenantId! : null;
     const targetType = input.scope === "tenant" ? "TENANT" : "PLATFORM";
     const metadata = JSON.stringify({ route: input.route, scope: input.scope });
+
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${userId}:${input.route}:${targetId}`}, 0))`,
+    );
 
     await tx.execute(sql`
       INSERT INTO audit_events (

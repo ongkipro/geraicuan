@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -13,6 +15,7 @@ import { completeProviderOrder } from "@/db/order-batch-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import { completeUnpaidRecovery } from "@/db/unpaid-recovery-repository";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -155,10 +158,7 @@ async function issueOrder(
 }
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 });
 
 beforeEach(async () => {
@@ -322,6 +322,7 @@ describe("immutable tenant operational ledger", () => {
           tx,
           context,
           original.id,
+          randomUUID(),
           reversalAt,
         );
         const reconciliation = await recordLedgerReconciliation(tx, context, {
@@ -412,7 +413,12 @@ describe("immutable tenant operational ledger", () => {
         (entry) => entry.entryType === "GERAICUAN_COD_SERVICE_FEE_REVENUE",
       );
       if (!revenue) throw new Error("Expected fixture revenue entry.");
-      const adjustment = await appendLedgerAdjustment(tx, context, revenue.id);
+      const adjustment = await appendLedgerAdjustment(
+        tx,
+        context,
+        revenue.id,
+        randomUUID(),
+      );
       const summary = await summarizeLedger(tx, context, {
         ...range,
         outletId: outletA,

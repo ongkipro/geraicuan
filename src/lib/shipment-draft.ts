@@ -12,6 +12,8 @@ const MAX_VALUE_IDR = 2_147_483_647;
 const MAX_WEIGHT_GRAMS = 100_000;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PROVIDER_AREA_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+const SAFE_AREA_LABEL_PATTERN = /^[^\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]+$/u;
 
 export type ShipmentDraftInput = {
   declaredValueIdr: number;
@@ -109,10 +111,18 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   if (!raw.outletId || !UUID_PATTERN.test(raw.outletId)) {
     errors.outletId = "Pilih outlet asal.";
   }
-  if (!raw.destinationAreaId || raw.destinationAreaId.length > MAX_AREA_ID_LENGTH) {
+  if (
+    !raw.destinationAreaId
+    || raw.destinationAreaId.length > MAX_AREA_ID_LENGTH
+    || !PROVIDER_AREA_ID_PATTERN.test(raw.destinationAreaId)
+  ) {
     errors.destinationAreaId = "Pilih area tujuan yang valid.";
   }
-  if (!raw.destinationAreaLabel || raw.destinationAreaLabel.length > MAX_AREA_LABEL_LENGTH) {
+  if (
+    !raw.destinationAreaLabel
+    || raw.destinationAreaLabel.length > MAX_AREA_LABEL_LENGTH
+    || !SAFE_AREA_LABEL_PATTERN.test(raw.destinationAreaLabel)
+  ) {
     errors.destinationAreaLabel = "Nama area tujuan wajib diisi dan maksimal 160 karakter.";
   }
 

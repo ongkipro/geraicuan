@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -5,17 +7,19 @@ import { Pool } from "pg";
 
 import {
   createShipmentDraft,
+  DraftSubmissionConflictError,
   OutletUnavailableError,
 } from "@/db/shipment-draft-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import * as schema from "@/db/schema";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
-import { previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
+import { deriveBulkRowSubmissionId, previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
 import {
   BulkImportRateLimitedError,
   enforceBulkImportRateLimit,
 } from "@/lib/bulk-import-rate-limit";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -70,10 +74,7 @@ function bulkCsv(rows: string[][]) {
 }
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
   await adminPool.query(
     "TRUNCATE shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
   );
@@ -161,6 +162,66 @@ describe("tenant shipment drafts", () => {
     expect(otherTenantRows).toEqual([]);
   });
 
+  it("replays one canonical submission without creating duplicate rows", async () => {
+    const validated = validateShipmentDraft(submission());
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const submissionId = "00000000-0000-4000-8000-000000000140";
+
+    const created = await Promise.all([
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, validated.input, submissionId)),
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, validated.input, submissionId)),
+    ]);
+
+    expect(created).toEqual([submissionId, submissionId]);
+    const shipmentRows = await adminDb
+      .select({ id: schema.shipments.id })
+      .from(schema.shipments)
+      .where(eq(schema.shipments.id, submissionId));
+    const draftRows = await adminDb
+      .select({ id: schema.shipmentDrafts.shipmentId })
+      .from(schema.shipmentDrafts)
+      .where(eq(schema.shipmentDrafts.shipmentId, submissionId));
+    const partyRows = await adminDb
+      .select({ role: schema.shipmentParties.role })
+      .from(schema.shipmentParties)
+      .where(eq(schema.shipmentParties.shipmentId, submissionId));
+    expect(shipmentRows).toHaveLength(1);
+    expect(draftRows).toHaveLength(1);
+    expect(partyRows).toHaveLength(2);
+
+    await adminDb
+      .update(schema.shipments)
+      .set({ status: "ESTIMATED" })
+      .where(eq(schema.shipments.id, submissionId));
+    await adminDb
+      .update(schema.outlets)
+      .set({ defaultOriginAreaId: null, defaultPickupAddressId: null })
+      .where(eq(schema.outlets.id, outletA));
+    await expect(
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, validated.input, submissionId)),
+    ).resolves.toBe(submissionId);
+
+    const changed = validateShipmentDraft(submission({ packageContent: "Isi berbeda" }));
+    expect(changed.ok).toBe(true);
+    if (!changed.ok) return;
+    await expect(
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, changed.input, submissionId)),
+    ).rejects.toBeInstanceOf(DraftSubmissionConflictError);
+    await expect(
+      withTenantContext(appDb, "draft-user-b", tenantB, (tx, context) =>
+        createShipmentDraft(tx, context, { ...validated.input, outletId: outletB }, submissionId)),
+    ).rejects.toBeInstanceOf(DraftSubmissionConflictError);
+    await adminDb
+      .update(schema.outlets)
+      .set({ defaultOriginAreaId: "origin-a", defaultPickupAddressId: "pickup-a" })
+      .where(eq(schema.outlets.id, outletA));
+  });
+
   it("rejects invalid input and a cross-tenant outlet without persisting a shipment", async () => {
     const invalid = validateShipmentDraft(
       submission({
@@ -195,6 +256,33 @@ describe("tenant shipment drafts", () => {
 
     expect(after).toEqual(before);
   });
+
+  it("rejects a configured-looking outlet whose private connection needs attention", async () => {
+    await adminPool.query(
+      `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
+       VALUES ($1, $2, 'vault://noncanonical-private-reference')`,
+      [tenantA, outletA],
+    );
+    try {
+      const validated = validateShipmentDraft(submission());
+      expect(validated.ok).toBe(true);
+      if (!validated.ok) return;
+
+      const before = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
+      await expect(
+        withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+          createShipmentDraft(tx, context, validated.input)),
+      ).rejects.toBeInstanceOf(OutletUnavailableError);
+      const after = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
+      expect(after).toEqual(before);
+    } finally {
+      await adminPool.query(
+        "DELETE FROM mengantar_connections WHERE tenant_id = $1 AND outlet_id = $2",
+        [tenantA, outletA],
+      );
+    }
+  });
+
   it("creates only CSV rows that passed validation in the tenant transaction", async () => {
     const validRow = [
       "Pengirim", "081212345678", "Jl. Asia Afrika 8", "Penerima", "081234567890",
@@ -211,13 +299,28 @@ describe("tenant shipment drafts", () => {
     expect("code" in preview).toBe(false);
     if ("code" in preview) return;
     expect(preview.validRows).toHaveLength(1);
+    const bulkSubmissionId = "00000000-0000-4000-8000-000000000142";
     const before = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
-    await withTenantContext(appDb, "draft-user-a", tenantA, async (tx, context) => {
-      for (const row of preview.validRows) await createShipmentDraft(tx, context, row.input);
-    });
+    for (let replay = 0; replay < 2; replay += 1) {
+      await withTenantContext(appDb, "draft-user-a", tenantA, async (tx, context) => {
+        for (const row of preview.validRows) {
+          await createShipmentDraft(
+            tx,
+            context,
+            row.input,
+            deriveBulkRowSubmissionId(bulkSubmissionId, row.row),
+          );
+        }
+      });
+    }
     const after = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
 
     expect(after).toHaveLength(before.length + 1);
+    expect(after).toContainEqual({ id: deriveBulkRowSubmissionId(bulkSubmissionId, 2) });
+    const otherTenantRows = await withTenantContext(appDb, "draft-user-b", tenantB, (tx) =>
+      tx.select({ id: schema.shipments.id }).from(schema.shipments),
+    );
+    expect(otherTenantRows).toEqual([]);
   });
   it("keeps shipment quota when Better Auth prunes expired auth limiter rows", async () => {
     await adminPool.query("DELETE FROM shipment_rate_limits");
@@ -268,6 +371,74 @@ describe("tenant shipment drafts", () => {
     expect(otherTenantLimits).toEqual([]);
   });
 
+  it("rejects a stale selected contact revision before writing a draft", async () => {
+    const contactId = randomUUID();
+    const addressId = randomUUID();
+    const submissionId = randomUUID();
+    const selectedAt = new Date("2026-09-01T00:00:00.000Z");
+    await adminPool.query(
+      `INSERT INTO contacts (id, tenant_id, name, phone, is_sender, is_recipient, updated_at)
+       VALUES ($1, $2, 'Selected sender', '081212345678', true, false, $3)`,
+      [contactId, tenantA, selectedAt],
+    );
+    await adminPool.query(
+      `INSERT INTO contact_addresses (
+         id, tenant_id, contact_id, label, address, is_primary, updated_at
+       ) VALUES ($1, $2, $3, 'Primary', 'Selected sender address', true, $4)`,
+      [addressId, tenantA, contactId, selectedAt],
+    );
+    await adminPool.query(
+      "UPDATE contacts SET name = 'Updated sender', updated_at = $2 WHERE id = $1",
+      [contactId, new Date("2026-09-01T00:01:00.000Z")],
+    );
+
+    vi.resetModules();
+    vi.doMock("@/db/client", () => ({ db: appDb }));
+    vi.doMock("@/lib/cms-auth", () => ({
+      CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
+      requireCmsScope: vi.fn(async () => ({
+        scope: "tenant",
+        userId: "draft-user-a",
+        tenantId: tenantA,
+        role: "OPERATOR",
+      })),
+    }));
+    vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    const { saveShipmentDraft } = await import("@/app/app/actions");
+    const formData = submission();
+    formData.set("submissionId", submissionId);
+    formData.set("senderContactId", contactId);
+    formData.set("senderContactAddressId", addressId);
+    formData.set("senderContactUpdatedAt", selectedAt.toISOString());
+    formData.set("senderContactAddressUpdatedAt", selectedAt.toISOString());
+    formData.set("senderContactSnapshotName", "Selected sender");
+    formData.set("senderContactSnapshotPhone", "081212345678");
+    formData.set("senderContactSnapshotAddress", "Selected sender address");
+    formData.set("senderName", "Selected sender");
+    formData.set("senderPhone", "081212345678");
+    formData.set("senderAddress", "Manual sender address override");
+
+    const before = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
+    await expect(saveShipmentDraft({}, formData)).resolves.toMatchObject({
+      errors: { senderContactSelection: expect.any(String) },
+    });
+    const after = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
+    expect(after).toEqual(before);
+
+    const validated = validateShipmentDraft(formData);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, validated.input, submissionId),
+    );
+    await expect(saveShipmentDraft({}, formData)).resolves.toBeUndefined();
+    const replayRows = await adminDb
+      .select({ id: schema.shipments.id })
+      .from(schema.shipments)
+      .where(eq(schema.shipments.id, submissionId));
+    expect(replayRows).toEqual([{ id: submissionId }]);
+  });
+
   it("commits invalid-outlet bulk attempts before returning the generic error", async () => {
     await adminPool.query("DELETE FROM shipment_rate_limits");
     vi.resetModules();
@@ -297,7 +468,7 @@ describe("tenant shipment drafts", () => {
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await expect(invalidOutletAttempt()).resolves.toEqual({
-        fileError: { code: "file", message: "Pilih outlet asal." },
+        fileError: { code: "file", field: "outletId", message: "Pilih outlet asal." },
       });
     }
 
@@ -311,6 +482,7 @@ describe("tenant shipment drafts", () => {
     await expect(invalidOutletAttempt()).resolves.toEqual({
       fileError: {
         code: "file",
+        field: "csv",
         message: "Terlalu banyak percobaan impor. Coba lagi dalam beberapa menit.",
       },
     });

@@ -10,7 +10,9 @@ import {
 } from "@/db/contact-repository";
 import {
   createShipmentDraft,
+  DraftSubmissionConflictError,
   OutletUnavailableError,
+  resolveExistingShipmentDraftReplay,
 } from "@/db/shipment-draft-repository";
 import { db } from "@/db/client";
 import {
@@ -21,13 +23,14 @@ import {
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import {
   validateShipmentDraft,
-  type ShipmentDraftInput,
 } from "@/lib/shipment-draft";
 
 const CONTACT_QUERY_MAX_LENGTH = 80;
 const CONTACT_SEARCH_LIMIT = 8;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type ShipmentContactRole = "RECIPIENT" | "SENDER";
 
@@ -51,7 +54,9 @@ export type ShipmentContactSearchActionState = {
 export type ShipmentContactSelection = {
   address: string;
   addressId: string;
+  addressUpdatedAt: string;
   contactId: string;
+  contactUpdatedAt: string;
   destinationAreaId: string | null;
   destinationAreaLabel: string | null;
   name: string;
@@ -117,9 +122,13 @@ function valuesFrom(formData: FormData): DraftFormValues {
 
 type DraftContactSelector = {
   addressId: string;
+  addressUpdatedAt: string;
   contactId: string;
+  contactUpdatedAt: string;
   role: ShipmentContactRole;
 };
+
+type ContactPickerSelector = Pick<DraftContactSelector, "addressId" | "contactId" | "role">;
 
 type ContactSelectionSnapshot = {
   address: string;
@@ -148,7 +157,7 @@ function maskPhone(phone: string) {
   return suffix ? `•••• ${suffix}` : "Nomor tersimpan";
 }
 
-function selectionFrom(formData: FormData): DraftContactSelector | null {
+function selectionFrom(formData: FormData): ContactPickerSelector | null {
   const value = formData.get("contactSelection");
   if (typeof value !== "string") return null;
   const parts = value.split(":");
@@ -171,21 +180,40 @@ function draftSelectorFrom(
   const prefix = role === "SENDER" ? "sender" : "recipient";
   const contactValue = formData.get(`${prefix}ContactId`);
   const addressValue = formData.get(`${prefix}ContactAddressId`);
+  const contactUpdatedAtValue = formData.get(`${prefix}ContactUpdatedAt`);
+  const addressUpdatedAtValue = formData.get(`${prefix}ContactAddressUpdatedAt`);
   if (
     (contactValue === null || contactValue === "") &&
     (addressValue === null || addressValue === "")
   ) {
     return null;
   }
-  if (typeof contactValue !== "string" || typeof addressValue !== "string") {
+  if (
+    typeof contactValue !== "string" ||
+    typeof addressValue !== "string" ||
+    typeof contactUpdatedAtValue !== "string" ||
+    typeof addressUpdatedAtValue !== "string"
+  ) {
     throw new DraftContactUnavailableError(role);
   }
   const contactId = contactValue.trim();
   const addressId = addressValue.trim();
-  if (!UUID_PATTERN.test(contactId) || !UUID_PATTERN.test(addressId)) {
+  const contactUpdatedAt = contactUpdatedAtValue.trim();
+  const addressUpdatedAt = addressUpdatedAtValue.trim();
+  if (
+    !UUID_PATTERN.test(contactId) ||
+    !UUID_PATTERN.test(addressId) ||
+    !isCanonicalTimestamp(contactUpdatedAt) ||
+    !isCanonicalTimestamp(addressUpdatedAt)
+  ) {
     throw new DraftContactUnavailableError(role);
   }
-  return { addressId, contactId, role };
+  return { addressId, addressUpdatedAt, contactId, contactUpdatedAt, role };
+}
+
+function isCanonicalTimestamp(value: string) {
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString() === value;
 }
 
 function selectionSnapshotFrom(
@@ -232,13 +260,20 @@ async function resolveDraftContact(
   selector: DraftContactSelector,
 ) {
   try {
-    return await resolveActiveContactAddress(
+    const resolved = await resolveActiveContactAddress(
       tx,
       context,
       selector.contactId,
       selector.addressId,
       selector.role,
     );
+    if (
+      resolved.contactUpdatedAt.toISOString() !== selector.contactUpdatedAt ||
+      resolved.addressUpdatedAt.toISOString() !== selector.addressUpdatedAt
+    ) {
+      throw new DraftContactUnavailableError(selector.role);
+    }
+    return resolved;
   } catch (error) {
     if (error instanceof ContactUnavailableError) {
       throw new DraftContactUnavailableError(selector.role);
@@ -249,54 +284,31 @@ async function resolveDraftContact(
 
 type ResolvedContact = {
   address: string;
+  addressUpdatedAt: Date;
+  contactUpdatedAt: Date;
   destinationAreaId: string | null;
   destinationAreaLabel: string | null;
   name: string;
   phone: string;
 };
 
-function applyContactSnapshot(
-  input: ShipmentDraftInput,
+function assertSelectionMatchesResolved(
   resolved: ResolvedContact,
-  role: ShipmentContactRole,
   selected: ContactSelectionSnapshot | null,
-): ShipmentDraftInput {
-  if (!selected) return input;
-  const partyMatches = role === "SENDER"
-    ? input.senderName === selected.name &&
-      input.senderPhone === selected.phone &&
-      input.senderAddress === selected.address
-    : input.recipientName === selected.name &&
-      input.recipientPhone === selected.phone &&
-      input.recipientAddress === selected.address;
-
-  if (!partyMatches) return input;
-
-  if (role === "SENDER") {
-    return {
-      ...input,
-      senderAddress: resolved.address,
-      senderName: resolved.name,
-      senderPhone: resolved.phone,
-    };
-  }
-
-  const snapshot: ShipmentDraftInput = {
-    ...input,
-    recipientAddress: resolved.address,
-    recipientName: resolved.name,
-    recipientPhone: resolved.phone,
-  };
+  role: ShipmentContactRole,
+) {
   if (
-    resolved.destinationAreaId &&
-    resolved.destinationAreaLabel &&
-    input.destinationAreaId === selected.destinationAreaId &&
-    input.destinationAreaLabel === selected.destinationAreaLabel
+    !selected ||
+    resolved.name !== selected.name ||
+    resolved.phone !== selected.phone ||
+    resolved.address !== selected.address ||
+    (role === "RECIPIENT" && (
+      resolved.destinationAreaId !== selected.destinationAreaId ||
+      resolved.destinationAreaLabel !== selected.destinationAreaLabel
+    ))
   ) {
-    snapshot.destinationAreaId = resolved.destinationAreaId;
-    snapshot.destinationAreaLabel = resolved.destinationAreaLabel;
+    throw new DraftContactUnavailableError(role);
   }
-  return snapshot;
 }
 
 async function searchShipmentContactsForRole(
@@ -395,7 +407,9 @@ export async function selectShipmentContact(
       selection: {
         address: resolved.address,
         addressId: selector.addressId,
+        addressUpdatedAt: resolved.addressUpdatedAt.toISOString(),
         contactId: selector.contactId,
+        contactUpdatedAt: resolved.contactUpdatedAt.toISOString(),
         destinationAreaId: resolved.destinationAreaId,
         destinationAreaLabel: resolved.destinationAreaLabel,
         name: resolved.name,
@@ -416,8 +430,18 @@ export async function saveShipmentDraft(
   formData: FormData,
 ): Promise<ShipmentDraftActionState> {
   const principal = await requireTenantPrincipal();
+  const submissionIdValue = formData.get("submissionId");
+  const submissionId = typeof submissionIdValue === "string"
+    ? submissionIdValue.trim()
+    : "";
   const validation = validateShipmentDraft(formData);
   const values = valuesFrom(formData);
+  if (!UUID_V4_PATTERN.test(submissionId)) {
+    return {
+      errors: { form: "Sesi formulir tidak valid. Muat ulang halaman lalu coba kembali." },
+      values,
+    };
+  }
   const senderSnapshot = selectionSnapshotFrom(formData, "SENDER");
   const recipientSnapshot = selectionSnapshotFrom(formData, "RECIPIENT");
 
@@ -450,21 +474,32 @@ export async function saveShipmentDraft(
       principal.userId,
       principal.tenantId,
       async (tx, context) => {
+        if (!validation.ok) {
+          return { ok: false, state: { errors: validation.errors, values } };
+        }
+
+        const replay = await resolveExistingShipmentDraftReplay(
+          tx,
+          context,
+          validation.input,
+          submissionId,
+        );
+        if (replay) return { ok: true, shipmentId: replay };
+
         const sender = senderSelector
           ? await resolveDraftContact(tx, context, senderSelector)
           : null;
         const recipient = recipientSelector
           ? await resolveDraftContact(tx, context, recipientSelector)
           : null;
-
-        if (!validation.ok) {
-          return { ok: false, state: { errors: validation.errors, values } };
-        }
-
-        let input = validation.input;
-        if (sender) input = applyContactSnapshot(input, sender, "SENDER", senderSnapshot);
-        if (recipient) input = applyContactSnapshot(input, recipient, "RECIPIENT", recipientSnapshot);
-        const shipmentId = await createShipmentDraft(tx, context, input);
+        if (sender) assertSelectionMatchesResolved(sender, senderSnapshot, "SENDER");
+        if (recipient) assertSelectionMatchesResolved(recipient, recipientSnapshot, "RECIPIENT");
+        const shipmentId = await createShipmentDraft(
+          tx,
+          context,
+          validation.input,
+          submissionId,
+        );
         return { ok: true, shipmentId };
       },
     );
@@ -484,9 +519,15 @@ export async function saveShipmentDraft(
         values,
       };
     }
+    if (error instanceof DraftSubmissionConflictError) {
+      return {
+        errors: { form: "Formulir ini sudah berubah atau pernah digunakan. Muat ulang lalu coba kembali." },
+        values,
+      };
+    }
     throw error;
   }
 
   if (!outcome.ok) return outcome.state;
-  redirect(`/app?draft=${outcome.shipmentId}`);
+  redirect(`/app/pengiriman/baru?draft=${outcome.shipmentId}`);
 }

@@ -4,6 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 
 import {
+  calculateCodAmounts,
+  calculateCodAmountsOrNull,
   CodTotalsUnavailableError,
   loadCodTotalsForShipment,
   persistCodTotalsForEstimate,
@@ -15,6 +17,7 @@ import {
 } from "@/db/estimate-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -72,10 +75,7 @@ const services = [
 ] satisfies readonly SupportedEstimateService[];
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 });
 
 beforeEach(async () => {
@@ -167,6 +167,13 @@ afterAll(async () => {
 });
 
 describe("shipment COD totals", () => {
+  it("fails an overflowing customer total closed without throwing into a route", () => {
+    expect(calculateCodAmountsOrNull(2_000_000_000, 0)).toEqual(
+      calculateCodAmounts(2_000_000_000, 0),
+    );
+    expect(calculateCodAmountsOrNull(2_147_483_647, 2_147_483_647)).toBeNull();
+  });
+
   it("persists exact whole-IDR components and reads the immutable values", async () => {
     const snapshotId = await withTenantContext(
       appDb,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useRef } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import {
@@ -14,22 +14,34 @@ import {
   type ShipmentContactSelectionActionState,
   type ShipmentDraftActionState,
 } from "@/app/app/actions";
+import {
+  invokeContactSearchFromKeyboard,
+  SelectedContactProvenance,
+} from "@/app/app/shipment-draft-experience";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 
 type Outlet = { id: string; name: string };
 
-type ShipmentDraftFormProps = { autoFocusFirstField: boolean; outlets: Outlet[] };
+type ShipmentDraftFormProps = {
+  autoFocusFirstField: boolean;
+  outlets: Outlet[];
+  submissionId: string;
+};
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <button className="sales-primary ship-submit" disabled={pending} type="submit">
+    <Button className="min-h-11 sm:w-fit" disabled={pending} type="submit">
       {pending ? "Menyimpan…" : "Simpan draf"}
-    </button>
+    </Button>
   );
 }
 
 function FieldError({ error, id }: { error?: string; id: string }) {
-  return error ? <p className="ship-field-error" id={id}>{error}</p> : null;
+  return error ? <p className="text-sm leading-5 text-destructive" id={id}>{error}</p> : null;
 }
 
 function setFormField(form: HTMLFormElement, name: string, value: string) {
@@ -57,6 +69,11 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
     ShipmentContactSelectionActionState,
     FormData
   >(selectShipmentContact, {});
+  const [chosenAddress, setChosenAddress] = useState<{
+    addressId: string;
+    addressLabel: string;
+    contactId: string;
+  } | null>(null);
   const prefix = role === "SENDER" ? "sender" : "recipient";
   const partyLabel = role === "SENDER" ? "pengirim" : "penerima";
   const searchBelongsToPicker = searchState.role === undefined || searchState.role === role;
@@ -66,9 +83,20 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
   const selection = selectionState.selection?.role === role
     ? selectionState.selection
     : undefined;
+  const selectedAddressLabel = selection &&
+      chosenAddress?.contactId === selection.contactId &&
+      chosenAddress.addressId === selection.addressId
+    ? chosenAddress.addressLabel
+    : undefined;
   const searchHintId = `${prefix}-contact-search-hint`;
   const searchErrorId = `${prefix}-contact-search-error`;
   const resultsId = `${prefix}-contact-results`;
+
+  const runSearch = (form: HTMLFormElement | null) => {
+    if (!form || searchPending || selectionPending) return;
+    const formData = new FormData(form);
+    startTransition(() => searchAction(formData));
+  };
 
   useEffect(() => {
     if (selection) onSelect(selection);
@@ -78,85 +106,105 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
     <div
       aria-busy={searchPending || selectionPending}
       aria-describedby={saveError ? `${prefix}ContactSelection-error` : undefined}
-      className="ship-payment"
+      className="grid min-w-0 gap-3 bg-muted/30 px-4 py-4"
       id={`${prefix}ContactSelection`}
       tabIndex={-1}
     >
-      <label htmlFor={`${prefix}ContactQuery`}>Gunakan kontak tersimpan (opsional)</label>
-      <div className="ship-pair">
-        <input
+      <label className="text-sm font-medium" htmlFor={`${prefix}ContactQuery`}>Gunakan kontak tersimpan (opsional)</label>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <Input
           aria-controls={resultsId}
           aria-describedby={searchError ? `${searchHintId} ${searchErrorId}` : searchHintId}
           aria-invalid={Boolean(searchError)}
           autoComplete="off"
+          className="min-h-11"
           id={`${prefix}ContactQuery`}
           maxLength={80}
           name={`${prefix}ContactQuery`}
+          onKeyDown={(event) => {
+            invokeContactSearchFromKeyboard(
+              {
+                isComposing: event.nativeEvent.isComposing,
+                key: event.key,
+                preventDefault: () => event.preventDefault(),
+              },
+              () => runSearch(event.currentTarget.form),
+            );
+          }}
           placeholder={`Cari nama atau nomor ${partyLabel}`}
           type="search"
         />
-        <button
+        <Button
           aria-controls={resultsId}
-          className="sales-secondary"
+          className="min-h-11 w-full sm:w-auto"
           disabled={searchPending || selectionPending}
-          onClick={(event) => {
-            const form = event.currentTarget.form;
-            if (form) searchAction(new FormData(form));
-          }}
+          onClick={(event) => runSearch(event.currentTarget.form)}
           type="button"
+          variant="outline"
         >
           {searchPending ? "Mencari…" : "Cari kontak"}
-        </button>
+        </Button>
       </div>
-      <p className="bulk-hint" id={searchHintId}>
+      <p className="text-sm leading-5 text-muted-foreground" id={searchHintId}>
         Masukkan minimal 2 karakter. Hasil hanya menampilkan kontak aktif untuk peran ini.
       </p>
       {searchError ? (
-        <p className="ship-field-error" id={searchErrorId} role="alert">{searchError}</p>
+        <p className="text-sm leading-5 text-destructive" id={searchErrorId} role="alert">{searchError}</p>
       ) : null}
-      {searchMessage ? <p className="bulk-hint" role="status">{searchMessage}</p> : null}
+      {searchMessage ? <p className="text-sm leading-5 text-muted-foreground" role="status">{searchMessage}</p> : null}
       {results.length > 0 ? (
         <>
-          <p className="bulk-hint" id={`${resultsId}-label`}>
+          <p className="text-sm leading-5 text-muted-foreground" id={`${resultsId}-label`}>
             Pilih alamat kontak untuk menyalin data ke isian {partyLabel}.
           </p>
           <ul
             aria-labelledby={`${resultsId}-label`}
-            className="contact-addresses"
+            className="grid list-none gap-2 p-0"
             id={resultsId}
           >
             {results.map((result) => (
               <li key={`${result.contactId}:${result.addressId}`}>
-                <button
-                  className="sales-secondary"
+                <Button
+                  className="h-auto min-h-11 w-full min-w-0 flex-col items-stretch justify-start gap-1 whitespace-normal px-3 py-2 text-left sm:flex-row sm:items-center"
                   disabled={searchPending || selectionPending}
                   onClick={() => {
                     const formData = new FormData();
                     formData.set("contactSelection", `${role}:${result.contactId}:${result.addressId}`);
-                    selectionAction(formData);
+                    setChosenAddress({
+                      addressId: result.addressId,
+                      addressLabel: result.addressLabel,
+                      contactId: result.contactId,
+                    });
+                    startTransition(() => selectionAction(formData));
                   }}
                   type="button"
+                  variant="outline"
                 >
-                  <strong>{result.name}</strong>
-                  {" · "}
-                  {result.phoneMasked}
-                  {" · "}
-                  {result.addressLabel}
-                  {" · "}
-                  {result.destinationAreaLabel ?? "Area belum disimpan"}
-                </button>
+                  <span className="grid min-w-0 gap-0.5 wrap-anywhere">
+                    <strong>{result.name}</strong>
+                    {" · "}
+                    {result.phoneMasked}
+                  </span>
+                  <span className="block text-sm font-normal leading-5 text-muted-foreground">
+                    {result.addressLabel}
+                    {" · "}
+                    {result.destinationAreaLabel ?? "Area belum disimpan"}
+                  </span>
+                </Button>
               </li>
             ))}
           </ul>
         </>
       ) : null}
       {selectionState.error ? (
-        <p className="ship-field-error" role="alert">{selectionState.error}</p>
+        <p className="text-sm leading-5 text-destructive" role="alert">{selectionState.error}</p>
       ) : null}
       {selection ? (
         <>
           <input name={`${prefix}ContactId`} type="hidden" value={selection.contactId} />
           <input name={`${prefix}ContactAddressId`} type="hidden" value={selection.addressId} />
+          <input name={`${prefix}ContactUpdatedAt`} type="hidden" value={selection.contactUpdatedAt} />
+          <input name={`${prefix}ContactAddressUpdatedAt`} type="hidden" value={selection.addressUpdatedAt} />
           <input name={`${prefix}ContactSnapshotName`} type="hidden" value={selection.name} />
           <input name={`${prefix}ContactSnapshotPhone`} type="hidden" value={selection.phone} />
           <input name={`${prefix}ContactSnapshotAddress`} type="hidden" value={selection.address} />
@@ -170,9 +218,11 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
             type="hidden"
             value={selection.destinationAreaLabel ?? ""}
           />
-          <p className="bulk-hint" role="status">
-            Kontak diterapkan. Isian manual tetap dapat diubah.
-          </p>
+          <SelectedContactProvenance
+            addressLabel={selectedAddressLabel}
+            partyLabel={partyLabel}
+            selection={selection}
+          />
         </>
       ) : null}
       <FieldError error={saveError} id={`${prefix}ContactSelection-error`} />
@@ -180,7 +230,7 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
   );
 }
 
-export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraftFormProps) {
+export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }: ShipmentDraftFormProps) {
   const [state, formAction, pending] = useActionState<ShipmentDraftActionState, FormData>(
     saveShipmentDraft,
     {},
@@ -240,118 +290,130 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets }: ShipmentDraf
     <form
       action={formAction}
       aria-busy={pending}
-      className="ship-form"
+      className="grid gap-6 pb-8"
       id="form-kiriman"
+      noValidate
       ref={formRef}
     >
+      <input name="submissionId" type="hidden" value={submissionId} />
       {errorEntries.length > 0 ? (
-        <section className="ship-error-summary" ref={errorSummaryRef} role="alert" tabIndex={-1}>
-          <h2>Periksa {errorEntries.length} isian berikut</h2>
-          <ul>
+        <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring" id="shipment-draft-errors" ref={errorSummaryRef} role="alert" tabIndex={-1}>
+          <h2 className="font-medium">Periksa {errorEntries.length} isian berikut</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
             {errorEntries.map(([field, message]) => (
-              <li key={field}><a href={`#${field}`}>{message}</a></li>
+              <li key={field}>
+                <a href={field === "form" ? "#shipment-draft-errors" : `#${field}`}>{message}</a>
+              </li>
             ))}
           </ul>
         </section>
       ) : null}
 
-      <fieldset className="ship-group">
-        <legend>Pengirim</legend>
+      <fieldset className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5">
+        <legend className="px-1 text-base font-medium">Pengirim</legend>
         <ContactPicker
           onSelect={applySenderSelection}
           role="SENDER"
           saveError={fieldError("senderContactSelection")}
         />
-        <div className="ship-pair">
-          <label htmlFor="senderName">Nama pengirim
-            <input aria-describedby={describedBy("senderName")} aria-invalid={Boolean(fieldError("senderName"))} autoFocus={autoFocusFirstField && !state.errors} defaultValue={values.senderName} id="senderName" name="senderName" required />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium" htmlFor="senderName">Nama pengirim
+            <Input className="min-h-11" aria-describedby={describedBy("senderName")} aria-invalid={Boolean(fieldError("senderName"))} autoFocus={autoFocusFirstField && !state.errors} defaultValue={values.senderName} id="senderName" name="senderName" required />
             <FieldError error={fieldError("senderName")} id="senderName-error" />
           </label>
-          <label htmlFor="senderPhone">Nomor telepon
-            <input aria-describedby={describedBy("senderPhone")} aria-invalid={Boolean(fieldError("senderPhone"))} defaultValue={values.senderPhone} id="senderPhone" name="senderPhone" required type="tel" />
+          <label className="grid gap-2 text-sm font-medium" htmlFor="senderPhone">Nomor telepon
+            <Input className="min-h-11" aria-describedby={describedBy("senderPhone")} aria-invalid={Boolean(fieldError("senderPhone"))} defaultValue={values.senderPhone} id="senderPhone" name="senderPhone" required type="tel" />
             <FieldError error={fieldError("senderPhone")} id="senderPhone-error" />
           </label>
         </div>
-        <label htmlFor="senderAddress">Alamat pengirim
-          <textarea aria-describedby={describedBy("senderAddress")} aria-invalid={Boolean(fieldError("senderAddress"))} defaultValue={values.senderAddress} id="senderAddress" name="senderAddress" required rows={3} />
+        <label className="grid gap-2 text-sm font-medium" htmlFor="senderAddress">Alamat pengirim
+          <Textarea aria-describedby={describedBy("senderAddress")} aria-invalid={Boolean(fieldError("senderAddress"))} defaultValue={values.senderAddress} id="senderAddress" name="senderAddress" required rows={3} />
           <FieldError error={fieldError("senderAddress")} id="senderAddress-error" />
         </label>
       </fieldset>
 
-      <fieldset className="ship-group">
-        <legend>Penerima</legend>
+      <fieldset className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5">
+        <legend className="px-1 text-base font-medium">Penerima</legend>
         <ContactPicker
           onSelect={applyRecipientSelection}
           role="RECIPIENT"
           saveError={fieldError("recipientContactSelection")}
         />
-        <div className="ship-pair">
-          <label htmlFor="recipientName">Nama penerima
-            <input aria-describedby={describedBy("recipientName")} aria-invalid={Boolean(fieldError("recipientName"))} defaultValue={values.recipientName} id="recipientName" name="recipientName" required />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium" htmlFor="recipientName">Nama penerima
+            <Input className="min-h-11" aria-describedby={describedBy("recipientName")} aria-invalid={Boolean(fieldError("recipientName"))} defaultValue={values.recipientName} id="recipientName" name="recipientName" required />
             <FieldError error={fieldError("recipientName")} id="recipientName-error" />
           </label>
-          <label htmlFor="recipientPhone">Nomor telepon
-            <input aria-describedby={describedBy("recipientPhone")} aria-invalid={Boolean(fieldError("recipientPhone"))} defaultValue={values.recipientPhone} id="recipientPhone" name="recipientPhone" required type="tel" />
+          <label className="grid gap-2 text-sm font-medium" htmlFor="recipientPhone">Nomor telepon
+            <Input className="min-h-11" aria-describedby={describedBy("recipientPhone")} aria-invalid={Boolean(fieldError("recipientPhone"))} defaultValue={values.recipientPhone} id="recipientPhone" name="recipientPhone" required type="tel" />
             <FieldError error={fieldError("recipientPhone")} id="recipientPhone-error" />
           </label>
         </div>
-        <label htmlFor="recipientAddress">Alamat penerima
-          <textarea aria-describedby={describedBy("recipientAddress")} aria-invalid={Boolean(fieldError("recipientAddress"))} defaultValue={values.recipientAddress} id="recipientAddress" name="recipientAddress" required rows={3} />
+        <label className="grid gap-2 text-sm font-medium" htmlFor="recipientAddress">Alamat penerima
+          <Textarea aria-describedby={describedBy("recipientAddress")} aria-invalid={Boolean(fieldError("recipientAddress"))} defaultValue={values.recipientAddress} id="recipientAddress" name="recipientAddress" required rows={3} />
           <FieldError error={fieldError("recipientAddress")} id="recipientAddress-error" />
         </label>
-        <div className="ship-pair">
-          <label htmlFor="destinationAreaLabel">Area tujuan
-            <input aria-describedby={describedBy("destinationAreaLabel")} aria-invalid={Boolean(fieldError("destinationAreaLabel"))} defaultValue={values.destinationAreaLabel} id="destinationAreaLabel" name="destinationAreaLabel" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium" htmlFor="destinationAreaLabel">Area tujuan
+            <Input className="min-h-11" aria-describedby={describedBy("destinationAreaLabel")} aria-invalid={Boolean(fieldError("destinationAreaLabel"))} defaultValue={values.destinationAreaLabel} id="destinationAreaLabel" name="destinationAreaLabel" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
             <FieldError error={fieldError("destinationAreaLabel")} id="destinationAreaLabel-error" />
           </label>
-          <label htmlFor="destinationAreaId">ID area tujuan
-            <input aria-describedby={describedBy("destinationAreaId")} aria-invalid={Boolean(fieldError("destinationAreaId"))} defaultValue={values.destinationAreaId} id="destinationAreaId" name="destinationAreaId" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
+          <label className="grid gap-2 text-sm font-medium" htmlFor="destinationAreaId">ID area tujuan
+            <Input className="min-h-11" aria-describedby={describedBy("destinationAreaId")} aria-invalid={Boolean(fieldError("destinationAreaId"))} defaultValue={values.destinationAreaId} id="destinationAreaId" name="destinationAreaId" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
             <FieldError error={fieldError("destinationAreaId")} id="destinationAreaId-error" />
           </label>
         </div>
       </fieldset>
 
-      <fieldset className="ship-group">
-        <legend>Paket</legend>
-        <label htmlFor="packageContent">Isi paket
-          <input aria-describedby={describedBy("packageContent")} aria-invalid={Boolean(fieldError("packageContent"))} defaultValue={values.packageContent} id="packageContent" name="packageContent" required />
+      <fieldset className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5">
+        <legend className="px-1 text-base font-medium">Paket</legend>
+        <label className="grid gap-2 text-sm font-medium" htmlFor="packageContent">Isi paket
+          <Input className="min-h-11" aria-describedby={describedBy("packageContent")} aria-invalid={Boolean(fieldError("packageContent"))} defaultValue={values.packageContent} id="packageContent" name="packageContent" required />
           <FieldError error={fieldError("packageContent")} id="packageContent-error" />
         </label>
-        <div className="ship-pair">
-          <label htmlFor="packageWeightGrams">Berat (gram)
-            <input aria-describedby={describedBy("packageWeightGrams")} aria-invalid={Boolean(fieldError("packageWeightGrams"))} defaultValue={values.packageWeightGrams} id="packageWeightGrams" inputMode="numeric" name="packageWeightGrams" required type="text" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium" htmlFor="packageWeightGrams">Berat (gram)
+            <Input className="min-h-11" aria-describedby={describedBy("packageWeightGrams")} aria-invalid={Boolean(fieldError("packageWeightGrams"))} defaultValue={values.packageWeightGrams} id="packageWeightGrams" inputMode="numeric" name="packageWeightGrams" required type="text" />
             <FieldError error={fieldError("packageWeightGrams")} id="packageWeightGrams-error" />
           </label>
-          <label htmlFor="packageQuantity">Jumlah paket
-            <input aria-describedby={describedBy("packageQuantity")} aria-invalid={Boolean(fieldError("packageQuantity"))} defaultValue={values.packageQuantity ?? "1"} id="packageQuantity" min="1" name="packageQuantity" required type="number" />
+          <label className="grid gap-2 text-sm font-medium" htmlFor="packageQuantity">Jumlah paket
+            <Input className="min-h-11" aria-describedby={describedBy("packageQuantity")} aria-invalid={Boolean(fieldError("packageQuantity"))} defaultValue={values.packageQuantity ?? "1"} id="packageQuantity" min="1" name="packageQuantity" required type="number" />
             <FieldError error={fieldError("packageQuantity")} id="packageQuantity-error" />
           </label>
         </div>
-        <div className="ship-dimensions">
-          <label htmlFor="packageLengthCm">Panjang (cm)<input aria-describedby={describedBy("packageLengthCm")} aria-invalid={Boolean(fieldError("packageLengthCm"))} defaultValue={values.packageLengthCm} id="packageLengthCm" inputMode="numeric" name="packageLengthCm" type="text" /><FieldError error={fieldError("packageLengthCm")} id="packageLengthCm-error" /></label>
-          <label htmlFor="packageWidthCm">Lebar (cm)<input aria-describedby={describedBy("packageWidthCm")} aria-invalid={Boolean(fieldError("packageWidthCm"))} defaultValue={values.packageWidthCm} id="packageWidthCm" inputMode="numeric" name="packageWidthCm" type="text" /><FieldError error={fieldError("packageWidthCm")} id="packageWidthCm-error" /></label>
-          <label htmlFor="packageHeightCm">Tinggi (cm)<input aria-describedby={describedBy("packageHeightCm")} aria-invalid={Boolean(fieldError("packageHeightCm"))} defaultValue={values.packageHeightCm} id="packageHeightCm" inputMode="numeric" name="packageHeightCm" type="text" /><FieldError error={fieldError("packageHeightCm")} id="packageHeightCm-error" /></label>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="grid gap-2 text-sm font-medium" htmlFor="packageLengthCm">Panjang (cm)<Input className="min-h-11" aria-describedby={describedBy("packageLengthCm")} aria-invalid={Boolean(fieldError("packageLengthCm"))} defaultValue={values.packageLengthCm} id="packageLengthCm" inputMode="numeric" name="packageLengthCm" type="text" /><FieldError error={fieldError("packageLengthCm")} id="packageLengthCm-error" /></label>
+          <label className="grid gap-2 text-sm font-medium" htmlFor="packageWidthCm">Lebar (cm)<Input className="min-h-11" aria-describedby={describedBy("packageWidthCm")} aria-invalid={Boolean(fieldError("packageWidthCm"))} defaultValue={values.packageWidthCm} id="packageWidthCm" inputMode="numeric" name="packageWidthCm" type="text" /><FieldError error={fieldError("packageWidthCm")} id="packageWidthCm-error" /></label>
+          <label className="grid gap-2 text-sm font-medium" htmlFor="packageHeightCm">Tinggi (cm)<Input className="min-h-11" aria-describedby={describedBy("packageHeightCm")} aria-invalid={Boolean(fieldError("packageHeightCm"))} defaultValue={values.packageHeightCm} id="packageHeightCm" inputMode="numeric" name="packageHeightCm" type="text" /><FieldError error={fieldError("packageHeightCm")} id="packageHeightCm-error" /></label>
         </div>
       </fieldset>
 
-      <fieldset className="ship-group">
-        <legend>Nilai dan pembayaran</legend>
-        <div className="ship-pair">
-          <label htmlFor="declaredValue">Nilai barang (Rp)
-            <input aria-describedby={describedBy("declaredValue")} aria-invalid={Boolean(fieldError("declaredValue"))} defaultValue={values.declaredValue} id="declaredValue" inputMode="numeric" name="declaredValue" required type="text" />
+      <fieldset className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5">
+        <legend className="px-1 text-base font-medium">Nilai dan pembayaran</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium" htmlFor="declaredValue">Nilai barang (Rp)
+            <Input className="min-h-11" aria-describedby={describedBy("declaredValue")} aria-invalid={Boolean(fieldError("declaredValue"))} defaultValue={values.declaredValue} id="declaredValue" inputMode="numeric" name="declaredValue" required type="text" />
             <FieldError error={fieldError("declaredValue")} id="declaredValue-error" />
           </label>
-          <fieldset className="ship-payment" id="paymentType">
-            <legend>Metode pembayaran</legend>
-            <label><input defaultChecked={values.paymentType === "NON_COD"} name="paymentType" required type="radio" value="NON_COD" />Non-COD</label>
-            <label><input defaultChecked={values.paymentType === "COD"} name="paymentType" required type="radio" value="COD" />COD</label>
+          <fieldset
+            aria-describedby={describedBy("paymentType")}
+            aria-invalid={Boolean(fieldError("paymentType"))}
+            className="grid gap-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            id="paymentType"
+            tabIndex={-1}
+          >
+            <legend className="mb-1 text-sm font-medium">Metode pembayaran</legend>
+            <RadioGroup defaultValue={values.paymentType === "COD" ? "COD" : "NON_COD"} name="paymentType" required>
+              <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm"><RadioGroupItem value="NON_COD" />Non-COD</label>
+              <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm"><RadioGroupItem value="COD" />COD</label>
+            </RadioGroup>
             <FieldError error={fieldError("paymentType")} id="paymentType-error" />
           </fieldset>
         </div>
       </fieldset>
 
-      <label className="ship-outlet" htmlFor="outletId">Outlet asal
-        <select aria-describedby={describedBy("outletId")} aria-invalid={Boolean(fieldError("outletId"))} defaultValue={values.outletId ?? (outlets.length === 1 ? outlets[0].id : "")} id="outletId" name="outletId" required>
+      <label className="grid gap-2 rounded-lg border bg-card p-4 text-sm font-medium sm:p-5" htmlFor="outletId">Outlet asal
+        <select className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" aria-describedby={describedBy("outletId")} aria-invalid={Boolean(fieldError("outletId"))} defaultValue={values.outletId ?? (outlets.length === 1 ? outlets[0].id : "")} id="outletId" name="outletId" required>
           <option value="">Pilih outlet</option>
           {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
         </select>

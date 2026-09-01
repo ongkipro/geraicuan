@@ -84,6 +84,11 @@ export type FixtureOrderOrchestrationInput = {
   principalId: string;
   tenantId: string;
   confirmations: readonly OrderConfirmation[];
+  prepareConfirmations?: (
+    tx: TenantTransaction,
+    context: TenantContext,
+    confirmations: readonly OrderConfirmation[],
+  ) => Promise<void>;
   resolveTransport: MengantarOrderTransportLookup;
   telemetrySink?: ShipmentTelemetrySink;
 };
@@ -200,12 +205,28 @@ type ProviderResponseItem = {
 
 type NormalizedProviderResponseItem = Omit<ProviderOrderResult, "shipmentId">;
 
+const SAFE_PROVIDER_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
+
+export function normalizeMengantarProviderIdentifier(
+  value: unknown,
+  safeCode: string,
+) {
+  if (typeof value !== "string") {
+    throw new MengantarOrderSubmissionUnknownError(safeCode);
+  }
+  const normalized = value.trim();
+  if (!SAFE_PROVIDER_IDENTIFIER.test(normalized)) {
+    throw new MengantarOrderSubmissionUnknownError(safeCode);
+  }
+  return normalized;
+}
+
 function optionalIdentity(value: unknown) {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string") {
-    throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
-  }
-  return value.trim() || null;
+  return normalizeMengantarProviderIdentifier(
+    value,
+    "ORDER_RESPONSE_IDENTIFIER_UNSAFE",
+  );
 }
 
 function normalizeResponseItem(value: unknown): NormalizedProviderResponseItem {
@@ -216,12 +237,12 @@ function normalizeResponseItem(value: unknown): NormalizedProviderResponseItem {
   if (typeof item.isPaid !== "boolean") {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
   }
-  if (item.cnote_no !== null && typeof item.cnote_no !== "string") {
-    throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
-  }
-  const cnoteNo = typeof item.cnote_no === "string" && item.cnote_no.trim()
-    ? item.cnote_no.trim()
-    : null;
+  const cnoteNo = item.cnote_no === null
+    ? null
+    : normalizeMengantarProviderIdentifier(
+        item.cnote_no,
+        "ORDER_RESPONSE_CNOTE_UNSAFE",
+      );
   const providerOrderId = optionalIdentity(item.order_id);
   const alternateId = optionalIdentity(item.id);
   if (!providerOrderId || (alternateId && alternateId !== providerOrderId)) {
@@ -339,7 +360,12 @@ async function submitPreparedBatch(
     await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>
       completeProviderBatch(tx, context, batch.id),
     );
-    return { id: batch.id, created: true, submitted: true, status: "COMPLETED" } as const;
+    return {
+      id: batch.id,
+      created: batch.created,
+      submitted: true,
+      status: "COMPLETED",
+    } as const;
   } catch (error) {
     const safeCode = error instanceof MengantarOrderSubmissionUnknownError
       ? error.safeCode
@@ -347,7 +373,7 @@ async function submitPreparedBatch(
     await markUnknown(input, batch.id, safeCode);
     return {
       id: batch.id,
-      created: true,
+      created: batch.created,
       submitted: true,
       status: "SUBMISSION_UNKNOWN",
     } as const;
@@ -393,19 +419,30 @@ export async function orchestrateFixtureBackedMengantarOrders(
       input.db,
       input.principalId,
       input.tenantId,
-      (tx, context) =>
-        prepareProviderBatches(tx, context, input.confirmations, async (scope) => {
-          const immutableScope = Object.freeze({ ...scope });
-          let resolved: unknown;
-          try {
-            resolved = await input.resolveTransport(immutableScope, tx, context);
-          } catch {
-            throw new MengantarOrderTransportUnavailableError();
-          }
-          const binding = validateTransportBinding(immutableScope, resolved);
-          transportBindings.set(batchScopeKey(immutableScope), binding);
-          return binding.providerAccountKey;
-        }),
+      async (tx, context) => {
+        await input.prepareConfirmations?.(tx, context, input.confirmations);
+        return prepareProviderBatches(
+          tx,
+          context,
+          input.confirmations,
+          async (scope) => {
+            const immutableScope = Object.freeze({ ...scope });
+            let resolved: unknown;
+            try {
+              resolved = await input.resolveTransport(
+                immutableScope,
+                tx,
+                context,
+              );
+            } catch {
+              throw new MengantarOrderTransportUnavailableError();
+            }
+            const binding = validateTransportBinding(immutableScope, resolved);
+            transportBindings.set(batchScopeKey(immutableScope), binding);
+            return binding.providerAccountKey;
+          },
+        );
+      },
     );
   } catch (error) {
     emitShipmentLifecycleEvent({
@@ -425,7 +462,7 @@ export async function orchestrateFixtureBackedMengantarOrders(
   const batches: FixtureOrderOrchestrationResult["batches"] = [];
   for (const batch of prepared) {
     let result: FixtureOrderOrchestrationResult["batches"][number];
-    if (!batch.created) {
+    if (batch.orders.length === 0) {
       result = {
         id: batch.id,
         created: false,

@@ -6,16 +6,35 @@ import { LoginForm } from "@/app/login/_components/login-form";
 
 export const metadata: Metadata = { robots: { index: false } };
 
+const demoPassword =
+  process.env.NODE_ENV !== "production"
+  && process.env.GERAICUAN_ENABLE_DEMO_LOGIN_HINT === "1"
+    ? process.env.DEV_LOCAL_PASSWORD
+    : undefined;
+
 export default function SuperAdminLoginPage() {
   return (
     <main className="auth-page">
-      <section aria-labelledby="login-title" className="auth-card">
-        <p>GeraiCUAN</p>
-        <h1 id="login-title">Masuk Super Admin</h1>
-        <p>Untuk pengelolaan tenant dan operasional platform.</p>
-        <LoginForm destination="/platform" />
-        <p><Link href="/">Kembali ke halaman utama</Link></p>
-      </section>
+      <div className="auth-login-shell">
+        <p className="auth-brand">GeraiCUAN</p>
+        <section aria-labelledby="login-title" className="auth-card">
+          <header className="auth-heading">
+            <h1 id="login-title">Masuk Super Admin</h1>
+            <p>Untuk pengelolaan tenant dan operasional platform.</p>
+          </header>
+          <LoginForm
+            demoCredentials={
+              demoPassword
+                ? { email: "super@geraicuan.com", password: demoPassword }
+                : undefined
+            }
+            destination="/platform"
+          />
+        </section>
+        <Link className="auth-return" href="/">
+          Kembali ke halaman utama
+        </Link>
+      </div>
     </main>
   );
 }

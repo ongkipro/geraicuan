@@ -13,6 +13,7 @@ import {
 } from "@/db/estimate-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
@@ -70,10 +71,7 @@ const fixtureServices = [
 ] satisfies readonly SupportedEstimateService[];
 
 beforeAll(async () => {
-  await adminPool.query("DROP ROLE IF EXISTS geraicuan_test_runtime");
-  await adminPool.query(
-    "CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app",
-  );
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
 });
 
 beforeEach(async () => {

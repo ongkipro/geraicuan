@@ -2,20 +2,19 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 
 import { resolveCmsPrincipal } from "@/lib/cms-auth";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).pathname !== "/geraicuan_test") {
+const appDatabaseUrl = process.env.APP_DATABASE_URL;
+if (!databaseUrl || !appDatabaseUrl || new URL(databaseUrl).pathname !== "/geraicuan_test") {
   throw new Error("CMS authorization integration tests require geraicuan_test.");
 }
 
 const adminPool = new Pool({ connectionString: databaseUrl });
 
-const runtimeRole = "geraicuan_test_runtime";
-
 beforeAll(async () => {
   await adminPool.query("TRUNCATE audit_events, platform_roles, shipments, outlets, memberships, tenants, users CASCADE");
-  await adminPool.query(`DROP ROLE IF EXISTS ${runtimeRole}`);
-  await adminPool.query(`CREATE ROLE ${runtimeRole} LOGIN INHERIT IN ROLE geraicuan_app`);
+  await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
   await adminPool.query(
     `INSERT INTO users (id, name, email, status) VALUES
       ('cms-super', 'CMS Super', 'cms-super@example.test', 'ACTIVE'),
@@ -43,7 +42,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await adminPool.query("TRUNCATE audit_events, platform_roles, shipments, outlets, memberships, tenants, users CASCADE");
-  await adminPool.query(`DROP ROLE ${runtimeRole}`);
   await adminPool.end();
 });
 

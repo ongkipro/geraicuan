@@ -12,6 +12,7 @@ import {
   primaryKey,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -22,6 +23,26 @@ export const tenantStatuses = [
   "ARCHIVED",
 ] as const;
 export const identityStatuses = ["ACTIVE", "SUSPENDED"] as const;
+
+export const auditEventActions = [
+  "TENANT_CREATED",
+  "TENANT_SUSPENDED",
+  "TENANT_REACTIVATED",
+  "PLATFORM_MONITORING_VIEWED",
+  "MEMBER_INVITED",
+  "MEMBER_ROLE_CHANGED",
+  "MEMBER_DEACTIVATED",
+  "OUTLET_SETTINGS_CHANGED",
+  "MENGANTAR_CREDENTIAL_CREATED",
+  "MENGANTAR_CREDENTIAL_REPLACED",
+  "MENGANTAR_PLATFORM_DEFAULT_RESTORED",
+] as const;
+export const auditEventTargetTypes = [
+  "TENANT",
+  "PLATFORM",
+  "MEMBERSHIP",
+  "OUTLET",
+] as const;
 
 
 export const membershipRoles = ["TENANT_ADMIN", "OPERATOR"] as const;
@@ -216,6 +237,7 @@ export const memberships = pgTable(
       .defaultNow(),
   },
   (table) => [
+    unique("memberships_user_key").on(table.userId),
     unique("memberships_tenant_user_key").on(table.tenantId, table.userId),
     index("memberships_user_tenant_idx").on(table.userId, table.tenantId),
     check(
@@ -353,6 +375,77 @@ export const mengantarConnections = pgTable(
   (table) => [
     unique("mengantar_connections_outlet_tenant_key").on(table.outletId, table.tenantId),
     check("mengantar_connections_secret_reference_not_blank", sql`char_length(btrim(secret_reference)) > 0`),
+  ],
+);
+
+export const managedSecretPayloads = pgTable(
+  "managed_secret_payloads",
+  {
+    reference: text("reference").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    outletId: uuid("outlet_id").notNull(),
+    purpose: text("purpose", { enum: ["MENGANTAR_API_KEY"] })
+      .notNull()
+      .default("MENGANTAR_API_KEY"),
+    ciphertext: text("ciphertext").notNull(),
+    nonce: text("nonce").notNull(),
+    authenticationTag: text("authentication_tag").notNull(),
+    keyVersion: integer("key_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "managed_secret_payloads_outlet_tenant_fkey",
+      columns: [table.outletId, table.tenantId],
+      foreignColumns: [outlets.id, outlets.tenantId],
+    }).onDelete("restrict"),
+    unique("managed_secret_payloads_outlet_purpose_key").on(
+      table.tenantId,
+      table.outletId,
+      table.purpose,
+    ),
+    check(
+      "managed_secret_payloads_purpose_valid",
+      sql`purpose = 'MENGANTAR_API_KEY'`,
+    ),
+    check(
+      "managed_secret_payloads_envelope_not_blank",
+      sql`char_length(btrim(reference)) > 0
+        AND char_length(btrim(ciphertext)) > 0
+        AND char_length(btrim(nonce)) > 0
+        AND char_length(btrim(authentication_tag)) > 0`,
+    ),
+    check("managed_secret_payloads_key_version_valid", sql`key_version = 1`),
+  ],
+);
+
+export const mengantarCredentialRateLimits = pgTable(
+  "mengantar_credential_rate_limits",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    outletId: uuid("outlet_id").notNull(),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    count: integer("count").notNull(),
+    lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "mengantar_credential_rate_limits_tenant_outlet_actor_pk",
+      columns: [table.tenantId, table.outletId, table.actorId],
+    }),
+    foreignKey({
+      name: "mengantar_credential_rate_limits_outlet_tenant_fkey",
+      columns: [table.outletId, table.tenantId],
+      foreignColumns: [outlets.id, outlets.tenantId],
+    }).onDelete("restrict"),
+    check("mengantar_credential_rate_limits_count_positive", sql`count > 0`),
   ],
 );
 export const shipments = pgTable(
@@ -1374,8 +1467,8 @@ export const auditEvents = pgTable(
     tenantId: uuid("tenant_id").references(() => tenants.id, {
       onDelete: "restrict",
     }),
-    action: text("action").notNull(),
-    targetType: text("target_type").notNull(),
+    action: text("action", { enum: auditEventActions }).notNull(),
+    targetType: text("target_type", { enum: auditEventTargetTypes }).notNull(),
     targetId: text("target_id").notNull(),
     outcome: text("outcome", { enum: ["SUCCESS", "DENIED"] }).notNull(),
     fromStatus: text("from_status", { enum: tenantStatuses }),
@@ -1389,10 +1482,40 @@ export const auditEvents = pgTable(
   (table) => [
     index("audit_events_actor_created_idx").on(table.actorId, table.createdAt),
     index("audit_events_tenant_created_idx").on(table.tenantId, table.createdAt),
-    check("audit_events_target_type_valid", sql`target_type = 'TENANT'`),
+    uniqueIndex("audit_events_member_attempt_key")
+      .on(
+        table.tenantId,
+        table.actorId,
+        table.action,
+        sql`(${table.metadata} ->> 'attemptId')`,
+      )
+      .where(sql`${table.action} IN ('MEMBER_INVITED', 'MEMBER_ROLE_CHANGED', 'MEMBER_DEACTIVATED') AND ${table.metadata} ? 'attemptId'`),
+    uniqueIndex("audit_events_platform_lifecycle_attempt_key")
+      .on(
+        table.actorId,
+        table.action,
+        sql`(${table.metadata} ->> 'attemptId')`,
+      )
+      .where(sql`${table.action} IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED') AND ${table.metadata} ? 'attemptId'`),
+    check(
+      "audit_events_target_type_valid",
+      sql`target_type IN ('TENANT', 'PLATFORM', 'MEMBERSHIP', 'OUTLET')`,
+    ),
     check(
       "audit_events_action_valid",
-      sql`action IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED')`,
+      sql`action IN (
+        'TENANT_CREATED',
+        'TENANT_SUSPENDED',
+        'TENANT_REACTIVATED',
+        'PLATFORM_MONITORING_VIEWED',
+        'MEMBER_INVITED',
+        'MEMBER_ROLE_CHANGED',
+        'MEMBER_DEACTIVATED',
+        'OUTLET_SETTINGS_CHANGED',
+        'MENGANTAR_CREDENTIAL_CREATED',
+        'MENGANTAR_CREDENTIAL_REPLACED',
+        'MENGANTAR_PLATFORM_DEFAULT_RESTORED'
+      )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),
   ],

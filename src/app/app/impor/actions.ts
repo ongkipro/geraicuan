@@ -1,9 +1,12 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
 import { redirect } from "next/navigation";
 
 import {
   createShipmentDraft,
+  DraftSubmissionConflictError,
   OutletUnavailableError,
   requireConfiguredShipmentOutlet,
 } from "@/db/shipment-draft-repository";
@@ -13,19 +16,29 @@ import {
   type BulkFileError,
   type BulkRowError,
   type BulkShipmentPreview,
+  type BulkValidRow,
+  deriveBulkRowSubmissionId,
   previewBulkShipmentCsv,
 } from "@/lib/bulk-shipment-intake";
-import { BULK_INPUT_FIELDS } from "@/lib/bulk-shipment-intake-contract";
+import {
+  BulkImportEnvelopeError,
+  createBulkImportEnvelope,
+  verifyBulkImportEnvelope,
+} from "@/lib/bulk-import-envelope";
 import {
   BulkImportRateLimitedError,
   enforceBulkImportRateLimit,
 } from "@/lib/bulk-import-rate-limit";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { validateShipmentDraft, type ShipmentDraftInput } from "@/lib/shipment-draft";
+
+type ConfirmableBulkPreview = Omit<BulkShipmentPreview, "validRows"> & {
+  submissionId: string;
+  validRows: Array<BulkValidRow & { confirmationToken: string }>;
+};
 
 export type BulkUploadState = {
   fileError?: BulkFileError;
-  preview?: BulkShipmentPreview;
+  preview?: ConfirmableBulkPreview;
 };
 
 export type BulkConfirmState = {
@@ -50,45 +63,50 @@ async function requireBulkImportPrincipal() {
   }
 }
 
-async function authorizeBulkAttempt(outletId?: string) {
-  const principal = await requireBulkImportPrincipal();
+async function consumeBulkPreviewAttempt(
+  principal: Awaited<ReturnType<typeof requireBulkImportPrincipal>>,
+) {
   await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
     enforceBulkImportRateLimit(tx, context),
   );
-  if (outletId) {
-    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      requireConfiguredShipmentOutlet(tx, context, outletId),
-    );
-  }
-  return principal;
 }
 
 export async function uploadBulkIntake(
   _previousState: BulkUploadState,
   formData: FormData,
 ): Promise<BulkUploadState> {
-  const file = formData.get("csv");
-  const outletId = formData.get("outletId");
-  if (!(file instanceof File) || file.size === 0) {
-    return { fileError: { code: "file", message: "Pilih berkas CSV." } };
-  }
-  if (typeof outletId !== "string" || !UUID_PATTERN.test(outletId)) {
-    return { fileError: { code: "file", message: "Pilih outlet asal." } };
-  }
-
+  const principal = await requireBulkImportPrincipal();
   try {
-    await authorizeBulkAttempt(outletId);
+    await consumeBulkPreviewAttempt(principal);
   } catch (error) {
     if (error instanceof BulkImportRateLimitedError) {
       return {
         fileError: {
           code: "file",
+          field: "csv",
           message: "Terlalu banyak percobaan impor. Coba lagi dalam beberapa menit.",
         },
       };
     }
+    throw error;
+  }
+
+  const file = formData.get("csv");
+  const outletId = formData.get("outletId");
+  if (!(file instanceof File) || file.size === 0) {
+    return { fileError: { code: "file", field: "csv", message: "Pilih berkas CSV." } };
+  }
+  if (typeof outletId !== "string" || !UUID_PATTERN.test(outletId)) {
+    return { fileError: { code: "file", field: "outletId", message: "Pilih outlet asal." } };
+  }
+
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      requireConfiguredShipmentOutlet(tx, context, outletId),
+    );
+  } catch (error) {
     if (error instanceof OutletUnavailableError) {
-      return { fileError: { code: "file", message: "Pilih outlet asal." } };
+      return { fileError: { code: "file", field: "outletId", message: "Pilih outlet asal." } };
     }
     throw error;
   }
@@ -97,11 +115,33 @@ export async function uploadBulkIntake(
   if ("code" in result) {
     return { fileError: result };
   }
-  return { preview: result };
+  const submissionId = randomUUID();
+  const envelopeContext = { actorId: principal.userId, tenantId: principal.tenantId };
+  return {
+    preview: {
+      ...result,
+      submissionId,
+      validRows: result.validRows.map((row) => ({
+        ...row,
+        confirmationToken: createBulkImportEnvelope(
+          envelopeContext,
+          submissionId,
+          row.row,
+          row.input,
+        ),
+      })),
+    },
+  };
 }
 
-function selectedInputs(formData: FormData): { errors: BulkRowError[]; inputs: ShipmentDraftInput[] } {
-  const selected = formData.getAll("baris");
+function selectedInputsForPrincipal(
+  formData: FormData,
+  context: { actorId: string; tenantId: string },
+): {
+  errors: BulkRowError[];
+  inputs: Array<ReturnType<typeof verifyBulkImportEnvelope>>;
+} {
+  const selected = formData.getAll("rowToken");
   if (selected.length === 0) {
     return { errors: [], inputs: [] };
   }
@@ -113,53 +153,41 @@ function selectedInputs(formData: FormData): { errors: BulkRowError[]; inputs: S
   }
 
   const seenRows = new Set<number>();
-  const errors: BulkRowError[] = [];
-  const inputs: ShipmentDraftInput[] = [];
-  for (const selectedRow of selected) {
-    const row = typeof selectedRow === "string" ? Number(selectedRow) : Number.NaN;
-    if (!Number.isInteger(row) || row < 2 || row > 101 || seenRows.has(row)) {
+  const inputs: Array<ReturnType<typeof verifyBulkImportEnvelope>> = [];
+  let submissionId: string | undefined;
+  try {
+    for (const selectedToken of selected) {
+      if (typeof selectedToken !== "string") throw new BulkImportEnvelopeError();
+      const payload = verifyBulkImportEnvelope(selectedToken, context);
+      submissionId ??= payload.submissionId;
+      if (payload.submissionId !== submissionId || seenRows.has(payload.row)) {
+        throw new BulkImportEnvelopeError();
+      }
+      seenRows.add(payload.row);
+      inputs.push(payload);
+    }
+  } catch (error) {
+    if (error instanceof BulkImportEnvelopeError) {
       return {
-        errors: [{ field: "nama_penerima", message: "Baris yang dipilih tidak valid.", row: 0 }],
+        errors: [{ field: "nama_penerima", message: "Pilihan baris tidak valid atau kedaluwarsa. Unggah ulang CSV.", row: 0 }],
         inputs: [],
       };
     }
-    seenRows.add(row);
-
-    const rowFormData = new FormData();
-    for (const field of BULK_INPUT_FIELDS) {
-      const value = formData.get(`r${row}.${field}`);
-      if (typeof value !== "string") {
-        errors.push({ field: "nama_penerima", message: "Data baris tidak lengkap.", row });
-        continue;
-      }
-      rowFormData.set(field, value);
-    }
-    if (errors.some((error) => error.row === row)) {
-      continue;
-    }
-
-    const validation = validateShipmentDraft(rowFormData);
-    if (validation.ok) {
-      inputs.push(validation.input);
-      continue;
-    }
-    errors.push(
-      ...Object.values(validation.errors).map((message) => ({
-        field: "nama_penerima" as const,
-        message,
-        row,
-      })),
-    );
+    throw error;
   }
-
-  return { errors, inputs };
+  inputs.sort((left, right) => left.row - right.row);
+  return { errors: [], inputs };
 }
 
 export async function createSelectedDrafts(
   _previousState: BulkConfirmState,
   formData: FormData,
 ): Promise<BulkConfirmState> {
-  const selection = selectedInputs(formData);
+  const principal = await requireBulkImportPrincipal();
+  const selection = selectedInputsForPrincipal(formData, {
+    actorId: principal.userId,
+    tenantId: principal.tenantId,
+  });
   if (selection.inputs.length === 0 && selection.errors.length === 0) {
     return { message: "Pilih minimal satu baris untuk dibuat." };
   }
@@ -168,21 +196,25 @@ export async function createSelectedDrafts(
   }
 
   try {
-    const principal = await authorizeBulkAttempt();
     await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
-      for (const input of selection.inputs) {
-        await createShipmentDraft(tx, context, input);
+      for (const { input, row, submissionId } of selection.inputs) {
+        await createShipmentDraft(
+          tx,
+          context,
+          input,
+          deriveBulkRowSubmissionId(submissionId, row),
+        );
       }
     });
   } catch (error) {
-    if (error instanceof BulkImportRateLimitedError) {
-      return { message: "Terlalu banyak percobaan impor. Coba lagi dalam beberapa menit." };
-    }
     if (error instanceof OutletUnavailableError) {
       return { message: "Outlet asal tidak tersedia. Tidak ada draf yang dibuat." };
+    }
+    if (error instanceof DraftSubmissionConflictError) {
+      return { message: "Sesi impor sudah berubah atau pernah digunakan. Tidak ada draf yang dibuat." };
     }
     throw error;
   }
 
-  redirect(`/app/impor?dibuat=${selection.inputs.length}`);
+  redirect("/app/pengiriman?status=DRAFT");
 }

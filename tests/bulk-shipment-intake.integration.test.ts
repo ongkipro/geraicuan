@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
-import { previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
+import { deriveBulkRowSubmissionId, previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
 
 const outletId = "00000000-0000-0000-0000-000000000111";
 const validRow = [
@@ -56,5 +56,46 @@ describe("bulk shipment CSV preview", () => {
     const result = await previewBulkShipmentCsv(upload(`\uFEFF${csv([quoted])}`), outletId);
 
     expect(result).toMatchObject({ totalRows: 1, validRows: [{ row: 2 }] });
+  });
+
+  it("rejects missing data, unsafe encoding, NUL bytes, and an oversized record", async () => {
+    const noRows = await previewBulkShipmentCsv(upload(BULK_TEMPLATE_HEADERS.join(",")), outletId);
+    const invalidUtf8 = await previewBulkShipmentCsv(
+      new File([new Uint8Array([0xff, 0xfe])], "kiriman.csv", { type: "text/csv" }),
+      outletId,
+    );
+    const nul = await previewBulkShipmentCsv(upload(`${csv([validRow])}\0`), outletId);
+    const oversized = [...validRow];
+    oversized[5] = "x".repeat(8 * 1024 + 1);
+    const largeRecord = await previewBulkShipmentCsv(upload(csv([oversized])), outletId);
+
+    expect(noRows).toMatchObject({ code: "file" });
+    expect(invalidUtf8).toMatchObject({ code: "syntax" });
+    expect(nul).toMatchObject({ code: "syntax" });
+    expect(largeRecord).toMatchObject({ code: "syntax" });
+  });
+
+  it("rejects invalid file metadata and keeps deterministic row replay IDs distinct", async () => {
+    const wrongExtension = await previewBulkShipmentCsv(upload(csv([validRow]), "kiriman.txt"), outletId);
+    const wrongMime = await previewBulkShipmentCsv(
+      new File([csv([validRow])], "kiriman.csv", { type: "application/json" }),
+      outletId,
+    );
+    const first = deriveBulkRowSubmissionId("00000000-0000-4000-8000-000000000141", 2);
+
+    expect(wrongExtension).toMatchObject({ code: "file" });
+    expect(wrongMime).toMatchObject({ code: "file" });
+    expect(first).toBe(deriveBulkRowSubmissionId("00000000-0000-4000-8000-000000000141", 2));
+    expect(first).not.toBe(deriveBulkRowSubmissionId("00000000-0000-4000-8000-000000000141", 3));
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("rejects a file above the 256 KB boundary before parsing", async () => {
+    const oversized = new File([new Uint8Array(256 * 1024 + 1)], "kiriman.csv", { type: "text/csv" });
+    await expect(previewBulkShipmentCsv(oversized, outletId)).resolves.toMatchObject({
+      code: "file",
+      field: "csv",
+      message: "Ukuran berkas maksimal 256 KB.",
+    });
   });
 });

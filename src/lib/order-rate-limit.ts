@@ -13,7 +13,13 @@ export class OrderRateLimitedError extends Error {
   }
 }
 
-export async function enforceOrderRateLimit(
+export class UnpaidRecoveryRateLimitedError extends Error {
+  constructor() {
+    super("Unpaid recovery rate limit exceeded.");
+  }
+}
+
+async function consumeOrderMutationRateLimit(
   tx: TenantTransaction,
   context: TenantContext,
 ) {
@@ -41,5 +47,26 @@ export async function enforceOrderRateLimit(
 
   if (result.rows.length !== 1) {
     throw new OrderRateLimitedError();
+  }
+}
+
+export async function enforceOrderRateLimit(
+  tx: TenantTransaction,
+  context: TenantContext,
+) {
+  return consumeOrderMutationRateLimit(tx, context);
+}
+
+export async function enforceUnpaidRecoveryRateLimit(
+  tx: TenantTransaction,
+  context: TenantContext,
+) {
+  try {
+    await consumeOrderMutationRateLimit(tx, context);
+  } catch (error) {
+    if (error instanceof OrderRateLimitedError) {
+      throw new UnpaidRecoveryRateLimitedError();
+    }
+    throw error;
   }
 }

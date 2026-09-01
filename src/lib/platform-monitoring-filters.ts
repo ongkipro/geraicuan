@@ -215,7 +215,11 @@ export function buildPlatformHref(
   overrides: FilterOverrides = {},
 ): string {
   const next = { ...filters, ...overrides };
-  const params = canonicalParams(next, route.includes("[tenantId]"));
+  const params = canonicalParams(
+    next,
+    route === "/platform/tenant/[tenantId]" ||
+      /^\/platform\/tenant\/[^/?#]+$/.test(route),
+  );
   const query = params.toString();
   return query ? `${route}?${query}` : route;
 }

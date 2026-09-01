@@ -51,6 +51,8 @@ export class UnpaidRecoveryUnavailableError extends Error {
   }
 }
 
+export const UNPAID_RECOVERY_CLAIM_STALE_AFTER_SECONDS = 120;
+
 function requireTenantAdmin(context: TenantContext) {
   if (context.role !== "TENANT_ADMIN") throw new UnpaidRecoveryDeniedError();
 }
@@ -285,6 +287,34 @@ export async function markUnpaidRecoveryUnknown(
     )
     .returning({ id: providerUnpaidRecoveries.id });
   if (updated.length !== 1) throw new UnpaidRecoveryUnavailableError();
+}
+
+export async function markStaleUnpaidRecoveryUnknown(
+  tx: TenantTransaction,
+  context: TenantContext,
+  batchId: string,
+  recoveryId: string,
+): Promise<boolean> {
+  requireTenantAdmin(context);
+  const updated = await tx
+    .update(providerUnpaidRecoveries)
+    .set({
+      status: "PAYMENT_UNKNOWN",
+      safeResponseCode: "PAY_UNPAID_INTERRUPTED",
+      completedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(providerUnpaidRecoveries.id, recoveryId),
+        eq(providerUnpaidRecoveries.batchId, batchId),
+        eq(providerUnpaidRecoveries.tenantId, context.tenantId),
+        eq(providerUnpaidRecoveries.status, "PAYING"),
+        sql`${providerUnpaidRecoveries.attemptedAt} <= now() - (${UNPAID_RECOVERY_CLAIM_STALE_AFTER_SECONDS} * interval '1 second')`,
+      ),
+    )
+    .returning({ id: providerUnpaidRecoveries.id });
+  return updated.length === 1;
 }
 
 export async function completeUnpaidRecovery(

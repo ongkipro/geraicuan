@@ -1,6 +1,6 @@
 # GeraiCUAN Development Pack
 
-> Staged specification for a free multi-tenant Indonesian shipping-label SaaS. It is not implementation or production evidence.
+> Canonical repository specification for a free multi-tenant Indonesian shipping-label SaaS. Runtime and release evidence remains owned by root `STATUS.md`, `BUILD-LOG.md`, `OBSERVABILITY.md`, and `RELEASE.md` rather than this pack.
 
 ## Product Boundary
 - Public surface: sales page plus Tenant Login and Super Admin Login.
@@ -10,19 +10,22 @@
 
 ## Read Order
 1. `02-PRD.md` — requirements, decisions, and evidence.
-2. `PLAN.md` — build order, delivery flow, visual/UX boundary.
+2. `../../PLAN.md` — build order, delivery flow, visual/UX boundary.
 3. `03-TECHNICAL-DESIGN.md` — provider, auth, finance, and UML flow.
 4. `04-SYSTEM-ARCHITECTURE.md` — trust boundaries and containers.
 5. `05-DATA-MODEL.md` — entities, money invariants, ERD.
 6. `06-TENANT-ISOLATION.md`, `07-IAM-RBAC-ABAC.md`, `12-SECURITY-ARCHITECTURE.md` — isolation and controls.
 7. `10-DESIGN-SYSTEM-WHITELABEL.md` — visual direction and required screens.
 8. `13-COMPLIANCE-PRIVACY.md`, `15-DEVOPS-CICD-MIGRATIONS.md`, `16-OBSERVABILITY-RATE-LIMITING.md` — operations controls.
-9. `TASKS.md` — canonical implementation queue.
+9. `17-UX-FLOWS-SCREEN-CONTRACTS.md` — operator journeys, information architecture, screen states, and component boundaries.
+10. `../../TASKS.md` — the sole canonical implementation queue.
 
-## Evidence Status
+## Repository Status Boundary
 - Mengantar non-mutating address, account estimate, and performance probes returned HTTP 200 on 2026-08-28.
 - The observed estimate/performance response did not expose insurance fields; GeraiCUAN must not invent an insurance fee.
-- No repository, migration, UI, runtime, or production evidence exists yet.
+- Completed dashboard and analytics increments are recorded in root `TASKS.md` and `BUILD-LOG.md`; the precision migration continues in the next open task phase.
+- Local fixture and browser evidence is not production provider-mutation evidence. Production Mengantar issuance and recovery remain blocked until the separate TD-14 release gate is explicitly approved.
+- No deployment or production readiness claim is made by this specification pack.
 
-## Promotion Gate
-After explicit development authorization, promote with `project-init --from-docs ~/Documents/work/prd/geraicuan/ --stack <selected-profile>`. The repository copy then becomes canonical.
+## Authority
+This repository copy is canonical. Any retained pre-repository planning snapshot is non-authoritative and must not be used to overwrite these files.

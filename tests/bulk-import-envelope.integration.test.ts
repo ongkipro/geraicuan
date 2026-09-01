@@ -1,0 +1,67 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import {
+  BulkImportEnvelopeError,
+  createBulkImportEnvelope,
+  verifyBulkImportEnvelope,
+} from "@/lib/bulk-import-envelope";
+import type { ShipmentDraftInput } from "@/lib/shipment-draft";
+
+const previousSecret = process.env.BETTER_AUTH_SECRET;
+const context = { actorId: "operator-a", tenantId: "00000000-0000-4000-8000-000000000101" };
+const submissionId = "00000000-0000-4000-8000-000000000141";
+const input: ShipmentDraftInput = {
+  declaredValueIdr: 150_000,
+  destinationAreaId: "3171010",
+  destinationAreaLabel: "Gambir, Jakarta Pusat",
+  isCod: false,
+  outletId: "00000000-0000-4000-8000-000000000111",
+  packageContent: "Paket fixture",
+  packageHeightCm: null,
+  packageLengthCm: null,
+  packageQuantity: 1,
+  packageWeightGrams: 500,
+  packageWidthCm: null,
+  recipientAddress: "Alamat penerima fixture",
+  recipientName: "Penerima fixture",
+  recipientPhone: "081234567890",
+  senderAddress: "Alamat pengirim fixture",
+  senderName: "Pengirim fixture",
+  senderPhone: "081212345678",
+};
+
+beforeEach(() => {
+  process.env.BETTER_AUTH_SECRET = "t41-test-only-signing-secret-32-bytes";
+});
+
+afterEach(() => {
+  if (previousSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+  else process.env.BETTER_AUTH_SECRET = previousSecret;
+});
+
+describe("bulk import confirmation envelope", () => {
+  it("round-trips one canonical row only for its tenant and actor", () => {
+    const token = createBulkImportEnvelope(context, submissionId, 2, input, 1_000);
+    expect(verifyBulkImportEnvelope(token, context, 2_000)).toEqual(expect.objectContaining({
+      input,
+      row: 2,
+      submissionId,
+    }));
+    expect(() => verifyBulkImportEnvelope(token, { ...context, actorId: "operator-b" }, 2_000))
+      .toThrow(BulkImportEnvelopeError);
+    expect(() => verifyBulkImportEnvelope(token, { ...context, tenantId: "00000000-0000-4000-8000-000000000102" }, 2_000))
+      .toThrow(BulkImportEnvelopeError);
+  });
+
+  it("rejects tampering, expiry, and missing signing configuration", () => {
+    const token = createBulkImportEnvelope(context, submissionId, 2, input, 1_000);
+    const [payload, mac] = token.split(".");
+    expect(() => verifyBulkImportEnvelope(`${payload}x.${mac}`, context, 2_000))
+      .toThrow(BulkImportEnvelopeError);
+    expect(() => verifyBulkImportEnvelope(token, context, 1_000 + 15 * 60 * 1_000 + 1))
+      .toThrow(BulkImportEnvelopeError);
+    delete process.env.BETTER_AUTH_SECRET;
+    expect(() => createBulkImportEnvelope(context, submissionId, 2, input, 1_000))
+      .toThrow(BulkImportEnvelopeError);
+  });
+});

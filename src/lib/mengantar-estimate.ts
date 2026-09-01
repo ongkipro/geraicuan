@@ -30,6 +30,32 @@ export class MengantarEstimateError extends Error {
   }
 }
 
+async function readBoundedResponseBody(response: Response, controller: AbortController) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new MengantarEstimateError();
+
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const parts: string[] = [];
+  let receivedBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      receivedBytes += value.byteLength;
+      if (receivedBytes > MAX_RESPONSE_BYTES) {
+        controller.abort();
+        throw new MengantarEstimateError();
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return parts.join("");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function readDeliveryEstimate(service: ProviderService) {
   const value = service.estimate_delivery ?? service.estimatedDate;
   return typeof value === "string" && value.trim().length > 0 && value.length <= 160 ? value : null;
@@ -94,32 +120,33 @@ export async function fetchMengantarEstimate(
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let response: Response;
+  let text: string;
   try {
-    response = await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       headers: { Accept: "application/json" },
       redirect: "error",
       signal: controller.signal,
     });
+
+    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
+      throw new MengantarEstimateError();
+    }
+
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+      controller.abort();
+      throw new MengantarEstimateError();
+    }
+
+    text = await readBoundedResponseBody(response, controller);
   } catch {
     throw new MengantarEstimateError();
   } finally {
     clearTimeout(timeout);
   }
 
-  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
-    throw new MengantarEstimateError();
-  }
-
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
-    throw new MengantarEstimateError();
-  }
-
   let payload: unknown;
   try {
-    const text = await response.text();
-    if (text.length > MAX_RESPONSE_BYTES) throw new MengantarEstimateError();
     payload = JSON.parse(text);
   } catch {
     throw new MengantarEstimateError();

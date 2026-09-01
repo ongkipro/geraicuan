@@ -1,0 +1,27 @@
+{
+  "capability": "full-stack-development",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "corrective-bulk-shipment-import-verification",
+  "model": "codex-gpt-5",
+  "provider": "openai-codex",
+  "reasoningEffort": "unavailable",
+  "recordedAt": "2026-08-31T22:15:11Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260831T221349Z-ffc85710",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "admin-product-ux",
+    "application-security",
+    "full-stack-development",
+    "mengantar-api",
+    "nextjs-development",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "042e67196361d808990ea43e472c2e5b6382c5ea8f2d6c353302be2b5f5d87ec",
+  "verificationFailed": false,
+  "worker": "root-codex"
+}

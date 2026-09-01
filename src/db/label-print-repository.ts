@@ -83,10 +83,25 @@ export type LabelUnavailableReason =
   | "NOT_ISSUED"
   | "AWAITING_UPSTREAM_PAYMENT";
 
+export type PrintAttemptResult =
+  | { outcome: "PRINTED"; sequence: number; printedAt: Date; awb: string }
+  | {
+      outcome: "BLOCKED";
+      reason: Exclude<LabelUnavailableReason, "NOT_FOUND">;
+      printedAt: Date;
+    };
+
 export class LabelUnavailableError extends Error {
   constructor(readonly reason: LabelUnavailableReason) {
     super("Shipment label is unavailable.");
     this.name = "LabelUnavailableError";
+  }
+}
+
+export class PrintAttemptConflictError extends Error {
+  constructor() {
+    super("Label print attempt conflicts with an existing event.");
+    this.name = "PrintAttemptConflictError";
   }
 }
 
@@ -364,97 +379,187 @@ export async function listPrintEvents(
   }));
 }
 
-export async function appendPrintEvent(
+async function loadPrintAttemptReplay(
   tx: TenantTransaction,
   context: TenantContext,
   shipmentId: string,
-): Promise<{ sequence: number; printedAt: Date; awb: string }> {
-  const candidate = await loadPrintCandidate(tx, context, shipmentId);
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const [inserted] = await tx
-      .insert(printEvents)
-      .values({
-        tenantId: context.tenantId,
-        shipmentId,
-        providerOrderSnapshotId: candidate.providerOrderSnapshotId,
-        sequence: sql<number>`(
-          SELECT coalesce(max(prior.sequence), 0) + 1
-          FROM ${printEvents} AS prior
-          WHERE prior.tenant_id = ${context.tenantId}
-            AND prior.shipment_id = ${shipmentId}
-            AND prior.outcome = 'PRINTED'
-        )`,
-        outcome: "PRINTED",
-        awbSnapshot: candidate.awb,
-        actorUserId: context.userId,
-        actorRole: context.role,
-      })
-      .onConflictDoNothing({
-        target: [printEvents.shipmentId, printEvents.sequence],
-      })
-      .returning({
-        sequence: printEvents.sequence,
-        printedAt: printEvents.printedAt,
-        awb: printEvents.awbSnapshot,
-      });
-
-    if (inserted?.sequence && inserted.awb) {
-      return {
-        sequence: inserted.sequence,
-        printedAt: inserted.printedAt,
-        awb: inserted.awb,
-      };
-    }
-  }
-
-  throw new Error("Label print sequence could not be allocated.");
-}
-
-export async function appendBlockedPrintEvent(
-  tx: TenantTransaction,
-  context: TenantContext,
-  shipmentId: string,
-  reason: LabelUnavailableReason,
-): Promise<void> {
-  if (reason === "NOT_FOUND") return;
-
-  const [row] = await tx
+  attemptId: string,
+): Promise<PrintAttemptResult | null> {
+  const [event] = await tx
     .select({
-      shipmentStatus: shipments.status,
-      providerOrderSnapshotId: providerOrderSnapshots.id,
+      outcome: printEvents.outcome,
+      sequence: printEvents.sequence,
+      printedAt: printEvents.printedAt,
+      awb: printEvents.awbSnapshot,
+      reasonCode: printEvents.reasonCode,
     })
-    .from(shipments)
-    .leftJoin(
-      providerOrderSnapshots,
-      and(
-        eq(providerOrderSnapshots.shipmentId, shipments.id),
-        eq(providerOrderSnapshots.tenantId, shipments.tenantId),
-      ),
-    )
+    .from(printEvents)
     .where(
       and(
-        eq(shipments.id, shipmentId),
-        eq(shipments.tenantId, context.tenantId),
+        eq(printEvents.id, attemptId),
+        eq(printEvents.tenantId, context.tenantId),
+        eq(printEvents.shipmentId, shipmentId),
+        eq(printEvents.actorUserId, context.userId),
       ),
     )
     .limit(1);
 
-  if (!row?.providerOrderSnapshotId) return;
-  const currentReason = row.shipmentStatus === "AWAITING_UPSTREAM_PAYMENT"
-    ? "AWAITING_UPSTREAM_PAYMENT"
-    : "NOT_ISSUED";
-  if (currentReason !== reason) return;
+  if (!event) return null;
+  if (
+    event.outcome === "PRINTED"
+    && event.sequence !== null
+    && event.awb
+  ) {
+    return {
+      outcome: "PRINTED",
+      sequence: event.sequence,
+      printedAt: event.printedAt,
+      awb: event.awb,
+    };
+  }
+  if (
+    event.outcome === "BLOCKED"
+    && (
+      event.reasonCode === "NOT_ISSUED"
+      || event.reasonCode === "AWAITING_UPSTREAM_PAYMENT"
+    )
+  ) {
+    return {
+      outcome: "BLOCKED",
+      reason: event.reasonCode,
+      printedAt: event.printedAt,
+    };
+  }
+  throw new PrintAttemptConflictError();
+}
 
-  await tx.insert(printEvents).values({
-    tenantId: context.tenantId,
+async function replayOrConflict(
+  tx: TenantTransaction,
+  context: TenantContext,
+  shipmentId: string,
+  attemptId: string,
+) {
+  const replay = await loadPrintAttemptReplay(
+    tx,
+    context,
     shipmentId,
-    providerOrderSnapshotId: row.providerOrderSnapshotId,
-    outcome: "BLOCKED",
-    reasonCode: reason,
-    actorUserId: context.userId,
-    actorRole: context.role,
-  });
+    attemptId,
+  );
+  if (replay) return replay;
+  throw new PrintAttemptConflictError();
+}
+
+export async function appendPrintAttempt(
+  tx: TenantTransaction,
+  context: TenantContext,
+  shipmentId: string,
+  attemptId: string,
+): Promise<PrintAttemptResult> {
+  const preflight = await loadPrintAttemptReplay(
+    tx,
+    context,
+    shipmentId,
+    attemptId,
+  );
+  if (preflight) return preflight;
+
+  const lockedShipment = await tx.execute<{ id: string }>(sql`
+    SELECT id
+    FROM ${shipments}
+    WHERE id = ${shipmentId}
+      AND tenant_id = ${context.tenantId}
+    FOR UPDATE
+  `);
+  if (lockedShipment.rows.length !== 1) {
+    throw new LabelUnavailableError("NOT_FOUND");
+  }
+
+  const replayAfterLock = await loadPrintAttemptReplay(
+    tx,
+    context,
+    shipmentId,
+    attemptId,
+  );
+  if (replayAfterLock) return replayAfterLock;
+
+  let candidate: Awaited<ReturnType<typeof loadPrintCandidate>>;
+  try {
+    candidate = await loadPrintCandidate(tx, context, shipmentId);
+  } catch (error) {
+    if (!(error instanceof LabelUnavailableError)) throw error;
+    if (error.reason === "NOT_FOUND") throw error;
+
+    const [row] = await tx
+      .select({ providerOrderSnapshotId: providerOrderSnapshots.id })
+      .from(providerOrderSnapshots)
+      .where(
+        and(
+          eq(providerOrderSnapshots.shipmentId, shipmentId),
+          eq(providerOrderSnapshots.tenantId, context.tenantId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw error;
+
+    const [inserted] = await tx
+      .insert(printEvents)
+      .values({
+        id: attemptId,
+        tenantId: context.tenantId,
+        shipmentId,
+        providerOrderSnapshotId: row.providerOrderSnapshotId,
+        outcome: "BLOCKED",
+        reasonCode: error.reason,
+        actorUserId: context.userId,
+        actorRole: context.role,
+      })
+      .onConflictDoNothing()
+      .returning({ printedAt: printEvents.printedAt });
+    if (inserted) {
+      return {
+        outcome: "BLOCKED",
+        reason: error.reason,
+        printedAt: inserted.printedAt,
+      };
+    }
+    return replayOrConflict(tx, context, shipmentId, attemptId);
+  }
+
+  const [inserted] = await tx
+    .insert(printEvents)
+    .values({
+      id: attemptId,
+      tenantId: context.tenantId,
+      shipmentId,
+      providerOrderSnapshotId: candidate.providerOrderSnapshotId,
+      sequence: sql<number>`(
+        SELECT coalesce(max(prior.sequence), 0) + 1
+        FROM ${printEvents} AS prior
+        WHERE prior.tenant_id = ${context.tenantId}
+          AND prior.shipment_id = ${shipmentId}
+          AND prior.outcome = 'PRINTED'
+      )`,
+      outcome: "PRINTED",
+      awbSnapshot: candidate.awb,
+      actorUserId: context.userId,
+      actorRole: context.role,
+    })
+    .onConflictDoNothing()
+    .returning({
+      sequence: printEvents.sequence,
+      printedAt: printEvents.printedAt,
+      awb: printEvents.awbSnapshot,
+    });
+
+  if (inserted?.sequence && inserted.awb) {
+    return {
+      outcome: "PRINTED",
+      sequence: inserted.sequence,
+      printedAt: inserted.printedAt,
+      awb: inserted.awb,
+    };
+  }
+  return replayOrConflict(tx, context, shipmentId, attemptId);
 }
 
 export async function listPrintableShipments(

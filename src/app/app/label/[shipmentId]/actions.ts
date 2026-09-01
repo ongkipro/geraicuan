@@ -2,15 +2,12 @@
 
 import { randomUUID } from "node:crypto";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db/client";
 import {
-  appendBlockedPrintEvent,
-  appendPrintEvent,
+  appendPrintAttempt,
   LabelUnavailableError,
-  type LabelUnavailableReason,
 } from "@/db/label-print-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
@@ -22,6 +19,7 @@ export type LabelPrintActionState = {
   printed?: { sequence: number; printedAt: string; token: string };
   blocked?: "NOT_ISSUED" | "AWAITING_UPSTREAM_PAYMENT";
   error?: string;
+  nextAttemptId?: string;
 };
 
 async function requireTenantPrincipal() {
@@ -44,7 +42,13 @@ export async function recordLabelPrint(
 ): Promise<LabelPrintActionState> {
   const principal = await requireTenantPrincipal();
   const shipmentId = formData.get("shipmentId");
-  if (typeof shipmentId !== "string" || !UUID_PATTERN.test(shipmentId)) {
+  const attemptId = formData.get("attemptId");
+  if (
+    typeof shipmentId !== "string"
+    || !UUID_PATTERN.test(shipmentId)
+    || typeof attemptId !== "string"
+    || !UUID_PATTERN.test(attemptId)
+  ) {
     return { error: "Kiriman tidak ditemukan." };
   }
 
@@ -53,44 +57,39 @@ export async function recordLabelPrint(
       db,
       principal.userId,
       principal.tenantId,
-      async (tx, context) => {
-        try {
-          return {
-            kind: "printed" as const,
-            event: await appendPrintEvent(tx, context, shipmentId),
-          };
-        } catch (error) {
-          if (!(error instanceof LabelUnavailableError)) throw error;
-          if (error.reason === "NOT_FOUND") {
-            return { kind: "unavailable" as const, reason: error.reason };
-          }
-          await appendBlockedPrintEvent(tx, context, shipmentId, error.reason);
-          return { kind: "unavailable" as const, reason: error.reason };
-        }
-      },
+      (tx, context) => appendPrintAttempt(
+        tx,
+        context,
+        shipmentId,
+        attemptId,
+      ),
     );
 
-    if (outcome.kind === "unavailable") {
-      if (outcome.reason === "NOT_FOUND") {
-        return { error: "Kiriman tidak ditemukan." };
-      }
+    if (outcome.outcome === "BLOCKED") {
       return {
-        blocked: outcome.reason as Exclude<
-          LabelUnavailableReason,
-          "NOT_FOUND"
-        >,
+        blocked: outcome.reason,
+        nextAttemptId: randomUUID(),
       };
     }
 
-    revalidatePath(`/app/label/${shipmentId}`);
     return {
       printed: {
-        sequence: outcome.event.sequence,
-        printedAt: outcome.event.printedAt.toISOString(),
-        token: randomUUID(),
+        sequence: outcome.sequence,
+        printedAt: outcome.printedAt.toISOString(),
+        token: attemptId,
       },
+      nextAttemptId: randomUUID(),
     };
-  } catch {
-    return { error: "Cetak tidak dapat dicatat. Coba lagi." };
+  } catch (error) {
+    if (
+      error instanceof LabelUnavailableError
+      && error.reason === "NOT_FOUND"
+    ) {
+      return { error: "Kiriman tidak ditemukan.", nextAttemptId: attemptId };
+    }
+    return {
+      error: "Permintaan cetak tidak dapat dicatat. Coba lagi.",
+      nextAttemptId: attemptId,
+    };
   }
 }

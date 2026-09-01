@@ -1,10 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import {
   addContactAddress,
   archiveContact,
+  ContactAddressLabelConflictError,
   ContactArchiveDeniedError,
   ContactUnavailableError,
   updateContact,
@@ -23,6 +25,25 @@ const MAX_NAME_LENGTH = 120;
 
 type IdentityField = "contactName" | "contactPhone" | "roles";
 type AddressField = "addressLabel" | "addressText" | "areaId" | "areaLabel";
+
+type IdentityValues = Partial<Record<"contactName" | "contactPhone" | "roleRecipient" | "roleSender", string>>;
+type AddressValues = Partial<Record<"addressLabel" | "addressText" | "areaId" | "areaLabel", string>>;
+
+export type ContactIdentityState = {
+  errors?: Partial<Record<IdentityField, string>>;
+  message?: string;
+  success?: boolean;
+  values?: IdentityValues;
+};
+
+export type ContactAddressState = {
+  errors?: Partial<Record<AddressField, string>>;
+  message?: string;
+  success?: boolean;
+  values?: AddressValues;
+};
+
+export type ContactArchiveState = { error?: string };
 
 function readText(formData: FormData, field: string) {
   const value = formData.get(field);
@@ -47,13 +68,22 @@ async function requireTenantPrincipal() {
   return principal;
 }
 
-function redirectWithFieldErrors(
-  contactId: string,
-  parameter: "alamatGagal" | "ubahGagal",
-  fields: readonly string[],
-): never {
-  const query = new URLSearchParams({ [parameter]: fields.join(",") });
-  redirect(`/app/kontak/${contactId}?${query.toString()}`);
+function identityValues(formData: FormData): IdentityValues {
+  return {
+    contactName: readText(formData, "contactName"),
+    contactPhone: readText(formData, "contactPhone"),
+    roleRecipient: formData.get("roleRecipient") === "on" ? "on" : "",
+    roleSender: formData.get("roleSender") === "on" ? "on" : "",
+  };
+}
+
+function addressValues(formData: FormData): AddressValues {
+  return {
+    addressLabel: readText(formData, "addressLabel"),
+    addressText: readText(formData, "addressText"),
+    areaId: readText(formData, "areaId"),
+    areaLabel: readText(formData, "areaLabel"),
+  };
 }
 
 function validateIdentity(formData: FormData) {
@@ -107,12 +137,16 @@ function validateAddress(formData: FormData) {
   };
 }
 
-export async function updateContactAction(formData: FormData) {
+export async function updateContactAction(
+  _previousState: ContactIdentityState,
+  formData: FormData,
+): Promise<ContactIdentityState> {
   const principal = await requireTenantPrincipal();
   const contactId = requireContactId(formData);
   const validation = validateIdentity(formData);
   if (!validation.ok) {
-    redirectWithFieldErrors(contactId, "ubahGagal", validation.fields);
+    const errors = Object.fromEntries(validation.fields.map((field) => [field, field === "contactName" ? "Nama wajib diisi dan maksimal 120 karakter." : field === "contactPhone" ? "Nomor telepon kontak tidak valid." : "Pilih minimal satu peran kontak."]));
+    return { errors, message: "Periksa data kontak.", values: identityValues(formData) };
   }
 
   try {
@@ -120,18 +154,23 @@ export async function updateContactAction(formData: FormData) {
       updateContact(tx, context, contactId, validation.input),
     );
   } catch (error) {
-    if (error instanceof ContactUnavailableError) redirect(`/app/kontak/${contactId}`);
+    if (error instanceof ContactUnavailableError) return { message: "Kontak tidak tersedia atau sudah diarsipkan." };
     throw error;
   }
-  redirect(`/app/kontak/${contactId}?disimpan=1`);
+  revalidatePath(`/app/kontak/${contactId}`);
+  return { message: "Perubahan kontak tersimpan. Kiriman lama tetap memakai snapshot sebelumnya.", success: true };
 }
 
-export async function addContactAddressAction(formData: FormData) {
+export async function addContactAddressAction(
+  _previousState: ContactAddressState,
+  formData: FormData,
+): Promise<ContactAddressState> {
   const principal = await requireTenantPrincipal();
   const contactId = requireContactId(formData);
   const validation = validateAddress(formData);
   if (!validation.ok) {
-    redirectWithFieldErrors(contactId, "alamatGagal", validation.fields);
+    const errors = Object.fromEntries(validation.fields.map((field) => [field, field === "addressLabel" ? "Label alamat wajib diisi dan maksimal 60 karakter." : field === "addressText" ? "Alamat wajib diisi dan maksimal 500 karakter." : field === "areaId" ? "Pilih area tujuan yang valid." : "Isi nama area dan ID area sekaligus, atau kosongkan keduanya."]));
+    return { errors, message: "Periksa alamat baru.", values: addressValues(formData) };
   }
 
   try {
@@ -140,14 +179,25 @@ export async function addContactAddressAction(formData: FormData) {
     );
   } catch (error) {
     if (error instanceof ContactUnavailableError) {
-      redirect(`/app/kontak/${contactId}?alamatGagal=tidakTersedia#alamat-heading`);
+      return { message: "Kontak tidak tersedia atau batas 20 alamat aktif sudah tercapai." };
+    }
+    if (error instanceof ContactAddressLabelConflictError) {
+      return {
+        errors: { addressLabel: "Label alamat sudah digunakan pada kontak ini." },
+        message: "Periksa alamat baru.",
+        values: addressValues(formData),
+      };
     }
     throw error;
   }
-  redirect(`/app/kontak/${contactId}?alamatDisimpan=1#alamat`);
+  revalidatePath(`/app/kontak/${contactId}`);
+  return { message: "Alamat tersimpan dan siap dipakai pada draf berikutnya.", success: true };
 }
 
-export async function archiveContactAction(formData: FormData) {
+export async function archiveContactAction(
+  _previousState: ContactArchiveState,
+  formData: FormData,
+): Promise<ContactArchiveState> {
   const principal = await requireTenantPrincipal();
   const contactId = requireContactId(formData);
 
@@ -160,7 +210,7 @@ export async function archiveContactAction(formData: FormData) {
       error instanceof ContactArchiveDeniedError ||
       error instanceof ContactUnavailableError
     ) {
-      redirect(`/app/kontak/${contactId}?arsipGagal=1`);
+      return { error: "Kontak tidak tersedia atau actor tidak memiliki izin Tenant Admin." };
     }
     throw error;
   }

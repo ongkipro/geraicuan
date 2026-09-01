@@ -7,6 +7,7 @@ import { listTenantUsage, PLATFORM_HEALTH_THRESHOLDS, readPlatformCounts, readPl
 import * as schema from "@/db/schema";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { parsePlatformFilters } from "@/lib/platform-monitoring-filters";
+import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminUrl=process.env.DATABASE_URL;const appUrl=process.env.APP_DATABASE_URL;
 if(!adminUrl||!appUrl)throw new Error("DATABASE_URL and APP_DATABASE_URL are required.");
@@ -17,7 +18,7 @@ const outletA="20000000-0000-4000-8000-000000000001",outletB="20000000-0000-4000
 const now=new Date("2026-08-30T12:00:00.000Z");
 
 beforeAll(async()=>{
-  await admin.query("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'geraicuan_test_runtime') THEN CREATE ROLE geraicuan_test_runtime LOGIN INHERIT IN ROLE geraicuan_app; END IF; END $$");
+  await ensureIntegrationRuntimeRole(admin, appUrl);
   await admin.query("TRUNCATE audit_events, platform_roles, provider_unpaid_recoveries, provider_order_snapshots, provider_batches, shipment_estimate_snapshots, shipments, mengantar_connections, outlets, memberships, tenants, users CASCADE");
   await admin.query("INSERT INTO users(id,name,email,status) VALUES ('monitor-super','Super','monitor-super@example.test','ACTIVE'),('monitor-member','Member','monitor-member@example.test','ACTIVE')");
   await admin.query("INSERT INTO platform_roles(user_id) VALUES ('monitor-super')");

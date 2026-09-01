@@ -1,20 +1,34 @@
-import { count } from "drizzle-orm";
+import { Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ContactDirectoryBrowser } from "@/app/app/kontak/contact-directory-browser";
+import type { SafeContactSearchRow } from "@/app/app/kontak/actions";
+import { PageContainer } from "@/components/cms/page-container";
+import { PageHeader } from "@/components/cms/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { listContacts } from "@/db/contact-repository";
 import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
-import { contacts } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
-type ContactDirectoryPageProps = { searchParams: Promise<{ q?: string }> };
+type SearchValue = string | string[] | undefined;
+type ContactDirectoryPageProps = { searchParams: Promise<{ status?: SearchValue }> };
+
+function firstValue(value: SearchValue) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function maskPhone(phone: string) {
-  return phone.length <= 7 ? `${"•".repeat(Math.max(0, phone.length - 2))}${phone.slice(-2)}` : `${phone.slice(0, 4)}••••${phone.slice(-3)}`;
+  return phone.length <= 7
+    ? `${"•".repeat(Math.max(0, phone.length - 2))}${phone.slice(-2)}`
+    : `${phone.slice(0, 4)}••••${phone.slice(-3)}`;
 }
 
 export default async function ContactDirectoryPage({ searchParams }: ContactDirectoryPageProps) {
@@ -27,16 +41,35 @@ export default async function ContactDirectoryPage({ searchParams }: ContactDire
   }
   if (principal.scope !== "tenant") redirect("/login/tenant");
 
-  const query = ((await searchParams).q ?? "").trim();
-  const queryError = query && (query.length < 2 || query.length > 80)
-    ? query.length < 2 ? "Kata kunci minimal 2 karakter." : "Kata kunci maksimal 80 karakter."
+  const auditScenario = process.env.NODE_ENV === "development"
+    ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/kontak")
     : null;
-  const data = await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
-    const rows = queryError ? [] : await listContacts(tx, context, query);
-    const [{ value: total }] = await tx.select({ value: count() }).from(contacts);
-    return { rows, total };
-  });
+  if (auditScenario === "contacts-error") throw new Error("Intentional development-only contact directory failure.");
 
-  return <main className="ship-shell"><a className="sales-skip" href="#hasil-kontak">Lewati ke hasil kontak</a><header className="ship-header"><p className="ship-wordmark">GeraiCUAN</p><Link href="/app">Kembali ke draf kiriman</Link></header><section className="ship-intro"><p className="sales-eyebrow">DIREKTORI KONTAK</p><h1>Kontak pengirim dan penerima</h1><p>Simpan data pihak kiriman sekali, pakai ulang pada draf berikutnya.</p><Link className="sales-primary" href="/app/kontak/baru">Kontak baru</Link></section>
-    {data.total === 0 ? <section className="ship-blocked" role="status"><h2>Belum ada kontak tersimpan.</h2><p>Buat kontak pertama untuk dipakai pada draf berikutnya.</p></section> : <><form className="ship-form" method="get"><fieldset className="ship-group"><legend>Cari kontak</legend><label htmlFor="q">Kata kunci<input defaultValue={query} id="q" maxLength={80} minLength={2} name="q" type="search" /><span className="bulk-hint">Cari nama atau nomor telepon.</span></label><button className="sales-primary ship-submit" type="submit">Cari</button>{query ? <Link className="sales-secondary" href="/app/kontak">Hapus filter</Link> : null}</fieldset></form>{queryError ? <section className="ship-error-summary" role="alert"><h2>Pencarian tidak dapat diproses.</h2><p>{queryError}</p></section> : <section aria-label="Hasil pencarian kontak" className="bulk-outcome" id="hasil-kontak"><p className="bulk-hint">Menampilkan {data.rows.length} kontak.</p>{data.rows.length === 0 ? <section className="ship-blocked" role="status"><h2>Tidak ada kontak yang cocok.</h2><p>Periksa ejaan atau buat kontak baru.</p></section> : <div className="bulk-scroll" role="region" tabIndex={0} aria-label="Daftar kontak"><table className="bulk-table contact-table"><caption>Kontak tenant</caption><thead><tr><th scope="col">Nama</th><th scope="col">Telepon</th><th scope="col">Peran</th></tr></thead><tbody>{data.rows.map((contact) => <tr key={contact.id}><th scope="row"><Link href={`/app/kontak/${contact.id}`}>{contact.name}</Link></th><td className="contact-cell-phone">{maskPhone(contact.phone)}</td><td><p className="contact-tags">{contact.isSender ? <span className="contact-tag">Pengirim</span> : null}{contact.isRecipient ? <span className="contact-tag">Penerima</span> : null}</p></td></tr>)}</tbody></table></div>}</section>}</>}</main>;
+  const requestedStatus = firstValue((await searchParams).status);
+  const status = requestedStatus === "archived" ? "archived" : "active";
+  const invalidStatus = Boolean(requestedStatus && requestedStatus !== "active" && requestedStatus !== "archived");
+  let rowsPromise = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+    listContacts(tx, context, "", status),
+  );
+  if (auditScenario === "contacts-stream") {
+    rowsPromise = rowsPromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
+  }
+  const rows = await rowsPromise;
+  const safeRows: SafeContactSearchRow[] = rows.map((contact) => ({
+    archived: Boolean(contact.archivedAt),
+    id: contact.id,
+    isRecipient: contact.isRecipient,
+    isSender: contact.isSender,
+    name: contact.name,
+    phoneMasked: maskPhone(contact.phone),
+  }));
+
+  return (
+    <PageContainer>
+      <PageHeader actions={<Button asChild className="min-h-11"><Link href="/app/kontak/baru"><Plus aria-hidden="true" />Kontak baru</Link></Button>} description="Simpan data pengirim dan penerima sekali, lalu gunakan kembali pada draf berikutnya." eyebrow="Data" title="Kontak" />
+      {invalidStatus ? <Alert role="status"><AlertTitle>Filter status disesuaikan</AlertTitle><AlertDescription>Status tidak dikenali; kontak aktif ditampilkan.</AlertDescription></Alert> : null}
+      <ContactDirectoryBrowser initialRows={safeRows} status={status} />
+    </PageContainer>
+  );
 }

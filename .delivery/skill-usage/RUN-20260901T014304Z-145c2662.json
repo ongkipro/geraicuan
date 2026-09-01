@@ -1,0 +1,20 @@
+{
+  "capability": "testing-engineering",
+  "head": "223beda8db3fd5fbe0903515a025f128bd4e6128",
+  "job": "analytics-test-order-corrective",
+  "model": "gpt-5.6-sol",
+  "provider": "openai-codex",
+  "reasoningEffort": "xhigh",
+  "recordedAt": "2026-09-01T01:46:06Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260901T014304Z-145c2662",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "postgres-drizzle",
+    "testing-engineering"
+  ],
+  "usageHash": "e239c154cc840a76251e254f7bec6e7c8a3c96475d8025fa480b6ebfd9f319b9",
+  "verificationFailed": false,
+  "worker": "parent"
+}

@@ -1,14 +1,32 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { CircleAlert, RefreshCw, Truck } from "lucide-react";
 
 import {
   loadShipmentEstimate,
   type ShipmentEstimateActionState,
 } from "@/app/app/estimate-actions";
+import {
+  DraftCodBreakdown,
+  type DraftCodBreakdownValue,
+} from "@/app/app/shipment-draft-experience";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type EstimateService = {
+  codBreakdown: DraftCodBreakdownValue | null;
   codEligible: boolean;
   deliveryEstimate: string;
   providerService: string;
@@ -21,6 +39,7 @@ type EstimateSnapshot = {
 };
 
 type DraftEstimatePanelProps = {
+  auditState?: "error" | null;
   draftId: string;
   isCod: boolean;
   snapshot: EstimateSnapshot | null;
@@ -47,86 +66,151 @@ function formatRetrievedAt(value: string) {
 function EstimateButton({ hasSnapshot }: { hasSnapshot: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button className="sales-primary ship-submit" disabled={pending} type="submit">
+    <Button className="min-h-11" disabled={pending} type="submit">
+      <RefreshCw aria-hidden="true" className={pending ? "animate-spin" : undefined} />
       {pending ? "Memuat estimasi…" : hasSnapshot ? "Muat ulang estimasi" : "Muat estimasi"}
-    </button>
+    </Button>
   );
 }
 
-export function DraftEstimatePanel({ draftId, isCod, snapshot }: DraftEstimatePanelProps) {
-  const [state, action] = useActionState(loadShipmentEstimate, initialState);
-  const services = snapshot?.services ?? [];
+export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot }: DraftEstimatePanelProps) {
+  const [auditRetryComplete, setAuditRetryComplete] = useState(false);
+  const [state, action] = useActionState(
+    loadShipmentEstimate,
+    auditState === "error"
+      ? { error: "Estimasi audit tidak dapat dimuat. Tinjau draf lalu coba lagi." }
+      : initialState,
+  );
+  const visibleSnapshot = auditState === "error" && !auditRetryComplete ? null : snapshot;
+  const visibleError = auditState === "error" && auditRetryComplete ? undefined : state.error;
+  const services = visibleSnapshot?.services ?? [];
   const codUnavailable = isCod && services.length > 0 && services.every((service) => !service.codEligible);
+  const codBreakdowns = isCod
+    ? services.flatMap((service) =>
+        service.codBreakdown
+          ? [{
+              breakdown: service.codBreakdown,
+              providerService: service.providerService,
+            }]
+          : [])
+    : [];
 
   return (
-    <section aria-busy={false} className="ship-estimate" id="estimasi-draf">
-      <h2>Estimasi layanan</h2>
-      <p>Tarif berasal dari Mengantar untuk detail draf saat ini. Estimasi tidak menjamin penerbitan AWB.</p>
-
-      {state.unconfigured ? (
-        <div className="ship-blocked" role="status">
-          <h3>Konfigurasi Mengantar belum tersedia.</h3>
-          <p>Hubungi Tenant Admin untuk melengkapi konfigurasi outlet.</p>
+    <section aria-busy={false} className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5" id="estimasi-draf">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-medium">Estimasi layanan</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Tarif berasal dari Mengantar untuk detail draf saat ini. Estimasi tidak menjamin penerbitan AWB.
+          </p>
         </div>
+
+      {auditState === "error" ? (
+        <Button
+          className="min-h-11"
+          onClick={() => setAuditRetryComplete(true)}
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" />
+          {auditRetryComplete ? "Estimasi audit dimuat" : "Coba lagi"}
+        </Button>
+      ) : state.unconfigured ? (
+        null
       ) : (
         <form action={action}>
           <input name="shipmentId" type="hidden" value={draftId} />
           <EstimateButton hasSnapshot={snapshot !== null} />
         </form>
       )}
+      </div>
 
-      {state.error ? <p className="ship-error-summary" role="alert">{state.error}</p> : null}
+      {state.unconfigured ? (
+        <Alert>
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Konfigurasi Mengantar belum tersedia</AlertTitle>
+          <AlertDescription>Hubungi Tenant Admin untuk melengkapi konfigurasi outlet.</AlertDescription>
+        </Alert>
+      ) : null}
 
-      {snapshot && services.length > 0 ? (
+      {visibleError ? (
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Estimasi tidak dapat dimuat</AlertTitle>
+          <AlertDescription>{visibleError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {visibleSnapshot && services.length > 0 ? (
         <>
-          <p aria-live="polite">Diperbarui {formatRetrievedAt(snapshot.retrievedAt)} WIB.</p>
+          <p aria-live="polite" className="text-xs text-muted-foreground">
+            Diperbarui {formatRetrievedAt(visibleSnapshot.retrievedAt)} WIB
+          </p>
           {codUnavailable ? (
-            <div className="ship-blocked" role="status">
-              <h3>COD tidak tersedia.</h3>
-              <p>Tidak ada layanan yang mendukung COD untuk rute ini.</p>
-            </div>
+            <Alert>
+              <CircleAlert aria-hidden="true" />
+              <AlertTitle>COD tidak tersedia</AlertTitle>
+              <AlertDescription>Tidak ada layanan yang mendukung COD untuk rute ini.</AlertDescription>
+            </Alert>
           ) : null}
           <div
             aria-label="Daftar estimasi layanan Mengantar"
-            className="bulk-scroll"
+            className="overflow-x-auto rounded-lg border"
             role="region"
             tabIndex={0}
           >
-            <table className="bulk-table">
-              <caption>Tarif layanan Mengantar</caption>
-              <thead>
+            <Table>
+              <TableCaption className="sr-only">Tarif layanan Mengantar</TableCaption>
+              <TableHeader>
                 <tr>
-                  <th scope="col">Layanan</th>
-                  <th scope="col">Estimasi tiba</th>
-                  <th scope="col">COD</th>
-                  <th scope="col">Ongkir</th>
+                  <TableHead scope="col">Layanan</TableHead>
+                  <TableHead scope="col">Estimasi tiba</TableHead>
+                  <TableHead scope="col">COD</TableHead>
+                  <TableHead className="text-right" scope="col">Ongkir</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {services.map((service) => (
-                  <tr key={service.providerService}>
-                    <td>{service.providerService}</td>
-                    <td>{service.deliveryEstimate}</td>
-                    <td>
+                  <TableRow key={service.providerService}>
+                    <TableCell className="font-medium"><span className="flex items-center gap-2"><Truck aria-hidden="true" className="size-4 text-muted-foreground" />{service.providerService}</span></TableCell>
+                    <TableCell>{service.deliveryEstimate}</TableCell>
+                    <TableCell>
                       {service.codEligible ? (
-                        <span className="contact-tag">Tersedia</span>
+                        <Badge variant="secondary">Tersedia</Badge>
                       ) : (
-                        <button
-                          aria-label={`COD tidak tersedia untuk ${service.providerService}`}
-                          className="contact-tag contact-tag-archived"
-                          disabled
-                          type="button"
-                        >
-                          COD tidak tersedia
-                        </button>
+                        <Badge aria-label={`COD tidak tersedia untuk ${service.providerService}`} variant="outline">Tidak tersedia</Badge>
                       )}
-                    </td>
-                    <td className="bulk-num">{formatIdr(service.shippingAmountIdr)}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
+          {codBreakdowns.length > 0 ? (
+            <section
+              aria-labelledby="draft-cod-explanation-title"
+              className="grid gap-4 border-t pt-5"
+            >
+              <header>
+                <h3 className="font-medium" id="draft-cod-explanation-title">
+                  Rincian penagihan COD sebelum konfirmasi
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Nilai mengikuti layanan penyedia yang ditampilkan. Melihat rincian ini
+                  belum mengonfirmasi layanan atau membuat pesanan ke penyedia.
+                </p>
+              </header>
+              <div className="grid gap-3 md:grid-cols-2">
+                {codBreakdowns.map(({ breakdown, providerService }) => (
+                  <DraftCodBreakdown
+                    breakdown={breakdown}
+                    key={providerService}
+                    providerService={providerService}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
         </>
       ) : null}
     </section>
