@@ -1,8 +1,8 @@
 # Technical Design: GeraiCUAN
 
-- Status: Accepted architecture; precision migration remains queued in `TASKS.md`
+- Status: Accepted architecture; destination authority and responsive outlet completion remain queued in `TASKS.md`
 - Owner: Paduka Ongki
-- Source: PR-1..PR-8; Mengantar Public API docs retrieved 2026-08-28.
+- Source: PR-1..PR-28; Mengantar Public API docs retrieved 2026-08-28 and reviewed for location authority on 2026-09-01.
 
 ## Components
 1. Next.js App Router UI: authenticated Super Admin and tenant operational surfaces.
@@ -91,7 +91,11 @@ The implemented issuance and unpaid-recovery paths are validated only through sa
 `mengantar_connections` remains the tenant/outlet-scoped source selector and stores only the canonical managed-secret reference plus non-secret status metadata. A separate server-only secret store persists an authenticated-encryption envelope for the private API key using Node.js `crypto`, a fresh nonce per write, and the dedicated runtime key `MENGANTAR_CREDENTIAL_ENCRYPTION_KEY`; plaintext is never written to PostgreSQL. Tenant-controlled input cannot change the provider base URL. The resolver combines a decrypted private API key with the platform-controlled base URL and the outlet's non-secret origin/pickup IDs, or uses the complete platform default when no private connection is active. Create and replacement writes are atomic, a failed replacement retains the working secret, switching to the platform default first proves that default complete, and every governed outcome emits a redacted audit event. A missing, malformed, or unavailable encryption key/secret fails closed.
 
 ## TD-16 — Mengantar location authority
-Do not create a canonical kecamatan table or autocomplete endpoint from assumed provider behavior. First accept a current, sanitized Mengantar address-search and pickup contract. Then choose the smallest provider-backed read model: on-demand lookup by default, with a bounded local cache/table only when measured provider latency, quota, or availability justifies it. Cache entries retain provider ID, display label, hierarchy metadata, source timestamp, and expiry; they never become authority after the accepted provider contract rejects or supersedes them. Origin, pickup, contact address, shipment draft, estimate, and provider-order payloads must preserve one validated ID-to-label binding.
+The official [Mengantar Public API documentation](https://api-public.mengantar.com/docs/) was retrieved and reviewed on 2026-09-01. The accepted pickup contract is account-scoped `GET /api/public/{API_KEY}/address`, whose successful response contains pickup `_id`, area `_id` in `PICKUP_AUTOFILL`, and readable `PICKUP_*` address hierarchy. The accepted general area-search contract is `GET /api/public/{API_KEY}/address/search?keyword={query}`, whose successful response contains area `_id` plus province, city, district, subdistrict, ZIP, and provider routing codes. The legacy search route documents that its path key is not validated; GeraiCUAN nevertheless keeps both routes server-only so credential-bearing URLs never reach browser code or logs.
+
+Outlet configuration reads pickup options on demand from the resolved Mengantar account. Selecting one pickup atomically derives its origin area from `PICKUP_AUTOFILL`; the browser cannot submit an independent area ID, and the server re-fetches the current account list before persistence. Private lookup carries the connection `updated_at` authority version into the final outlet-locked transaction; a credential replacement or source switch between provider validation and persistence rejects the stale write instead of binding account-A location data to account B. The browser DTO contains only pickup/area IDs and readable labels and excludes provider user, PIC, and phone fields. Requests use strict response validation, a 10-second timeout, a 512 KB response limit, HTTPS-only platform-controlled base URL, rejected redirects, sanitized failures, and no retry. Platform-default tenants receive only the already configured platform pickup, preventing a shared-account pickup list from leaking across tenants; private-account tenants receive their own account list. No local location cache/table is justified yet because no measured latency, quota, or availability evidence requires it. Provider `POST /address` mutation remains outside this decision and is not called.
+
+Origin, pickup, contact address, shipment draft, estimate, and provider-order payloads must preserve one validated ID-to-label binding. General destination-area integration remains a separate implementation slice using the accepted search contract; no canonical kecamatan dataset is introduced.
 
 ## UML Sequence — authenticated shipment issuance
 ```mermaid

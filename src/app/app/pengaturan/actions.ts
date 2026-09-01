@@ -26,7 +26,13 @@ import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import {
   assertPlatformDefaultMengantarCredentialsComplete,
   MengantarConfigurationError,
+  resolveMengantarAccountCredentials,
 } from "@/lib/mengantar-credentials";
+import {
+  fetchMengantarPickupOptions,
+  MengantarLocationError,
+  type MengantarPickupOption,
+} from "@/lib/mengantar-locations";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,9 +52,17 @@ export type OutletSettingsActionState = {
   success?: boolean;
   values?: {
     defaultPickupAddressId: string;
-    defaultOriginAreaId: string;
+    defaultPickupAddressLabel?: string;
+    defaultOriginAreaId?: string;
+    defaultOriginAreaLabel?: string;
     connectionMode: "platform_default" | "private";
   };
+};
+
+export type MengantarPickupOptionsActionState = {
+  message?: string;
+  options?: MengantarPickupOption[];
+  success?: boolean;
 };
 
 type MengantarCredentialField = "apiKey" | "confirmation" | "outletId";
@@ -120,6 +134,50 @@ function credentialFailureState(
   errors?: MengantarCredentialActionState["errors"],
 ): MengantarCredentialActionState {
   return { errors, message, resultToken: randomUUID() };
+}
+
+async function fetchAuthorizedPickupOptions(
+  principal: Awaited<ReturnType<typeof requireTenantAdminPrincipal>>,
+  outletId: string,
+) {
+  const resolved = await withTenantContext(
+    db,
+    principal.userId,
+    principal.tenantId,
+    (tx, context) => resolveMengantarAccountCredentials(tx, context, outletId),
+  );
+  return {
+    authority: resolved.authority,
+    options: await fetchMengantarPickupOptions(resolved.credentials, resolved.source),
+  };
+}
+
+export async function loadMengantarPickupOptions(
+  outletId: string,
+): Promise<MengantarPickupOptionsActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  if (!UUID_PATTERN.test(outletId)) {
+    return { message: "Outlet tidak valid." };
+  }
+  try {
+    return {
+      options: (await fetchAuthorizedPickupOptions(principal, outletId)).options,
+      success: true,
+    };
+  } catch (error) {
+    if (
+      error instanceof MengantarConfigurationError
+      || error instanceof MengantarLocationError
+    ) {
+      return {
+        message:
+          "Daftar pickup Mengantar belum dapat dimuat. Pilihan tersimpan tidak berubah.",
+      };
+    }
+    return {
+      message: "Daftar pickup Mengantar belum dapat dimuat. Coba lagi.",
+    };
+  }
 }
 
 export async function savePrivateMengantarCredential(
@@ -268,11 +326,9 @@ export async function saveOutletSettings(
     formData,
     "defaultPickupAddressId",
   );
-  const defaultOriginAreaId = formString(formData, "defaultOriginAreaId");
   const connectionModeValue = formString(formData, "connectionMode");
   const values = {
     defaultPickupAddressId: safeReturnedIdentifier(defaultPickupAddressId),
-    defaultOriginAreaId: safeReturnedIdentifier(defaultOriginAreaId),
     connectionMode:
       connectionModeValue === "private" ? "private" as const : "platform_default" as const,
   };
@@ -283,14 +339,8 @@ export async function saveOutletSettings(
   }
   validateOpaqueIdentifier(
     defaultPickupAddressId,
-    "ID alamat pickup",
+    "Alamat pickup",
     "defaultPickupAddressId",
-    errors,
-  );
-  validateOpaqueIdentifier(
-    defaultOriginAreaId,
-    "ID area asal",
-    "defaultOriginAreaId",
     errors,
   );
   if (connectionModeValue !== "platform_default" && connectionModeValue !== "private") {
@@ -305,6 +355,45 @@ export async function saveOutletSettings(
     };
   }
 
+  let canonicalPickup: MengantarPickupOption;
+  let expectedConnectionUpdatedAt: Date | null;
+  try {
+    const { authority, options } = await fetchAuthorizedPickupOptions(principal, outletId);
+    const selected = options.find(
+      (option) => option.pickupAddressId === defaultPickupAddressId,
+    );
+    if (!selected) {
+      return {
+        errors: {
+          defaultPickupAddressId:
+            "Pilihan sudah berubah di Mengantar. Cari dan pilih ulang.",
+        },
+        message: "Lokasi belum disimpan.",
+        resultToken: randomUUID(),
+        values,
+      };
+    }
+    canonicalPickup = selected;
+    expectedConnectionUpdatedAt = authority.connectionUpdatedAt;
+  } catch (error) {
+    if (
+      error instanceof MengantarConfigurationError
+      || error instanceof MengantarLocationError
+    ) {
+      return {
+        message:
+          "Lokasi belum dapat diverifikasi ke Mengantar. Pilihan tersimpan tidak berubah.",
+        resultToken: randomUUID(),
+        values,
+      };
+    }
+    return {
+      message: "Lokasi belum dapat diverifikasi. Coba lagi.",
+      resultToken: randomUUID(),
+      values,
+    };
+  }
+
   try {
     await withTenantContext(
       db,
@@ -312,9 +401,12 @@ export async function saveOutletSettings(
       principal.tenantId,
       (tx, context) => updateOutletReadiness(tx, context, {
         outletId,
-        defaultPickupAddressId,
-        defaultOriginAreaId,
+        defaultPickupAddressId: canonicalPickup.pickupAddressId,
+        defaultPickupAddressLabel: canonicalPickup.pickupLabel,
+        defaultOriginAreaId: canonicalPickup.originAreaId,
+        defaultOriginAreaLabel: canonicalPickup.originLabel,
         connectionMode: connectionModeValue as "platform_default" | "private",
+        expectedConnectionUpdatedAt,
       }),
     );
   } catch (error) {
@@ -348,9 +440,15 @@ export async function saveOutletSettings(
 
   revalidateOutletConfigurationPaths();
   return {
-    message: "Pengaturan pickup outlet tersimpan. Status kesiapan terbaru ditampilkan pada kartu outlet.",
+    message: "Pickup dan area asal Mengantar tersimpan untuk outlet ini.",
     resultToken: randomUUID(),
     success: true,
-    values,
+    values: {
+      connectionMode: values.connectionMode,
+      defaultOriginAreaId: canonicalPickup.originAreaId,
+      defaultOriginAreaLabel: canonicalPickup.originLabel,
+      defaultPickupAddressId: canonicalPickup.pickupAddressId,
+      defaultPickupAddressLabel: canonicalPickup.pickupLabel,
+    },
   };
 }

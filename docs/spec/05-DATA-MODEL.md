@@ -9,8 +9,8 @@
 | `tenants` | No | Platform customer lifecycle and status. |
 | `users` | No | Authenticated principal identity. |
 | `memberships` | Yes | User role in one tenant: `TENANT_ADMIN` or `OPERATOR`. |
-| `outlets` | Yes | Tenant shipment origin and operational pickup identity. |
-| `mengantar_connections` | Yes | Outlet private credential reference, masked metadata, default pickup/origin IDs, and `private`/`platform_default` resolution state; never plaintext secrets. |
+| `outlets` | Yes | Tenant shipment origin and operational pickup identity, including provider pickup/origin IDs and their readable labels. |
+| `mengantar_connections` | Yes | Outlet private credential reference and non-secret connection metadata; row presence selects `private`, absence selects `platform_default`; never plaintext secrets. |
 | `managed_secret_payloads` | Yes | Server-only authenticated-encryption envelope for an outlet's private Mengantar API key, keyed by canonical purpose/reference and encryption-key version; never plaintext or browser-readable metadata. |
 | `mengantar_location_cache` | No | Optional bounded cache of provider-authoritative area/pickup identifiers and Indonesian display hierarchy, created only after an accepted address-search contract proves caching is needed. |
 | `contacts` | Yes | Reusable sender/recipient directory entry with role tags and normalized contact details. |
@@ -48,7 +48,7 @@ Store currency as `IDR` and all amounts as whole integer rupiah. Persist user-de
 `mengantar_connections` stores no ciphertext or secret fragment. Each active private connection resolves exactly one purpose-bound encrypted payload for the same tenant and outlet. The envelope stores ciphertext, nonce, authentication tag, key version, and timestamps; authenticated additional data binds purpose, tenant, outlet, and canonical reference so rows cannot be replayed across scope. Replacement is transactional and never exposes the prior value. Removing a private connection is allowed only after the platform default is complete and records a redacted audit outcome.
 
 ## DATA-7 — Provider location invariant
-Persist provider IDs together with their last accepted human-readable label at operational snapshot boundaries. A cached area row is never sufficient evidence that an ID remains supported; estimate/order behavior remains authoritative. Do not seed or import a kecamatan dataset until TD-16 accepts its provider contract, refresh policy, and expiry behavior.
+Persist provider IDs together with their last accepted human-readable label at operational snapshot boundaries. Outlet pickup configuration stores `default_pickup_address_id` with `default_pickup_address_label` and `default_origin_area_id` with `default_origin_area_label`; both labels are null for legacy rows or non-null as one pair. New writes accept only a pickup from the current account-scoped provider response and derive the area ID and both labels from that same response. A cached area row is never sufficient evidence that an ID remains supported; estimate/order behavior remains authoritative. No location cache or canonical kecamatan dataset exists because current evidence does not justify one.
 
 ## ERD
 ```mermaid

@@ -1,14 +1,16 @@
 "use client";
 
-import { ChevronDown, CircleAlert } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, CircleAlert, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 
 import {
+  loadMengantarPickupOptions,
   saveOutletSettings,
   savePrivateMengantarCredential,
   switchMengantarToPlatformDefault,
   type MengantarCredentialActionState,
+  type MengantarPickupOptionsActionState,
   type OutletSettingsActionState,
 } from "@/app/app/pengaturan/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,6 +29,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Field,
   FieldContent,
   FieldDescription,
@@ -38,7 +48,10 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { MengantarPickupOption } from "@/lib/mengantar-locations";
 
 type ConnectionIssue =
   | "authentication"
@@ -50,7 +63,9 @@ type SafeOutletReadiness = {
   id: string;
   name: string;
   defaultPickupAddressId: string | null;
+  defaultPickupAddressLabel: string | null;
   defaultOriginAreaId: string | null;
+  defaultOriginAreaLabel: string | null;
   connectionIssue: ConnectionIssue;
   connectionSource: "platform_default" | "private";
   connectionStatus: "platform_default" | "private_ready" | "private_attention";
@@ -62,6 +77,7 @@ type SafeOutletReadiness = {
 type OutletSettingsFormProps = {
   defaultExpanded: boolean;
   outlet: SafeOutletReadiness;
+  pickupOptionsFixture?: MengantarPickupOptionsActionState;
 };
 
 const initialOutletState: OutletSettingsActionState = {};
@@ -72,9 +88,198 @@ type ReturnedOutletSettingsState = OutletSettingsActionState & {
   values?: {
     connectionMode?: "platform_default" | "private";
     defaultOriginAreaId?: string;
+    defaultOriginAreaLabel?: string;
     defaultPickupAddressId?: string;
+    defaultPickupAddressLabel?: string;
   };
 };
+
+type PickupSelectorProps = {
+  disabled: boolean;
+  error?: string;
+  onSelectionChange: (selection: MengantarPickupOption | null) => void;
+  outletId: string;
+  optionsFixture?: MengantarPickupOptionsActionState;
+  selection: MengantarPickupOption | null;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+};
+
+function PickupSelector({
+  disabled,
+  error,
+  onSelectionChange,
+  outletId,
+  optionsFixture,
+  selection,
+  triggerRef,
+}: PickupSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<MengantarPickupOption[] | null>(
+    optionsFixture?.success ? optionsFixture.options ?? [] : null,
+  );
+  const [loadState, setLoadState] = useState<MengantarPickupOptionsActionState>(
+    optionsFixture ?? {},
+  );
+  const [loading, startLoading] = useTransition();
+  const emptyRef = useRef<HTMLButtonElement>(null);
+  const requestSequence = useRef(0);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listId = `pickup-options-${outletId}`;
+
+  function loadOptions() {
+    const request = ++requestSequence.current;
+    setLoadState({});
+    startLoading(async () => {
+      const result = await loadMengantarPickupOptions(outletId);
+      if (request !== requestSequence.current) return;
+      setLoadState(result);
+      setOptions(result.success ? result.options ?? [] : null);
+    });
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (nextOpen && options === null && !loadState.message && !loading) loadOptions();
+  }
+
+  useEffect(() => {
+    if (!open || loading) return;
+    const frame = requestAnimationFrame(() => {
+      if (loadState.success && options && options.length > 0) {
+        searchRef.current?.focus();
+      } else if (loadState.success && options?.length === 0) {
+        emptyRef.current?.focus();
+      } else if (loadState.message) {
+        retryRef.current?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loadState.message, loadState.success, loading, open, options]);
+
+  return (
+    <Field data-invalid={Boolean(error)}>
+      <FieldLabel htmlFor={`pickup-${outletId}`}>Alamat pickup Mengantar</FieldLabel>
+      <input
+        name="defaultPickupAddressId"
+        type="hidden"
+        value={selection?.pickupAddressId ?? ""}
+      />
+      <Popover onOpenChange={handleOpenChange} open={open}>
+        <PopoverTrigger asChild>
+          <Button
+            aria-controls={listId}
+            aria-describedby={error ? `pickup-error-${outletId}` : `pickup-help-${outletId}`}
+            aria-expanded={open}
+            aria-invalid={Boolean(error)}
+            className="min-h-11 w-full justify-between whitespace-normal px-3 py-2 text-left font-normal"
+            disabled={disabled}
+            id={`pickup-${outletId}`}
+            ref={triggerRef}
+            role="combobox"
+            type="button"
+            variant="outline"
+          >
+            <span className="min-w-0 leading-5">
+              {selection ? selection.pickupLabel : "Pilih alamat pickup"}
+            </span>
+            <ChevronsUpDown aria-hidden="true" className="ml-2 size-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-(--radix-popover-trigger-width) max-w-[calc(100vw-2rem)] p-0"
+        >
+          {loading ? (
+            <div aria-live="polite" className="space-y-2 p-3">
+              <p className="text-sm text-muted-foreground">Memuat pickup Mengantar…</p>
+              {[0, 1, 2].map((item) => (
+                <Skeleton className="h-11 w-full" key={item} />
+              ))}
+            </div>
+          ) : loadState.message ? (
+            <div className="space-y-3 p-3">
+              <p className="text-sm leading-6 text-destructive" role="alert">
+                {loadState.message}
+              </p>
+              <Button
+                className="min-h-11"
+                onClick={loadOptions}
+                ref={retryRef}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RefreshCw aria-hidden="true" />
+                Coba lagi
+              </Button>
+            </div>
+          ) : loadState.success && options?.length === 0 ? (
+            <div className="space-y-3 p-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Belum ada alamat pickup</p>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Tambahkan pickup di akun Mengantar aktif, lalu muat ulang daftar ini.
+                </p>
+              </div>
+              <Button
+                className="min-h-11"
+                onClick={loadOptions}
+                ref={emptyRef}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RefreshCw aria-hidden="true" />
+                Muat ulang
+              </Button>
+            </div>
+          ) : (
+            <Command>
+              <CommandInput placeholder="Cari nama pickup atau lokasi…" ref={searchRef} />
+              <CommandList id={listId}>
+                <CommandEmpty>
+                  Tidak ada pickup yang cocok. Hapus atau ubah kata pencarian.
+                </CommandEmpty>
+                <CommandGroup heading="Alamat pickup">
+                  {(options ?? []).map((option) => (
+                    <CommandItem
+                      data-checked={selection?.pickupAddressId === option.pickupAddressId}
+                      key={option.pickupAddressId}
+                      onSelect={() => {
+                        onSelectionChange(option);
+                        setOpen(false);
+                      }}
+                      value={`${option.pickupLabel} ${option.originLabel}`}
+                    >
+                      <span className="sr-only">
+                        {selection?.pickupAddressId === option.pickupAddressId
+                          ? "Terpilih."
+                          : ""}
+                      </span>
+                      <span className="grid min-w-0 gap-1 py-1">
+                        <span className="whitespace-normal font-medium leading-5">
+                          {option.pickupLabel}
+                        </span>
+                        <span className="whitespace-normal text-xs leading-5 text-muted-foreground">
+                          Area asal: {option.originLabel}
+                        </span>
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          )}
+        </PopoverContent>
+      </Popover>
+      <FieldDescription id={`pickup-help-${outletId}`}>
+        Daftar diambil dari akun Mengantar yang aktif. Area asal mengikuti pickup terpilih.
+      </FieldDescription>
+      <FieldError id={`pickup-error-${outletId}`}>{error}</FieldError>
+    </Field>
+  );
+}
 
 function ConnectionStatus({ outlet }: { outlet: SafeOutletReadiness }) {
   if (outlet.connectionStatus === "private_ready") {
@@ -138,7 +343,11 @@ function ConnectionStatus({ outlet }: { outlet: SafeOutletReadiness }) {
   );
 }
 
-export function OutletSettingsForm({ defaultExpanded, outlet }: OutletSettingsFormProps) {
+export function OutletSettingsForm({
+  defaultExpanded,
+  outlet,
+  pickupOptionsFixture,
+}: OutletSettingsFormProps) {
   const [locationState, locationAction, locationPending] = useActionState(
     saveOutletSettings,
     initialOutletState,
@@ -153,28 +362,48 @@ export function OutletSettingsForm({ defaultExpanded, outlet }: OutletSettingsFo
   );
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [connectionMode, setConnectionMode] = useState(outlet.connectionSource);
+  const [selectedPickup, setSelectedPickup] = useState<MengantarPickupOption | null>(() =>
+    outlet.defaultPickupAddressId
+    && outlet.defaultPickupAddressLabel
+    && outlet.defaultOriginAreaId
+    && outlet.defaultOriginAreaLabel
+      ? {
+          originAreaId: outlet.defaultOriginAreaId,
+          originLabel: outlet.defaultOriginAreaLabel,
+          pickupAddressId: outlet.defaultPickupAddressId,
+          pickupLabel: outlet.defaultPickupAddressLabel,
+        }
+      : null,
+  );
   const returnedLocationState = locationState as ReturnedOutletSettingsState;
-  const pickupRef = useRef<HTMLInputElement>(null);
-  const originRef = useRef<HTMLInputElement>(null);
+  const pickupRef = useRef<HTMLButtonElement>(null);
   const locationResultRef = useRef<HTMLDivElement>(null);
   const apiKeyRef = useRef<HTMLInputElement>(null);
   const privateConnectionRef = useRef<HTMLButtonElement>(null);
   const credentialResultRef = useRef<HTMLDivElement>(null);
   const fallbackResultRef = useRef<HTMLDivElement>(null);
   const pickupError = locationState.errors?.defaultPickupAddressId;
-  const originError = locationState.errors?.defaultOriginAreaId;
   const apiKeyError = credentialState.errors?.apiKey;
+  const hasLegacyLocation = Boolean(
+    (outlet.defaultPickupAddressId || outlet.defaultOriginAreaId)
+    && (
+      !outlet.defaultPickupAddressId
+      || !outlet.defaultPickupAddressLabel
+      || !outlet.defaultOriginAreaId
+      || !outlet.defaultOriginAreaLabel
+    ),
+  );
   const missing: string[] = [];
   if (!outlet.defaultPickupAddressId) missing.push("alamat pickup");
   if (!outlet.defaultOriginAreaId) missing.push("area asal");
+  if (hasLegacyLocation) missing.push("label lokasi Mengantar");
   if (outlet.connectionStatus === "private_attention") missing.push("koneksi Mengantar");
 
   useEffect(() => {
     if (!returnedLocationState.resultToken) return;
     if (pickupError) pickupRef.current?.focus();
-    else if (originError) originRef.current?.focus();
     else locationResultRef.current?.focus();
-  }, [originError, pickupError, returnedLocationState.resultToken]);
+  }, [pickupError, returnedLocationState.resultToken]);
 
   useEffect(() => {
     if (!credentialState.resultToken) return;
@@ -228,7 +457,6 @@ export function OutletSettingsForm({ defaultExpanded, outlet }: OutletSettingsFo
             action={locationAction}
             aria-busy={locationPending}
             className="space-y-4"
-            key={returnedLocationState.resultToken ?? "location-initial"}
             noValidate
           >
             <input name="outletId" type="hidden" value={outlet.id} />
@@ -238,53 +466,46 @@ export function OutletSettingsForm({ defaultExpanded, outlet }: OutletSettingsFo
             <FieldSet className="rounded-lg border p-4 sm:p-5">
               <FieldLegend>Lokasi pengiriman</FieldLegend>
               <FieldDescription>
-                Nilai lokasi tetap tersimpan saat pengaturan koneksi diubah.
+                Pilih pickup dari akun Mengantar aktif. Area asal ditentukan otomatis oleh
+                Mengantar dan disimpan sebagai satu pasangan.
               </FieldDescription>
-              <FieldGroup className="md:grid md:grid-cols-2">
-                <Field data-invalid={Boolean(pickupError)}>
-                  <FieldLabel htmlFor={`pickup-${outlet.id}`}>ID alamat pickup</FieldLabel>
-                  <Input
-                    aria-describedby={pickupError ? `pickup-error-${outlet.id}` : undefined}
-                    aria-invalid={Boolean(pickupError)}
-                    className="min-h-11"
-                    defaultValue={
-                      returnedLocationState.values?.defaultPickupAddressId
-                      ?? outlet.defaultPickupAddressId
-                      ?? ""
-                    }
-                    id={`pickup-${outlet.id}`}
-                    maxLength={160}
-                    name="defaultPickupAddressId"
-                    ref={pickupRef}
-                    required
-                  />
-                  <FieldDescription>
-                    Gunakan ID alamat pickup Mengantar, bukan alamat atau nomor telepon.
-                  </FieldDescription>
-                  <FieldError id={`pickup-error-${outlet.id}`}>{pickupError}</FieldError>
-                </Field>
+              {hasLegacyLocation ? (
+                <Alert>
+                  <CircleAlert aria-hidden="true" />
+                  <AlertTitle>Lokasi lama perlu dipilih ulang</AlertTitle>
+                  <AlertDescription>
+                    Data lama belum memiliki label Mengantar. Cari dan pilih pickup agar nama
+                    lokasi serta area asal dapat ditampilkan dengan jelas.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              <FieldGroup>
+                <PickupSelector
+                  disabled={isBusy}
+                  error={pickupError}
+                  onSelectionChange={setSelectedPickup}
+                  outletId={outlet.id}
+                  optionsFixture={pickupOptionsFixture}
+                  selection={selectedPickup}
+                  triggerRef={pickupRef}
+                />
 
-                <Field data-invalid={Boolean(originError)}>
-                  <FieldLabel htmlFor={`origin-${outlet.id}`}>ID area asal</FieldLabel>
-                  <Input
-                    aria-describedby={originError ? `origin-error-${outlet.id}` : undefined}
-                    aria-invalid={Boolean(originError)}
-                    className="min-h-11"
-                    defaultValue={
-                      returnedLocationState.values?.defaultOriginAreaId
-                      ?? outlet.defaultOriginAreaId
-                      ?? ""
-                    }
-                    id={`origin-${outlet.id}`}
-                    maxLength={160}
-                    name="defaultOriginAreaId"
-                    ref={originRef}
-                    required
-                  />
+                <Field>
+                  <FieldLabel>Area asal</FieldLabel>
+                  <div
+                    aria-live="polite"
+                    className="flex min-h-11 items-center rounded-md border bg-muted/40 px-3 py-2 text-sm leading-5"
+                  >
+                    {selectedPickup?.originLabel ?? (
+                      <span className="text-muted-foreground">
+                        Akan terisi setelah pickup dipilih
+                      </span>
+                    )}
+                  </div>
                   <FieldDescription>
-                    Gunakan ID area asal yang sesuai dengan lokasi pickup.
+                    Mengikuti area yang terhubung ke pickup di Mengantar; tidak dapat diedit
+                    terpisah.
                   </FieldDescription>
-                  <FieldError id={`origin-error-${outlet.id}`}>{originError}</FieldError>
                 </Field>
               </FieldGroup>
             </FieldSet>
@@ -308,7 +529,11 @@ export function OutletSettingsForm({ defaultExpanded, outlet }: OutletSettingsFo
               </Alert>
             ) : null}
 
-            <Button className="min-h-11 max-sm:w-full" disabled={isBusy} type="submit">
+            <Button
+              className="min-h-11 max-sm:w-full"
+              disabled={isBusy || !selectedPickup}
+              type="submit"
+            >
               {locationPending ? "Menyimpan lokasi…" : "Simpan lokasi"}
             </Button>
           </form>

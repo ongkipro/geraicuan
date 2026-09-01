@@ -282,7 +282,9 @@ export const outlets = pgTable(
       .references(() => tenants.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     defaultPickupAddressId: text("default_pickup_address_id"),
+    defaultPickupAddressLabel: text("default_pickup_address_label"),
     defaultOriginAreaId: text("default_origin_area_id"),
+    defaultOriginAreaLabel: text("default_origin_area_label"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -294,6 +296,18 @@ export const outlets = pgTable(
     unique("outlets_id_tenant_key").on(table.id, table.tenantId),
     index("outlets_tenant_idx").on(table.tenantId),
     check("outlets_name_not_blank", sql`char_length(btrim(name)) > 0`),
+    check(
+      "outlets_pickup_label_not_blank",
+      sql`default_pickup_address_label IS NULL OR char_length(btrim(default_pickup_address_label)) > 0`,
+    ),
+    check(
+      "outlets_origin_label_not_blank",
+      sql`default_origin_area_label IS NULL OR char_length(btrim(default_origin_area_label)) > 0`,
+    ),
+    check(
+      "outlets_location_labels_complete",
+      sql`(default_pickup_address_label IS NULL) = (default_origin_area_label IS NULL)`,
+    ),
   ],
 );
 

@@ -2,6 +2,33 @@
 
 Record only durable implementation changes, validation evidence, and gotchas that the next maintainer needs. Temporary task narration belongs in neither this file nor global memory.
 
+## 2026-09-01 — T-52/T-53 Mengantar pickup authority slice
+
+- Accepted the official 2026-09-01 Mengantar pickup contract: account-scoped
+  `GET /api/public/{API_KEY}/address` returns pickup `_id` and its origin area in
+  `PICKUP_AUTOFILL`. Provider `POST /address` and order mutation were not called.
+- Added bounded server-only pickup retrieval with strict response mapping,
+  HTTPS and redirect checks, a 10-second timeout, a 512 KB body limit,
+  credential-safe errors, private-account options, and platform shared-account
+  filtering. Browser DTOs exclude provider PIC, phone, user, credentials, and
+  base URL.
+- Replaced manual pickup/origin IDs with a shadcn searchable pickup selector and
+  derived read-only origin. It has distinct loading, account-empty,
+  query-empty, retry, selected, and legacy states plus 44px controls and
+  settled-state focus recovery.
+- Added migration 0026 for readable pickup/origin labels. A provider-validated
+  private selection carries the connection `updated_at` authority version into
+  the final outlet-locked write; credential replacement or fallback races fail
+  closed instead of persisting a location from the prior account.
+- Disposable PostgreSQL upgrade preserved a representative legacy ID-only row.
+  Focused verification passed 6 files / 67 tests; the full suite passed 61 files
+  / 447 tests. Full lint, TypeScript, clean production build, diff checks,
+  browser-backed designer review, and independent security review passed.
+  Settled 390px measurement confirmed a 44px search input, focus handoff, and
+  zero horizontal overflow. General destination search and complete
+  many-outlet list-detail UX remain queued; no production or provider mutation
+  ran.
+
 ## 2026-09-01 — T-49 fresh-CI analytics correction
 
 - Fresh PostgreSQL 16 pre-push verification exposed one analytics suite that

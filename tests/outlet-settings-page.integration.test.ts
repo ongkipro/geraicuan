@@ -15,6 +15,7 @@ const errors = vi.hoisted(() => ({
 }));
 
 const actionMocks = vi.hoisted(() => ({
+  loadMengantarPickupOptions: vi.fn(async () => ({})),
   saveOutletSettings: vi.fn(async () => ({})),
   savePrivateMengantarCredential: vi.fn(async () => ({})),
   switchMengantarToPlatformDefault: vi.fn(async () => ({})),
@@ -94,7 +95,9 @@ function outlet(overrides: Record<string, unknown> = {}) {
     connectionIssue: null,
     connectionUpdatedAt: null,
     defaultOriginAreaId: null,
+    defaultOriginAreaLabel: null,
     defaultPickupAddressId: null,
+    defaultPickupAddressLabel: null,
     id: OUTLET_ONE,
     name: "Outlet Belum Siap",
     readinessStatus: "needs_attention",
@@ -177,9 +180,10 @@ describe("Outlet settings page acceptance", () => {
     expect(html).toContain("Periksa alamat pickup, area asal.");
     expect(html).toContain("Default GeraiCUAN");
     expect(html).toContain(`id="pickup-${OUTLET_ONE}"`);
-    expect(html).toContain(`id="origin-${OUTLET_ONE}"`);
+    expect(html).toContain("Akan terisi setelah pickup dipilih");
     expect(html).toContain('name="connectionMode"');
-    expect(html).toContain('required=""');
+    expect(html).not.toContain("ID alamat pickup");
+    expect(html).not.toContain("ID area asal");
     expect(html).not.toContain(SECRET_SENTINEL);
   });
 
@@ -194,7 +198,9 @@ describe("Outlet settings page acceptance", () => {
         connectionStatus: "private_ready",
         connectionUpdatedAt: new Date("2026-09-01T02:00:00.000Z"),
         defaultOriginAreaId: "origin-ready",
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
         defaultPickupAddressId: "pickup-ready",
+        defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
         id: OUTLET_TWO,
         name: "B — Privat siap",
         readinessStatus: "ready",
@@ -207,7 +213,9 @@ describe("Outlet settings page acceptance", () => {
         connectionIssue: "secret_unavailable",
         connectionUpdatedAt: new Date("2026-09-01T03:00:00.000Z"),
         defaultOriginAreaId: "origin-attention",
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
         defaultPickupAddressId: "pickup-attention",
+        defaultPickupAddressLabel: "Gudang perhatian, Jalan Contoh 2",
         id: OUTLET_THREE,
         name: "C — Privat perlu perhatian",
         readinessStatus: "needs_attention",
@@ -237,15 +245,19 @@ describe("Outlet settings page acceptance", () => {
     expect(html).not.toContain("vault://");
   });
 
-  it("renders preserved values, described field errors, and a focusable result", async () => {
-    mocks.outlets = [outlet()];
+  it("renders the saved readable selection, described errors, and a focusable result", async () => {
+    mocks.outlets = [outlet({
+      defaultOriginAreaId: "origin-safe-preserved",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
+      defaultPickupAddressId: "pickup-safe-preserved",
+      defaultPickupAddressLabel: "Gudang utama, Jalan Contoh 1",
+    })];
     mocks.locationState = {
-      errors: { defaultOriginAreaId: "ID area asal wajib diisi." },
+      errors: { defaultPickupAddressId: "Pilihan pickup sudah berubah." },
       message: "Periksa kembali pengaturan yang ditandai.",
       success: false,
       values: {
         connectionMode: "private",
-        defaultOriginAreaId: "",
         defaultPickupAddressId: "pickup-safe-preserved",
         outletId: OUTLET_ONE,
       },
@@ -254,8 +266,10 @@ describe("Outlet settings page acceptance", () => {
     const html = await renderPage();
 
     expect(html).toMatch(/name="defaultPickupAddressId"[^>]*value="pickup-safe-preserved"/);
-    expect(html).toContain(`aria-describedby="origin-error-${OUTLET_ONE}"`);
-    expect(html).toContain("ID area asal wajib diisi.");
+    expect(html).toContain(`aria-describedby="pickup-error-${OUTLET_ONE}"`);
+    expect(html).toContain("Pilihan pickup sudah berubah.");
+    expect(html).toContain("Gudang utama, Jalan Contoh 1");
+    expect(html).toContain("Coblong, Kota Bandung, Jawa Barat");
     expect(html).toContain('role="alert"');
     expect(html).toMatch(/tabindex="-1">Lokasi belum tersimpan/);
     expect(html).not.toContain(SECRET_SENTINEL);
@@ -274,7 +288,9 @@ describe("Outlet settings page acceptance", () => {
   it("renders a focusable success result and the route that proves drafting readiness", async () => {
     mocks.outlets = [outlet({
       defaultOriginAreaId: "origin-ready",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
       defaultPickupAddressId: "pickup-ready",
+      defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
       name: "Outlet Siap",
       readinessStatus: "ready",
     })];
@@ -299,7 +315,9 @@ describe("Outlet settings page acceptance", () => {
       connectionStatus: "private_ready",
       connectionUpdatedAt: new Date("2026-09-01T02:00:00.000Z"),
       defaultOriginAreaId: "origin-ready",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
       defaultPickupAddressId: "pickup-ready",
+      defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
       readinessStatus: "ready",
     })];
 
@@ -321,7 +339,7 @@ describe("Outlet settings page acceptance", () => {
     );
 
     for (const component of [
-      "AlertDialog", "Alert", "Badge", "Button", "Field", "Input", "RadioGroup",
+      "AlertDialog", "Alert", "Badge", "Button", "Command", "Field", "Input", "Popover", "RadioGroup",
     ]) {
       expect(source).toContain(component);
     }

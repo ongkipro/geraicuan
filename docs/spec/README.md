@@ -22,8 +22,9 @@
 
 ## Repository Status Boundary
 - Mengantar non-mutating address, account estimate, and performance probes returned HTTP 200 on 2026-08-28.
+- Official Mengantar documentation reviewed on 2026-09-01 now owns the accepted account-pickup and general area-search contracts in `03-TECHNICAL-DESIGN.md`; documentation acceptance is not production availability evidence.
 - The observed estimate/performance response did not expose insurance fields; GeraiCUAN must not invent an insurance fee.
-- Completed dashboard and analytics increments are recorded in root `TASKS.md` and `BUILD-LOG.md`; the precision migration continues in the next open task phase.
+- Completed dashboard, analytics, credential, and pickup-selector increments are recorded in root `TASKS.md` and `BUILD-LOG.md`. The only open implementation sequence is destination authority and downstream ID/label binding, followed by responsive many-outlet settings completion.
 - Local fixture and browser evidence is not production provider-mutation evidence. Production Mengantar issuance and recovery remain blocked until the separate TD-14 release gate is explicitly approved.
 - No deployment or production readiness claim is made by this specification pack.
 

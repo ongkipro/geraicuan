@@ -7,10 +7,6 @@ import { db } from "@/db/client";
 import { replaceManagedMengantarApiKey } from "@/db/managed-secret-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import {
-  configureMengantarConnection,
-  MengantarConfigurationDeniedError,
-} from "@/lib/mengantar-configuration";
-import {
   MengantarConfigurationError,
   resolveMengantarCredentials,
 } from "@/lib/mengantar-credentials";
@@ -148,16 +144,4 @@ describe("Mengantar credential resolution", () => {
     }
   });
 
-  it("denies an operator and cross-tenant outlet configuration", async () => {
-    await expect(configureMengantarConnection("operator-a", tenantA, {
-      outletId: outletA,
-      pickupAddressId: "pickup",
-      originAreaId: "origin",
-    })).rejects.toBeInstanceOf(MengantarConfigurationDeniedError);
-    await expect(configureMengantarConnection("admin-a", tenantA, {
-      outletId: outletB,
-      pickupAddressId: "pickup",
-      originAreaId: "origin",
-    })).rejects.toBeInstanceOf(MengantarConfigurationDeniedError);
-  });
 });

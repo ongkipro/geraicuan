@@ -15,6 +15,7 @@ const errors = vi.hoisted(() => ({
   ManagedMengantarSecretUnavailableError:
     class ManagedMengantarSecretUnavailableError extends Error {},
   MengantarConfigurationError: class MengantarConfigurationError extends Error {},
+  MengantarLocationError: class MengantarLocationError extends Error {},
   OutletConnectionModeUnavailableError:
     class OutletConnectionModeUnavailableError extends Error {},
   OutletSettingsDeniedError: class OutletSettingsDeniedError extends Error {},
@@ -30,6 +31,13 @@ const mocks = vi.hoisted(() => ({
   contextCalls: 0,
   failure: "" as "" | "connection" | "denied" | "generic" | "invalid",
   platformDefaultIncomplete: false,
+  pickupFailure: "" as "" | "configuration" | "generic" | "provider",
+  pickupOptions: [{
+    originAreaId: "origin-safe-canonical",
+    originLabel: "Coblong, Kota Bandung, Jawa Barat",
+    pickupAddressId: "pickup-safe-preserved",
+    pickupLabel: "Gudang utama, Jalan Contoh 1",
+  }],
   principal: {
     role: "TENANT_ADMIN" as "OPERATOR" | "TENANT_ADMIN",
     scope: "tenant" as "platform" | "tenant",
@@ -43,6 +51,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn((href: string) => mocks.revalidated.push(href)),
+}));
+
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({ get: vi.fn(() => null) })),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -144,13 +156,42 @@ vi.mock("@/lib/mengantar-credentials", () => ({
       throw new errors.MengantarConfigurationError();
     }
   }),
+  resolveMengantarAccountCredentials: vi.fn(async () => {
+    if (mocks.pickupFailure === "configuration") {
+      throw new errors.MengantarConfigurationError();
+    }
+    return {
+      authority: {
+        connectionUpdatedAt: null,
+        source: "platform_default",
+      },
+      credentials: {
+        apiKey: "server-only-test-key",
+        baseUrl: "https://api-public.mengantar.com",
+        pickupAddressId: "pickup-safe-preserved",
+      },
+      originAreaId: "origin-safe-canonical",
+      pickupAddressId: "pickup-safe-preserved",
+      source: "private",
+    };
+  }),
+}));
+
+vi.mock("@/lib/mengantar-locations", () => ({
+  MengantarLocationError: errors.MengantarLocationError,
+  fetchMengantarPickupOptions: vi.fn(async () => {
+    if (mocks.pickupFailure === "provider") {
+      throw new errors.MengantarLocationError();
+    }
+    if (mocks.pickupFailure === "generic") throw new Error(SECRET_SENTINEL);
+    return mocks.pickupOptions;
+  }),
 }));
 
 function validForm() {
   const form = new FormData();
   form.set("outletId", OUTLET_ID);
   form.set("defaultPickupAddressId", "pickup-safe-preserved");
-  form.set("defaultOriginAreaId", "origin-safe-preserved");
   form.set("connectionMode", "platform_default");
   return form;
 }
@@ -164,6 +205,13 @@ beforeEach(() => {
   mocks.contextCalls = 0;
   mocks.failure = "";
   mocks.platformDefaultIncomplete = false;
+  mocks.pickupFailure = "";
+  mocks.pickupOptions = [{
+    originAreaId: "origin-safe-canonical",
+    originLabel: "Coblong, Kota Bandung, Jawa Barat",
+    pickupAddressId: "pickup-safe-preserved",
+    pickupLabel: "Gudang utama, Jalan Contoh 1",
+  }];
   mocks.principal = {
     role: "TENANT_ADMIN",
     scope: "tenant",
@@ -217,17 +265,16 @@ describe("Outlet settings Server Action", () => {
 
   it("returns field errors and preserves only the safe submitted values before data access", async () => {
     const form = validForm();
-    form.set("defaultOriginAreaId", "   ");
+    form.set("defaultPickupAddressId", "   ");
     const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
 
     const state = await saveOutletSettings({}, form);
 
     expect(state).toMatchObject({
-      errors: { defaultOriginAreaId: expect.any(String) },
+      errors: { defaultPickupAddressId: expect.any(String) },
       values: {
         connectionMode: "platform_default",
-        defaultOriginAreaId: "",
-        defaultPickupAddressId: "pickup-safe-preserved",
+        defaultPickupAddressId: "",
       },
     });
     expect(state).toHaveProperty("resultToken", expect.any(String));
@@ -236,10 +283,40 @@ describe("Outlet settings Server Action", () => {
     expect(mocks.updates).toEqual([]);
   });
 
+  it("rejects a pickup that is not in the current account response", async () => {
+    const form = validForm();
+    form.set("defaultPickupAddressId", "pickup-forged");
+    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
+
+    const state = await saveOutletSettings({}, form);
+
+    expect(state).toMatchObject({
+      errors: { defaultPickupAddressId: expect.any(String) },
+    });
+    expect(state).not.toHaveProperty("success", true);
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.revalidated).toEqual([]);
+  });
+
+  it.each(["configuration", "provider", "generic"] as const)(
+    "keeps the stored location unchanged on a %s pickup lookup failure",
+    async (failure) => {
+      mocks.pickupFailure = failure;
+      const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
+
+      const state = await saveOutletSettings({}, validForm());
+
+      expect(state).toMatchObject({ message: expect.any(String) });
+      expect(state).not.toHaveProperty("success", true);
+      expect(JSON.stringify(state)).not.toContain(SECRET_SENTINEL);
+      expect(mocks.updates).toEqual([]);
+      expect(mocks.revalidated).toEqual([]);
+    },
+  );
+
   it.each([
     ["outletId", "not-a-uuid"],
     ["defaultPickupAddressId", "x".repeat(161)],
-    ["defaultOriginAreaId", "origin\u0000invalid"],
     ["connectionMode", "browser-forged-mode"],
   ])("rejects invalid %s without entering tenant context", async (field, value) => {
     const form = validForm();
@@ -265,7 +342,6 @@ describe("Outlet settings Server Action", () => {
       errors: { connectionMode: expect.any(String) },
       values: {
         connectionMode: "private",
-        defaultOriginAreaId: "origin-safe-preserved",
         defaultPickupAddressId: "pickup-safe-preserved",
       },
     });
@@ -294,8 +370,14 @@ describe("Outlet settings Server Action", () => {
 
   it("saves normalized input and revalidates settings plus dashboard readiness", async () => {
     const form = validForm();
+    mocks.pickupOptions = [{
+      originAreaId: "origin-canonical",
+      originLabel: "Coblong, Kota Bandung, Jawa Barat",
+      pickupAddressId: "pickup-normalized",
+      pickupLabel: "Gudang canonical, Jalan Contoh 2",
+    }];
     form.set("defaultPickupAddressId", " pickup-normalized ");
-    form.set("defaultOriginAreaId", " origin-normalized ");
+    form.set("defaultOriginAreaId", "browser-forged-origin");
     const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
 
     const state = await saveOutletSettings({}, form);
@@ -303,8 +385,11 @@ describe("Outlet settings Server Action", () => {
     expect(state).toMatchObject({ success: true, message: expect.any(String) });
     expect(mocks.updates).toEqual([{
       connectionMode: "platform_default",
-      defaultOriginAreaId: "origin-normalized",
+      defaultOriginAreaId: "origin-canonical",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
       defaultPickupAddressId: "pickup-normalized",
+      defaultPickupAddressLabel: "Gudang canonical, Jalan Contoh 2",
+      expectedConnectionUpdatedAt: null,
       outletId: OUTLET_ID,
     }]);
     expect(mocks.revalidated).toEqual([
@@ -313,6 +398,34 @@ describe("Outlet settings Server Action", () => {
       "/app/pengiriman/baru",
       "/app/impor",
     ]);
+  });
+});
+
+describe("Mengantar pickup option Server Action", () => {
+  it("authenticates before resolving provider account data", async () => {
+    mocks.authorizationDenied = true;
+    const { loadMengantarPickupOptions } = await import("@/app/app/pengaturan/actions");
+
+    await expect(loadMengantarPickupOptions(OUTLET_ID)).rejects.toThrow(
+      "REDIRECT:/login/tenant",
+    );
+    expect(mocks.contextCalls).toBe(0);
+  });
+
+  it("returns only sanitized pickup and derived-origin display fields", async () => {
+    const { loadMengantarPickupOptions } = await import("@/app/app/pengaturan/actions");
+
+    const state = await loadMengantarPickupOptions(OUTLET_ID);
+
+    expect(state).toEqual({ options: mocks.pickupOptions, success: true });
+    expect(JSON.stringify(state)).not.toMatch(/apiKey|baseUrl|phone|PICKUP_PIC/);
+    expect(Object.keys(state.options?.[0] ?? {}).sort()).toEqual([
+      "originAreaId",
+      "originLabel",
+      "pickupAddressId",
+      "pickupLabel",
+    ]);
+    expect(mocks.contextCalls).toBe(1);
   });
 });
 

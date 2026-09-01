@@ -19,6 +19,7 @@ import {
   parseUiAuditScenarioForRoute,
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
+import type { MengantarPickupOption } from "@/lib/mengantar-locations";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -40,7 +41,11 @@ function buildManyOutletAuditFixture(): OutletReadiness[] {
       id: `79000000-0000-4000-8000-${sequence}`,
       name: `Outlet Audit ${String(index + 1).padStart(2, "0")}`,
       defaultPickupAddressId: needsAttention && index === 0 ? null : `pickup-audit-${index + 1}`,
+      defaultPickupAddressLabel:
+        needsAttention && index === 0 ? null : `Gudang Audit ${index + 1}, Jalan Contoh ${index + 1}`,
       defaultOriginAreaId: needsAttention && index === 1 ? null : `origin-audit-${index + 1}`,
+      defaultOriginAreaLabel:
+        needsAttention && index === 1 ? null : `Kecamatan Audit ${index + 1}, Kota Bandung, Jawa Barat`,
       connectionIssue: privateAttention ? "secret_unavailable" : null,
       connectionSource: privateConnection ? "private" : "platform_default",
       connectionStatus:
@@ -54,6 +59,15 @@ function buildManyOutletAuditFixture(): OutletReadiness[] {
       updatedAt: auditUpdatedAt,
     };
   });
+}
+
+function buildPickupOptionsAuditFixture(): MengantarPickupOption[] {
+  return Array.from({ length: 12 }, (_, index) => ({
+    originAreaId: `origin-audit-${index + 1}`,
+    originLabel: `Kecamatan Audit ${index + 1}, Kota Bandung, Jawa Barat`,
+    pickupAddressId: `pickup-audit-${index + 1}`,
+    pickupLabel: `Gudang Audit ${index + 1}, Jalan Contoh ${index + 1}`,
+  }));
 }
 
 export default async function OutletSettingsPage() {
@@ -98,7 +112,9 @@ export default async function OutletSettingsPage() {
       id: "79000000-0000-4000-8000-000000000099",
       name: "Outlet Audit Privat",
       defaultPickupAddressId: "pickup-audit-private",
+      defaultPickupAddressLabel: "Gudang Privat, Jalan Audit 99",
       defaultOriginAreaId: "origin-audit-private",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
       connectionIssue: "secret_unavailable",
       connectionSource: "private",
       connectionStatus: "private_attention",
@@ -118,7 +134,9 @@ export default async function OutletSettingsPage() {
         ? "Outlet Audit Autentikasi"
         : "Outlet Audit Provider",
       defaultPickupAddressId: "pickup-audit-private",
+      defaultPickupAddressLabel: "Gudang Privat, Jalan Audit 98",
       defaultOriginAreaId: "origin-audit-private",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
       connectionIssue: auditScenario === "settings-private-auth-error"
         ? "authentication"
         : "provider_unavailable",
@@ -190,11 +208,23 @@ export default async function OutletSettingsPage() {
                   outlets.length === 1 || outlet.readinessStatus === "needs_attention"
                 }
                 key={outlet.id}
+                pickupOptionsFixture={
+                  auditScenario === "settings-many"
+                    ? { options: buildPickupOptionsAuditFixture(), success: true }
+                    : auditScenario === "settings-provider-error"
+                      ? {
+                          message:
+                            "Daftar pickup Mengantar belum dapat dimuat. Pilihan tersimpan tidak berubah.",
+                        }
+                      : undefined
+                }
                 outlet={{
                   id: outlet.id,
                   name: outlet.name,
                   defaultPickupAddressId: outlet.defaultPickupAddressId,
+                  defaultPickupAddressLabel: outlet.defaultPickupAddressLabel,
                   defaultOriginAreaId: outlet.defaultOriginAreaId,
+                  defaultOriginAreaLabel: outlet.defaultOriginAreaLabel,
                   connectionIssue: outlet.connectionIssue,
                   connectionSource: outlet.connectionSource,
                   connectionStatus: outlet.connectionStatus,

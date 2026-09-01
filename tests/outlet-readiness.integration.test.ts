@@ -108,7 +108,9 @@ beforeEach(async () => {
   await adminPool.query(
     `UPDATE outlets
       SET default_pickup_address_id = NULL,
+          default_pickup_address_label = NULL,
           default_origin_area_id = NULL,
+          default_origin_area_label = NULL,
           updated_at = now()
       WHERE tenant_id = ANY($1::uuid[])`,
     [fixtureTenantIds],
@@ -143,8 +145,11 @@ describe("tenant outlet readiness", () => {
         updateOutletReadiness(tx, context, {
           outletId: outletA,
           defaultPickupAddressId: pickup,
+          defaultPickupAddressLabel: "Gudang utama",
           defaultOriginAreaId: origin,
+          defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
           connectionMode: "platform_default",
+          expectedConnectionUpdatedAt: null,
         }))),
     );
 
@@ -154,7 +159,9 @@ describe("tenant outlet readiness", () => {
       expect(updated[0]).toMatchObject({
         id: outletA,
         defaultPickupAddressId: pickup,
+        defaultPickupAddressLabel: "Gudang utama",
         defaultOriginAreaId: origin,
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
         connectionSource: "platform_default",
         connectionStatus: "platform_default",
         readinessStatus: "ready",
@@ -176,7 +183,12 @@ describe("tenant outlet readiness", () => {
       action: "OUTLET_SETTINGS_CHANGED",
       target_type: "OUTLET",
       metadata: {
-        changedFields: ["defaultPickupAddressId", "defaultOriginAreaId"],
+        changedFields: [
+          "defaultPickupAddressId",
+          "defaultPickupAddressLabel",
+          "defaultOriginAreaId",
+          "defaultOriginAreaLabel",
+        ],
         connectionSource: "platform_default",
       },
     }]);
@@ -198,13 +210,21 @@ describe("tenant outlet readiness", () => {
        VALUES ($1, $2, $3)`,
       [tenantA, outletA, canonicalReference],
     );
+    const privateAuthority = await adminPool.query<{ updated_at: Date }>(
+      "SELECT updated_at FROM mengantar_connections WHERE tenant_id = $1 AND outlet_id = $2",
+      [tenantA, outletA],
+    );
+    const expectedConnectionUpdatedAt = privateAuthority.rows[0].updated_at;
 
     await withTenantContext(db, adminA, tenantA, (tx, context) =>
       updateOutletReadiness(tx, context, {
         outletId: outletA,
         defaultPickupAddressId: "private-pickup",
+        defaultPickupAddressLabel: "Gudang privat",
         defaultOriginAreaId: "private-origin",
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
         connectionMode: "private",
+        expectedConnectionUpdatedAt,
       }));
 
     await expect(
@@ -212,8 +232,11 @@ describe("tenant outlet readiness", () => {
         updateOutletReadiness(tx, context, {
           outletId: outletA,
           defaultPickupAddressId: "downgrade-pickup",
+          defaultPickupAddressLabel: "Gudang downgrade",
           defaultOriginAreaId: "downgrade-origin",
+          defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
           connectionMode: "platform_default",
+          expectedConnectionUpdatedAt,
         })),
     ).rejects.toBeInstanceOf(OutletConnectionModeUnavailableError);
 
@@ -241,8 +264,11 @@ describe("tenant outlet readiness", () => {
         updateOutletReadiness(tx, context, {
           outletId: outletA,
           defaultPickupAddressId: "forged-pickup",
+          defaultPickupAddressLabel: "Gudang forged",
           defaultOriginAreaId: "forged-origin",
+          defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
           connectionMode: "private",
+          expectedConnectionUpdatedAt: null,
         })),
     ).rejects.toBeInstanceOf(OutletConnectionModeUnavailableError);
 
@@ -257,12 +283,53 @@ describe("tenant outlet readiness", () => {
     }]);
   });
 
+  it("rejects a pickup verified before the private account authority changed", async () => {
+    const canonicalReference = mengantarSecretReference(tenantA, outletA);
+    const inserted = await adminPool.query<{ updated_at: Date }>(
+      `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
+       VALUES ($1, $2, $3)
+       RETURNING updated_at`,
+      [tenantA, outletA, canonicalReference],
+    );
+    await adminPool.query(
+      `UPDATE mengantar_connections
+       SET updated_at = updated_at + interval '1 second'
+       WHERE tenant_id = $1 AND outlet_id = $2`,
+      [tenantA, outletA],
+    );
+
+    await expect(withTenantContext(db, adminA, tenantA, (tx, context) =>
+      updateOutletReadiness(tx, context, {
+        outletId: outletA,
+        defaultPickupAddressId: "stale-account-pickup",
+        defaultPickupAddressLabel: "Gudang akun lama",
+        defaultOriginAreaId: "stale-account-origin",
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
+        connectionMode: "private",
+        expectedConnectionUpdatedAt: inserted.rows[0].updated_at,
+      }))).rejects.toBeInstanceOf(OutletConnectionModeUnavailableError);
+
+    const stored = await adminPool.query(
+      `SELECT default_pickup_address_id, default_origin_area_id
+       FROM outlets WHERE tenant_id = $1 AND id = $2`,
+      [tenantA, outletA],
+    );
+    expect(stored.rows).toEqual([{
+      default_pickup_address_id: null,
+      default_origin_area_id: null,
+    }]);
+  });
+
   it("returns actionable private-attention state without the stored reference", async () => {
     const privateReference = "vault://fixture/credential-material-must-never-render";
     await adminPool.query(
       `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
        VALUES ($1, $2, $3)`,
       [tenantA, outletA, privateReference],
+    );
+    const privateAuthority = await adminPool.query<{ updated_at: Date }>(
+      "SELECT updated_at FROM mengantar_connections WHERE tenant_id = $1 AND outlet_id = $2",
+      [tenantA, outletA],
     );
     await adminPool.query(
       `UPDATE outlets
@@ -291,8 +358,11 @@ describe("tenant outlet readiness", () => {
       updateOutletReadiness(tx, context, {
         outletId: outletA,
         defaultPickupAddressId: "pickup-amended",
+        defaultPickupAddressLabel: "Gudang amended",
         defaultOriginAreaId: "origin-amended",
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
         connectionMode: "private",
+        expectedConnectionUpdatedAt: privateAuthority.rows[0].updated_at,
       }));
     const preserved = await adminPool.query<{ secret_reference: string }>(
       "SELECT secret_reference FROM mengantar_connections WHERE tenant_id = $1 AND outlet_id = $2",
@@ -327,11 +397,11 @@ describe("tenant outlet readiness", () => {
 
   it("rejects malformed identifiers and connection modes without writes or audit", async () => {
     const invalidInputs = [
-      { outletId: "not-a-uuid", defaultPickupAddressId: "pickup", defaultOriginAreaId: "origin", connectionMode: "platform_default" },
-      { outletId: outletA, defaultPickupAddressId: " ", defaultOriginAreaId: "origin", connectionMode: "platform_default" },
-      { outletId: outletA, defaultPickupAddressId: "pickup\u0000", defaultOriginAreaId: "origin", connectionMode: "platform_default" },
-      { outletId: outletA, defaultPickupAddressId: "x".repeat(161), defaultOriginAreaId: "origin", connectionMode: "platform_default" },
-      { outletId: outletA, defaultPickupAddressId: "pickup", defaultOriginAreaId: "origin", connectionMode: "forged" },
+      { outletId: "not-a-uuid", defaultPickupAddressId: "pickup", defaultPickupAddressLabel: "Pickup", defaultOriginAreaId: "origin", defaultOriginAreaLabel: "Area", connectionMode: "platform_default", expectedConnectionUpdatedAt: null },
+      { outletId: outletA, defaultPickupAddressId: " ", defaultPickupAddressLabel: "Pickup", defaultOriginAreaId: "origin", defaultOriginAreaLabel: "Area", connectionMode: "platform_default", expectedConnectionUpdatedAt: null },
+      { outletId: outletA, defaultPickupAddressId: "pickup\u0000", defaultPickupAddressLabel: "Pickup", defaultOriginAreaId: "origin", defaultOriginAreaLabel: "Area", connectionMode: "platform_default", expectedConnectionUpdatedAt: null },
+      { outletId: outletA, defaultPickupAddressId: "x".repeat(161), defaultPickupAddressLabel: "Pickup", defaultOriginAreaId: "origin", defaultOriginAreaLabel: "Area", connectionMode: "platform_default", expectedConnectionUpdatedAt: null },
+      { outletId: outletA, defaultPickupAddressId: "pickup", defaultPickupAddressLabel: "Pickup", defaultOriginAreaId: "origin", defaultOriginAreaLabel: "Area", connectionMode: "forged", expectedConnectionUpdatedAt: null },
     ] as const;
 
     for (const input of invalidInputs) {
@@ -359,8 +429,11 @@ describe("tenant outlet readiness", () => {
         updateOutletReadiness(tx, context, {
           outletId: outletA,
           defaultPickupAddressId: "operator-pickup",
+          defaultPickupAddressLabel: "Operator pickup",
           defaultOriginAreaId: "operator-origin",
+          defaultOriginAreaLabel: "Operator area",
           connectionMode: "platform_default",
+          expectedConnectionUpdatedAt: null,
         })),
     ).rejects.toBeInstanceOf(OutletSettingsDeniedError);
 
@@ -369,8 +442,11 @@ describe("tenant outlet readiness", () => {
         updateOutletReadiness(tx, context, {
           outletId: outletB,
           defaultPickupAddressId: "cross-tenant-pickup",
+          defaultPickupAddressLabel: "Cross-tenant pickup",
           defaultOriginAreaId: "cross-tenant-origin",
+          defaultOriginAreaLabel: "Cross-tenant area",
           connectionMode: "platform_default",
+          expectedConnectionUpdatedAt: null,
         })),
     ).rejects.toBeInstanceOf(OutletSettingsDeniedError);
 

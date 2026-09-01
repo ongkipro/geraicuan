@@ -12,7 +12,9 @@ export type OutletReadiness = {
   id: string;
   name: string;
   defaultPickupAddressId: string | null;
+  defaultPickupAddressLabel: string | null;
   defaultOriginAreaId: string | null;
+  defaultOriginAreaLabel: string | null;
   connectionIssue: "authentication" | "provider_unavailable" | "secret_unavailable" | null;
   connectionSource: "platform_default" | "private";
   connectionStatus: "platform_default" | "private_ready" | "private_attention";
@@ -35,13 +37,17 @@ export type ReadyShipmentOutlet = {
 export type OutletReadinessUpdate = {
   outletId: string;
   defaultPickupAddressId: string;
+  defaultPickupAddressLabel: string;
   defaultOriginAreaId: string;
+  defaultOriginAreaLabel: string;
   connectionMode: OutletConnectionMode;
+  expectedConnectionUpdatedAt: Date | null;
 };
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_OPAQUE_IDENTIFIER_LENGTH = 160;
+const MAX_LOCATION_LABEL_LENGTH = 320;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 
 export class OutletSettingsDeniedError extends Error {
@@ -84,6 +90,18 @@ function normalizeOpaqueIdentifier(value: string) {
   return normalized;
 }
 
+function normalizeLocationLabel(value: string) {
+  const normalized = value.trim();
+  if (
+    normalized.length === 0
+    || normalized.length > MAX_LOCATION_LABEL_LENGTH
+    || CONTROL_CHARACTER_PATTERN.test(normalized)
+  ) {
+    throw new OutletSettingsInvalidError();
+  }
+  return normalized;
+}
+
 async function loadOutletReadiness(
   tx: TenantTransaction,
   context: TenantContext,
@@ -93,7 +111,9 @@ async function loadOutletReadiness(
       id: outlets.id,
       name: outlets.name,
       defaultPickupAddressId: outlets.defaultPickupAddressId,
+      defaultPickupAddressLabel: outlets.defaultPickupAddressLabel,
       defaultOriginAreaId: outlets.defaultOriginAreaId,
+      defaultOriginAreaLabel: outlets.defaultOriginAreaLabel,
       hasPrivateConnection: sql<boolean>`${mengantarConnections.id} is not null`,
       hasCanonicalPrivateConnection: sql<boolean>`coalesce(
         ${mengantarConnections.secretReference} = (
@@ -131,7 +151,9 @@ async function loadOutletReadiness(
       id: row.id,
       name: row.name,
       defaultPickupAddressId: row.defaultPickupAddressId,
+      defaultPickupAddressLabel: row.defaultPickupAddressLabel,
       defaultOriginAreaId: row.defaultOriginAreaId,
+      defaultOriginAreaLabel: row.defaultOriginAreaLabel,
       connectionIssue:
         connectionStatus === "private_attention" ? "secret_unavailable" as const : null,
       connectionSource: row.hasPrivateConnection ? "private" : "platform_default",
@@ -206,10 +228,16 @@ export async function updateOutletReadiness(
     input.defaultPickupAddressId,
   );
   const defaultOriginAreaId = normalizeOpaqueIdentifier(input.defaultOriginAreaId);
+  const defaultPickupAddressLabel = normalizeLocationLabel(
+    input.defaultPickupAddressLabel,
+  );
+  const defaultOriginAreaLabel = normalizeLocationLabel(input.defaultOriginAreaLabel);
   const [outlet] = await tx
     .select({
       defaultOriginAreaId: outlets.defaultOriginAreaId,
+      defaultOriginAreaLabel: outlets.defaultOriginAreaLabel,
       defaultPickupAddressId: outlets.defaultPickupAddressId,
+      defaultPickupAddressLabel: outlets.defaultPickupAddressLabel,
       id: outlets.id,
     })
     .from(outlets)
@@ -226,7 +254,10 @@ export async function updateOutletReadiness(
   }
 
   const [existingConnection] = await tx
-    .select({ id: mengantarConnections.id })
+    .select({
+      id: mengantarConnections.id,
+      updatedAt: mengantarConnections.updatedAt,
+    })
     .from(mengantarConnections)
     .where(
       and(
@@ -241,10 +272,21 @@ export async function updateOutletReadiness(
   if (input.connectionMode !== authoritativeConnectionMode) {
     throw new OutletConnectionModeUnavailableError();
   }
+  const authoritativeConnectionUpdatedAt = existingConnection?.updatedAt
+    ? new Date(existingConnection.updatedAt).getTime()
+    : null;
+  if (
+    authoritativeConnectionUpdatedAt
+    !== (input.expectedConnectionUpdatedAt?.getTime() ?? null)
+  ) {
+    throw new OutletConnectionModeUnavailableError();
+  }
 
   if (
     outlet.defaultOriginAreaId === defaultOriginAreaId
     && outlet.defaultPickupAddressId === defaultPickupAddressId
+    && outlet.defaultOriginAreaLabel === defaultOriginAreaLabel
+    && outlet.defaultPickupAddressLabel === defaultPickupAddressLabel
   ) {
     return;
   }
@@ -252,11 +294,21 @@ export async function updateOutletReadiness(
   const updatedAt = new Date();
   const changedFields = [
     outlet.defaultPickupAddressId === defaultPickupAddressId ? null : "defaultPickupAddressId",
+    outlet.defaultPickupAddressLabel === defaultPickupAddressLabel
+      ? null
+      : "defaultPickupAddressLabel",
     outlet.defaultOriginAreaId === defaultOriginAreaId ? null : "defaultOriginAreaId",
+    outlet.defaultOriginAreaLabel === defaultOriginAreaLabel ? null : "defaultOriginAreaLabel",
   ].filter((field): field is string => field !== null);
   await tx
     .update(outlets)
-    .set({ defaultOriginAreaId, defaultPickupAddressId, updatedAt })
+    .set({
+      defaultOriginAreaId,
+      defaultOriginAreaLabel,
+      defaultPickupAddressId,
+      defaultPickupAddressLabel,
+      updatedAt,
+    })
     .where(
       and(
         eq(outlets.id, outlet.id),

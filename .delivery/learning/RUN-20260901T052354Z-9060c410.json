@@ -1,0 +1,82 @@
+{
+  "capturedAt": "2026-09-01T05:54:32Z",
+  "lesson": {
+    "check": "Run the Mengantar location, outlet settings action/page, and outlet readiness integration tests; no provider mutation is part of this contract.",
+    "fix": "Use the official Mengantar docs at https://api-public.mengantar.com/docs/; fetch the resolved account pickup list server-side, display safe labels, derive origin from PICKUP_AUTOFILL, and revalidate provider membership plus connection updated_at before persistence.",
+    "invariant": "For outlet pickup configuration, GET /api/public/{API_KEY}/address is server-only; pickup _id and PICKUP_AUTOFILL form one authoritative pickup-origin pair, and private writes must reject a changed account authority version.",
+    "rootCause": "The current official Mengantar pickup response contract had not been recorded as repository-owned evidence.",
+    "symptom": "Outlet settings previously required users or agents to supply opaque pickup and origin IDs without an accepted provider binding.",
+    "title": "Mengantar pickup and origin authority contract"
+  },
+  "provenance": {
+    "capability": "provider-location-authority",
+    "finishedAt": "2026-09-01T05:53:32Z",
+    "job": "full-stack-implementation",
+    "model": "gpt-5.6",
+    "provider": "openai-codex",
+    "reasoningEffort": "xhigh",
+    "requirement": "PR-28",
+    "risk": "R3",
+    "sourceHead": "cfca9ea8311c2d58374edbd26627078b59312f21",
+    "task": "T-52",
+    "verification": [
+      {
+        "check": "official-provider-contract",
+        "detail": "Official Mengantar docs retrieved 2026-09-01: GET /api/public/{API_KEY}/address maps pickup _id and PICKUP_AUTOFILL; GET /address/search is accepted for later destination work; no provider mutation ran.",
+        "status": "PASS"
+      },
+      {
+        "check": "migration-upgrade",
+        "detail": "Disposable PostgreSQL 16 applied migrations 0000-0025, preserved a representative legacy ID-only outlet, applied 0026, and retained both IDs with nullable labels.",
+        "status": "PASS"
+      },
+      {
+        "check": "focused-tests",
+        "detail": "6 focused files / 67 tests passed, including provider mapping, action authority, page contract, stale credential-version rejection, and UI audit ownership.",
+        "status": "PASS"
+      },
+      {
+        "check": "full-integration",
+        "detail": "61 files / 447 tests passed against isolated local PostgreSQL.",
+        "status": "PASS"
+      },
+      {
+        "check": "lint",
+        "detail": "Full pnpm lint passed without warnings after the final test mock correction.",
+        "status": "PASS"
+      },
+      {
+        "check": "typescript",
+        "detail": "pnpm exec tsc --noEmit passed.",
+        "status": "PASS"
+      },
+      {
+        "check": "production-build",
+        "detail": "Next.js 16.3.3 production build passed with isolated local DB and explicit non-production auth build values.",
+        "status": "PASS"
+      },
+      {
+        "check": "security-review",
+        "detail": "Independent Opus security review passed after account-authority TOCTOU correction.",
+        "status": "PASS"
+      },
+      {
+        "check": "ui-validation",
+        "detail": "Authenticated local Chromium plus independent designer review passed at 390/768/1280: readable pickup/derived area, 44px settled search input, keyboard/focus recovery, distinct empty/error states, zero horizontal overflow, and zero browser-to-Mengantar requests.",
+        "status": "PASS"
+      },
+      {
+        "check": "designer-review",
+        "detail": "Independent browser-backed designer post-edit review returned PASS with no remaining blockers.",
+        "status": "PASS"
+      }
+    ],
+    "worker": "codex"
+  },
+  "recommendedDestination": "project-memory",
+  "reusabilityScore": 70,
+  "runId": "RUN-20260901T052354Z-9060c410",
+  "schemaVersion": 1,
+  "scope": "project",
+  "signalHash": "e053dbf3b8b410a989009b776e8f7a65f1da8abe92bf3684a003354d478edcf6"
+}

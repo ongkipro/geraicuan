@@ -23,7 +23,19 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-50 and T-51 are complete locally. Tenant-managed Mengantar API keys now have an
+T-50 and T-51 are complete locally. The T-52/T-53 outlet-location slice now
+uses the official 2026-09-01 Mengantar pickup contract: Tenant Admins search
+readable account pickup labels, origin follows `PICKUP_AUTOFILL`, browser-
+submitted area IDs are ignored, and the server revalidates both provider
+membership and the private-account authority version before persistence.
+Additive migration 0026 stores pickup/origin labels while preserving legacy
+ID-only rows. Focused verification, migration upgrade, the full 61-file / 447-
+test suite, lint, TypeScript, production build, final browser-backed designer
+review, and independent security review pass. General destination search and the
+many-outlet list-detail/mobile selector remain T-52/T-53 work; no provider
+mutation or production call occurred.
+
+Tenant-managed Mengantar API keys now have an
 encrypted-at-rest, server-only lifecycle backed by additive migration 0025,
 forced RLS, tenant/outlet/purpose-bound AES-256-GCM envelopes, durable failed-
 attempt rate limiting, Tenant Admin create/replace/fallback actions, redacted
@@ -36,9 +48,7 @@ Chromium passed authenticated 390px, 768px, and 1280px settings journeys with
 10 outlets, zero horizontal overflow, blank password fields after create and
 replacement, and correct dialog focus restoration; focused T-51 verification
 passed 3 files / 43 tests, targeted lint, TypeScript, designer review, and
-independent security review. Provider-authoritative area/pickup search and the
-10–20 outlet list-detail experience remain T-52/T-53. No provider or production
-call occurred.
+independent security review.
 
 Pre-push verification on a fresh PostgreSQL 16 container also corrected the
 last T-49 runtime-role setup dependency in the analytics suite and made courier
@@ -94,7 +104,16 @@ provider or production action.
 
 ## Active work
 
-The accepted CMS precision and UI/UX goal is complete: T-35, its atomic queue
+The next executable sequence is T-52 followed by T-53. T-52 must complete the
+server-only general destination-area search and preserve one validated provider
+ID/readable-label binding through contacts, immutable party snapshots, drafts,
+estimates, and provider-order payload construction. T-53 then completes one
+responsive outlet context: compact list-detail at 1280px and one active-outlet
+selector at 390px/768px, verified with zero, one, ten, and twenty outlets. The
+accepted pickup selector is progress toward both tasks, not completion. No
+cache or canonical kecamatan dataset is planned without measured evidence.
+
+The earlier CMS precision and UI/UX goal is complete: T-35, its atomic queue
 T-37 through T-47, T-48, the corrective T-49 test-harness task, and final T-36
 verification all passed their recorded boundaries. T-47 corrective delivery-ledger run
 `RUN-20260901T010311Z-f801bb9f` closed the complete Super Admin monitoring,
@@ -114,9 +133,9 @@ ensure the guarded role explicitly. Final T-36 verification run
 `RUN-20260901T015655Z-f8920fff` passes the full automated, migration, build,
 traceability, and browser boundary. The release verdict remains NO-GO because
 the tree is uncommitted, the release manifest is DRAFT/UNSET, and no clean
-release candidate or release approval exists. No implementation or verification
-task remains in this goal; commit, release, live provider activity, and
-deployment remain explicitly unapproved.
+release candidate or release approval exists. That earlier goal has no remaining
+implementation task; the new T-52/T-53 sequence is separate. Commit, release,
+live provider activity, and deployment remain explicitly unapproved.
 
 ## Verification evidence
 

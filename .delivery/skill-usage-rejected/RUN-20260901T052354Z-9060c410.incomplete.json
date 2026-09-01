@@ -1,0 +1,19 @@
+{
+  "capability": "provider-location-authority",
+  "head": "cfca9ea8311c2d58374edbd26627078b59312f21",
+  "job": "full-stack-implementation",
+  "model": "gpt-5.6",
+  "provider": "openai-codex",
+  "reasoningEffort": "xhigh",
+  "recordedAt": "2026-09-01T05:53:37Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T052354Z-9060c410",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "mengantar-api"
+  ],
+  "usageHash": "0e5794bef2016989b88155b67d4116088cbc9b34d8e7c5ec05249878d731075f",
+  "verificationFailed": false,
+  "worker": "codex"
+}

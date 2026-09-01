@@ -17,6 +17,16 @@ export type MengantarCredentials = {
   pickupAddressId: string;
 };
 
+export type MengantarAccountCredentials = Pick<
+  MengantarCredentials,
+  "apiKey" | "baseUrl" | "pickupAddressId"
+>;
+
+export type MengantarAccountAuthority = {
+  connectionUpdatedAt: Date | null;
+  source: "private" | "platform_default";
+};
+
 export class MengantarConfigurationError extends Error {
   constructor() {
     super("Mengantar configuration is unavailable.");
@@ -43,6 +53,25 @@ function requireCompleteCredentials(value: MengantarCredentials) {
     throw new MengantarConfigurationError();
   }
 
+  return value;
+}
+
+function requireAccountCredentials(value: MengantarAccountCredentials) {
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(value.baseUrl);
+  } catch {
+    throw new MengantarConfigurationError();
+  }
+  if (
+    !value.apiKey.trim()
+    || baseUrl.protocol !== "https:"
+    || !baseUrl.hostname
+    || Boolean(baseUrl.username)
+    || Boolean(baseUrl.password)
+  ) {
+    throw new MengantarConfigurationError();
+  }
   return value;
 }
 
@@ -83,6 +112,28 @@ export async function resolveMengantarCredentials(
   context: TenantContext,
   outletId: string,
 ): Promise<{ credentials: MengantarCredentials; source: "private" | "platform_default" }> {
+  const resolved = await resolveMengantarAccountCredentials(tx, context, outletId);
+  return {
+    credentials: requireCompleteCredentials({
+      ...resolved.credentials,
+      originAreaId: resolved.originAreaId,
+      pickupAddressId: resolved.pickupAddressId,
+    }),
+    source: resolved.source,
+  };
+}
+
+export async function resolveMengantarAccountCredentials(
+  tx: TenantTransaction,
+  context: TenantContext,
+  outletId: string,
+): Promise<{
+  authority: MengantarAccountAuthority;
+  credentials: MengantarAccountCredentials;
+  originAreaId: string;
+  pickupAddressId: string;
+  source: "private" | "platform_default";
+}> {
   const outlet = await tx
     .select({
       defaultOriginAreaId: schema.outlets.defaultOriginAreaId,
@@ -102,7 +153,10 @@ export async function resolveMengantarCredentials(
   }
 
   const connection = await tx
-    .select({ secretReference: schema.mengantarConnections.secretReference })
+    .select({
+      secretReference: schema.mengantarConnections.secretReference,
+      updatedAt: schema.mengantarConnections.updatedAt,
+    })
     .from(schema.mengantarConnections)
     .where(
       and(
@@ -120,7 +174,11 @@ export async function resolveMengantarCredentials(
 
     try {
       return {
-        credentials: requireCompleteCredentials({
+        authority: {
+          connectionUpdatedAt: new Date(connection[0].updatedAt),
+          source: "private" as const,
+        },
+        credentials: requireAccountCredentials({
           apiKey: await loadManagedMengantarApiKey(
             tx,
             context,
@@ -128,9 +186,10 @@ export async function resolveMengantarCredentials(
             expectedReference,
           ),
           baseUrl: platformBaseUrl(),
-          originAreaId: outlet[0].defaultOriginAreaId ?? "",
           pickupAddressId: outlet[0].defaultPickupAddressId ?? "",
         }),
+        originAreaId: outlet[0].defaultOriginAreaId ?? "",
+        pickupAddressId: outlet[0].defaultPickupAddressId ?? "",
         source: "private",
       };
     } catch (error) {
@@ -141,5 +200,15 @@ export async function resolveMengantarCredentials(
     }
   }
 
-  return { credentials: platformCredentials(), source: "platform_default" };
+  const credentials = platformCredentials();
+  return {
+    authority: {
+      connectionUpdatedAt: null,
+      source: "platform_default",
+    },
+    credentials,
+    originAreaId: credentials.originAreaId,
+    pickupAddressId: credentials.pickupAddressId,
+    source: "platform_default",
+  };
 }
