@@ -15,6 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Technical design: `docs/spec/03-TECHNICAL-DESIGN.md`.
 - Architecture and data: `docs/spec/04-SYSTEM-ARCHITECTURE.md`, `docs/spec/05-DATA-MODEL.md`.
 - Tenancy, IAM, security, privacy, operations, and UX: `docs/spec/06-TENANT-ISOLATION.md` through `docs/spec/16-OBSERVABILITY-RATE-LIMITING.md`.
+- AI Code Navigation Map: `docs/spec/18-AI-ROUTE-MAP.md`.
 - Execution queue: root `TASKS.md`. Execute one task only after its requirement and constraints are accepted.
 - Runtime and release truth: `STATUS.md`, `BUILD-LOG.md`, `OBSERVABILITY.md`, and `RELEASE.md`.
 
