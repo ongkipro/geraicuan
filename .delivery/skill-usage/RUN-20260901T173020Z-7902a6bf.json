@@ -1,0 +1,19 @@
+{
+  "capability": "provider-destination-search",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "full-stack-implementation",
+  "model": "gpt-5.6",
+  "provider": "openai-codex",
+  "reasoningEffort": "xhigh",
+  "recordedAt": "2026-09-01T17:42:16Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T173020Z-7902a6bf",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "full-stack-development"
+  ],
+  "usageHash": "e880abddb15f7fa500b558af038a4a2b3c9f3c1d92e8e048787022de95e67d2b",
+  "verificationFailed": false,
+  "worker": "codex"
+}

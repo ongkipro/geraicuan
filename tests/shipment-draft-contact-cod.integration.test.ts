@@ -13,6 +13,10 @@ vi.mock("@/app/app/estimate-actions", () => ({
   loadShipmentEstimate: vi.fn(),
 }));
 
+vi.mock("@/app/app/location-actions", () => ({
+  searchMengantarDestinationAreas: vi.fn(),
+}));
+
 import { DraftEstimatePanel } from "@/app/app/draft-estimate-panel";
 import {
   invokeContactSearchFromKeyboard,
@@ -70,6 +74,10 @@ describe("shipment draft contact and COD experience", () => {
     expect(markup).toContain('aria-controls="recipient-contact-results"');
     expect(markup).toContain('noValidate=""');
     expect(occurrences(markup, "min-h-11")).toBeGreaterThanOrEqual(18);
+    expect(markup).toContain('name="destinationMode"');
+    expect(markup).toContain("Area tujuan Mengantar");
+    expect(markup).not.toContain("ID area tujuan");
+    expect(markup.indexOf("Outlet asal")).toBeLessThan(markup.indexOf("Area tujuan Mengantar"));
   });
 
   it("shows the selected contact and chosen address provenance", () => {

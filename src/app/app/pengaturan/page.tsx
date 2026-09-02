@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { OutletSettingsForm } from "@/app/app/pengaturan/outlet-settings-form";
-import { DefinitionGrid } from "@/components/cms/detail-section";
+import { OutletSettingsWorkspace } from "@/app/app/pengaturan/outlet-settings-workspace";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -31,8 +31,8 @@ const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
 
 const auditUpdatedAt = new Date("2026-09-01T00:00:00.000Z");
 
-function buildManyOutletAuditFixture(): OutletReadiness[] {
-  return Array.from({ length: 10 }, (_, index) => {
+function buildManyOutletAuditFixture(count = 10): OutletReadiness[] {
+  return Array.from({ length: count }, (_, index) => {
     const sequence = String(index + 1).padStart(12, "0");
     const needsAttention = index < 3;
     const privateAttention = needsAttention && index === 2;
@@ -70,7 +70,13 @@ function buildPickupOptionsAuditFixture(): MengantarPickupOption[] {
   }));
 }
 
-export default async function OutletSettingsPage() {
+type OutletSettingsPageProps = {
+  searchParams?: Promise<{ outlet?: string | string[] }>;
+};
+
+export default async function OutletSettingsPage({
+  searchParams = Promise.resolve({}),
+}: OutletSettingsPageProps = {}) {
   let principal;
   try {
     principal = await requireCmsScope("tenant");
@@ -105,8 +111,8 @@ export default async function OutletSettingsPage() {
   let outlets: OutletReadiness[];
   if (auditScenario === "settings-empty" || auditScenario === "settings-first-run") {
     outlets = [];
-  } else if (auditScenario === "settings-many") {
-    outlets = buildManyOutletAuditFixture();
+  } else if (auditScenario === "settings-many" || auditScenario === "settings-twenty") {
+    outlets = buildManyOutletAuditFixture(auditScenario === "settings-twenty" ? 20 : 10);
   } else if (auditScenario === "settings-private-attention") {
     outlets = [{
       id: "79000000-0000-4000-8000-000000000099",
@@ -162,9 +168,23 @@ export default async function OutletSettingsPage() {
     }
     return left.name.localeCompare(right.name, "id-ID") || left.id.localeCompare(right.id);
   });
+  const requestedOutlet = (await searchParams).outlet;
+  const requestedOutletId = typeof requestedOutlet === "string" ? requestedOutlet : null;
+  const activeOutlet = orderedOutlets.find(({ id }) => id === requestedOutletId)
+    ?? orderedOutlets[0]
+    ?? null;
+  const activePickupOptionsFixture = auditScenario === "settings-many"
+    || auditScenario === "settings-twenty"
+    ? { options: buildPickupOptionsAuditFixture(), success: true as const }
+    : auditScenario === "settings-provider-error"
+      ? {
+          message:
+            "Daftar pickup Mengantar belum dapat dimuat. Pilihan tersimpan tidak berubah.",
+        }
+      : undefined;
 
   return (
-    <PageContainer>
+    <PageContainer width="wide">
       <PageHeader
         description="Lengkapi pickup, area asal, dan sumber koneksi. Nilai kredensial tidak pernah dikirim ke browser."
         eyebrow="Pengaturan"
@@ -183,60 +203,83 @@ export default async function OutletSettingsPage() {
       ) : (
         <>
           {outlets.length > 1 ? (
-            <section aria-label="Ringkasan kesiapan outlet">
-              <DefinitionGrid
-                items={[
-                  { label: "Total outlet", value: outlets.length },
-                  { label: "Siap dipakai", value: readyCount },
-                  { label: "Koneksi privat", value: privateCount },
-                  { label: "Default platform", value: outlets.length - privateCount },
-                ]}
-              />
-            </section>
+            <dl
+              aria-label="Ringkasan kesiapan outlet"
+              className="grid grid-cols-2 border-y xl:grid-cols-4"
+            >
+              {[
+                ["Total outlet", outlets.length],
+                ["Siap dipakai", readyCount],
+                ["Perlu dilengkapi", outlets.length - readyCount],
+                ["Koneksi privat", privateCount],
+              ].map(([label, value], index) => (
+                <div
+                  className={`grid gap-1 px-3 py-3 ${index % 2 === 1 ? "border-l" : ""} ${index > 1 ? "border-t xl:border-t-0" : ""} ${index > 0 ? "xl:border-l" : ""}`}
+                  key={label}
+                >
+                  <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                  <dd className="text-sm font-semibold tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
           ) : null}
 
-          <section aria-label="Daftar pengaturan outlet" className="grid max-w-3xl gap-4">
-            {outlets.length > 1 ? (
-              <p className="text-sm leading-6 text-muted-foreground">
-                Outlet yang perlu dilengkapi ditampilkan lebih dulu. Buka outlet siap pakai untuk
-                mengubah pickup atau memeriksa sumber koneksinya.
-              </p>
-            ) : null}
-            {orderedOutlets.map((outlet) => (
-              <OutletSettingsForm
-                defaultExpanded={
-                  outlets.length === 1 || outlet.readinessStatus === "needs_attention"
-                }
-                key={outlet.id}
-                pickupOptionsFixture={
-                  auditScenario === "settings-many"
-                    ? { options: buildPickupOptionsAuditFixture(), success: true }
-                    : auditScenario === "settings-provider-error"
-                      ? {
-                          message:
-                            "Daftar pickup Mengantar belum dapat dimuat. Pilihan tersimpan tidak berubah.",
-                        }
-                      : undefined
-                }
-                outlet={{
-                  id: outlet.id,
-                  name: outlet.name,
-                  defaultPickupAddressId: outlet.defaultPickupAddressId,
-                  defaultPickupAddressLabel: outlet.defaultPickupAddressLabel,
-                  defaultOriginAreaId: outlet.defaultOriginAreaId,
-                  defaultOriginAreaLabel: outlet.defaultOriginAreaLabel,
-                  connectionIssue: outlet.connectionIssue,
-                  connectionSource: outlet.connectionSource,
-                  connectionStatus: outlet.connectionStatus,
-                  connectionUpdatedAtLabel: outlet.connectionUpdatedAt
-                    ? `${updatedAtFormatter.format(outlet.connectionUpdatedAt)} WIB`
-                    : null,
-                  readinessStatus: outlet.readinessStatus,
-                  updatedAtLabel: `${updatedAtFormatter.format(outlet.updatedAt)} WIB`,
-                }}
-              />
-            ))}
-          </section>
+          {activeOutlet ? (
+            outlets.length === 1 ? (
+              <div className="max-w-3xl border-y py-6">
+                <OutletSettingsForm
+                  key={activeOutlet.id}
+                  pickupOptionsFixture={activePickupOptionsFixture}
+                  outlet={{
+                    id: activeOutlet.id,
+                    name: activeOutlet.name,
+                    defaultPickupAddressId: activeOutlet.defaultPickupAddressId,
+                    defaultPickupAddressLabel: activeOutlet.defaultPickupAddressLabel,
+                    defaultOriginAreaId: activeOutlet.defaultOriginAreaId,
+                    defaultOriginAreaLabel: activeOutlet.defaultOriginAreaLabel,
+                    connectionIssue: activeOutlet.connectionIssue,
+                    connectionSource: activeOutlet.connectionSource,
+                    connectionStatus: activeOutlet.connectionStatus,
+                    connectionUpdatedAtLabel: activeOutlet.connectionUpdatedAt
+                      ? `${updatedAtFormatter.format(activeOutlet.connectionUpdatedAt)} WIB`
+                      : null,
+                    readinessStatus: activeOutlet.readinessStatus,
+                    updatedAtLabel: `${updatedAtFormatter.format(activeOutlet.updatedAt)} WIB`,
+                  }}
+                />
+              </div>
+            ) : (
+              <OutletSettingsWorkspace
+                activeOutletId={activeOutlet.id}
+                outlets={orderedOutlets.map(({ id, name, readinessStatus }) => ({
+                  id,
+                  name,
+                  readinessStatus,
+                }))}
+              >
+                <OutletSettingsForm
+                  key={activeOutlet.id}
+                  pickupOptionsFixture={activePickupOptionsFixture}
+                  outlet={{
+                    id: activeOutlet.id,
+                    name: activeOutlet.name,
+                    defaultPickupAddressId: activeOutlet.defaultPickupAddressId,
+                    defaultPickupAddressLabel: activeOutlet.defaultPickupAddressLabel,
+                    defaultOriginAreaId: activeOutlet.defaultOriginAreaId,
+                    defaultOriginAreaLabel: activeOutlet.defaultOriginAreaLabel,
+                    connectionIssue: activeOutlet.connectionIssue,
+                    connectionSource: activeOutlet.connectionSource,
+                    connectionStatus: activeOutlet.connectionStatus,
+                    connectionUpdatedAtLabel: activeOutlet.connectionUpdatedAt
+                      ? `${updatedAtFormatter.format(activeOutlet.connectionUpdatedAt)} WIB`
+                      : null,
+                    readinessStatus: activeOutlet.readinessStatus,
+                    updatedAtLabel: `${updatedAtFormatter.format(activeOutlet.updatedAt)} WIB`,
+                  }}
+                />
+              </OutletSettingsWorkspace>
+            )
+          ) : null}
         </>
       )}
     </PageContainer>

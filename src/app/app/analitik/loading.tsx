@@ -20,6 +20,7 @@ export default function AnalyticsLoading() {
     >
       <PageHeader
         description="Menyiapkan ringkasan, perbandingan periode, tren, dan daftar kiriman."
+        eyebrow="Wawasan"
         title="Analitik"
       />
       <Card className="hidden md:flex" size="sm">

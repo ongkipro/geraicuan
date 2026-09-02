@@ -159,10 +159,12 @@ async function seedShipment(input: {
   );
   await adminPool.query(
     `INSERT INTO shipment_parties (
-      tenant_id, shipment_id, role, name, phone, address, created_at
+      tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label, created_at
     ) VALUES
-      ($1, $2, 'SENDER', 'Pengirim fixture', '081211110000', 'Alamat pengirim fixture', $3),
-      ($1, $2, 'RECIPIENT', $4, '081299990000', 'Alamat penerima fixture', $3)`,
+      ($1, $2, 'SENDER', 'Pengirim fixture', '081211110000', 'Alamat pengirim fixture', NULL, NULL, $3),
+      ($1, $2, 'RECIPIENT', $4, '081299990000', 'Alamat penerima fixture',
+        (SELECT destination_area_id FROM shipment_drafts WHERE shipment_id = $2),
+        (SELECT destination_area_label FROM shipment_drafts WHERE shipment_id = $2), $3)`,
     [tenantId, id, createdAt, `Penerima ${input.sequence}`],
   );
 
@@ -185,8 +187,11 @@ async function seedIssuedEvent(input: {
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
       id, tenant_id, shipment_id, outlet_id, origin_area_id,
-      destination_area_id, weight_grams, is_cod_requested, credential_source
-    ) VALUES ($1, $2, $3, $4, 'origin', 'destination', 1000, false, 'platform_default')`,
+      destination_area_id, destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES ($1, $2, $3, $4, 'origin',
+      (SELECT destination_area_id FROM shipment_drafts WHERE shipment_id = $3),
+      (SELECT destination_area_label FROM shipment_drafts WHERE shipment_id = $3),
+      1000, false, 'platform_default')`,
     [snapshotId, input.tenantId, input.shipmentId, input.outletId],
   );
   await adminPool.query(
@@ -215,10 +220,12 @@ async function seedIssuedEvent(input: {
   await adminPool.query(
     `INSERT INTO provider_order_snapshots (
       id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
-      estimate_service_id, position, provider_service, currency,
+      estimate_service_id, position, provider_service, destination_area_id, destination_area_label, currency,
       shipping_amount_idr, is_cod, status, provider_order_id, is_paid,
       cnote_no, resolved_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE REG', 'IDR', 10000,
+    ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE REG',
+      (SELECT destination_area_id FROM shipment_drafts WHERE shipment_id = $4),
+      (SELECT destination_area_label FROM shipment_drafts WHERE shipment_id = $4), 'IDR', 10000,
       false, 'ISSUED', $7, true, $8, $9)`,
     [
       orderId,

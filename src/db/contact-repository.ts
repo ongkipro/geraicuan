@@ -214,6 +214,118 @@ export async function addContactAddress(
   }
 }
 
+export async function hasActiveContactAddressMutationTarget(
+  tx: TenantTransaction,
+  context: TenantContext,
+  contactId: string,
+  addressId?: string,
+) {
+  if (!addressId) {
+    const rows = await tx
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.id, contactId),
+          eq(contacts.tenantId, context.tenantId),
+          isNull(contacts.archivedAt),
+        ),
+      )
+      .limit(1);
+    return rows.length === 1;
+  }
+  const rows = await tx
+    .select({ id: contactAddresses.id })
+    .from(contactAddresses)
+    .innerJoin(
+      contacts,
+      and(
+        eq(contacts.id, contactAddresses.contactId),
+        eq(contacts.tenantId, contactAddresses.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(contactAddresses.id, addressId),
+        eq(contactAddresses.contactId, contactId),
+        eq(contactAddresses.tenantId, context.tenantId),
+        isNull(contactAddresses.archivedAt),
+        isNull(contacts.archivedAt),
+      ),
+    )
+    .limit(1);
+  return rows.length === 1;
+}
+
+export async function updateContactAddress(
+  tx: TenantTransaction,
+  context: TenantContext,
+  contactId: string,
+  addressId: string,
+  input: Pick<ContactDirectoryInput, "address" | "addressLabel"> & {
+    destinationArea?: { id: string; label: string } | null;
+  },
+) {
+  const [current] = await tx
+    .select({
+      destinationAreaId: contactAddresses.destinationAreaId,
+      destinationAreaLabel: contactAddresses.destinationAreaLabel,
+    })
+    .from(contactAddresses)
+    .innerJoin(
+      contacts,
+      and(
+        eq(contacts.id, contactAddresses.contactId),
+        eq(contacts.tenantId, contactAddresses.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(contactAddresses.id, addressId),
+        eq(contactAddresses.contactId, contactId),
+        eq(contactAddresses.tenantId, context.tenantId),
+        isNull(contactAddresses.archivedAt),
+        isNull(contacts.archivedAt),
+      ),
+    )
+    .limit(1)
+    .for("update", { of: [contactAddresses] });
+  if (!current) throw new ContactUnavailableError();
+  const destinationAreaId = input.destinationArea === undefined
+    ? current.destinationAreaId
+    : input.destinationArea?.id ?? null;
+  const destinationAreaLabel = input.destinationArea === undefined
+    ? current.destinationAreaLabel
+    : input.destinationArea?.label ?? null;
+
+  try {
+    const updated = await tx
+      .update(contactAddresses)
+      .set({
+        address: input.address,
+        destinationAreaId,
+        destinationAreaLabel,
+        label: input.addressLabel,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(contactAddresses.id, addressId),
+          eq(contactAddresses.contactId, contactId),
+          eq(contactAddresses.tenantId, context.tenantId),
+          isNull(contactAddresses.archivedAt),
+        ),
+      )
+      .returning({ id: contactAddresses.id });
+    if (updated.length !== 1) throw new ContactUnavailableError();
+  } catch (error) {
+    if (isContactAddressLabelConflict(error)) {
+      throw new ContactAddressLabelConflictError();
+    }
+    throw error;
+  }
+}
+
 export async function updateContact(
   tx: TenantTransaction,
   context: TenantContext,

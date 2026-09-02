@@ -107,12 +107,29 @@ export async function fetchMengantarEstimate(
   credentials: MengantarCredentials,
   request: DraftEstimateRequest,
 ): Promise<SupportedEstimateService[]> {
-  const baseUrl = new URL(credentials.baseUrl);
-  if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password) {
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(credentials.baseUrl);
+  } catch {
+    throw new MengantarEstimateError();
+  }
+  if (
+    baseUrl.protocol !== "https:"
+    || !baseUrl.hostname
+    || baseUrl.username
+    || baseUrl.password
+    || baseUrl.pathname !== "/"
+    || baseUrl.search
+    || baseUrl.hash
+    || !credentials.apiKey.trim()
+  ) {
     throw new MengantarEstimateError();
   }
 
-  const endpoint = new URL(`${baseUrl.toString().replace(/\/$/, "")}/api/public/${credentials.apiKey}/order/estimate`);
+  const endpoint = new URL(
+    `/api/public/${encodeURIComponent(credentials.apiKey)}/order/estimate`,
+    baseUrl.origin,
+  );
   endpoint.searchParams.set("origin_id", request.originAreaId);
   endpoint.searchParams.set("destination_id", request.destinationAreaId);
   endpoint.searchParams.set("courier", "all");

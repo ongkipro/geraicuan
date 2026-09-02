@@ -6,6 +6,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 
 import { saveContact, type CreateContactState } from "@/app/app/kontak/actions";
+import { DestinationAreaSelector, type DestinationAreaOutlet } from "@/app/app/destination-area-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,16 +22,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-function SubmitButton() {
+function SubmitButton({ disabled = false }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">
+    <Button className="min-h-11 max-sm:w-full" disabled={disabled || pending} type="submit">
       {pending ? "Menyimpan…" : "Simpan kontak"}
     </Button>
   );
 }
 
-export function ContactForm() {
+export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
   const [state, formAction, pending] = useActionState<CreateContactState, FormData>(saveContact, {});
   const errors = state.errors ?? {};
   const values = state.values ?? {};
@@ -120,19 +121,13 @@ export function ContactForm() {
               <Textarea aria-describedby={describedBy("addressText")} aria-invalid={Boolean(errors.addressText)} className="min-h-24" defaultValue={values.addressText} id="addressText" name="addressText" required rows={3} />
               <FieldError id="addressText-error">{errors.addressText}</FieldError>
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={Boolean(errors.areaLabel)}>
-                <FieldLabel htmlFor="areaLabel">Nama area</FieldLabel>
-                <Input aria-describedby={describedBy("areaLabel")} aria-invalid={Boolean(errors.areaLabel)} className="min-h-11" defaultValue={values.areaLabel} id="areaLabel" name="areaLabel" />
-                <FieldError id="areaLabel-error">{errors.areaLabel}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.areaId)}>
-                <FieldLabel htmlFor="areaId">ID area</FieldLabel>
-                <Input aria-describedby={describedBy("areaId")} aria-invalid={Boolean(errors.areaId)} className="min-h-11" defaultValue={values.areaId} id="areaId" name="areaId" />
-                <FieldError id="areaId-error">{errors.areaId}</FieldError>
-              </Field>
-            </div>
-            <FieldDescription>Isi nama dan ID area bila kontak dipakai sebagai penerima agar tujuan draf terisi otomatis.</FieldDescription>
+            <DestinationAreaSelector
+              defaultSelection={state.selectedArea}
+              defaultQuery={state.areaQuery}
+              error={errors.areaLabel}
+              key={state.selectedArea ? `${state.selectedArea.outletId}:${state.selectedArea.areaId}:${state.selectedArea.query}` : state.areaQuery ? `${state.areaQuery.outletId}:${state.areaQuery.query}:invalid` : "area-empty"}
+              outlets={outlets}
+            />
           </FieldGroup>
         </CardContent>
       </Card>

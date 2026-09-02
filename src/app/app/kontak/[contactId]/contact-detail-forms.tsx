@@ -12,7 +12,9 @@ import {
   type ContactArchiveState,
   type ContactIdentityState,
   updateContactAction,
+  updateContactAddressAction,
 } from "@/app/app/kontak/[contactId]/actions";
+import { DestinationAreaSelector, type DestinationAreaOutlet } from "@/app/app/destination-area-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,8 +74,24 @@ export function ContactIdentityForm({ contact }: { contact: { id: string; isReci
   );
 }
 
-export function ContactAddressForm({ contactId }: { contactId: string }) {
-  const [state, action, pending] = useActionState<ContactAddressState, FormData>(addContactAddressAction, {});
+type EditableAddress = {
+  address: string;
+  destinationAreaId: string | null;
+  destinationAreaLabel: string | null;
+  id: string;
+  label: string;
+};
+
+export function ContactAddressForm({
+  address,
+  contactId,
+  outlets,
+}: {
+  address?: EditableAddress;
+  contactId: string;
+  outlets: DestinationAreaOutlet[];
+}) {
+  const [state, action, pending] = useActionState<ContactAddressState, FormData>(address ? updateContactAddressAction : addContactAddressAction, {});
   const feedbackRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const errors = state.errors ?? {};
@@ -85,15 +103,22 @@ export function ContactAddressForm({ contactId }: { contactId: string }) {
   return (
     <form action={action} aria-busy={pending} className="grid gap-6" id="alamat-baru" noValidate>
       <input name="contactId" type="hidden" value={contactId} />
+      {address ? <input name="addressId" type="hidden" value={address.id} /> : null}
       <MutationFeedback state={state} targetRef={feedbackRef} />
-      {Object.keys(errors).length > 0 ? <Alert role="alert" variant="destructive"><AlertTitle>Periksa alamat baru</AlertTitle><AlertDescription><ul className="list-disc pl-5">{Object.entries(errors).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul></AlertDescription></Alert> : null}
-      <FieldSet><FieldLegend>Alamat baru</FieldLegend><FieldGroup>
-        <Field data-invalid={Boolean(errors.addressLabel)}><FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel><Input aria-describedby={errors.addressLabel ? "addressLabel-hint addressLabel-error" : "addressLabel-hint"} aria-invalid={Boolean(errors.addressLabel)} className="min-h-11" defaultValue={values.addressLabel} id="addressLabel" maxLength={60} name="addressLabel" required /><FieldDescription id="addressLabel-hint">Contoh: Gudang Bandung, Rumah, Toko Pusat.</FieldDescription><FieldError id="addressLabel-error">{errors.addressLabel}</FieldError></Field>
-        <Field data-invalid={Boolean(errors.addressText)}><FieldLabel htmlFor="addressText">Alamat lengkap</FieldLabel><Textarea aria-describedby={errors.addressText ? "addressText-error" : undefined} aria-invalid={Boolean(errors.addressText)} defaultValue={values.addressText} id="addressText" maxLength={500} name="addressText" required rows={3} /><FieldError id="addressText-error">{errors.addressText}</FieldError></Field>
-        <div className="grid gap-5 sm:grid-cols-2"><Field data-invalid={Boolean(errors.areaLabel)}><FieldLabel htmlFor="areaLabel">Nama area</FieldLabel><Input aria-describedby={errors.areaLabel ? "areaLabel-error" : undefined} aria-invalid={Boolean(errors.areaLabel)} className="min-h-11" defaultValue={values.areaLabel} id="areaLabel" maxLength={160} name="areaLabel" /><FieldError id="areaLabel-error">{errors.areaLabel}</FieldError></Field><Field data-invalid={Boolean(errors.areaId)}><FieldLabel htmlFor="areaId">ID area</FieldLabel><Input aria-describedby={errors.areaId ? "areaId-error" : undefined} aria-invalid={Boolean(errors.areaId)} className="min-h-11" defaultValue={values.areaId} id="areaId" maxLength={160} name="areaId" /><FieldError id="areaId-error">{errors.areaId}</FieldError></Field></div>
-        <FieldDescription>Isi nama dan ID area sekaligus bila kontak dipakai sebagai penerima.</FieldDescription>
+      {Object.keys(errors).length > 0 ? <Alert role="alert" variant="destructive"><AlertTitle>{address ? "Periksa perubahan alamat" : "Periksa alamat baru"}</AlertTitle><AlertDescription><ul className="list-disc pl-5">{Object.entries(errors).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul></AlertDescription></Alert> : null}
+      <FieldSet><FieldLegend>{address ? `Edit ${address.label}` : "Alamat baru"}</FieldLegend><FieldGroup>
+        <Field data-invalid={Boolean(errors.addressLabel)}><FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel><Input aria-describedby={errors.addressLabel ? "addressLabel-hint addressLabel-error" : "addressLabel-hint"} aria-invalid={Boolean(errors.addressLabel)} className="min-h-11" defaultValue={values.addressLabel ?? address?.label} id="addressLabel" maxLength={60} name="addressLabel" required /><FieldDescription id="addressLabel-hint">Contoh: Gudang Bandung, Rumah, Toko Pusat.</FieldDescription><FieldError id="addressLabel-error">{errors.addressLabel}</FieldError></Field>
+        <Field data-invalid={Boolean(errors.addressText)}><FieldLabel htmlFor="addressText">Alamat lengkap</FieldLabel><Textarea aria-describedby={errors.addressText ? "addressText-error" : undefined} aria-invalid={Boolean(errors.addressText)} defaultValue={values.addressText ?? address?.address} id="addressText" maxLength={500} name="addressText" required rows={3} /><FieldError id="addressText-error">{errors.addressText}</FieldError></Field>
+        <DestinationAreaSelector
+          defaultArea={address?.destinationAreaId && address.destinationAreaLabel ? { areaId: address.destinationAreaId, areaLabel: address.destinationAreaLabel } : null}
+          defaultQuery={state.areaQuery}
+          defaultSelection={state.selectedArea}
+          error={errors.areaLabel}
+          key={state.selectedArea ? `${state.selectedArea.outletId}:${state.selectedArea.areaId}:${state.selectedArea.query}` : state.areaQuery ? `${state.areaQuery.outletId}:${state.areaQuery.query}:invalid` : `area-${address?.id ?? "new"}`}
+          outlets={outlets}
+        />
       </FieldGroup></FieldSet>
-      <MutationButton idle="Simpan alamat" pending="Menyimpan…" />
+      <MutationButton idle={address ? "Simpan perubahan alamat" : "Simpan alamat"} pending="Menyimpan…" />
     </form>
   );
 }

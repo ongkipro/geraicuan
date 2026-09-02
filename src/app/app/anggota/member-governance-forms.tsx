@@ -5,8 +5,9 @@ import { UserPlus } from "lucide-react";
 
 import { changeMemberRoleAction, deactivateMemberAction, inviteMemberAction, type MemberActionState } from "@/app/app/anggota/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { TenantMemberRole } from "@/db/member-governance-repository";
@@ -99,9 +100,15 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
   const [roleState, roleAction, rolePending] = useActionState(changeMemberRoleAction, { nextAttemptId: roleAttemptId });
   const [deactivateState, deactivateAction, deactivatePending] = useActionState(deactivateMemberAction, { nextAttemptId: deactivateAttemptId });
   const roleRef = useRef<HTMLSelectElement>(null);
+  const roleTriggerRef = useRef<HTMLButtonElement>(null);
   const roleResultRef = useRef<HTMLDivElement>(null);
+  const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
   const deactivateResultRef = useRef<HTMLDivElement>(null);
+  const roleFocusAfterCloseRef = useRef<"field" | "result" | null>(null);
+  const deactivateResultAfterCloseRef = useRef(false);
   const [expanded, setExpanded] = useState(false);
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<TenantMemberRole>(roleState.values?.role ?? role);
   const suffix = membershipId.replaceAll("-", "");
   const roleFormId = `member-role-form-${suffix}`;
@@ -109,12 +116,22 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
 
   useEffect(() => {
     if (!roleState.resultToken) return;
-    if (roleState.errors?.role) roleRef.current?.focus();
-    else roleResultRef.current?.focus();
+    roleFocusAfterCloseRef.current = roleState.errors?.role ? "field" : "result";
+    const frame = window.requestAnimationFrame(() => {
+      setExpanded(true);
+      setRoleDialogOpen(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [roleState.errors?.role, roleState.resultToken]);
 
   useEffect(() => {
-    if (deactivateState.resultToken) deactivateResultRef.current?.focus();
+    if (!deactivateState.resultToken) return;
+    deactivateResultAfterCloseRef.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      setExpanded(true);
+      setDeactivateDialogOpen(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [deactivateState.resultToken, status]);
 
   if (status === "SUSPENDED") {
@@ -129,11 +146,15 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
     return <p className="text-sm leading-6 text-muted-foreground" role="status">{isLastActiveAdmin ? "Akun ini adalah Tenant Admin aktif terakhir dan tidak dapat diubah atau dinonaktifkan." : "Peran dan status akun Anda harus diubah oleh Tenant Admin aktif lain."}</p>;
   }
 
-  const hasResult = Boolean(roleState.resultToken || deactivateState.resultToken);
   return (
-    <details className="group rounded-lg border bg-muted/20" onToggle={(event) => setExpanded(event.currentTarget.open)} open={expanded || hasResult}>
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-medium marker:content-none">Kelola akses<span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span></summary>
-      <div className="grid gap-5 border-t p-4 lg:grid-cols-2">
+    <Collapsible className="rounded-lg border bg-muted/20" onOpenChange={setExpanded} open={expanded}>
+      <CollapsibleTrigger asChild>
+        <Button className="group min-h-11 w-full justify-between rounded-lg px-4 text-sm font-medium" type="button" variant="ghost">
+          Kelola akses
+          <span aria-hidden="true" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180">⌄</span>
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="grid gap-5 border-t p-4 lg:grid-cols-2">
         <form action={roleAction} aria-busy={rolePending} className="grid content-start gap-4" id={roleFormId} noValidate>
           <input name="attemptId" type="hidden" value={roleState.nextAttemptId ?? roleAttemptId} />
           <input name="membershipId" type="hidden" value={membershipId} />
@@ -148,11 +169,20 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
                 </select>
                 <FieldError id={`member-role-error-${suffix}`}>{roleState.errors?.role}</FieldError>
               </Field>
-              <AlertDialog>
-                <AlertDialogTrigger asChild><Button className="min-h-11" disabled={rolePending || selectedRole === role} type="button" variant="outline">Tinjau perubahan</Button></AlertDialogTrigger>
-                <AlertDialogContent>
+              <AlertDialog onOpenChange={setRoleDialogOpen} open={roleDialogOpen}>
+                <AlertDialogTrigger asChild><Button className="min-h-11" disabled={rolePending || selectedRole === role} ref={roleTriggerRef} type="button" variant="outline">Tinjau perubahan</Button></AlertDialogTrigger>
+                <AlertDialogContent onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  const target = roleFocusAfterCloseRef.current === "field"
+                    ? roleRef.current
+                    : roleFocusAfterCloseRef.current === "result"
+                      ? roleResultRef.current
+                      : roleTriggerRef.current;
+                  roleFocusAfterCloseRef.current = null;
+                  window.requestAnimationFrame(() => target?.focus());
+                }}>
                   <AlertDialogHeader><AlertDialogTitle>Ubah peran {name} menjadi {selectedRole === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"}?</AlertDialogTitle><AlertDialogDescription>Izin baru berlaku pada permintaan CMS berikutnya dan perubahan ini dicatat di jejak audit.</AlertDialogDescription></AlertDialogHeader>
-                  <AlertDialogFooter><AlertDialogCancel>Batalkan</AlertDialogCancel><AlertDialogAction form={roleFormId} name="confirmation" type="submit" value="CONFIRM_ROLE_CHANGE">{rolePending ? "Menyimpan…" : "Ubah peran"}</AlertDialogAction></AlertDialogFooter>
+                  <AlertDialogFooter><AlertDialogCancel className="min-h-11" disabled={rolePending}>Batalkan</AlertDialogCancel><Button className="min-h-11" disabled={rolePending} form={roleFormId} name="confirmation" type="submit" value="CONFIRM_ROLE_CHANGE">{rolePending ? "Menyimpan…" : "Ubah peran"}</Button></AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             </FieldGroup>
@@ -164,17 +194,22 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
           <FieldSet disabled={deactivatePending}>
             <FieldLegend>Nonaktifkan akses</FieldLegend>
             <FieldDescription>{role === "TENANT_ADMIN" ? "Tenant Admin hanya dapat dinonaktifkan jika admin aktif lain tetap tersedia." : "Anggota tidak dapat memakai CMS tenant setelah tindakan ini selesai."}</FieldDescription>
-            <AlertDialog>
-              <AlertDialogTrigger asChild><Button className="mt-4 min-h-11 w-full" disabled={deactivatePending} type="button" variant="destructive">Nonaktifkan anggota</Button></AlertDialogTrigger>
-              <AlertDialogContent>
+            <AlertDialog onOpenChange={setDeactivateDialogOpen} open={deactivateDialogOpen}>
+              <AlertDialogTrigger asChild><Button className="mt-4 min-h-11 w-full" disabled={deactivatePending} ref={deactivateTriggerRef} type="button" variant="destructive">Nonaktifkan anggota</Button></AlertDialogTrigger>
+              <AlertDialogContent onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const target = deactivateResultAfterCloseRef.current ? deactivateResultRef.current : deactivateTriggerRef.current;
+                deactivateResultAfterCloseRef.current = false;
+                window.requestAnimationFrame(() => target?.focus());
+              }}>
                 <AlertDialogHeader><AlertDialogTitle>Nonaktifkan akses {name}?</AlertDialogTitle><AlertDialogDescription>{name} tidak akan dapat memakai CMS tenant. Keanggotaan dapat diaktifkan kembali melalui undangan baru.</AlertDialogDescription></AlertDialogHeader>
-                <AlertDialogFooter><AlertDialogCancel>Batalkan</AlertDialogCancel><AlertDialogAction form={deactivateFormId} name="confirmation" type="submit" value="CONFIRM_DEACTIVATE" variant="destructive">{deactivatePending ? "Menonaktifkan…" : `Nonaktifkan ${name}`}</AlertDialogAction></AlertDialogFooter>
+                <AlertDialogFooter><AlertDialogCancel className="min-h-11" disabled={deactivatePending}>Batalkan</AlertDialogCancel><Button className="min-h-11" disabled={deactivatePending} form={deactivateFormId} name="confirmation" type="submit" value="CONFIRM_DEACTIVATE" variant="destructive">{deactivatePending ? "Menonaktifkan…" : `Nonaktifkan ${name}`}</Button></AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           </FieldSet>
           <ActionMessage resultRef={deactivateResultRef} state={deactivateState} />
         </form>
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

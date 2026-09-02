@@ -17,16 +17,28 @@ type LoginFormProps = {
     password: string;
   };
   destination: "/app" | "/platform";
+  initialNotice?: "access-unavailable" | "session-required";
 };
 
-export function LoginForm({ demoCredentials, destination }: LoginFormProps) {
+const notices = {
+  "access-unavailable": "Akun ini tidak dapat membuka workspace tersebut. Gunakan halaman masuk yang sesuai atau hubungi administrator.",
+  "session-required": "Sesi diperlukan untuk membuka workspace ini. Silakan masuk kembali.",
+} as const;
+
+export function LoginForm({
+  demoCredentials,
+  destination,
+  initialNotice,
+}: LoginFormProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState(initialNotice);
   const describedBy = [
     demoCredentials ? "demo-hint" : undefined,
+    notice ? "login-notice" : undefined,
     error ? "login-error" : undefined,
   ]
     .filter(Boolean)
@@ -44,13 +56,17 @@ export function LoginForm({ demoCredentials, destination }: LoginFormProps) {
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
+    setNotice(undefined);
     setPending(true);
 
     try {
       const response = await fetch("/api/auth/sign-in/email", {
         body: JSON.stringify({ email, password }),
         credentials: "same-origin",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-geraicuan-login-scope": destination === "/app" ? "tenant" : "platform",
+        },
         method: "POST",
       });
 
@@ -104,6 +120,12 @@ export function LoginForm({ demoCredentials, destination }: LoginFormProps) {
           value={password}
         />
       </div>
+      {notice ? (
+        <Alert id="login-notice" role="status">
+          <AlertTitle>Akses workspace</AlertTitle>
+          <AlertDescription>{notices[notice]}</AlertDescription>
+        </Alert>
+      ) : null}
       {error ? (
         <Alert id="login-error" variant="destructive">
           <AlertTitle>Masuk belum berhasil</AlertTitle>
@@ -121,7 +143,7 @@ export function LoginForm({ demoCredentials, destination }: LoginFormProps) {
             <span> · kata sandi tersedia untuk lingkungan lokal</span>
           </AlertDescription>
           <Button
-            className="auth-demo-fill"
+            className="min-h-11"
             onClick={fillDemoCredentials}
             size="sm"
             type="button"

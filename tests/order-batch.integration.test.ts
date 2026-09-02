@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -10,6 +11,7 @@ import {
   completeProviderOrder,
   deriveProviderAccountKey,
   markStaleProviderBatchUnknown,
+  OrderBatchUnavailableError,
   prepareProviderBatches,
   type OrderConfirmation,
 } from "@/db/order-batch-repository";
@@ -17,6 +19,7 @@ import * as schema from "@/db/schema";
 import { checkShipmentStaleOperation } from "@/db/shipment-stale-operation-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import {
+  buildMengantarOrderPayload,
   orchestrateFixtureBackedMengantarOrders,
   type MengantarOrderRequest,
   type MengantarOrderTransport,
@@ -81,6 +84,14 @@ async function seedEstimatedShipment(
   credentialSource: "private" | "platform_default" = "platform_default",
 ) {
   const value = ids(sequence);
+  if (credentialSource === "private") {
+    await adminPool.query(
+      `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (outlet_id) DO NOTHING`,
+      [tenantId, outletId, `managed://mengantar/${tenantId}/${outletId}`],
+    );
+  }
   await adminPool.query(
     "INSERT INTO shipments (id, tenant_id, outlet_id, status) VALUES ($1, $2, $3, 'ESTIMATED')",
     [value.shipmentId, tenantId, outletId],
@@ -94,18 +105,18 @@ async function seedEstimatedShipment(
     [value.shipmentId, tenantId, isCod],
   );
   await adminPool.query(
-    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address)
+    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label)
       VALUES
-      ($1, $2, 'SENDER', 'Synthetic Sender', '0000000000', 'Synthetic origin'),
-      ($1, $2, 'RECIPIENT', 'Synthetic Recipient', '0000000000', 'Synthetic destination')`,
+      ($1, $2, 'SENDER', 'Synthetic Sender', '0000000000', 'Synthetic origin', NULL, NULL),
+      ($1, $2, 'RECIPIENT', 'Synthetic Recipient', '0000000000', 'Synthetic destination', 'fixture-destination', 'Fixture destination')`,
     [tenantId, value.shipmentId],
   );
   const origin = outletId === outletA ? "origin-a" : outletId === outletA2 ? "origin-a2" : "origin-b";
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
       id, tenant_id, shipment_id, outlet_id, origin_area_id, destination_area_id,
-      weight_grams, is_cod_requested, credential_source
-    ) VALUES ($1, $2, $3, $4, $5, 'fixture-destination', 1000, $6, $7)`,
+      destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES ($1, $2, $3, $4, $5, 'fixture-destination', 'Fixture destination', 1000, $6, $7)`,
     [value.estimateSnapshotId, tenantId, value.shipmentId, outletId, origin, isCod, credentialSource],
   );
   await adminPool.query(
@@ -194,7 +205,7 @@ beforeEach(async () => {
       ($4, $5, 'Outlet B', 'pickup-b', 'origin-b')`,
     [outletA, tenantA, outletA2, outletB, tenantB],
   );
-});
+}, 30_000);
 
 afterAll(async () => {
   await appPool.end();
@@ -202,6 +213,212 @@ afterAll(async () => {
 });
 
 describe("fixture-backed Mengantar order orchestration", () => {
+  it("rejects a destination pair that diverges before order snapshot creation", async () => {
+    const confirmation = await seedEstimatedShipment(88, tenantA, outletA, "JNE");
+    await adminPool.query(
+      `UPDATE shipment_parties
+       SET destination_area_label = 'Changed destination'
+       WHERE shipment_id = $1 AND role = 'RECIPIENT'`,
+      [confirmation.shipmentId],
+    );
+
+    await expect(withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    )).rejects.toBeInstanceOf(OrderBatchUnavailableError);
+    const snapshots = await adminDb
+      .select({ id: schema.providerOrderSnapshots.id })
+      .from(schema.providerOrderSnapshots)
+      .where(eq(schema.providerOrderSnapshots.shipmentId, confirmation.shipmentId));
+    expect(snapshots).toEqual([]);
+  });
+
+  it("allows a valid raw runtime-role order snapshot and rejects destination-pair drift", async () => {
+    const invalid = await seedEstimatedShipment(86, tenantA, outletA, "JNE");
+    const invalidBatchId = "00000000-0000-4000-8004-000000000086";
+    await expect(withTenantContext(appDb, "order-user-a", tenantA, async (tx) => {
+      await tx.insert(schema.providerBatches).values({
+        id: invalidBatchId,
+        tenantId: tenantA,
+        outletId: outletA,
+        pickupAddressId: "pickup-a",
+        courier: "JNE",
+        credentialSource: "platform_default",
+        providerAccountKey: "a".repeat(64),
+        idempotencyKey: "b".repeat(64),
+      });
+      await tx.insert(schema.providerOrderSnapshots).values({
+        tenantId: tenantA,
+        batchId: invalidBatchId,
+        shipmentId: invalid.shipmentId,
+        estimateSnapshotId: invalid.estimateSnapshotId,
+        estimateServiceId: invalid.estimateServiceId,
+        position: 0,
+        providerService: "JNE",
+        destinationAreaId: "fixture-destination",
+        destinationAreaLabel: "Changed destination",
+        currency: "IDR",
+        shippingAmountIdr: 8_000,
+        insuranceAmountIdr: null,
+        isCod: false,
+        providerCodAmountIdr: null,
+      });
+    })).rejects.toThrow();
+
+    const valid = await seedEstimatedShipment(87, tenantA, outletA, "JNE");
+    const validBatchId = "00000000-0000-4000-8004-000000000087";
+    await expect(withTenantContext(appDb, "order-user-a", tenantA, async (tx) => {
+      await tx.insert(schema.providerBatches).values({
+        id: validBatchId,
+        tenantId: tenantA,
+        outletId: outletA,
+        pickupAddressId: "pickup-a",
+        courier: "JNE",
+        credentialSource: "platform_default",
+        providerAccountKey: "c".repeat(64),
+        idempotencyKey: "d".repeat(64),
+      });
+      await tx.insert(schema.providerOrderSnapshots).values({
+        tenantId: tenantA,
+        batchId: validBatchId,
+        shipmentId: valid.shipmentId,
+        estimateSnapshotId: valid.estimateSnapshotId,
+        estimateServiceId: valid.estimateServiceId,
+        position: 0,
+        providerService: "JNE",
+        destinationAreaId: "fixture-destination",
+        destinationAreaLabel: "Fixture destination",
+        currency: "IDR",
+        shippingAmountIdr: 8_000,
+        insuranceAmountIdr: null,
+        isCod: false,
+        providerCodAmountIdr: null,
+      });
+    })).resolves.toBeUndefined();
+
+    const snapshots = await adminDb
+      .select({ shipmentId: schema.providerOrderSnapshots.shipmentId })
+      .from(schema.providerOrderSnapshots);
+    expect(snapshots).toEqual([{ shipmentId: valid.shipmentId }]);
+  });
+
+  it("rejects preparation when the current Mengantar source changed after estimation", async () => {
+    const confirmation = await seedEstimatedShipment(84, tenantA, outletA, "JNE");
+    await adminPool.query(
+      `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
+       VALUES ($1, $2, $3)`,
+      [tenantA, outletA, `managed://mengantar/${tenantA}/${outletA}`],
+    );
+
+    await expect(withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    )).rejects.toBeInstanceOf(OrderBatchUnavailableError);
+
+    const persisted = await adminPool.query<{ batch_count: string; order_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM provider_batches WHERE tenant_id = $1) AS batch_count,
+         (SELECT count(*)::text FROM provider_order_snapshots WHERE tenant_id = $1) AS order_count`,
+      [tenantA],
+    );
+    expect(persisted.rows[0]).toEqual({ batch_count: "0", order_count: "0" });
+  });
+
+  it("rejects a raw runtime-role order snapshot when the current Mengantar source changed", async () => {
+    const confirmation = await seedEstimatedShipment(85, tenantA, outletA, "JNE");
+    const batchId = "00000000-0000-4000-8004-000000000085";
+    await withTenantContext(appDb, "order-user-a", tenantA, (tx) =>
+      tx.insert(schema.providerBatches).values({
+        id: batchId,
+        tenantId: tenantA,
+        outletId: outletA,
+        pickupAddressId: "pickup-a",
+        courier: "JNE",
+        credentialSource: "platform_default",
+        providerAccountKey: "e".repeat(64),
+        idempotencyKey: "f".repeat(64),
+      }));
+    await adminPool.query(
+      `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
+       VALUES ($1, $2, $3)`,
+      [tenantA, outletA, `managed://mengantar/${tenantA}/${outletA}`],
+    );
+
+    await expect(withTenantContext(appDb, "order-user-a", tenantA, (tx) =>
+      tx.insert(schema.providerOrderSnapshots).values({
+        tenantId: tenantA,
+        batchId,
+        shipmentId: confirmation.shipmentId,
+        estimateSnapshotId: confirmation.estimateSnapshotId,
+        estimateServiceId: confirmation.estimateServiceId,
+        position: 0,
+        providerService: "JNE",
+        destinationAreaId: "fixture-destination",
+        destinationAreaLabel: "Fixture destination",
+        currency: "IDR",
+        shippingAmountIdr: 8_000,
+        insuranceAmountIdr: null,
+        isCod: false,
+        providerCodAmountIdr: null,
+      }))).rejects.toThrow();
+
+    const snapshots = await adminDb
+      .select({ id: schema.providerOrderSnapshots.id })
+      .from(schema.providerOrderSnapshots)
+      .where(eq(schema.providerOrderSnapshots.shipmentId, confirmation.shipmentId));
+    expect(snapshots).toEqual([]);
+  });
+
+  it("constructs the provider payload from one persisted destination pair without sending it", async () => {
+    const confirmation = await seedEstimatedShipment(89, tenantA, outletA, "JNE");
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
+
+    const [snapshot] = await adminDb
+      .select({
+        destinationAreaId: schema.providerOrderSnapshots.destinationAreaId,
+        destinationAreaLabel: schema.providerOrderSnapshots.destinationAreaLabel,
+      })
+      .from(schema.providerOrderSnapshots)
+      .where(eq(schema.providerOrderSnapshots.shipmentId, confirmation.shipmentId));
+    const payload = buildMengantarOrderPayload(prepared.orders);
+
+    expect(prepared.orders[0]).toMatchObject({
+      destinationAreaId: "fixture-destination",
+      destinationAreaLabel: "Fixture destination",
+    });
+    expect(snapshot).toEqual({
+      destinationAreaId: "fixture-destination",
+      destinationAreaLabel: "Fixture destination",
+    });
+    expect(payload).toHaveLength(1);
+    expect(payload[0]?.destination_id).toBe("fixture-destination");
+  });
+
   it("resumes a persisted unattempted queue exactly once", async () => {
     const confirmation = await seedEstimatedShipment(90, tenantA, outletA, "JNE");
     await withTenantContext(appDb, "order-user-a", tenantA, (tx, context) =>

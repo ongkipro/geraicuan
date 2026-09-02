@@ -179,17 +179,17 @@ beforeAll(async () => {
   );
   await adminPool.query(
     `INSERT INTO shipment_parties (
-      tenant_id, shipment_id, role, name, phone, address
+      tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label
     ) VALUES
-      ($1, $2, 'SENDER', 'Pengirim Sintetis', '0000000000', 'Alamat sintetis asal'),
-      ($1, $2, 'RECIPIENT', 'Penerima Sintetis', '0000000000', 'Alamat sintetis tujuan')`,
+      ($1, $2, 'SENDER', 'Pengirim Sintetis', '0000000000', 'Alamat sintetis asal', NULL, NULL),
+      ($1, $2, 'RECIPIENT', 'Penerima Sintetis', '0000000000', 'Alamat sintetis tujuan', 'fixture-destination', 'Fixture destination')`,
     [tenantA, shipmentId],
   );
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
       id, tenant_id, shipment_id, outlet_id, origin_area_id,
-      destination_area_id, weight_grams, is_cod_requested, credential_source
-    ) VALUES ($1, $2, $3, $4, 'fixture-origin-a', 'fixture-destination',
+      destination_area_id, destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES ($1, $2, $3, $4, 'fixture-origin-a', 'fixture-destination', 'Fixture destination',
       1000, false, 'platform_default')`,
     [estimateSnapshotId, tenantA, shipmentId, outletA],
   );
@@ -220,10 +220,10 @@ beforeAll(async () => {
   await adminPool.query(
     `INSERT INTO provider_order_snapshots (
       id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
-      estimate_service_id, position, provider_service, currency,
+      estimate_service_id, position, provider_service, destination_area_id, destination_area_label, currency,
       shipping_amount_idr, insurance_amount_idr, is_cod, status,
       provider_order_id, is_paid, safe_response_code, resolved_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE', 'IDR', 8000, 500,
+    ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE', 'fixture-destination', 'Fixture destination', 'IDR', 8000, 500,
       false, 'AWAITING_UPSTREAM_PAYMENT', 'SANITIZED-ORDER-UNPAID', false,
       'ORDER_AWAITING_PAYMENT', now())`,
     [

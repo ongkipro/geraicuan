@@ -117,8 +117,8 @@ async function seedCodOrder(
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
       id, tenant_id, shipment_id, outlet_id, origin_area_id,
-      destination_area_id, weight_grams, is_cod_requested, credential_source
-    ) VALUES ($1, $2, $3, $4, 'origin', 'area', 1000, true, 'platform_default')`,
+      destination_area_id, destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES ($1, $2, $3, $4, 'origin', 'area', 'Fixture area', 1000, true, 'platform_default')`,
     [fixture.snapshotId, tenantId, fixture.shipmentId, outletId],
   );
   await adminPool.query(
@@ -156,9 +156,9 @@ async function seedCodOrder(
   await adminPool.query(
     `INSERT INTO provider_order_snapshots (
       id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
-      estimate_service_id, position, provider_service, currency,
+      estimate_service_id, position, provider_service, destination_area_id, destination_area_label, currency,
       shipping_amount_idr, insurance_amount_idr, is_cod, provider_cod_amount_idr
-    ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE REG', 'IDR',
+    ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE REG', 'area', 'Fixture area', 'IDR',
       10000, 500, true, 113663)`,
     [
       fixture.orderId,

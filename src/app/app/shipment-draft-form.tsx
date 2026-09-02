@@ -15,12 +15,17 @@ import {
   type ShipmentDraftActionState,
 } from "@/app/app/actions";
 import {
+  DestinationAreaSelector,
+  type DestinationAreaSelection,
+} from "@/app/app/destination-area-selector";
+import {
   invokeContactSearchFromKeyboard,
   SelectedContactProvenance,
 } from "@/app/app/shipment-draft-experience";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 type Outlet = { id: string; name: string };
@@ -30,6 +35,11 @@ type ShipmentDraftFormProps = {
   outlets: Outlet[];
   submissionId: string;
 };
+
+type DestinationState =
+  | { mode: "empty" }
+  | { mode: "contact"; areaId: string; areaLabel: string }
+  | ({ mode: "manual" } & DestinationAreaSelection);
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -242,7 +252,21 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
   const describedBy = (field: string) => (fieldError(field) ? `${field}-error` : undefined);
   const errorSummaryRef = useRef<HTMLElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const recipientAreaSelectionRef = useRef<{ id: string; label: string } | null>(null);
+  const [selectedOutletId, setSelectedOutletId] = useState(
+    values.outletId ?? (outlets.length === 1 ? outlets[0].id : ""),
+  );
+  const [destination, setDestination] = useState<DestinationState>({ mode: "empty" });
+  const [destinationRevision, setDestinationRevision] = useState(0);
+  const [destinationEditedAfterSubmit, setDestinationEditedAfterSubmit] = useState(true);
+  const [destinationResetMessage, setDestinationResetMessage] = useState("");
+  const destinationRejected = Boolean(
+    fieldError("destinationAreaLabel") ||
+      fieldError("destinationAreaId") ||
+      (destination.mode === "contact" && fieldError("recipientContactSelection")),
+  ) && !destinationEditedAfterSubmit;
+  const effectiveDestination: DestinationState = destinationRejected
+    ? { mode: "empty" }
+    : destination;
   const applySenderSelection = useCallback((selection: ShipmentContactSelection) => {
     const form = formRef.current;
     if (!form) return;
@@ -257,31 +281,22 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
     setFormField(form, "recipientPhone", selection.phone);
     setFormField(form, "recipientAddress", selection.address);
 
-    if (!selection.destinationAreaId || !selection.destinationAreaLabel) return;
-    const areaIdField = form.elements.namedItem("destinationAreaId");
-    const areaLabelField = form.elements.namedItem("destinationAreaLabel");
-    if (
-      !(areaIdField instanceof HTMLInputElement) ||
-      !(areaLabelField instanceof HTMLInputElement)
-    ) {
-      return;
-    }
-    const previousSelection = recipientAreaSelectionRef.current;
-    const targetIsBlank = areaIdField.value.trim() === "" && areaLabelField.value.trim() === "";
-    const targetWasSelectionSet = previousSelection !== null &&
-      areaIdField.value === previousSelection.id &&
-      areaLabelField.value === previousSelection.label;
-    if (targetIsBlank || targetWasSelectionSet) {
-      areaIdField.value = selection.destinationAreaId;
-      areaLabelField.value = selection.destinationAreaLabel;
-      recipientAreaSelectionRef.current = {
-        id: selection.destinationAreaId,
-        label: selection.destinationAreaLabel,
-      };
-    } else {
-      recipientAreaSelectionRef.current = null;
-    }
-  }, []);
+    setDestination(selection.destinationAreaId && selection.destinationAreaLabel
+      ? {
+          mode: "contact",
+          areaId: selection.destinationAreaId,
+          areaLabel: selection.destinationAreaLabel,
+        }
+      : { mode: "empty" });
+    setDestinationRevision((revision) => revision + 1);
+    setDestinationEditedAfterSubmit(true);
+    setDestinationResetMessage("");
+  }, [
+    setDestination,
+    setDestinationEditedAfterSubmit,
+    setDestinationResetMessage,
+    setDestinationRevision,
+  ]);
   useEffect(() => {
     if (state.errors) errorSummaryRef.current?.focus();
   }, [state]);
@@ -293,21 +308,67 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
       className="grid gap-6 pb-8"
       id="form-kiriman"
       noValidate
+      onSubmit={() => setDestinationEditedAfterSubmit(false)}
       ref={formRef}
     >
       <input name="submissionId" type="hidden" value={submissionId} />
+      <input name="destinationMode" type="hidden" value={effectiveDestination.mode} />
+      <input
+        name="destinationAreaId"
+        type="hidden"
+        value={effectiveDestination.mode === "empty" ? "" : effectiveDestination.areaId}
+      />
+      <input
+        name="destinationAreaLabel"
+        type="hidden"
+        value={effectiveDestination.mode === "empty" ? "" : effectiveDestination.areaLabel}
+      />
       {errorEntries.length > 0 ? (
         <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring" id="shipment-draft-errors" ref={errorSummaryRef} role="alert" tabIndex={-1}>
           <h2 className="font-medium">Periksa {errorEntries.length} isian berikut</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
             {errorEntries.map(([field, message]) => (
               <li key={field}>
-                <a href={field === "form" ? "#shipment-draft-errors" : `#${field}`}>{message}</a>
+                <a href={field === "form" ? "#shipment-draft-errors" : field.startsWith("destinationArea") ? "#areaLabel" : `#${field}`}>{message}</a>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
+
+      <div className="grid gap-2 rounded-lg border bg-card p-4 text-sm font-medium sm:p-5">
+        <label htmlFor="outletId">Outlet asal</label>
+        <Select
+          onValueChange={(value) => {
+            setSelectedOutletId(value);
+            setDestination({ mode: "empty" });
+            setDestinationRevision((revision) => revision + 1);
+            setDestinationEditedAfterSubmit(true);
+            setDestinationResetMessage(
+              "Outlet berubah. Area tujuan sebelumnya dihapus; pilih ulang area untuk outlet ini.",
+            );
+          }}
+          value={selectedOutletId}
+        >
+          <SelectTrigger
+            aria-describedby={describedBy("outletId")}
+            aria-invalid={Boolean(fieldError("outletId"))}
+            className="min-h-11 w-full"
+            id="outletId"
+          >
+            <SelectValue placeholder="Pilih outlet" />
+          </SelectTrigger>
+          <SelectContent>
+            {outlets.map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <input name="outletId" type="hidden" value={selectedOutletId} />
+        <FieldError error={fieldError("outletId")} id="outletId-error" />
+        <p className="font-normal text-muted-foreground">Outlet menentukan akun Mengantar untuk pencarian area dan estimasi.</p>
+        <p aria-live="polite" className="font-normal text-muted-foreground" role="status">
+          {destinationResetMessage}
+        </p>
+      </div>
 
       <fieldset className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5">
         <legend className="px-1 text-base font-medium">Pengirim</legend>
@@ -353,16 +414,31 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
           <Textarea aria-describedby={describedBy("recipientAddress")} aria-invalid={Boolean(fieldError("recipientAddress"))} defaultValue={values.recipientAddress} id="recipientAddress" name="recipientAddress" required rows={3} />
           <FieldError error={fieldError("recipientAddress")} id="recipientAddress-error" />
         </label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-2 text-sm font-medium" htmlFor="destinationAreaLabel">Area tujuan
-            <Input className="min-h-11" aria-describedby={describedBy("destinationAreaLabel")} aria-invalid={Boolean(fieldError("destinationAreaLabel"))} defaultValue={values.destinationAreaLabel} id="destinationAreaLabel" name="destinationAreaLabel" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
-            <FieldError error={fieldError("destinationAreaLabel")} id="destinationAreaLabel-error" />
-          </label>
-          <label className="grid gap-2 text-sm font-medium" htmlFor="destinationAreaId">ID area tujuan
-            <Input className="min-h-11" aria-describedby={describedBy("destinationAreaId")} aria-invalid={Boolean(fieldError("destinationAreaId"))} defaultValue={values.destinationAreaId} id="destinationAreaId" name="destinationAreaId" onChange={() => { recipientAreaSelectionRef.current = null; }} required />
-            <FieldError error={fieldError("destinationAreaId")} id="destinationAreaId-error" />
-          </label>
-        </div>
+        {selectedOutletId ? (
+          <DestinationAreaSelector
+            defaultArea={effectiveDestination.mode === "contact"
+              ? { areaId: effectiveDestination.areaId, areaLabel: effectiveDestination.areaLabel }
+              : null}
+            defaultQuery={destinationRejected && destination.mode === "manual"
+              ? { outletId: destination.outletId, query: destination.query }
+              : null}
+            defaultSelection={effectiveDestination.mode === "manual" ? effectiveDestination : null}
+            error={fieldError("destinationAreaLabel") ?? fieldError("destinationAreaId")}
+            fixedOutletId={selectedOutletId}
+            key={`${selectedOutletId}:${destinationRevision}:${destinationRejected ? "rejected" : "ready"}`}
+            onSelectionChange={(selection) => {
+              setDestination(selection
+                ? { mode: "manual", ...selection }
+                : { mode: "empty" });
+              setDestinationEditedAfterSubmit(true);
+              setDestinationResetMessage("");
+            }}
+            outlets={outlets}
+            required
+          />
+        ) : (
+          <p className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground" role="status">Pilih outlet asal sebelum mencari area tujuan.</p>
+        )}
       </fieldset>
 
       <fieldset className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5">
@@ -412,13 +488,6 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
         </div>
       </fieldset>
 
-      <label className="grid gap-2 rounded-lg border bg-card p-4 text-sm font-medium sm:p-5" htmlFor="outletId">Outlet asal
-        <select className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" aria-describedby={describedBy("outletId")} aria-invalid={Boolean(fieldError("outletId"))} defaultValue={values.outletId ?? (outlets.length === 1 ? outlets[0].id : "")} id="outletId" name="outletId" required>
-          <option value="">Pilih outlet</option>
-          {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
-        </select>
-        <FieldError error={fieldError("outletId")} id="outletId-error" />
-      </label>
       <SubmitButton />
     </form>
   );

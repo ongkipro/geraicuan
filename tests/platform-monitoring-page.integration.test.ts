@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -368,6 +370,19 @@ describe("platform monitoring page authorization", () => {
 });
 
 describe("platform monitoring page states", () => {
+  it("keeps lifecycle confirmation controlled through pending and uses route-neutral recovery copy", () => {
+    const lifecycleSource = readFileSync("src/app/platform/_components/tenant-lifecycle-controls.tsx", "utf8");
+    const monitoringSource = readFileSync("src/app/platform/_components/monitoring-view.tsx", "utf8");
+
+    expect(lifecycleSource).toContain("open={open}");
+    expect(lifecycleSource).toContain("aria-busy={disabled}");
+    expect(lifecycleSource).toContain("ref={contentRef} tabIndex={-1}");
+    expect(lifecycleSource).toContain("Memproses…");
+    expect(lifecycleSource).not.toContain("AlertDialogAction");
+    expect(monitoringSource).toContain("Parameter URL tidak dikenal; filter aman tetap digunakan.");
+    expect(monitoringSource).not.toContain("Parameter audit tidak dikenal");
+  });
+
   it("renders the empty overview with filters, local tables, and a global audit receipt", async () => {
     const html = await renderOverview();
 

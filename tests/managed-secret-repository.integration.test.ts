@@ -150,6 +150,10 @@ describe("managed Mengantar secret repository", () => {
     const firstApiKey = generatedApiKey();
     const secondApiKey = generatedApiKey();
     const reference = mengantarSecretReference(tenantA, outletA);
+    const beforeAuthority = await adminPool.query<{ mengantar_authority_version: number }>(
+      "SELECT mengantar_authority_version FROM outlets WHERE tenant_id = $1 AND id = $2",
+      [tenantA, outletA],
+    );
 
     await withTenantContext(db, adminA, tenantA, (tx, context) =>
       replaceManagedMengantarApiKey(tx, context, outletA, () => firstApiKey));
@@ -215,6 +219,12 @@ describe("managed Mengantar secret repository", () => {
       "connectionSource",
       "credentialChange",
     ]);
+    const afterAuthority = await adminPool.query<{ mengantar_authority_version: number }>(
+      "SELECT mengantar_authority_version FROM outlets WHERE tenant_id = $1 AND id = $2",
+      [tenantA, outletA],
+    );
+    expect(afterAuthority.rows[0].mengantar_authority_version)
+      .toBe(beforeAuthority.rows[0].mengantar_authority_version + 2);
   });
 
   it("retains the previous working secret when replacement encryption fails", async () => {
@@ -314,6 +324,10 @@ describe("managed Mengantar secret repository", () => {
   it("keeps private state until a complete platform default is proven", async () => {
     await withTenantContext(db, adminA, tenantA, (tx, context) =>
       replaceManagedMengantarApiKey(tx, context, outletA, generatedApiKey));
+    const privateAuthority = await adminPool.query<{ mengantar_authority_version: number }>(
+      "SELECT mengantar_authority_version FROM outlets WHERE tenant_id = $1 AND id = $2",
+      [tenantA, outletA],
+    );
     delete process.env.MENGANTAR_API_KEY;
 
     await expect(withTenantContext(db, adminA, tenantA, (tx, context) =>
@@ -373,6 +387,12 @@ describe("managed Mengantar secret repository", () => {
       connection_count: "0",
       payload_count: "0",
     }]);
+    const platformAuthority = await adminPool.query<{ mengantar_authority_version: number }>(
+      "SELECT mengantar_authority_version FROM outlets WHERE tenant_id = $1 AND id = $2",
+      [tenantA, outletA],
+    );
+    expect(platformAuthority.rows[0].mengantar_authority_version)
+      .toBe(privateAuthority.rows[0].mengantar_authority_version + 1);
   });
 
   it("rate-limits repeated credential changes per tenant, actor, and outlet", async () => {

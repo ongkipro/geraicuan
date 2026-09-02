@@ -4,9 +4,13 @@
 - Deployment target: [TBD owner=Engineering owner; due=before repository initialization]
 
 ## DEL-1 — Release gates
+- Owner: Engineering owner
+
 CI must run type checks, unit/integration tests, tenant-isolation tests, sanitized Mengantar contract tests, and migration checks. Production deployment, live Mengantar order creation, and credential configuration need explicit approval and separate evidence.
 
 ## MIG-1 — Database changes
+- Owner: Engineering owner
+
 Use versioned Drizzle/PostgreSQL migrations. Apply additive schema first, backfill separately, then enforce non-null/unique/RLS constraints. Test empty-database and representative fixture upgrades. A failed migration uses a documented forward fix or verified rollback; never delete tenant shipment records as rollback.
 
 ## Environments

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
-import { deriveBulkRowSubmissionId, previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
+import { deriveBulkRowSubmissionId, previewBulkShipmentCsv as previewCsv } from "@/lib/bulk-shipment-intake";
 
 const outletId = "00000000-0000-0000-0000-000000000111";
 const validRow = [
   "Pengirim", "081212345678", "Jl. Asia Afrika 8", "Penerima", "081234567890",
-  "Jl. Medan Merdeka Barat 1", "3171010", "\"Gambir, Jakarta Pusat\"", "Pakaian", "500",
+  "Jl. Medan Merdeka Barat 1", "Gambir Jakarta Pusat", "Pakaian", "500",
   "1", "", "", "", "150000", "NON_COD",
 ];
 
@@ -16,6 +16,13 @@ function csv(rows: string[][]) {
 
 function upload(contents: string, name = "kiriman.csv") {
   return new File([contents], name, { type: "text/csv" });
+}
+
+function previewBulkShipmentCsv(file: File, selectedOutletId: string) {
+  return previewCsv(file, selectedOutletId, async (query) => ({
+    option: { areaId: "3171010", areaLabel: `${query}, DKI Jakarta, 10110` },
+    status: "resolved",
+  }));
 }
 
 describe("bulk shipment CSV preview", () => {
@@ -97,5 +104,85 @@ describe("bulk shipment CSV preview", () => {
       field: "csv",
       message: "Ukuran berkas maksimal 256 KB.",
     });
+  });
+
+  it("normalizes and deduplicates destination queries before bounded resolution", async () => {
+    const second = [...validRow];
+    second[6] = "  Gambir   Jakarta Pusat  ";
+    const calls: string[] = [];
+    const result = await previewCsv(upload(csv([validRow, second])), outletId, async (query) => {
+      calls.push(query);
+      return {
+        option: { areaId: "3171010", areaLabel: "Gambir, Jakarta Pusat" },
+        status: "resolved",
+      };
+    });
+
+    expect(calls).toEqual(["Gambir Jakarta Pusat"]);
+    expect(result).toMatchObject({
+      totalRows: 2,
+      uniqueDestinationQueries: 1,
+      validRows: [
+        { destinationQuery: "Gambir Jakarta Pusat", row: 2 },
+        { destinationQuery: "Gambir Jakarta Pusat", row: 3 },
+      ],
+    });
+  });
+
+  it("keeps malformed, ambiguous, no-result, and unavailable destinations out of valid rows", async () => {
+    const rows = ["x", "Ambiguous Jakarta", "Tidak Ada Jakarta", "Gangguan Jakarta"].map((query) => {
+      const row = [...validRow];
+      row[6] = query;
+      return row;
+    });
+    const result = await previewCsv(upload(csv(rows)), outletId, async (query) => {
+      if (query.startsWith("Ambiguous")) {
+        return {
+          candidateLabels: ["Pilihan A", "Pilihan B"],
+          message: "Lokasi masih ambigu.",
+          status: "ambiguous",
+        };
+      }
+      if (query.startsWith("Tidak Ada")) {
+        return { message: "Lokasi tidak ditemukan.", status: "no_result" };
+      }
+      throw new Error("sanitized provider failure");
+    });
+
+    expect("code" in result).toBe(false);
+    if ("code" in result) return;
+    expect(result.validRows).toEqual([]);
+    expect(result.errors.map((error) => error.code)).toEqual([
+      "invalid_query",
+      "ambiguous",
+      "no_result",
+      "unavailable",
+    ]);
+    expect(result.errors[1]).toMatchObject({
+      candidateLabels: ["Pilihan A", "Pilihan B"],
+      field: "lokasi_tujuan",
+    });
+  });
+
+  it("rejects more than ten unique destination queries before provider resolution", async () => {
+    const rows = Array.from({ length: 11 }, (_, index) => {
+      const row = [...validRow];
+      row[6] = `Lokasi tujuan unik ${index}`;
+      return row;
+    });
+    let calls = 0;
+    const result = await previewCsv(upload(csv(rows)), outletId, async () => {
+      calls += 1;
+      return {
+        option: { areaId: "unused", areaLabel: "Unused" },
+        status: "resolved",
+      };
+    });
+
+    expect(result).toMatchObject({
+      code: "row_limit",
+      message: "Maksimal 10 lokasi tujuan unik per unggahan.",
+    });
+    expect(calls).toBe(0);
   });
 });

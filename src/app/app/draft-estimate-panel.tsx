@@ -81,7 +81,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
       ? { error: "Estimasi audit tidak dapat dimuat. Tinjau draf lalu coba lagi." }
       : initialState,
   );
-  const visibleSnapshot = auditState === "error" && !auditRetryComplete ? null : snapshot;
+  const visibleSnapshot = snapshot;
   const visibleError = auditState === "error" && auditRetryComplete ? undefined : state.error;
   const services = visibleSnapshot?.services ?? [];
   const codUnavailable = isCod && services.length > 0 && services.every((service) => !service.codEligible);

@@ -59,7 +59,7 @@ export function validateContactDirectory(formData: FormData): ContactDirectoryVa
     errors.addressText = "Alamat wajib diisi dan maksimal 500 karakter.";
   }
   if ((areaId && !areaLabel) || (!areaId && areaLabel)) {
-    errors.areaLabel = "Isi nama area dan ID area sekaligus, atau kosongkan keduanya.";
+    errors.areaLabel = "Cari dan pilih ulang area tujuan, atau kosongkan pilihan area.";
   } else {
     if (areaId.length > MAX_AREA_LENGTH) errors.areaId = "Pilih area tujuan yang valid.";
     if (areaLabel.length > MAX_AREA_LENGTH) {

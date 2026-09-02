@@ -41,6 +41,7 @@ const shipmentB = "00000000-0000-0000-0000-000000000622";
 const request = {
   originAreaId: "same-as-origin",
   destinationAreaId: "same-as-origin",
+  destinationAreaLabel: "Same area",
   weightGrams: 1_000,
   isCodRequested: false,
   credentialSource: "platform_default",
@@ -163,6 +164,7 @@ describe("shipment estimate snapshots", () => {
       outletId: outletA,
       originAreaId: request.originAreaId,
       destinationAreaId: request.destinationAreaId,
+      destinationAreaLabel: request.destinationAreaLabel,
       weightGrams: request.weightGrams,
       isCod: false,
     });
@@ -205,6 +207,7 @@ describe("shipment estimate snapshots", () => {
       outletId: outletA,
       originAreaId: request.originAreaId,
       destinationAreaId: request.destinationAreaId,
+      destinationAreaLabel: request.destinationAreaLabel,
       weightGrams: request.weightGrams,
       isCodRequested: false,
       credentialSource: "platform_default",
@@ -220,6 +223,11 @@ describe("shipment estimate snapshots", () => {
     const secondServices = [
       { ...fixtureServices[0], shippingAmountIdr: 9_000 },
     ] satisfies readonly SupportedEstimateService[];
+    await adminPool.query(
+      `INSERT INTO mengantar_connections (tenant_id, outlet_id, secret_reference)
+       VALUES ($1, $2, $3)`,
+      [tenantA, outletA, `managed://mengantar/${tenantA}/${outletA}`],
+    );
     const secondSnapshotId = await withTenantContext(
       appDb,
       "estimate-user-a",
@@ -300,6 +308,18 @@ describe("shipment estimate snapshots", () => {
     ).rejects.toBeInstanceOf(DraftEstimateUnavailableError);
 
     await expect(
+      withTenantContext(appDb, "estimate-user-a", tenantA, (tx, context) =>
+        appendEstimateSnapshot(
+          tx,
+          context,
+          shipmentA,
+          { ...request, destinationAreaLabel: "Stale destination label" },
+          fixtureServices,
+        ),
+      ),
+    ).rejects.toBeInstanceOf(DraftEstimateUnavailableError);
+
+    await expect(
       withTenantContext(appDb, "estimate-user-b", tenantB, (tx, context) =>
         appendEstimateSnapshot(tx, context, shipmentA, request, fixtureServices),
       ),
@@ -313,6 +333,7 @@ describe("shipment estimate snapshots", () => {
           outletId: outletA,
           originAreaId: request.originAreaId,
           destinationAreaId: request.destinationAreaId,
+          destinationAreaLabel: request.destinationAreaLabel,
           weightGrams: request.weightGrams,
           isCodRequested: request.isCodRequested,
           credentialSource: request.credentialSource,
@@ -340,6 +361,48 @@ describe("shipment estimate snapshots", () => {
       (tx, context) => loadLatestEstimateSnapshot(tx, context, shipmentA),
     );
     expect(crossTenantLatest).toBeNull();
+  });
+
+  it("allows a valid raw runtime-role estimate insert and rejects destination-pair drift", async () => {
+    await expect(withTenantContext(
+      appDb,
+      "estimate-user-a",
+      tenantA,
+      (tx) => tx.insert(schema.shipmentEstimateSnapshots).values({
+        tenantId: tenantA,
+        shipmentId: shipmentA,
+        outletId: outletA,
+        originAreaId: request.originAreaId,
+        destinationAreaId: request.destinationAreaId,
+        destinationAreaLabel: request.destinationAreaLabel,
+        weightGrams: request.weightGrams,
+        isCodRequested: request.isCodRequested,
+        credentialSource: request.credentialSource,
+      }),
+    )).resolves.toBeDefined();
+
+    await expect(withTenantContext(
+      appDb,
+      "estimate-user-a",
+      tenantA,
+      (tx) => tx.insert(schema.shipmentEstimateSnapshots).values({
+        tenantId: tenantA,
+        shipmentId: shipmentA,
+        outletId: outletA,
+        originAreaId: request.originAreaId,
+        destinationAreaId: request.destinationAreaId,
+        destinationAreaLabel: "Stale destination label",
+        weightGrams: request.weightGrams,
+        isCodRequested: request.isCodRequested,
+        credentialSource: request.credentialSource,
+      }),
+    )).rejects.toThrow();
+
+    const snapshots = await adminDb
+      .select({ destinationAreaLabel: schema.shipmentEstimateSnapshots.destinationAreaLabel })
+      .from(schema.shipmentEstimateSnapshots)
+      .where(eq(schema.shipmentEstimateSnapshots.shipmentId, shipmentA));
+    expect(snapshots).toEqual([{ destinationAreaLabel: request.destinationAreaLabel }]);
   });
 
   it("rolls back snapshots unless request context and shipment status are appendable", async () => {

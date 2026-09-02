@@ -6,7 +6,11 @@ const MAX_RESPONSE_BYTES = 512_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_IDENTIFIER_LENGTH = 160;
 const MAX_LABEL_LENGTH = 320;
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
+const MAX_AREA_LABEL_LENGTH = 160;
+const MAX_AREA_RESULTS = 100;
+const MIN_AREA_QUERY_LENGTH = 3;
+const MAX_AREA_QUERY_LENGTH = 100;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
 
 export type MengantarPickupOption = {
   originAreaId: string;
@@ -15,9 +19,20 @@ export type MengantarPickupOption = {
   pickupLabel: string;
 };
 
+export type MengantarDestinationAreaOption = {
+  areaId: string;
+  areaLabel: string;
+};
+
 export class MengantarLocationError extends Error {
   constructor() {
     super("Mengantar location data is unavailable.");
+  }
+}
+
+export class MengantarLocationQueryError extends Error {
+  constructor() {
+    super("Mengantar location query is invalid.");
   }
 }
 
@@ -45,6 +60,73 @@ function joinLabel(parts: Array<string | null>) {
     throw new MengantarLocationError();
   }
   return label;
+}
+
+function joinAreaLabel(parts: string[]) {
+  const label = parts.join(", ");
+  if (label.length === 0 || label.length > MAX_AREA_LABEL_LENGTH) {
+    throw new MengantarLocationError();
+  }
+  return label;
+}
+
+export function normalizeMengantarAreaQuery(value: unknown) {
+  if (typeof value !== "string") throw new MengantarLocationQueryError();
+  const unicodeNormalized = value.normalize("NFKC");
+  if (CONTROL_CHARACTER_PATTERN.test(unicodeNormalized)) {
+    throw new MengantarLocationQueryError();
+  }
+  const normalized = unicodeNormalized.replace(/\s+/gu, " ").trim();
+  if (
+    normalized.length < MIN_AREA_QUERY_LENGTH
+    || normalized.length > MAX_AREA_QUERY_LENGTH
+  ) {
+    throw new MengantarLocationQueryError();
+  }
+  return normalized;
+}
+
+export function normalizeMengantarDestinationAreaOptions(
+  payload: unknown,
+): MengantarDestinationAreaOption[] {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new MengantarLocationError();
+  }
+  const response = payload as { data?: unknown; success?: unknown };
+  if (
+    response.success !== true
+    || !Array.isArray(response.data)
+    || response.data.length > MAX_AREA_RESULTS
+  ) {
+    throw new MengantarLocationError();
+  }
+
+  const unique = new Map<string, MengantarDestinationAreaOption>();
+  for (const item of response.data) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new MengantarLocationError();
+    }
+    const area = item as Record<string, unknown>;
+    const option = {
+      areaId: requiredText(area._id, MAX_IDENTIFIER_LENGTH),
+      areaLabel: joinAreaLabel([
+        requiredText(area.SUBDISTRICT_NAME, MAX_AREA_LABEL_LENGTH),
+        requiredText(area.DISTRICT_NAME, MAX_AREA_LABEL_LENGTH),
+        requiredText(area.CITY_NAME, MAX_AREA_LABEL_LENGTH),
+        requiredText(area.PROVINCE_NAME, MAX_AREA_LABEL_LENGTH),
+        requiredText(area.ZIP_CODE, 12),
+      ]),
+    };
+    const existing = unique.get(option.areaId);
+    if (existing && existing.areaLabel !== option.areaLabel) {
+      throw new MengantarLocationError();
+    }
+    unique.set(option.areaId, option);
+  }
+
+  return [...unique.values()].sort((left, right) =>
+    left.areaLabel.localeCompare(right.areaLabel, "id-ID")
+    || left.areaId.localeCompare(right.areaId));
 }
 
 export function normalizeMengantarPickupOptions(payload: unknown): MengantarPickupOption[] {
@@ -121,10 +203,10 @@ async function readBoundedBody(response: Response, controller: AbortController) 
   }
 }
 
-export async function fetchMengantarPickupOptions(
-  credentials: Pick<MengantarCredentials, "apiKey" | "baseUrl" | "pickupAddressId">,
-  source: "platform_default" | "private",
-): Promise<MengantarPickupOption[]> {
+function mengantarEndpoint(
+  credentials: Pick<MengantarCredentials, "apiKey" | "baseUrl">,
+  path: string,
+) {
   let baseUrl: URL;
   try {
     baseUrl = new URL(credentials.baseUrl);
@@ -136,14 +218,20 @@ export async function fetchMengantarPickupOptions(
     || !baseUrl.hostname
     || baseUrl.username
     || baseUrl.password
+    || baseUrl.pathname !== "/"
+    || baseUrl.search
+    || baseUrl.hash
     || !credentials.apiKey.trim()
   ) {
     throw new MengantarLocationError();
   }
-
-  const endpoint = new URL(
-    `${baseUrl.toString().replace(/\/$/, "")}/api/public/${encodeURIComponent(credentials.apiKey)}/address`,
+  return new URL(
+    `/api/public/${encodeURIComponent(credentials.apiKey)}/${path}`,
+    baseUrl.origin,
   );
+}
+
+async function fetchMengantarJson(endpoint: URL) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let text: string;
@@ -168,12 +256,19 @@ export async function fetchMengantarPickupOptions(
     clearTimeout(timeout);
   }
 
-  let payload: unknown;
   try {
-    payload = JSON.parse(text);
+    return JSON.parse(text) as unknown;
   } catch {
     throw new MengantarLocationError();
   }
+}
+
+export async function fetchMengantarPickupOptions(
+  credentials: Pick<MengantarCredentials, "apiKey" | "baseUrl" | "pickupAddressId">,
+  source: "platform_default" | "private",
+): Promise<MengantarPickupOption[]> {
+  const endpoint = mengantarEndpoint(credentials, "address");
+  const payload = await fetchMengantarJson(endpoint);
   const options = normalizeMengantarPickupOptions(payload);
   if (source === "private") return options;
 
@@ -182,4 +277,16 @@ export async function fetchMengantarPickupOptions(
   );
   if (configured.length !== 1) throw new MengantarLocationError();
   return configured;
+}
+
+export async function fetchMengantarDestinationAreas(
+  credentials: Pick<MengantarCredentials, "apiKey" | "baseUrl">,
+  query: string,
+): Promise<MengantarDestinationAreaOption[]> {
+  const normalizedQuery = normalizeMengantarAreaQuery(query);
+  const endpoint = mengantarEndpoint(credentials, "address/search");
+  endpoint.searchParams.set("keyword", normalizedQuery);
+  return normalizeMengantarDestinationAreaOptions(
+    await fetchMengantarJson(endpoint),
+  );
 }

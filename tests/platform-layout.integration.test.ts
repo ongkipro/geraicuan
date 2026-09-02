@@ -35,14 +35,14 @@ describe("platform shell authorization boundary", () => {
   });
 
   it.each([
-    { status: "anonymous" } as const,
-    { status: "forbidden", userId: "tenant-user" } as const,
-  ])("redirects $status actors before rendering Platform chrome", async (access) => {
+    [{ status: "anonymous" } as const, "session-required"],
+    [{ status: "forbidden", userId: "tenant-user" } as const, "access-unavailable"],
+  ])("redirects $0.status actors before rendering Platform chrome", async (access, notice) => {
     mocks.access = access;
 
     await expect(
       PlatformLayout({ children: createElement("p", null, "Protected") }),
-    ).rejects.toThrow("REDIRECT:/login/super-admin");
+    ).rejects.toThrow(`REDIRECT:/login/super-admin?notice=${notice}`);
     expect(mocks.shell).not.toHaveBeenCalled();
   });
 

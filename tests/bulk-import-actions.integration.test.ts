@@ -4,15 +4,44 @@ import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
 
 const mocks = vi.hoisted(() => ({
   authorizationDenied: false,
+  currentAuthorityVersion: 1,
   created: [] as Array<{ input: unknown; submissionId: string }>,
   rateAttempts: 0,
   configuredChecks: 0,
+  searchMode: "resolved" as "ambiguous" | "no_result" | "resolved",
   principal: {
     role: "OPERATOR", scope: "tenant", tenantId: "00000000-0000-4000-8000-000000000101", userId: "operator-a",
   } as { role?: "OPERATOR"; scope: "platform" | "tenant"; tenantId?: string; userId: string },
 }));
 const authTypes = vi.hoisted(() => ({
   CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
+  MengantarConfigurationError: class MengantarConfigurationError extends Error {},
+}));
+
+vi.mock("@/app/app/location-actions", () => ({
+  searchMengantarDestinationAreas: vi.fn(async () => ({
+    options: mocks.searchMode === "no_result"
+      ? []
+      : mocks.searchMode === "ambiguous"
+        ? [
+            { areaId: "3171010", areaLabel: "Gambir, Jakarta Pusat" },
+            { areaId: "3171011", areaLabel: "Gambir Lain, Jakarta Pusat" },
+          ]
+        : [{ areaId: "3171010", areaLabel: "Gambir Jakarta Pusat" }],
+    success: true,
+  })),
+  validateMengantarDestinationAreaSelection: vi.fn(async (_outletId, _query, areaId, areaLabel) => ({
+    authority: { connectionUpdatedAt: null, source: "platform_default", version: 1 },
+    option: { areaId, areaLabel },
+    success: true,
+  })),
+}));
+vi.mock("@/lib/mengantar-credentials", () => ({
+  lockMengantarAccountAuthority: vi.fn(async () => ({
+    connectionUpdatedAt: null, source: "platform_default", version: mocks.currentAuthorityVersion,
+  })),
+  MengantarConfigurationError: authTypes.MengantarConfigurationError,
+  sameMengantarAccountAuthority: vi.fn((expected, current) => expected.version === current.version),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -48,7 +77,7 @@ vi.mock("@/db/shipment-draft-repository", () => ({
 const outletId = "00000000-0000-4000-8000-000000000111";
 const validRow = [
   "Pengirim", "081212345678", "Jl. Asia Afrika 8", "Penerima", "081234567890",
-  "Jl. Medan Merdeka Barat 1", "3171010", "Gambir Jakarta Pusat", "Pakaian", "500",
+  "Jl. Medan Merdeka Barat 1", "Gambir Jakarta Pusat", "Pakaian", "500",
   "1", "", "", "", "150000", "NON_COD",
 ];
 
@@ -64,12 +93,14 @@ function uploadForm() {
 beforeEach(() => {
   process.env.BETTER_AUTH_SECRET = "t41-action-test-signing-secret-32-bytes";
   mocks.authorizationDenied = false;
+  mocks.currentAuthorityVersion = 1;
   mocks.principal = {
     role: "OPERATOR", scope: "tenant", tenantId: "00000000-0000-4000-8000-000000000101", userId: "operator-a",
   };
   mocks.created.length = 0;
   mocks.rateAttempts = 0;
   mocks.configuredChecks = 0;
+  mocks.searchMode = "resolved";
 });
 
 describe("bulk import actions", () => {
@@ -81,12 +112,48 @@ describe("bulk import actions", () => {
     expect(previewState.preview?.validRows).toHaveLength(1);
     expect(mocks.created).toEqual([]);
 
+    const browserState = JSON.stringify(previewState);
+    for (const sensitiveValue of [
+      "recipientPhone",
+      "recipientAddress",
+      "senderName",
+      "senderPhone",
+      "senderAddress",
+      "packageContent",
+      "Pengirim",
+      "081212345678",
+      "Jl. Asia Afrika 8",
+      "081234567890",
+      "Jl. Medan Merdeka Barat 1",
+      "Pakaian",
+    ]) {
+      expect(browserState).not.toContain(sensitiveValue);
+    }
+    expect(previewState.preview!.validRows[0]).toMatchObject({
+      declaredValueIdr: 150_000,
+      destinationAreaLabel: "Gambir Jakarta Pusat",
+      destinationQuery: "Gambir Jakarta Pusat",
+      isCod: false,
+      packageWeightGrams: 500,
+      recipientName: "Penerima",
+      row: 2,
+    });
+
     const confirmation = new FormData();
     confirmation.set("rowToken", previewState.preview!.validRows[0]!.confirmationToken);
     await expect(createSelectedDrafts({}, confirmation)).rejects.toThrow("REDIRECT:/app/pengiriman?status=DRAFT");
     await expect(createSelectedDrafts({}, confirmation)).rejects.toThrow("REDIRECT:/app/pengiriman?status=DRAFT");
     expect(mocks.rateAttempts).toBe(1);
     expect(mocks.created).toHaveLength(1);
+    expect(mocks.created[0]!.input).toMatchObject({
+      packageContent: "Pakaian",
+      recipientAddress: "Jl. Medan Merdeka Barat 1",
+      recipientName: "Penerima",
+      recipientPhone: "081234567890",
+      senderAddress: "Jl. Asia Afrika 8",
+      senderName: "Pengirim",
+      senderPhone: "081212345678",
+    });
     expect(mocks.created[0]!.submissionId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -100,6 +167,27 @@ describe("bulk import actions", () => {
     confirmation.set("rowToken", `${previewState.preview!.validRows[0]!.confirmationToken}tampered`);
     await expect(createSelectedDrafts({}, confirmation)).resolves.toMatchObject({
       message: "Tidak ada draf yang dibuat.",
+    });
+    expect(mocks.created).toEqual([]);
+  });
+
+  it("does not issue a token for an ambiguous destination and rejects authority drift on confirmation", async () => {
+    const { createSelectedDrafts, uploadBulkIntake } = await import("@/app/app/impor/actions");
+    mocks.searchMode = "ambiguous";
+    const ambiguous = await uploadBulkIntake({}, uploadForm());
+    expect(ambiguous.preview?.validRows).toEqual([]);
+    expect(ambiguous.preview?.errors[0]).toMatchObject({
+      code: "ambiguous",
+      field: "lokasi_tujuan",
+    });
+
+    mocks.searchMode = "resolved";
+    const preview = await uploadBulkIntake({}, uploadForm());
+    const confirmation = new FormData();
+    confirmation.set("rowToken", preview.preview!.validRows[0]!.confirmationToken);
+    mocks.currentAuthorityVersion = 2;
+    await expect(createSelectedDrafts({}, confirmation)).resolves.toMatchObject({
+      message: "Koneksi Mengantar berubah. Tidak ada draf yang dibuat; unggah ulang CSV.",
     });
     expect(mocks.created).toEqual([]);
   });
@@ -129,6 +217,30 @@ describe("bulk import actions", () => {
       role: "OPERATOR", scope: "tenant", tenantId: "00000000-0000-4000-8000-000000000102", userId: "operator-b",
     };
     await expect(createSelectedDrafts({}, confirmation)).resolves.toMatchObject({
+      message: "Tidak ada draf yang dibuat.",
+    });
+    expect(mocks.created).toEqual([]);
+  });
+
+  it("rejects actor replay and duplicate row selection without creating a draft", async () => {
+    const { createSelectedDrafts, uploadBulkIntake } = await import("@/app/app/impor/actions");
+    const previewState = await uploadBulkIntake({}, uploadForm());
+    const token = previewState.preview!.validRows[0]!.confirmationToken;
+
+    mocks.principal = {
+      role: "OPERATOR", scope: "tenant", tenantId: "00000000-0000-4000-8000-000000000101", userId: "operator-b",
+    };
+    const replay = new FormData();
+    replay.set("rowToken", token);
+    await expect(createSelectedDrafts({}, replay)).resolves.toMatchObject({
+      message: "Tidak ada draf yang dibuat.",
+    });
+
+    mocks.principal.userId = "operator-a";
+    const duplicate = new FormData();
+    duplicate.append("rowToken", token);
+    duplicate.append("rowToken", token);
+    await expect(createSelectedDrafts({}, duplicate)).resolves.toMatchObject({
       message: "Tidak ada draf yang dibuat.",
     });
     expect(mocks.created).toEqual([]);

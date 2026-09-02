@@ -10,7 +10,11 @@ export default async function PlatformLayout({
   children: ReactNode;
 }) {
   const access = await resolvePlatformAccess();
-  if (access.status !== "authorized") redirect("/login/super-admin");
+  if (access.status !== "authorized") {
+    redirect(
+      `/login/super-admin?notice=${access.status === "anonymous" ? "session-required" : "access-unavailable"}`,
+    );
+  }
 
   return (
     <CmsShell

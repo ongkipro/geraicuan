@@ -1,0 +1,24 @@
+{
+  "capability": "full-stack-development",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "verification",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-01T21:47:04Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T213811Z-8264937b",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "application-security",
+    "full-stack-development",
+    "native-first",
+    "observability-engineering",
+    "postgres-drizzle",
+    "testing-engineering"
+  ],
+  "usageHash": "d0d4324c144a80c591e38de936e983a888785117602d3076bc48ae4f0e029889",
+  "verificationFailed": false,
+  "worker": "main"
+}

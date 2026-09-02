@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-type LoginDestination = "/login/super-admin" | "/login/tenant";
+export type LoginDestination = "/login/super-admin" | "/login/tenant";
 
 type SignOutRequest = (
   input: RequestInfo | URL,
@@ -31,8 +31,10 @@ export async function completeCmsSignOut(
 
 export function SignOutControl({
   destination,
+  onSignedOut,
 }: {
   destination: LoginDestination;
+  onSignedOut: (destination: LoginDestination) => void;
 }) {
   const errorId = useId();
   const [error, setError] = useState(false);
@@ -45,7 +47,7 @@ export function SignOutControl({
     try {
       await completeCmsSignOut(
         fetch,
-        (nextDestination) => window.location.assign(nextDestination),
+        onSignedOut,
         destination,
       );
     } catch {

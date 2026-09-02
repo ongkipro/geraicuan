@@ -1,0 +1,25 @@
+{
+  "capability": "ui-validation",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "verification",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-01T21:37:41Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260901T213612Z-55647f47",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "admin-product-ux",
+    "native-first",
+    "nextjs-development",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "2bf4c3e76a0badd3e14be239ef25e113ec32f148bfd91c7b4a36373869d6c380",
+  "verificationFailed": false,
+  "worker": "main"
+}

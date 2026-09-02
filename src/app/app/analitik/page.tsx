@@ -18,15 +18,13 @@ import {
   AnalyticsTrendSkeleton,
   type AnalyticsResolvedRegionProps,
 } from "@/app/app/analitik/analytics-regions";
-import { AnalyticsFilterFields } from "@/app/app/analitik/analytics-filter-fields";
-import { AnalyticsFilterSheet } from "@/app/app/analitik/analytics-filter-sheet";
+import { AnalyticsFilters } from "@/app/app/analitik/analytics-filters";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import {
   countTenantShipments,
@@ -214,14 +212,9 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
 
   return (
     <PageContainer width="wide">
-      <PageHeader actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah." focusTargetId="analytics-page-heading" title="Analitik" />
+      <PageHeader actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah." eyebrow="Wawasan" focusTargetId="analytics-page-heading" title="Analitik" />
 
-      <Card className="hidden md:flex" size="sm">
-        <CardHeader className="border-b"><CardTitle>Filter analitik</CardTitle><CardDescription>Satu filter untuk KPI, tren, tabel, dan ekspor.</CardDescription></CardHeader>
-        <CardContent><form action="/app/analitik" className="space-y-4" method="get"><AnalyticsFilterFields key={canonicalQueryString} layout="desktop" options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} /><p className="text-xs leading-5 text-muted-foreground">Tanggal awal dan akhir dipakai saat memilih Rentang khusus. Menerapkan filter selalu kembali ke halaman pertama.</p><div className="flex flex-wrap justify-end gap-2"><Button type="submit">Terapkan filter</Button>{activeCount > 0 ? <Button asChild variant="ghost"><Link href="/app/analitik">Reset semua</Link></Button> : null}</div></form></CardContent>
-      </Card>
-
-      <div className="flex flex-wrap items-center gap-2 md:hidden"><AnalyticsFilterSheet key={canonicalQueryString} activeCount={activeCount} options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} />{activeCount > 0 ? <Button asChild className="min-h-11" variant="ghost"><Link href="/app/analitik">Reset semua</Link></Button> : null}</div>
+      <AnalyticsFilters key={canonicalQueryString} activeCount={activeCount} options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} />
 
       <section aria-labelledby="period-context-title" className="flex flex-col gap-2 border-y py-3 text-sm sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-medium text-foreground" id="period-context-title">{decisionContext.periodLabel}</h2><p className="text-muted-foreground">{decisionContext.timezoneLabel} / {decisionContext.presetLabel}. Created memakai waktu pembuatan; issued memakai waktu AWB provider.</p></div><p aria-live="polite" className="text-muted-foreground" id="hasil-analitik" role="status">Dibandingkan dengan <strong className="font-medium text-foreground">{decisionContext.previousPeriodLabel}</strong> / {decisionContext.timezoneLabel}.</p></section>
 

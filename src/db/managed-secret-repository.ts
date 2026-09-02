@@ -312,6 +312,19 @@ export async function replaceManagedMengantarApiKey(
       set: { secretReference: reference, updatedAt },
     });
 
+  await tx
+    .update(outlets)
+    .set({
+      mengantarAuthorityVersion: sql`${outlets.mengantarAuthorityVersion} + 1`,
+      updatedAt,
+    })
+    .where(
+      and(
+        eq(outlets.id, outletId),
+        eq(outlets.tenantId, context.tenantId),
+      ),
+    );
+
   await tx.insert(auditEvents).values({
     action: existingConnection
       ? "MENGANTAR_CREDENTIAL_REPLACED"
@@ -352,6 +365,19 @@ export async function restorePlatformDefaultMengantarConnection(
   if (connection.length === 0) {
     return false;
   }
+
+  await tx
+    .update(outlets)
+    .set({
+      mengantarAuthorityVersion: sql`${outlets.mengantarAuthorityVersion} + 1`,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(outlets.id, outletId),
+        eq(outlets.tenantId, context.tenantId),
+      ),
+    );
 
   await tx
     .delete(managedSecretPayloads)

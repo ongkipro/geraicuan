@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { getContact, listContactAddresses } from "@/db/contact-repository";
 import { db } from "@/db/client";
+import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 
@@ -25,7 +26,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 type SearchValue = string | string[] | undefined;
 type ContactDetailPageProps = {
   params: Promise<{ contactId: string }>;
-  searchParams: Promise<{ arsipkan?: SearchValue; diarsipkan?: SearchValue }>;
+  searchParams: Promise<{ alamat?: SearchValue; arsipkan?: SearchValue; diarsipkan?: SearchValue }>;
 };
 
 function firstValue(value: SearchValue) {
@@ -54,13 +55,18 @@ export default async function ContactDetailPage({ params, searchParams }: Contac
     ? await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
         const item = await getContact(tx, context, contactId);
         if (!item) return null;
-        return { addresses: await listContactAddresses(tx, context, contactId), item };
+        const [addresses, outlets] = await Promise.all([
+          listContactAddresses(tx, context, contactId),
+          listReadyShipmentOutlets(tx, context),
+        ]);
+        return { addresses, item, outlets };
       })
     : null;
   if (!detail) return <ContactNotFound />;
 
   const query = await searchParams;
   const activeAddresses = detail.addresses.filter((address) => !address.archivedAt);
+  const selectedAddress = activeAddresses.find((address) => address.id === firstValue(query.alamat));
   const archiveConfirmation = firstValue(query.arsipkan) === "1" && principal.role === "TENANT_ADMIN" && !detail.item.archivedAt;
   const archivedSuccess = firstValue(query.diarsipkan) === "1" && Boolean(detail.item.archivedAt);
 
@@ -78,8 +84,9 @@ export default async function ContactDetailPage({ params, searchParams }: Contac
       <Card className="shadow-none">
         <CardHeader className="border-b"><CardTitle className="flex items-center gap-2" id="alamat-heading"><MapPin aria-hidden="true" className="size-4" />Alamat</CardTitle><CardDescription>{activeAddresses.length} dari maksimal 20 alamat aktif.</CardDescription></CardHeader>
         <CardContent className="grid min-w-0 gap-6">
-          {activeAddresses.length > 0 ? <ul className="min-w-0 divide-y" id="alamat">{activeAddresses.map((address) => <li className="grid min-w-0 gap-2 py-4 first:pt-0 last:pb-0" key={address.id}><div className="flex min-w-0 flex-wrap items-center gap-2"><strong className="wrap-anywhere">{address.label}</strong>{address.isPrimary ? <Badge variant="secondary">Alamat utama</Badge> : null}</div><p className="wrap-anywhere text-sm leading-6">{address.address}</p><p className="wrap-anywhere text-sm text-muted-foreground">{address.destinationAreaLabel && address.destinationAreaId ? `Area: ${address.destinationAreaLabel} · ${address.destinationAreaId}` : "Area belum diisi"}</p></li>)}</ul> : <p className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground" id="alamat" role="status">Belum ada alamat aktif.</p>}
-          {!detail.item.archivedAt && activeAddresses.length < 20 ? <><Separator /><ContactAddressForm contactId={detail.item.id} /></> : <Alert role="status"><AlertTitle>{detail.item.archivedAt ? "Alamat baru dinonaktifkan" : "Batas alamat tercapai"}</AlertTitle><AlertDescription>{detail.item.archivedAt ? "Kontak diarsipkan tidak dapat menerima alamat baru." : "Batas 20 alamat aktif per kontak sudah tercapai."}</AlertDescription></Alert>}
+          {activeAddresses.length > 0 ? <ul className="min-w-0 divide-y" id="alamat">{activeAddresses.map((address) => <li className="grid min-w-0 gap-2 py-4 first:pt-0 last:pb-0" key={address.id}><div className="flex min-w-0 flex-wrap items-center gap-2"><strong className="wrap-anywhere">{address.label}</strong>{address.isPrimary ? <Badge variant="secondary">Alamat utama</Badge> : null}</div><p className="wrap-anywhere text-sm leading-6">{address.address}</p><p className="wrap-anywhere text-sm text-muted-foreground">{address.destinationAreaLabel ? `Area: ${address.destinationAreaLabel}` : "Area belum dipilih"}</p>{!detail.item.archivedAt ? <Button asChild className="min-h-11 justify-self-start" size="sm" variant="outline"><Link href={`/app/kontak/${contactId}?alamat=${address.id}#alamat-edit`}>Edit alamat</Link></Button> : null}</li>)}</ul> : <p className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground" id="alamat" role="status">Belum ada alamat aktif.</p>}
+          {!detail.item.archivedAt && selectedAddress ? <><Separator /><div className="rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="alamat-edit" tabIndex={-1}><ContactAddressForm address={selectedAddress} contactId={detail.item.id} outlets={detail.outlets} /></div></> : null}
+          {!detail.item.archivedAt && !selectedAddress && activeAddresses.length < 20 ? <><Separator /><ContactAddressForm contactId={detail.item.id} outlets={detail.outlets} /></> : !selectedAddress ? <Alert role="status"><AlertTitle>{detail.item.archivedAt ? "Alamat baru dinonaktifkan" : "Batas alamat tercapai"}</AlertTitle><AlertDescription>{detail.item.archivedAt ? "Kontak diarsipkan tidak dapat menerima alamat baru." : "Batas 20 alamat aktif per kontak sudah tercapai."}</AlertDescription></Alert> : null}
         </CardContent>
       </Card>
 

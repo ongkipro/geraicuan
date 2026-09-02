@@ -95,17 +95,17 @@ async function seedProviderShipment(input: {
   );
   await adminPool.query(
     `INSERT INTO shipment_parties (
-      tenant_id, shipment_id, role, name, phone, address
+      tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label
     ) VALUES
-      ($1, $2, 'SENDER', 'Pengirim Snapshot', '081211110000', 'Alamat pengirim snapshot yang tidak berubah'),
-      ($1, $2, 'RECIPIENT', 'Penerima Snapshot', '081299998765', 'Alamat penerima snapshot yang tidak berubah')`,
+      ($1, $2, 'SENDER', 'Pengirim Snapshot', '081211110000', 'Alamat pengirim snapshot yang tidak berubah', NULL, NULL),
+      ($1, $2, 'RECIPIENT', 'Penerima Snapshot', '081299998765', 'Alamat penerima snapshot yang tidak berubah', 'fixture-destination', 'Kec. Menteng, Jakarta Pusat')`,
     [tenantId, ids.shipmentId],
   );
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
       id, tenant_id, shipment_id, outlet_id, origin_area_id,
-      destination_area_id, weight_grams, is_cod_requested, credential_source
-    ) VALUES ($1, $2, $3, $4, 'fixture-origin', 'fixture-destination', 2450, $5, 'platform_default')`,
+      destination_area_id, destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES ($1, $2, $3, $4, 'fixture-origin', 'fixture-destination', 'Kec. Menteng, Jakarta Pusat', 2450, $5, 'platform_default')`,
     [
       ids.estimateSnapshotId,
       tenantId,
@@ -150,12 +150,12 @@ async function seedProviderShipment(input: {
   await adminPool.query(
     `INSERT INTO provider_order_snapshots (
       id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
-      estimate_service_id, position, provider_service, currency,
+      estimate_service_id, position, provider_service, destination_area_id, destination_area_label, currency,
       shipping_amount_idr, insurance_amount_idr, is_cod,
       provider_cod_amount_idr, status, provider_order_id, is_paid,
       cnote_no, safe_response_code, resolved_at
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, 0, 'REG', 'IDR', 8000, NULL, $7,
+      $1, $2, $3, $4, $5, $6, 0, 'REG', 'fixture-destination', 'Kec. Menteng, Jakarta Pusat', 'IDR', 8000, NULL, $7,
       $8, $9, $10, $11, $12, 'FIXTURE_ACCEPTED', now()
     )`,
     [

@@ -1,27 +1,18 @@
 import "server-only";
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { resolveBetterAuthRuntimeConfig } from "@/lib/auth-config";
+import { resolveCmsPrincipal } from "@/lib/cms-principal";
 
-const trustedOrigins = process.env.BETTER_AUTH_TRUSTED_ORIGINS
-  ?.split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-const trustedProxies = process.env.BETTER_AUTH_TRUSTED_PROXY_CIDRS
-  ?.split(",")
-  .map((cidr) => cidr.trim())
-  .filter(Boolean);
-
-if (process.env.NODE_ENV === "production" && !trustedProxies?.length) {
-  throw new Error("BETTER_AUTH_TRUSTED_PROXY_CIDRS is required in production.");
-}
+const { baseURL, trustedOrigins, trustedProxies } =
+  resolveBetterAuthRuntimeConfig(process.env);
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL,
   trustedOrigins,
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -32,6 +23,31 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session, context) => {
+          const requestedScope = context?.request?.headers.get(
+            "x-geraicuan-login-scope",
+          );
+          if (requestedScope !== "tenant" && requestedScope !== "platform") {
+            throw new APIError("UNAUTHORIZED", {
+              code: "INVALID_EMAIL_OR_PASSWORD",
+              message: "Invalid email or password",
+            });
+          }
+
+          const principal = await resolveCmsPrincipal(session.userId);
+          if (principal?.scope !== requestedScope) {
+            throw new APIError("UNAUTHORIZED", {
+              code: "INVALID_EMAIL_OR_PASSWORD",
+              message: "Invalid email or password",
+            });
+          }
+        },
+      },
+    },
   },
   rateLimit: {
     enabled: true,

@@ -18,7 +18,7 @@ type ConfirmablePreview = NonNullable<BulkUploadState["preview"]>;
 
 function UploadButton() {
   const { pending } = useFormStatus();
-  return <Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Memeriksa…" : "Periksa berkas"}</Button>;
+  return <Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Mencocokkan lokasi…" : "Periksa berkas"}</Button>;
 }
 
 function ConfirmButton({ count }: { count: number }) {
@@ -49,7 +49,7 @@ function PreviewConfirmation({ preview }: { preview: ConfirmablePreview }) {
   });
 
   if (preview.validRows.length === 0) {
-    return <Alert><AlertTitle>Tidak ada draf yang dapat dibuat</AlertTitle><AlertDescription>Perbaiki baris bermasalah di CSV, lalu unggah kembali.</AlertDescription></Alert>;
+    return <Alert><AlertTitle>Tidak ada draf yang dapat dibuat</AlertTitle><AlertDescription>Perbaiki lokasi_tujuan dan baris bermasalah lain di CSV, lalu unggah kembali.</AlertDescription></Alert>;
   }
 
   return (
@@ -67,17 +67,17 @@ function PreviewConfirmation({ preview }: { preview: ConfirmablePreview }) {
         <p aria-live="polite"><strong>{selectedRows.size}</strong> dari {preview.validRows.length} baris dipilih</p>
         <Button className="min-h-11" onClick={() => toggleAll(!allSelected)} type="button" variant="outline">{allSelected ? "Kosongkan pilihan" : "Pilih semua baris valid"}</Button>
       </div>
-      <Table containerClassName="rounded-lg border" containerProps={{ "aria-label": "Baris CSV siap dibuat", role: "region", tabIndex: 0 }}>
+      <Table className="min-w-[980px]" containerClassName="rounded-lg border" containerProps={{ "aria-label": "Baris CSV siap dibuat", role: "region", tabIndex: 0 }}>
         <TableCaption className="sr-only">Baris siap dibuat</TableCaption>
         <TableHeader><TableRow>
           <TableHead className="sticky left-0 z-20 w-14 bg-background"><div className="flex min-h-11 items-center justify-center"><Checkbox className="after:-inset-3.5" aria-label="Pilih semua baris valid" checked={allSelected ? true : someSelected ? "indeterminate" : false} onCheckedChange={(checked) => toggleAll(checked === true)} /></div></TableHead>
-          <TableHead className="sticky left-14 z-20 bg-background">Baris</TableHead><TableHead>Penerima</TableHead><TableHead>Area</TableHead><TableHead>Berat</TableHead><TableHead>Pembayaran</TableHead><TableHead>Nilai barang</TableHead>
+          <TableHead className="sticky left-14 z-20 bg-background">Baris</TableHead><TableHead>Penerima</TableHead><TableHead>Lokasi di CSV</TableHead><TableHead>Area Mengantar</TableHead><TableHead>Berat</TableHead><TableHead>Pembayaran</TableHead><TableHead>Nilai barang</TableHead>
         </TableRow></TableHeader>
         <TableBody>{preview.validRows.map((row) => {
           const checked = selectedRows.has(row.row);
           return <TableRow data-state={checked ? "selected" : undefined} key={row.row}>
             <TableCell className="sticky left-0 z-10 bg-background"><div className="flex min-h-11 items-center justify-center"><Checkbox className="after:-inset-3.5" aria-label={`Pilih baris ${row.row}`} checked={checked} name="rowToken" onCheckedChange={(value) => toggleRow(row.row, value === true)} value={row.confirmationToken} /></div></TableCell>
-            <TableCell className="sticky left-14 z-10 bg-background font-medium">{row.row}</TableCell><TableCell>{row.input.recipientName}</TableCell><TableCell>{row.input.destinationAreaLabel}</TableCell><TableCell className="text-right tabular-nums">{row.input.packageWeightGrams} g</TableCell><TableCell>{row.input.isCod ? "COD" : "Non-COD"}</TableCell><TableCell className="text-right tabular-nums">Rp {formatRupiah(row.input.declaredValueIdr)}</TableCell>
+            <TableCell className="sticky left-14 z-10 bg-background font-medium">{row.row}</TableCell><TableCell>{row.recipientName}</TableCell><TableCell className="max-w-56 whitespace-normal">{row.destinationQuery}</TableCell><TableCell className="max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell><TableCell className="text-right tabular-nums">{row.packageWeightGrams} g</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell className="text-right tabular-nums">Rp {formatRupiah(row.declaredValueIdr)}</TableCell>
           </TableRow>;
         })}</TableBody>
       </Table>
@@ -129,15 +129,15 @@ export function BulkIntakeForm({ initialPreview, outlets }: BulkIntakeFormProps)
         </CardContent>
       </Card>
 
-      {preview ? <section aria-labelledby="hasil-pemeriksaan" className="grid min-w-0 gap-4 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" ref={previewRef} tabIndex={-1}>
-        <div aria-live="polite"><h2 className="font-heading text-lg font-medium" id="hasil-pemeriksaan">Hasil pemeriksaan</h2><p className="mt-1 text-sm text-muted-foreground">{preview.totalRows} baris diperiksa · {preview.validRows.length} baris siap dibuat · {preview.errors.length} kesalahan</p></div>
-        {preview.errors.length > 0 ? <Table containerClassName="rounded-lg border" containerProps={{ "aria-label": "Baris CSV bermasalah", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Baris bermasalah</TableCaption><TableHeader><TableRow><TableHead>Baris</TableHead><TableHead>Kolom</TableHead><TableHead>Kesalahan</TableHead></TableRow></TableHeader><TableBody>{preview.errors.map((error, index) => <TableRow key={`${error.row}-${error.field}-${index}`}><TableCell className="font-medium">Baris {error.row}</TableCell><TableCell>{error.field}</TableCell><TableCell className="whitespace-normal text-destructive">{error.message}</TableCell></TableRow>)}</TableBody></Table> : null}
+      {preview ? <section aria-labelledby="hasil-pemeriksaan-title" className="grid min-w-0 gap-4 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="hasil-pemeriksaan" ref={previewRef} tabIndex={-1}>
+        <div aria-live="polite"><h2 className="font-heading text-lg font-medium" id="hasil-pemeriksaan-title">Hasil pemeriksaan</h2><p className="mt-1 text-sm text-muted-foreground">{preview.totalRows} baris · {preview.uniqueDestinationQueries} lokasi unik diperiksa · {preview.validRows.length} baris valid · {preview.errors.length} kesalahan</p></div>
+        {preview.errors.length > 0 ? <Table className="min-w-[720px]" containerClassName="rounded-lg border" containerProps={{ "aria-label": "Baris CSV bermasalah", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Baris bermasalah</TableCaption><TableHeader><TableRow><TableHead>Baris</TableHead><TableHead>Kolom</TableHead><TableHead>Lokasi di CSV</TableHead><TableHead>Kesalahan</TableHead></TableRow></TableHeader><TableBody>{preview.errors.map((error, index) => <TableRow key={`${error.row}-${error.field}-${index}`}><TableCell className="font-medium">Baris {error.row}</TableCell><TableCell>{error.field}</TableCell><TableCell className="max-w-56 whitespace-normal">{error.query ?? "—"}</TableCell><TableCell className="max-w-96 whitespace-normal text-destructive"><p>{error.message}</p>{error.candidateLabels?.length ? <p className="mt-1 text-xs text-muted-foreground">Kemungkinan: {error.candidateLabels.join(" · ")}</p> : null}</TableCell></TableRow>)}</TableBody></Table> : null}
         <PreviewConfirmation key={preview.submissionId} preview={preview} />
       </section> : null}
 
       <details className="min-w-0 rounded-lg border bg-card p-4" open>
         <summary className="flex min-h-11 cursor-pointer items-center rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Format CSV</summary><p className="mt-2 text-sm text-muted-foreground">Nama dan urutan judul kolom harus sama persis. Semua kolom wajib kecuali tiga dimensi: isi ketiganya atau kosongkan semuanya.</p>
-        <Table containerClassName="mt-4 rounded-lg border" containerProps={{ "aria-label": "Dokumentasi kolom CSV", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Kolom template</TableCaption><TableHeader><TableRow><TableHead>Kolom</TableHead><TableHead>Aturan</TableHead></TableRow></TableHeader><TableBody>{BULK_TEMPLATE_HEADERS.map((header) => <TableRow key={header}><TableCell className="font-mono text-xs font-medium">{header}</TableCell><TableCell>{header === "panjang_cm" || header === "lebar_cm" || header === "tinggi_cm" ? "Opsional; isi ketiga dimensi bila digunakan." : "Wajib; ikuti format dan batas formulir draf."}</TableCell></TableRow>)}</TableBody></Table>
+        <Table containerClassName="mt-4 rounded-lg border" containerProps={{ "aria-label": "Dokumentasi kolom CSV", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Kolom template</TableCaption><TableHeader><TableRow><TableHead>Kolom</TableHead><TableHead>Aturan</TableHead></TableRow></TableHeader><TableBody>{BULK_TEMPLATE_HEADERS.map((header) => <TableRow key={header}><TableCell className="font-mono text-xs font-medium">{header}</TableCell><TableCell>{header === "panjang_cm" || header === "lebar_cm" || header === "tinggi_cm" ? "Opsional; isi ketiga dimensi bila digunakan." : header === "lokasi_tujuan" ? "Wajib; isi kelurahan/kecamatan/kota/provinsi/kode pos. Sistem hanya menerima satu hasil Mengantar yang tidak ambigu." : "Wajib; ikuti format dan batas formulir draf."}</TableCell></TableRow>)}</TableBody></Table>
       </details>
     </div>
   );

@@ -214,7 +214,7 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
         <CardHeader className="border-b">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div><CardTitle className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" id="dashboard-period-heading" tabIndex={-1}>Ringkasan periode</CardTitle><CardDescription>{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</CardDescription></div>
-            {principal.role === "TENANT_ADMIN" ? <Button asChild size="sm" variant="outline"><Link href={analyticsHref}>Analitik lengkap</Link></Button> : null}
+            {principal.role === "TENANT_ADMIN" ? <Button asChild className="min-h-11 sm:min-h-8" size="sm" variant="outline"><Link href={analyticsHref}>Analitik lengkap</Link></Button> : null}
           </div>
         </CardHeader>
         <CardContent className="space-y-4 border-b py-4">

@@ -30,12 +30,16 @@ export default async function TenantLayout({
     principal = await requireCmsScope("tenant");
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) {
-      redirect("/login/tenant");
+      redirect(
+        `/login/tenant?notice=${error.reason === "anonymous" ? "session-required" : "access-unavailable"}`,
+      );
     }
     throw error;
   }
 
-  if (principal.scope !== "tenant") redirect("/login/tenant");
+  if (principal.scope !== "tenant") {
+    redirect("/login/tenant?notice=access-unavailable");
+  }
 
   const shell = await withTenantContext(
     db,

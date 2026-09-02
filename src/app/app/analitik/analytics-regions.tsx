@@ -142,12 +142,19 @@ function MetricsGrid({ metrics }: { metrics: Metric[] }) {
   return (
     <dl className={`grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border ${responsiveColumns}`}>
       {metrics.map((metric) => (
-        <div className="min-w-0 bg-card p-4" key={metric.label}>
+        <div className={`min-w-0 bg-card p-4 ${metric.href ? "relative transition-colors hover:bg-muted/40" : ""}`} key={metric.label}>
+          {metric.href ? (
+            <Link
+              aria-label={`${metric.label}: ${metric.value}. Lihat record pendukung`}
+              className="absolute inset-0 z-10 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              href={metric.href}
+            />
+          ) : null}
           <dt className="text-sm font-medium text-muted-foreground">
-            {metric.href ? <Link className="underline-offset-4 hover:underline" href={metric.href}>{metric.label}</Link> : metric.label}
+            {metric.label}
           </dt>
           <dd className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
-            {metric.href ? <Link aria-label={`${metric.label}: ${metric.value}. Lihat record pendukung`} className="underline-offset-4 hover:underline" href={metric.href}>{metric.value}</Link> : metric.value}
+            {metric.value}
           </dd>
           {metric.context ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{metric.context}</p> : null}
           {metric.previous === undefined ? null : (
@@ -384,7 +391,7 @@ export async function AnalyticsShipmentRegion({
                 const reference = row.shipmentId.slice(0, 8).toUpperCase();
                 return (
                   <TableRow key={row.shipmentId}>
-                    <TableCell className="sticky left-0 z-10 bg-card font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="text-primary underline-offset-4 hover:underline" href={detailHref}>{reference}</Link> : reference}</TableCell>
+                    <TableCell className="sticky left-0 z-10 bg-card font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline sm:min-h-0" href={detailHref}>{reference}</Link> : reference}</TableCell>
                     <TableCell>{formatInZone(row.createdAt, context.range.timezone)}</TableCell>
                     <TableCell>{row.issuedAt ? formatInZone(row.issuedAt, context.range.timezone) : "—"}</TableCell>
                     <TableCell>{row.outletName}</TableCell>
@@ -402,8 +409,8 @@ export async function AnalyticsShipmentRegion({
         <nav aria-label="Navigasi halaman kiriman" className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-muted-foreground">Halaman {page} dari {totalPages} / {countFormatter.format(shipmentPage.totalCount)} kiriman</span>
           <div className="flex gap-2">
-            {page > 1 ? <Button asChild variant="outline"><Link href={paginationHref(context.canonicalQuery, page - 1)}><ChevronLeft aria-hidden="true" />Sebelumnya</Link></Button> : <Button disabled variant="outline"><ChevronLeft aria-hidden="true" />Sebelumnya</Button>}
-            {page < totalPages ? <Button asChild variant="outline"><Link href={paginationHref(context.canonicalQuery, page + 1)}>Berikutnya<ChevronRight aria-hidden="true" /></Link></Button> : <Button disabled variant="outline">Berikutnya<ChevronRight aria-hidden="true" /></Button>}
+            {page > 1 ? <Button asChild className="min-h-11 sm:min-h-8" variant="outline"><Link href={paginationHref(context.canonicalQuery, page - 1)}><ChevronLeft aria-hidden="true" />Sebelumnya</Link></Button> : <Button className="min-h-11 sm:min-h-8" disabled variant="outline"><ChevronLeft aria-hidden="true" />Sebelumnya</Button>}
+            {page < totalPages ? <Button asChild className="min-h-11 sm:min-h-8" variant="outline"><Link href={paginationHref(context.canonicalQuery, page + 1)}>Berikutnya<ChevronRight aria-hidden="true" /></Link></Button> : <Button className="min-h-11 sm:min-h-8" disabled variant="outline">Berikutnya<ChevronRight aria-hidden="true" /></Button>}
           </div>
         </nav>
       </CardContent>

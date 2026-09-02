@@ -437,7 +437,7 @@ export default async function ShipmentDetailPage({
           : `Label sudah dicetak ${detail.printCount}×.`}
       </p>
       {detail.status === "ISSUED" ? (
-        <Button asChild className="w-fit" size="sm" variant="outline">
+        <Button asChild className="min-h-11 w-fit sm:min-h-8" size="sm" variant="outline">
           <Link href={`/app/label/${encodeURIComponent(detail.shipmentId)}`}>Buka label dan riwayat cetak</Link>
         </Button>
       ) : (

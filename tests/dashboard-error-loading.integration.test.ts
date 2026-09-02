@@ -38,6 +38,7 @@ describe("dashboard route error and loading states", () => {
       expect(html).toContain('aria-live="polite"');
       expect(html).toContain('role="status"');
       expect(html).toContain("max-w-7xl");
+      if (headingId === "analytics-page-heading") expect(html).toContain("Wawasan");
     },
   );
 
@@ -60,5 +61,6 @@ describe("dashboard route error and loading states", () => {
     expect(html).toContain('aria-label="Memuat tren analitik"');
     expect(html).toContain('aria-label="Memuat performa kurir"');
     expect(html).toContain('aria-label="Memuat tabel kiriman"');
+    expect(html).toContain("Wawasan");
   });
 });

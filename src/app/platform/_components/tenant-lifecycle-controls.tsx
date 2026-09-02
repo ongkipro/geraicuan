@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useRef, type RefObject } from "react";
+import { useActionState, useEffect, useRef, useState, type RefObject } from "react";
 
 import {
   submitPlatformTenantLifecycle,
@@ -10,7 +10,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -26,14 +25,8 @@ import { Label } from "@/components/ui/label";
 
 const initialState: PlatformTenantLifecycleState = {};
 
-function ActionOutcome({ state }: { state: PlatformTenantLifecycleState }) {
-  const resultRef = useRef<HTMLDivElement>(null);
+function ActionOutcome({ resultRef, state }: { resultRef: RefObject<HTMLDivElement | null>; state: PlatformTenantLifecycleState }) {
   const entries = Object.entries(state.errors ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const hasVisibleFieldError = Boolean(state.errors?.tenantName || state.errors?.confirmationName);
-
-  useEffect(() => {
-    if (state.resultToken && !hasVisibleFieldError) resultRef.current?.focus();
-  }, [hasVisibleFieldError, state.resultToken]);
 
   if (!state.message) return null;
   return (
@@ -67,8 +60,11 @@ function ConfirmAction({
   children,
   description,
   disabled,
+  fieldHasError,
   formId,
   focusAfterSubmitRef,
+  resultRef,
+  resultToken,
   title,
   variant = "default",
   error,
@@ -76,45 +72,74 @@ function ConfirmAction({
   children: string;
   description: string;
   disabled: boolean;
+  fieldHasError: boolean;
   formId: string;
   focusAfterSubmitRef: RefObject<HTMLInputElement | null>;
+  resultRef: RefObject<HTMLDivElement | null>;
+  resultToken?: string;
   title: string;
   variant?: "default" | "destructive";
   error?: string;
 }) {
-  const submittedRef = useRef(false);
+  const [open, setOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const focusAfterCloseRef = useRef<"field" | "result" | "trigger" | null>(null);
+
+  useEffect(() => {
+    if (!resultToken) return;
+    focusAfterCloseRef.current = fieldHasError ? "field" : "result";
+    const frame = requestAnimationFrame(() => setOpen(false));
+    return () => cancelAnimationFrame(frame);
+  }, [fieldHasError, resultToken]);
+
+  useEffect(() => {
+    if (!disabled || !open) return;
+    const frame = requestAnimationFrame(() => contentRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [disabled, open]);
+
   return (
     <div className="grid gap-2">
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={(nextOpen) => {
+      if (disabled && !nextOpen) return;
+      if (!nextOpen && !focusAfterCloseRef.current) focusAfterCloseRef.current = "trigger";
+      setOpen(nextOpen);
+    }}>
       <AlertDialogTrigger asChild>
-        <Button className="min-h-11 w-fit" disabled={disabled} type="button" variant={variant}>
-          {disabled ? "Memproses…" : children}
+        <Button className="min-h-11 w-fit" disabled={disabled} ref={triggerRef} type="button" variant={variant}>
+          {children}
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent onCloseAutoFocus={(event) => {
-        if (!submittedRef.current) return;
+      <AlertDialogContent aria-busy={disabled} onCloseAutoFocus={(event) => {
+        const target = focusAfterCloseRef.current;
+        if (!target) return;
         event.preventDefault();
-        submittedRef.current = false;
-        requestAnimationFrame(() => focusAfterSubmitRef.current?.focus());
-      }}>
+        focusAfterCloseRef.current = null;
+        requestAnimationFrame(() => {
+          if (target === "field") focusAfterSubmitRef.current?.focus();
+          else if (target === "result") resultRef.current?.focus();
+          else triggerRef.current?.focus();
+        });
+      }} ref={contentRef} tabIndex={-1}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="min-h-11">Batal</AlertDialogCancel>
-          <AlertDialogAction
+          <AlertDialogCancel className="min-h-11" disabled={disabled}>Batal</AlertDialogCancel>
+          <Button
+            aria-busy={disabled}
             className="min-h-11"
             disabled={disabled}
             form={formId}
             name="confirmation"
-            onClick={() => { submittedRef.current = true; }}
             type="submit"
             value="confirmed"
             variant={variant}
           >
-            {children}
-          </AlertDialogAction>
+            {disabled ? "Memproses…" : children}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -128,18 +153,7 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
   const attemptId = state.nextAttemptId ?? initialAttemptId;
   const formId = "provision-tenant-form";
   const nameRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!state.resultToken || !state.errors?.tenantName) return;
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => nameRef.current?.focus());
-    });
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      cancelAnimationFrame(secondFrame);
-    };
-  }, [state.errors?.tenantName, state.resultToken]);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   return (
     <section aria-labelledby="provision-tenant-title" className="grid gap-3">
@@ -147,7 +161,7 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
         <h2 className="font-semibold" id="provision-tenant-title">Siklus tenant</h2>
         <p className="text-sm leading-6 text-muted-foreground">Provision tenant baru sebelum meninjau daftar operasional.</p>
       </div>
-      <ActionOutcome state={state} />
+      <ActionOutcome resultRef={resultRef} state={state} />
       <details className="rounded-xl border bg-card" open={state.outcome === "invalid" || state.outcome === "error"}>
         <summary className="min-h-11 cursor-pointer content-center px-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
           Provisioning tenant
@@ -176,8 +190,11 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
             description="Tenant aktif baru akan dibuat dan langsung tersedia untuk konfigurasi. Tindakan ini tercatat pada jejak audit."
             disabled={pending}
             error={state.errors?.confirmation}
+            fieldHasError={Boolean(state.errors?.tenantName)}
             formId={formId}
             focusAfterSubmitRef={nameRef}
+            resultRef={resultRef}
+            resultToken={state.resultToken}
             title="Provision tenant baru?"
           >
             Provisioning tenant
@@ -192,18 +209,7 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
   const [state, action, pending] = useActionState(submitPlatformTenantLifecycle, auditState);
   const attemptId = state.nextAttemptId ?? initialAttemptId;
   const confirmationRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!state.resultToken || !state.errors?.confirmationName) return;
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => confirmationRef.current?.focus());
-    });
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      cancelAnimationFrame(secondFrame);
-    };
-  }, [state.errors?.confirmationName, state.resultToken]);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   if (status !== "ACTIVE" && status !== "SUSPENDED") {
     return (
@@ -235,7 +241,7 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
           {suspending ? "Penangguhan memblokir operasi tenant sampai tenant diaktifkan kembali." : "Aktivasi kembali membuka otorisasi operasional tenant."}
         </p>
       </div>
-      <ActionOutcome state={state} />
+      <ActionOutcome resultRef={resultRef} state={state} />
       <details className="rounded-xl border bg-card" open={state.outcome === "invalid" || state.outcome === "error"}>
         <summary className="min-h-11 cursor-pointer content-center px-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
           {actionLabel}
@@ -265,8 +271,11 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
             description={suspending ? `Semua operasi ${tenantName} akan diblokir sampai tenant diaktifkan kembali.` : `Otorisasi operasional ${tenantName} akan dibuka kembali.`}
             disabled={pending}
             error={state.errors?.confirmation}
+            fieldHasError={Boolean(state.errors?.confirmationName)}
             formId={formId}
             focusAfterSubmitRef={confirmationRef}
+            resultRef={resultRef}
+            resultToken={state.resultToken}
             title={`${actionLabel}?`}
             variant={suspending ? "destructive" : "default"}
           >

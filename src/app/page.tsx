@@ -33,8 +33,8 @@ export default function Home() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link className="text-sm font-semibold tracking-tight" href="/">GeraiCUAN</Link>
           <nav aria-label="Masuk" className="flex items-center gap-2">
-            <Button asChild size="sm" variant="ghost"><Link href="/login/super-admin">Super Admin</Link></Button>
-            <Button asChild size="sm"><Link href="/login/tenant">Masuk Tenant</Link></Button>
+            <Button asChild className="min-h-11" size="sm" variant="ghost"><Link href="/login/super-admin">Super Admin</Link></Button>
+            <Button asChild className="min-h-11" size="sm"><Link href="/login/tenant">Masuk Tenant</Link></Button>
           </nav>
         </div>
       </header>
@@ -47,8 +47,8 @@ export default function Home() {
               <h1 className="max-w-3xl text-[clamp(2.5rem,1.7rem+3.2vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.055em]">Pengiriman rapi dari draf sampai rekonsiliasi.</h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">Catat kiriman, terbitkan resi penyedia, cetak label, dan pisahkan dana COD dari pendapatan—dalam satu workspace untuk tim outlet.</p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button asChild size="lg"><Link href="/login/tenant">Masuk Tenant <ArrowRight aria-hidden="true" /></Link></Button>
-                <Button asChild size="lg" variant="outline"><Link href="#cara-kerja">Lihat cara kerja</Link></Button>
+                <Button asChild className="min-h-11" size="lg"><Link href="/login/tenant">Masuk Tenant <ArrowRight aria-hidden="true" /></Link></Button>
+                <Button asChild className="min-h-11" size="lg" variant="outline"><Link href="#cara-kerja">Lihat cara kerja</Link></Button>
               </div>
               <p className="mt-4 text-xs leading-5 text-muted-foreground">Akun tenant dibuat melalui undangan tim GeraiCUAN. Belum ada pendaftaran mandiri.</p>
             </div>
@@ -105,7 +105,7 @@ export default function Home() {
 
         <section className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-4 py-16 sm:px-6 md:flex-row md:items-center lg:px-8">
           <div><h2 className="text-2xl font-semibold tracking-tight">Masuk ke workspace GeraiCUAN</h2><p className="mt-2 text-sm text-muted-foreground">Pilih akses sesuai peran akun Anda.</p></div>
-          <div className="flex flex-wrap gap-3"><Button asChild><Link href="/login/tenant">Masuk Tenant</Link></Button><Button asChild variant="outline"><Link href="/login/super-admin">Masuk Super Admin</Link></Button></div>
+          <div className="flex flex-wrap gap-3"><Button asChild className="min-h-11"><Link href="/login/tenant">Masuk Tenant</Link></Button><Button asChild className="min-h-11" variant="outline"><Link href="/login/super-admin">Masuk Super Admin</Link></Button></div>
         </section>
       </main>
 

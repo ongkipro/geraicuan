@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-01
+Updated: 2026-09-02
 Status: Active
 State: INTEGRATING
 Review-Risk: R4
@@ -23,6 +23,85 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
+The verified pickup-authority increment and its documentation were committed as
+`2b3bd18` and pushed to `origin/feat/cms-ui-mengantar-settings` on 2026-09-01.
+The follow-up execution queue is local work after that baseline. T-54 through
+T-58, T-63 through T-66, T-69, T-70, and the T-52/T-53 destination-authority and many-outlet
+milestones are complete with local verification evidence. T-58's cross-layer
+screening is also complete: 67 files / 500 PostgreSQL integration tests,
+migration upgrade through 0029, static trust-boundary checks, and independent
+security review passed. The specification pack now also passes its structural
+traceability validator with 14 files, 122 declarations, and zero findings after
+independent semantic review. T-64 through T-66 tenant screen groups also pass
+corrective security and responsive browser review. T-67 also passes its
+role-specific pre-session authorization, production origin/proxy validation,
+and 36-capture browser boundary. T-68 now passes the complete platform state
+matrix, lifecycle dialog, redaction, and authority review. The reopened T-48
+correction now passes pointer and keyboard account-menu activation plus real
+sign-out/Back invalidation for Tenant Admin and Super Admin at all three target
+widths. The second T-61 rerun captured 111 fresh role/viewport navigation
+states and passed lifecycle/audit, reload, forbidden-route, contact, and
+sign-out subsets, but correctly failed on reproducible member-disclosure and
+account-menu/history hydration mismatches plus incomplete estimate/bulk and
+Operator sign-out evidence. Corrective T-66 now passes the official shadcn
+Collapsible member-disclosure replacement at all three widths without a
+hydration warning. Corrective T-48 also passes modal close-before-navigation
+and persisted-page session revalidation for all three roles and widths. Final
+T-61 now passes the complete consolidated role journey and independent
+designer/correctness/security review. T-71 also closes the estimate adapter's
+origin-only URL and encoded credential-segment boundary with fixture-only
+regression evidence and independent security review. The remaining executable
+milestone is T-62, but it can start only from a clean, explicitly approved
+release candidate. All of this follow-up work remains local and uncommitted.
+
+T-70 resolved the previous 95 specification-suite structural findings without
+changing runtime behavior or accepted product decisions. Every normative
+declaration has an accountable owner, architecture/security/observability IDs
+are deterministic declarations, and `JUR-ID-1` has one canonical source with an
+explicit unresolved privacy/legal approval gate. T-62 remains blocked by the
+screening and role-journey tasks, not by specification structure.
+
+T-54 and T-55 are complete locally. Authenticated tenant users can search Mengantar's
+general destination-area contract through a server-only, tenant/outlet-scoped
+boundary that returns only provider ID and readable Indonesian hierarchy.
+Query, response size/cardinality, timeout, HTTPS origin, redirect, durable rate,
+distributed concurrency, credential-version, and cross-tenant controls passed
+fresh PostgreSQL 16 and hermetic contract tests plus independent security
+review. Contact create/add/edit now share a shadcn provider selector, preserve
+optional destinations, clear stale hidden authority, persist exact revalidated
+ID/label pairs, and leave archived contacts and shipment snapshots unchanged.
+Focused tests, fresh PostgreSQL 16, Tenant Admin and Operator Chromium at
+390px/768px/1280px, corrective designer review, and independent security review
+passed with zero provider requests. Individual shipment drafting now uses the
+same selector after choosing the source outlet, and manual destination choice
+is revalidated before persistence. Contact-address prefill is also revalidated
+against the current outlet account by searching its stored readable label,
+then must still equal the freshly resolved active contact/address pair before
+any write. Migration 0028 preserves the same ID/readable-label pair through
+recipient party, estimate snapshot, and provider-order snapshot boundaries.
+Corrective migration 0029 adds an outlet-scoped monotonic Mengantar authority
+version and forced-RLS predicates for exact destination-pair plus current
+credential-source binding. Contact, draft, estimate, and provider-batch writes
+now compare the validated authority under the outlet lock before persistence;
+stale account, pickup/origin, destination, and source transitions fail closed.
+Fresh migration, focused, full PostgreSQL, static, and production-build checks
+passed; the final integration suite reports 65 files / 486 tests. Existing
+Chromium evidence at 390px, 768px, and 1280px remains applicable because the
+corrective slice is server-only. Independent security re-review returned PASS
+with zero live provider request or mutation. T-56 and T-63 are complete. T-52
+then added a dedicated cross-slice authority test: one current-account pickup and
+one destination ID/readable-label pair remain exact across contact, immutable
+party, draft, estimate, provider-order snapshot, and locally constructed payload;
+stale outlet pickup/origin authority fails before order-snapshot creation. The
+focused authority set passed 10 files / 86 tests and the full suite passed 66
+files / 492 tests with independent R3 PASS. T-53 then completed one
+URL-addressable active-outlet workspace for zero, one, ten, and twenty outlets.
+Its focused 3-file / 49-test set, full 66-file / 493-test suite, full static
+checks, 18-page production build, complete responsive browser matrix, final
+  designer review, and independent security review passed without provider or
+production activity. T-57, T-69, and T-58 subsequently passed; T-64 through
+T-68 are complete and T-59 is the next screen-level milestone closure.
+
 T-50 and T-51 are complete locally. The T-52/T-53 outlet-location slice now
 uses the official 2026-09-01 Mengantar pickup contract: Tenant Admins search
 readable account pickup labels, origin follows `PICKUP_AUTOFILL`, browser-
@@ -32,8 +111,8 @@ Additive migration 0026 stores pickup/origin labels while preserving legacy
 ID-only rows. Focused verification, migration upgrade, the full 61-file / 447-
 test suite, lint, TypeScript, production build, final browser-backed designer
 review, and independent security review pass. General destination search and the
-many-outlet list-detail/mobile selector remain T-52/T-53 work; no provider
-mutation or production call occurred.
+many-outlet list-detail/mobile selector are now complete through T-52/T-53; no
+provider mutation or production call occurred.
 
 Tenant-managed Mengantar API keys now have an
 encrypted-at-rest, server-only lifecycle backed by additive migration 0025,
@@ -104,14 +183,119 @@ provider or production action.
 
 ## Active work
 
-The next executable sequence is T-52 followed by T-53. T-52 must complete the
-server-only general destination-area search and preserve one validated provider
-ID/readable-label binding through contacts, immutable party snapshots, drafts,
-estimates, and provider-order payload construction. T-53 then completes one
-responsive outlet context: compact list-detail at 1280px and one active-outlet
-selector at 390px/768px, verified with zero, one, ten, and twenty outlets. The
-accepted pickup selector is progress toward both tasks, not completion. No
-cache or canonical kecamatan dataset is planned without measured evidence.
+T-57, corrective T-69, T-70, and T-64 through T-66 are complete. The deterministic inventory now passes
+10/10 checks, including exact route/state/action ownership and one responsive
+GET filter form on Ringkasan, Analitik, and Keuangan. Authenticated browser
+evidence proves the single-form disclosure/inline composition at 390px, 768px,
+and 1280px. T-58 completed cross-layer correctness screening after T-52/T-53;
+the specification validator now also reports zero findings. All three bounded
+tenant route groups now pass before milestone T-59. T-67 and T-68 also pass the
+public/login and platform boundaries before milestone T-60. T-61 then proves clean-session role
+journeys and T-62 executes the final verification-only release boundary. The
+accepted pickup selector is progress, not completion. No cache or canonical
+kecamatan dataset is planned without measured evidence, and no screening task
+authorizes indiscriminate redesign or live provider mutation.
+
+T-64 closed the first post-location browser group. The bulk-import confirmation
+token is now a versioned AES-256-GCM envelope rather than browser-decodable
+signed JSON. Only the recipient name needed to identify a row plus non-sensitive
+shipment summary fields reach the confirmation UI; phones, addresses, sender
+identity, package content, and provider authority remain server-only. Ringkasan
+KPI links and daily-workflow drill-down targets now have one logical tab stop and
+44px mobile hit areas. Final focused checks passed 18 files / 107 tests. Fresh
+Chromium covered 30 primary screenshots and 234 state/loading/pending/
+unauthorized observations for both tenant roles at 390px, 768px, and 1280px
+with zero failures, document overflow, unexpected browser events, or provider
+requests. Designer and independent security review passed.
+
+T-65 closed the tenant data and physical-output group. Fresh automated checks
+passed 9 files / 77 tests plus TypeScript, targeted ESLint, and whitespace
+validation. The effective browser matrix covered 138 role/state/width
+observations, including a clean 30-capture sanctioned-fixture rerun at
+390px/768px/1280px. Real local contact create, address edit, archive, and label
+print journeys proved pending and focus behavior without provider traffic.
+Both label PDFs were one 100×150mm-class page. Designer, security, and
+correctness reviews passed.
+
+T-66 closed the tenant analysis, finance, outlet, and member-governance group.
+The final focused PostgreSQL suite passed 21 files / 201 tests. Browser review
+covered the 108-capture state matrix plus warmed action/control rechecks at
+390px, 768px, and 1280px. Analytics linked metrics now use one full-card tab
+stop, mobile record controls are 44px, and member confirmation dialogs remain
+visible through pending before deterministic result focus. Local invite, role,
+deactivation, reconciliation, and invalid-pickup journeys produced no provider
+request or browser error. Independent designer and security reviews passed.
+
+T-67 closed the public/auth boundary. Better Auth now validates the requested
+tenant/platform login scope against the server-resolved active principal before
+creating any session row or cookie; wrong-scope, suspended, missing-scope, and
+unknown credentials share one generic public failure. Production auth config
+fails closed unless it has exactly two explicit HTTPS CMS origins and valid
+trusted IP/CIDR entries. Bounded recovery notices make unauthenticated and
+forbidden redirects understandable without protected data or account details.
+Focused final checks pass 7 files / 70 tests plus static, workflow, and
+production-build validation. The 36-capture Chromium matrix passes at all three
+required widths with no protected leak, mismatch cookie, overflow, external
+request, provider traffic, or unexpected browser error.
+
+T-68 closed the complete platform workspace group. The deterministic inventory
+now owns the Super Admin tenant lifecycle action and its pending, success,
+failure, and unauthorized states. Monitoring, tenant list/detail, and audit
+passed the 93-capture responsive state matrix plus 15 settled route-boundary
+captures. Corrective browser checks prove controlled provisioning and lifecycle
+dialogs remain busy and focus-contained through pending, restore trigger focus
+on cancellation, and route completed validation focus to the field or result.
+The final focused checks pass 5 files / 33 tests plus 2 PostgreSQL files / 9
+tests, targeted ESLint, TypeScript, whitespace validation, and an 18-page
+production build. Designer and security reviews passed with no overflow,
+secret/PII exposure, unexpected network event, provider request, or production
+mutation. The first T-59 closure correctly failed because Analitik alone omitted
+the required shared page eyebrow in populated, loading, and error states. The
+bounded T-66 correction now passes focused checks, the production build, and
+nine fresh state/viewport captures. The T-59 rerun then passed all 14 tenant
+routes and role evidence with no unexplained divergence. T-60 also passed 21
+public/login/platform primary captures with distinct job and authority
+boundaries. The first T-61 run captured 87 navigation states but correctly
+failed because pointer/click activation could not open the account dropdown
+even though Enter/Space worked. Corrective T-48 run
+`RUN-20260902T005309Z-cfd95f31` now passes controlled pointer/keyboard
+activation and replaces the protected history entry after successful sign-out;
+six fresh role/viewport journeys prove the cookie is removed and Back cannot
+restore protected content. T-61 must now rerun the complete clean-session
+journey and remaining navigation-owned mutation evidence.
+
+The second T-61 run `RUN-20260902T010729Z-b3093c8c` expanded fresh evidence to
+111 navigation captures and completed a provider-free Super Admin lifecycle
+and audit round trip, but it also reproduced two unwaived hydration defects.
+Member governance retained a native disclosure's open DOM state against a
+closed server render after role mutation, while the shared account menu left
+modal `aria-hidden` attributes on reused CMS DOM during history interaction.
+Corrective T-66 run `RUN-20260902T014655Z-3106a76c` now passes the member
+disclosure root fix, result/pending focus, reload persistence, fixture restore,
+and clean console at all three target widths. Corrective T-48 run
+`RUN-20260902T020659Z-1eb98512` now also passes nine role/viewport sign-out
+journeys: the modal portal closes cleanly after success, and any earlier
+protected BFCache entry is hidden and revalidated through the server before it
+can expose a protected H1. The fixture-only
+estimate resolver, bulk upload transport retry, and full Operator sign-out
+matrix remain explicit T-61 evidence gaps.
+
+Final T-61 run `RUN-20260902T023444Z-7b34e5df` closes those gaps without a
+waiver. It consolidates the 111 navigation captures, final T-66 and T-48
+corrective matrices, lifecycle/audit and contact mutations, a navigation-only
+sanctioned estimate with 14 persisted services, and a native bulk preview with
+one valid row and no confirmation. The long-lived Chrome profile's ALPN error
+reproduced at both local origins, while the identical upload passed in a clean
+isolated profile, so it is retained as browser network-service state rather
+than hidden. Fresh 15-file / 144-test role/action and 3-file / 10-test
+PostgreSQL ledger/COD/lifecycle checks pass. Independent security and
+correctness reviewers found no blocker; zero provider/order/recovery or
+production action occurred. T-62 preflight then correctly failed on the
+estimate endpoint URL/key construction required by its own scope. T-71 has now
+closed that bounded adapter correction with 2 files / 15 fixture-only tests,
+targeted ESLint, TypeScript, `git diff --check`, and independent security and
+correctness review. A clean reviewed commit and explicit candidate approval
+remain the T-62 prerequisites.
 
 The earlier CMS precision and UI/UX goal is complete: T-35, its atomic queue
 T-37 through T-47, T-48, the corrective T-49 test-harness task, and final T-36

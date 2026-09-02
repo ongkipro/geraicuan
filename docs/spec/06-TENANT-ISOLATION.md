@@ -4,9 +4,13 @@
 - Decision: GeraiCUAN is a shared multi-tenant service. Super Admin is platform-scoped; all outlet operational data is tenant-scoped.
 
 ## TEN-1 — Tenant context
+- Owner: Security owner
+
 A request obtains active tenant context only from authenticated membership or explicit Super Admin platform action. Client-supplied tenant IDs never authorize access.
 
 ## TEN-2 — Isolation invariant
+- Owner: Security owner
+
 A tenant actor can access only rows whose `tenant_id` matches their membership. Tenant-scoped joins, mutations, background jobs, exports, print history, provider batches, and logs retain tenant identity. RLS enforces the same predicate as defense in depth.
 
 ## Tenant lifecycle

@@ -24,18 +24,28 @@
 | `audit_events` | Scope-tagged | Security-sensitive Super Admin/tenant-admin changes. |
 
 ## DATA-1 — Isolation invariant
+- Owner: Engineering owner
+
 Every tenant-owned table has non-null `tenant_id`; foreign keys and composite uniqueness prevent associations across tenant IDs. Application queries use tenant context; RLS policies use the same tenant identity defense-in-depth.
 
 ## DATA-2 — Shipment lifecycle
+- Owner: Engineering owner
+
 `DRAFT → ESTIMATED → SUBMISSION_QUEUED → SUBMISSION_UNKNOWN|ISSUED|AWAITING_UPSTREAM_PAYMENT|FAILED`. `ISSUED` requires a provider `cnote_no`. Print events reference issued shipments only.
 
 ## DATA-3 — Money and provider snapshots
+- Owner: Engineering owner
+
 Store currency as `IDR` and all amounts as whole integer rupiah. Persist user-declared goods value, provider-returned shipping and insurance values, GeraiCUAN COD service fee, VAT, and final provider COD amount separately. For COD, `service_fee = round_half_up((goods_value + shipping_fee) × 3%)`, `vat = round_half_up(service_fee × 11%)`, and final COD equals the sum of goods, shipping, service fee, and VAT. Preserve a sanitized estimate/order snapshot tied to the selected service; do not recompute provider shipping or insurance totals.
 
 ## DATA-4 — Operational ledger
+- Owner: Engineering owner
+
 `ledger_entries` is append-only. Amounts are IDR integers; source event and shipment/provider batch references are mandatory. Corrections create an `ADJUSTMENT` or reversal entry, never modify an existing entry. `COD_PRINCIPAL_COLLECTABLE` is a liability and is never reported as GeraiCUAN revenue. Reconciliation compares ledger/source totals by tenant, outlet, and professional date-range contract.
 
 ## DATA-5 — Source-of-truth transitions
+- Owner: Engineering owner
+
 | Trigger | Required outcome |
 |---|---|
 | Confirmed COD shipment | Persist selected estimate and calculated COD components; no ledger revenue is recognized yet. |
@@ -45,9 +55,13 @@ Store currency as `IDR` and all amounts as whole integer rupiah. Persist user-de
 | Reconciliation variance | Preserve source totals and append an adjustment/reconciliation entry; never mutate prior ledger entries. |
 
 ## DATA-6 — Managed credential invariant
+- Owner: Engineering owner
+
 `mengantar_connections` stores no ciphertext or secret fragment. Each active private connection resolves exactly one purpose-bound encrypted payload for the same tenant and outlet. The envelope stores ciphertext, nonce, authentication tag, key version, and timestamps; authenticated additional data binds purpose, tenant, outlet, and canonical reference so rows cannot be replayed across scope. Replacement is transactional and never exposes the prior value. Removing a private connection is allowed only after the platform default is complete and records a redacted audit outcome.
 
 ## DATA-7 — Provider location invariant
+- Owner: Engineering owner
+
 Persist provider IDs together with their last accepted human-readable label at operational snapshot boundaries. Outlet pickup configuration stores `default_pickup_address_id` with `default_pickup_address_label` and `default_origin_area_id` with `default_origin_area_label`; both labels are null for legacy rows or non-null as one pair. New writes accept only a pickup from the current account-scoped provider response and derive the area ID and both labels from that same response. A cached area row is never sufficient evidence that an ID remains supported; estimate/order behavior remains authoritative. No location cache or canonical kecamatan dataset exists because current evidence does not justify one.
 
 ## ERD

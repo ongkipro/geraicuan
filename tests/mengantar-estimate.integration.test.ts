@@ -66,6 +66,58 @@ describe("Mengantar estimate normalization", () => {
       .toThrow(MengantarEstimateError);
   });
 
+  it("uses an HTTPS origin-only base URL and encodes the credential path segment", async () => {
+    const fixture = await loadFixture();
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toBe(
+        "https://mengantar.invalid/api/public/key%2Fprivate/order/estimate?origin_id=origin-fixture&destination_id=destination-fixture&courier=all&weight=1",
+      );
+      return new Response(JSON.stringify({
+        data: fixture.response.body.data,
+        success: true,
+      }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchMengantarEstimate({
+      ...credentials,
+      apiKey: "key/private",
+    }, request)).resolves.toHaveLength(14);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "http://mengantar.invalid",
+    "https://user:pass@mengantar.invalid",
+    "https://mengantar.invalid/prefix",
+    "https://mengantar.invalid?redirect=https://example.com",
+    "https://mengantar.invalid#fragment",
+    "https://",
+  ])("rejects non-origin provider base URL %s before fetch", async (baseUrl) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchMengantarEstimate({
+      ...credentials,
+      baseUrl,
+    }, request)).rejects.toEqual(new MengantarEstimateError());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a blank API key before fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchMengantarEstimate({
+      ...credentials,
+      apiKey: "   ",
+    }, request)).rejects.toEqual(new MengantarEstimateError());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("keeps the request deadline active while a response body drips", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async (_input: unknown, init?: RequestInit) => {

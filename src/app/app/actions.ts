@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import { validateMengantarDestinationAreaSelection } from "@/app/app/location-actions";
+
 import {
   ContactUnavailableError,
   listContactAddresses,
@@ -21,6 +23,12 @@ import {
   type TenantTransaction,
 } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import {
+  lockMengantarAccountAuthority,
+  MengantarConfigurationError,
+  type MengantarAccountAuthority,
+  sameMengantarAccountAuthority,
+} from "@/lib/mengantar-credentials";
 import {
   validateShipmentDraft,
 } from "@/lib/shipment-draft";
@@ -92,6 +100,9 @@ const FORM_FIELDS = [
   "recipientAddress",
   "destinationAreaId",
   "destinationAreaLabel",
+  "destinationMode",
+  "areaQuery",
+  "areaOutletId",
   "packageContent",
   "packageWeightGrams",
   "packageQuantity",
@@ -231,8 +242,12 @@ function selectionSnapshotFrom(
   const destinationAreaLabel = formData.get(`${prefix}ContactSnapshotDestinationAreaLabel`);
   return {
     address,
-    destinationAreaId: typeof destinationAreaId === "string" ? destinationAreaId : null,
-    destinationAreaLabel: typeof destinationAreaLabel === "string" ? destinationAreaLabel : null,
+    destinationAreaId: typeof destinationAreaId === "string" && destinationAreaId
+      ? destinationAreaId
+      : null,
+    destinationAreaLabel: typeof destinationAreaLabel === "string" && destinationAreaLabel
+      ? destinationAreaLabel
+      : null,
     name,
     phone,
   };
@@ -444,6 +459,10 @@ export async function saveShipmentDraft(
   }
   const senderSnapshot = selectionSnapshotFrom(formData, "SENDER");
   const recipientSnapshot = selectionSnapshotFrom(formData, "RECIPIENT");
+  const destinationModeValue = formData.get("destinationMode");
+  const destinationMode = destinationModeValue === "contact" || destinationModeValue === "manual"
+    ? destinationModeValue
+    : "empty";
 
   let senderSelector: DraftContactSelector | null;
   let recipientSelector: DraftContactSelector | null;
@@ -463,8 +482,99 @@ export async function saveShipmentDraft(
     throw error;
   }
 
-  if (!validation.ok && !senderSelector && !recipientSelector) {
+  if (!validation.ok) {
     return { errors: validation.errors, values };
+  }
+
+  let manualDestination: { areaId: string; areaLabel: string } | null = null;
+  let validatedDestinationAuthority: MengantarAccountAuthority | null = null;
+  if (destinationMode === "manual") {
+    const areaOutletId = formData.get("areaOutletId");
+    const areaQuery = formData.get("areaQuery");
+    const areaId = formData.get("areaId");
+    const areaLabel = formData.get("areaLabel");
+    if (
+      typeof areaOutletId !== "string"
+      || areaOutletId !== validation.input.outletId
+      || typeof areaQuery !== "string"
+      || typeof areaId !== "string"
+      || typeof areaLabel !== "string"
+    ) {
+      return {
+        errors: { destinationAreaLabel: "Cari dan pilih ulang area tujuan untuk outlet asal." },
+        values,
+      };
+    }
+    const authority = await validateMengantarDestinationAreaSelection(
+      areaOutletId,
+      areaQuery,
+      areaId,
+      areaLabel,
+    );
+    if (!authority.success || !authority.option) {
+      return {
+        errors: {
+          destinationAreaLabel: authority.message
+            ?? "Pilihan area berubah. Cari dan pilih ulang area tujuan.",
+        },
+        values,
+      };
+    }
+    manualDestination = authority.option;
+    validatedDestinationAuthority = authority.authority ?? null;
+  } else if (destinationMode === "contact") {
+    if (
+      !recipientSelector
+      || !recipientSnapshot?.destinationAreaId
+      || !recipientSnapshot.destinationAreaLabel
+    ) {
+      return {
+        errors: { destinationAreaLabel: "Pilih alamat kontak penerima yang memiliki area tujuan." },
+        values,
+      };
+    }
+    try {
+      await withTenantContext(
+        db,
+        principal.userId,
+        principal.tenantId,
+        async (tx, context) => {
+          const recipient = await resolveDraftContact(tx, context, recipientSelector);
+          assertSelectionMatchesResolved(recipient, recipientSnapshot, "RECIPIENT");
+        },
+      );
+    } catch (error) {
+      if (error instanceof DraftContactUnavailableError) {
+        return {
+          errors: {
+            recipientContactSelection: CONTACT_SELECTION_COPY.RECIPIENT.message,
+          },
+          values,
+        };
+      }
+      throw error;
+    }
+    const authority = await validateMengantarDestinationAreaSelection(
+      validation.input.outletId,
+      recipientSnapshot.destinationAreaLabel,
+      recipientSnapshot.destinationAreaId,
+      recipientSnapshot.destinationAreaLabel,
+    );
+    if (!authority.success || !authority.option) {
+      return {
+        errors: {
+          destinationAreaLabel: authority.message
+            ?? "Area alamat kontak berubah. Cari dan pilih ulang alamat penerima.",
+        },
+        values,
+      };
+    }
+    validatedDestinationAuthority = authority.authority ?? null;
+  } else {
+    return {
+      errors: { destinationAreaLabel: "Cari area tujuan atau pilih alamat kontak yang memiliki area." },
+      values,
+    };
   }
 
   let outcome: DraftSaveOutcome;
@@ -474,18 +584,22 @@ export async function saveShipmentDraft(
       principal.userId,
       principal.tenantId,
       async (tx, context) => {
-        if (!validation.ok) {
-          return { ok: false, state: { errors: validation.errors, values } };
+        const manualInput = manualDestination
+          ? {
+              ...validation.input,
+              destinationAreaId: manualDestination.areaId,
+              destinationAreaLabel: manualDestination.areaLabel,
+            }
+          : null;
+        if (manualInput) {
+          const replay = await resolveExistingShipmentDraftReplay(
+            tx,
+            context,
+            manualInput,
+            submissionId,
+          );
+          if (replay) return { ok: true, shipmentId: replay };
         }
-
-        const replay = await resolveExistingShipmentDraftReplay(
-          tx,
-          context,
-          validation.input,
-          submissionId,
-        );
-        if (replay) return { ok: true, shipmentId: replay };
-
         const sender = senderSelector
           ? await resolveDraftContact(tx, context, senderSelector)
           : null;
@@ -494,10 +608,84 @@ export async function saveShipmentDraft(
           : null;
         if (sender) assertSelectionMatchesResolved(sender, senderSnapshot, "SENDER");
         if (recipient) assertSelectionMatchesResolved(recipient, recipientSnapshot, "RECIPIENT");
+        const destination = destinationMode === "contact"
+          ? recipient?.destinationAreaId && recipient.destinationAreaLabel
+            ? {
+                areaId: recipient.destinationAreaId,
+                areaLabel: recipient.destinationAreaLabel,
+              }
+            : null
+          : manualDestination;
+        if (!destination) {
+          return {
+            ok: false,
+            state: {
+              errors: {
+                destinationAreaLabel: destinationMode === "contact"
+                  ? "Alamat kontak belum memiliki area tujuan. Cari dan pilih area tujuan."
+                  : "Cari dan pilih ulang area tujuan.",
+              },
+              values,
+            },
+          };
+        }
+        const input = manualInput ?? {
+          ...validation.input,
+          destinationAreaId: destination.areaId,
+          destinationAreaLabel: destination.areaLabel,
+        };
+        if (!manualInput) {
+          const replay = await resolveExistingShipmentDraftReplay(
+            tx,
+            context,
+            input,
+            submissionId,
+          );
+          if (replay) return { ok: true, shipmentId: replay };
+        }
+        try {
+          const currentAuthority = await lockMengantarAccountAuthority(
+            tx,
+            context,
+            validation.input.outletId,
+          );
+          if (
+            !validatedDestinationAuthority
+            || !sameMengantarAccountAuthority(
+              validatedDestinationAuthority,
+              currentAuthority,
+            )
+          ) {
+            return {
+              ok: false,
+              state: {
+                errors: {
+                  destinationAreaLabel:
+                    "Koneksi Mengantar berubah. Cari dan pilih ulang area tujuan.",
+                },
+                values,
+              },
+            };
+          }
+        } catch (error) {
+          if (error instanceof MengantarConfigurationError) {
+            return {
+              ok: false,
+              state: {
+                errors: {
+                  destinationAreaLabel:
+                    "Koneksi Mengantar tidak tersedia. Cari ulang area tujuan setelah koneksi diperbaiki.",
+                },
+                values,
+              },
+            };
+          }
+          throw error;
+        }
         const shipmentId = await createShipmentDraft(
           tx,
           context,
-          validation.input,
+          input,
           submissionId,
         );
         return { ok: true, shipmentId };

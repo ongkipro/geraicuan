@@ -200,4 +200,33 @@ describe("responsive CMS navigation presentation", () => {
       'className="cms-signout-button min-h-11"',
     );
   });
+
+  it("replaces protected history after sign-out so Back cannot restore it", () => {
+    expect(shellSource).toContain(
+      "window.location.replace(destination)",
+    );
+    expect(shellSource).not.toContain(
+      "window.location.assign(destination)",
+    );
+    expect(shellSource).toContain("onCloseAutoFocus={(event) => {");
+    expect(shellSource).toContain("signOutDestinationRef.current = destination;");
+    expect(shellSource).toContain("setAccountOpen(false);");
+    expect(signOutSource).toContain("onSignedOut");
+    expect(shellSource).toContain(
+      'window.addEventListener("pageshow", revalidateRestoredSession)',
+    );
+    expect(shellSource).toContain("if (!event.persisted) return;");
+    expect(shellSource).toContain(
+      'document.documentElement.style.visibility = "hidden"',
+    );
+    expect(shellSource).toContain("window.location.reload();");
+  });
+
+  it("keeps the account menu controlled for pointer and keyboard activation", () => {
+    expect(shellSource).toContain(
+      "<DropdownMenu onOpenChange={setAccountOpen} open={accountOpen}>",
+    );
+    expect(shellSource).toContain("onPointerDown={(event) => {");
+    expect(shellSource).toContain("setAccountOpen((open) => !open);");
+  });
 });

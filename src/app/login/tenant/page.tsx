@@ -12,7 +12,17 @@ const demoPassword =
     ? process.env.DEV_LOCAL_PASSWORD
     : undefined;
 
-export default function TenantLoginPage() {
+export default async function TenantLoginPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<{ notice?: string | string[] }>;
+}) {
+  const notice = (await searchParams).notice;
+  const initialNotice =
+    notice === "session-required" || notice === "access-unavailable"
+      ? notice
+      : undefined;
+
   return (
     <main className="auth-page">
       <div className="auth-login-shell">
@@ -29,6 +39,7 @@ export default function TenantLoginPage() {
                 : undefined
             }
             destination="/app"
+            initialNotice={initialNotice}
           />
         </section>
         <Link className="auth-return" href="/">

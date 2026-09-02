@@ -74,6 +74,13 @@ const contacts = Array.from({ length: 15 }, (_, index) => ({
   isSender: index < 3,
   isRecipient: index !== 1,
 }));
+const archivedContact = {
+  id: fixedUuid("71", 16),
+  name: "Sari Arsip",
+  phone: "081290000016",
+  isSender: false,
+  isRecipient: true,
+};
 
 const shipmentDefinitions = [
   { status: "DRAFT", isCod: false, daysAgo: 0 },
@@ -116,6 +123,7 @@ try {
   );
   await client.query(runtimePasswordStatement.rows[0].statement);
   await client.query("BEGIN");
+  await client.query("DELETE FROM rate_limits");
   await client.query(
     `INSERT INTO tenants (id, name, status)
        VALUES ($1, 'Local Development Tenant', 'ACTIVE')
@@ -208,6 +216,49 @@ try {
     );
   }
 
+  const archivedAt = at(1, 18);
+  await client.query(
+    `INSERT INTO contacts (
+       id, tenant_id, name, phone, is_recipient, is_sender, archived_at, created_at, updated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       name = EXCLUDED.name,
+       phone = EXCLUDED.phone,
+       is_recipient = EXCLUDED.is_recipient,
+       is_sender = EXCLUDED.is_sender,
+       archived_at = EXCLUDED.archived_at,
+       updated_at = EXCLUDED.updated_at`,
+    [
+      archivedContact.id,
+      tenantId,
+      archivedContact.name,
+      archivedContact.phone,
+      archivedContact.isRecipient,
+      archivedContact.isSender,
+      archivedAt,
+      at(22, 8),
+    ],
+  );
+  await client.query(
+    `INSERT INTO contact_addresses (
+       id, tenant_id, contact_id, label, address, destination_area_id,
+       destination_area_label, is_primary, archived_at, created_at, updated_at
+     ) VALUES ($1, $2, $3, 'Alamat lama', 'Jl. Arsip Demo No. 16, Jakarta',
+       '31710016', 'Gambir, Jakarta Pusat', true, $4, $5, $4)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       contact_id = EXCLUDED.contact_id,
+       label = EXCLUDED.label,
+       address = EXCLUDED.address,
+       destination_area_id = EXCLUDED.destination_area_id,
+       destination_area_label = EXCLUDED.destination_area_label,
+       is_primary = true,
+       archived_at = EXCLUDED.archived_at,
+       updated_at = EXCLUDED.updated_at`,
+    [fixedUuid("70", 16), tenantId, archivedContact.id, archivedAt, at(22, 8)],
+  );
+
   for (const shipment of shipmentDefinitions) {
     const createdAt = at(shipment.daysAgo, 8 + shipment.index % 7, (shipment.index * 7) % 60);
     const resolvedAt = shipment.status === "SUBMISSION_QUEUED"
@@ -218,6 +269,8 @@ try {
     const recipient = contacts[3 + shipment.index % (contacts.length - 3)];
     const sender = contacts[shipment.index % 3];
     const areaIndex = shipment.index % 5;
+    const destinationAreaId = `31710${String(areaIndex + 1).padStart(2, "0")}`;
+    const destinationAreaLabel = ["Gambir, Jakarta Pusat", "Tebet, Jakarta Selatan", "Kebayoran Baru, Jakarta Selatan", "Kebon Jeruk, Jakarta Barat", "Kelapa Gading, Jakarta Utara"][areaIndex];
 
     await client.query(
       `INSERT INTO shipments (id, tenant_id, outlet_id, status, created_at, updated_at)
@@ -253,8 +306,8 @@ try {
       [
         shipment.id,
         tenantId,
-        `31710${String(areaIndex + 1).padStart(2, "0")}`,
-        ["Gambir, Jakarta Pusat", "Tebet, Jakarta Selatan", "Kebayoran Baru, Jakarta Selatan", "Kebon Jeruk, Jakarta Barat", "Kelapa Gading, Jakarta Utara"][areaIndex],
+        destinationAreaId,
+        destinationAreaLabel,
         ["Pakaian", "Aksesori", "Peralatan rumah", "Buku", "Produk perawatan"][shipment.index % 5],
         500 + shipment.index * 125,
         1 + shipment.index % 3,
@@ -268,13 +321,16 @@ try {
     for (const [partyIndex, party] of [sender, recipient].entries()) {
       await client.query(
         `INSERT INTO shipment_parties (
-           id, tenant_id, shipment_id, role, name, phone, address, created_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           id, tenant_id, shipment_id, role, name, phone, address,
+           destination_area_id, destination_area_label, created_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (shipment_id, role) DO UPDATE SET
            tenant_id = EXCLUDED.tenant_id,
            name = EXCLUDED.name,
            phone = EXCLUDED.phone,
-           address = EXCLUDED.address`,
+           address = EXCLUDED.address,
+           destination_area_id = EXCLUDED.destination_area_id,
+           destination_area_label = EXCLUDED.destination_area_label`,
         [
           fixedUuid(partyIndex === 0 ? "7c" : "7d", shipment.index + 1),
           tenantId,
@@ -283,6 +339,8 @@ try {
           party.name,
           party.phone,
           `Jl. Demo GeraiCUAN No. ${(shipment.index % contacts.length) + 1}, Jakarta`,
+          partyIndex === 0 ? null : destinationAreaId,
+          partyIndex === 0 ? null : destinationAreaLabel,
           createdAt,
         ],
       );
@@ -298,19 +356,20 @@ try {
     await client.query(
       `INSERT INTO shipment_estimate_snapshots (
          id, tenant_id, shipment_id, outlet_id, origin_area_id, destination_area_id,
-         weight_grams, is_cod_requested, credential_source, retrieved_at
-       ) VALUES ($1, $2, $3, $4, 'local-origin', $5, $6, $7, 'platform_default', $8)
+         destination_area_label, weight_grams, is_cod_requested, credential_source, retrieved_at
+       ) VALUES ($1, $2, $3, $4, 'local-origin', $5, $6, $7, $8, 'platform_default', $9)
        ON CONFLICT (id) DO UPDATE SET
          tenant_id = EXCLUDED.tenant_id,
          shipment_id = EXCLUDED.shipment_id,
          outlet_id = EXCLUDED.outlet_id,
          origin_area_id = EXCLUDED.origin_area_id,
          destination_area_id = EXCLUDED.destination_area_id,
+         destination_area_label = EXCLUDED.destination_area_label,
          weight_grams = EXCLUDED.weight_grams,
          is_cod_requested = EXCLUDED.is_cod_requested,
          credential_source = EXCLUDED.credential_source,
          retrieved_at = EXCLUDED.retrieved_at`,
-      [shipment.estimateSnapshotId, tenantId, shipment.id, outletId, `31710${String(areaIndex + 1).padStart(2, "0")}`, 500 + shipment.index * 125, shipment.isCod, estimateAt],
+      [shipment.estimateSnapshotId, tenantId, shipment.id, outletId, destinationAreaId, destinationAreaLabel, 500 + shipment.index * 125, shipment.isCod, estimateAt],
     );
     await client.query(
       `INSERT INTO shipment_estimate_services (
@@ -409,11 +468,12 @@ try {
     await client.query(
       `INSERT INTO provider_order_snapshots (
          id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
-         estimate_service_id, position, provider_service, currency,
+         estimate_service_id, position, provider_service,
+         destination_area_id, destination_area_label, currency,
          shipping_amount_idr, insurance_amount_idr, is_cod,
          provider_cod_amount_idr, status, provider_order_id, is_paid,
          cnote_no, safe_response_code, resolved_at, created_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, 'IDR', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+       ) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, 'IDR', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        ON CONFLICT (id) DO UPDATE SET
          tenant_id = EXCLUDED.tenant_id,
          batch_id = EXCLUDED.batch_id,
@@ -421,6 +481,8 @@ try {
          estimate_snapshot_id = EXCLUDED.estimate_snapshot_id,
          estimate_service_id = EXCLUDED.estimate_service_id,
          provider_service = EXCLUDED.provider_service,
+         destination_area_id = EXCLUDED.destination_area_id,
+         destination_area_label = EXCLUDED.destination_area_label,
          shipping_amount_idr = EXCLUDED.shipping_amount_idr,
          insurance_amount_idr = EXCLUDED.insurance_amount_idr,
          is_cod = EXCLUDED.is_cod,
@@ -434,6 +496,7 @@ try {
       [
         shipment.providerOrderSnapshotId, tenantId, shipment.batchId, shipment.id,
         shipment.estimateSnapshotId, shipment.estimateServiceId, providerService,
+        destinationAreaId, destinationAreaLabel,
         shippingAmountIdr, insuranceAmountIdr, shipment.isCod, providerCodAmountIdr,
         shipment.status, providerOrderId,
         shipment.status === "ISSUED" ? true : shipment.status === "AWAITING_UPSTREAM_PAYMENT" ? false : null,
@@ -561,6 +624,7 @@ try {
     `SELECT
        (SELECT count(*)::int FROM memberships WHERE tenant_id = $1 AND status = 'ACTIVE') AS memberships,
        (SELECT count(*)::int FROM contacts WHERE tenant_id = $1 AND archived_at IS NULL) AS contacts,
+       (SELECT count(*)::int FROM contacts WHERE tenant_id = $1 AND archived_at IS NOT NULL) AS archived_contacts,
        (SELECT count(*)::int FROM contacts WHERE tenant_id = $1 AND id = ANY($2::uuid[])) AS seed_contacts,
        (SELECT count(*)::int FROM contact_addresses WHERE tenant_id = $1 AND archived_at IS NULL) AS contact_addresses,
        (SELECT count(*)::int FROM shipments WHERE tenant_id = $1) AS shipments,
@@ -577,7 +641,7 @@ try {
        (SELECT count(*)::int FROM ledger_entries WHERE tenant_id = $1) AS ledger_entries,
        (SELECT count(*)::int FROM reconciliation_runs WHERE tenant_id = $1) AS reconciliation_runs,
        (SELECT count(*)::int FROM print_events WHERE tenant_id = $1) AS print_events`,
-    [tenantId, contacts.map(({ id }) => id), shipmentDefinitions.map(({ id }) => id)],
+    [tenantId, [...contacts.map(({ id }) => id), archivedContact.id], shipmentDefinitions.map(({ id }) => id)],
   );
   seedSummary = counts.rows[0];
   const expectedStatuses = {
@@ -590,7 +654,8 @@ try {
     SUBMISSION_UNKNOWN: 3,
   };
   if (
-    seedSummary.seed_contacts !== contacts.length
+    seedSummary.seed_contacts !== contacts.length + 1
+    || seedSummary.archived_contacts < 1
     || seedSummary.seed_shipments !== shipmentDefinitions.length
     || Object.keys(seedSummary.shipment_statuses ?? {}).length !== Object.keys(expectedStatuses).length
     || Object.entries(expectedStatuses).some(

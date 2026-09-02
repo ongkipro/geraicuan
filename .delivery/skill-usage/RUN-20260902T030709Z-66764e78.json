@@ -1,0 +1,22 @@
+{
+  "capability": "full-stack-development",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "release-verification",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-02T03:08:08Z",
+  "result": "FAIL",
+  "risk": "R4",
+  "runId": "RUN-20260902T030709Z-66764e78",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "application-security",
+    "full-stack-development",
+    "mengantar-api",
+    "testing-engineering"
+  ],
+  "usageHash": "c29cf38c9733725b43d526657fc5e910fe5628cd6bd2e95768c1cf9d5b56eb4c",
+  "verificationFailed": true,
+  "worker": "main"
+}

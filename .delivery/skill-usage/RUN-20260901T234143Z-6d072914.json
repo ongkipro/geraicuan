@@ -1,0 +1,26 @@
+{
+  "capability": "full-stack-development",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "screening",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-02T00:05:28Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T234143Z-6d072914",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "application-security",
+    "full-stack-development",
+    "native-first",
+    "nextjs-development",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "de01fb88f94d23d6d329e0ebacdda42c3f0fbe765be35303d6986cd245bd97ab",
+  "verificationFailed": false,
+  "worker": "main"
+}

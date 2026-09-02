@@ -4,25 +4,29 @@ import { createHash } from "node:crypto";
 
 import { parse } from "csv-parse/sync";
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
-
-
 import {
   validateShipmentDraft,
   type ShipmentDraftField,
   type ShipmentDraftInput,
 } from "@/lib/shipment-draft";
-
-
+import {
+  MengantarLocationQueryError,
+  normalizeMengantarAreaQuery,
+  type MengantarDestinationAreaOption,
+} from "@/lib/mengantar-locations";
 
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_RECORD_BYTES = 8 * 1024;
 const MAX_ROWS = 100;
+export const MAX_BULK_DESTINATION_QUERIES = 10;
+// T-54 intentionally permits one location lookup per tenant actor at a time.
+const DESTINATION_RESOLUTION_CONCURRENCY = 1;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FIELD_TO_HEADER: Record<ShipmentDraftField, (typeof BULK_TEMPLATE_HEADERS)[number]> = {
   declaredValue: "nilai_barang",
-  destinationAreaId: "id_area_tujuan",
-  destinationAreaLabel: "area_tujuan",
+  destinationAreaId: "lokasi_tujuan",
+  destinationAreaLabel: "lokasi_tujuan",
   outletId: "nama_pengirim",
   packageContent: "isi_paket",
   packageHeightCm: "tinggi_cm",
@@ -42,9 +46,7 @@ const FIELD_TO_HEADER: Record<ShipmentDraftField, (typeof BULK_TEMPLATE_HEADERS)
 const FIELD_TO_FORM_NAME: Record<(typeof BULK_TEMPLATE_HEADERS)[number], string> = {
   alamat_penerima: "recipientAddress",
   alamat_pengirim: "senderAddress",
-  area_tujuan: "destinationAreaLabel",
   berat_gram: "packageWeightGrams",
-  id_area_tujuan: "destinationAreaId",
   isi_paket: "packageContent",
   jumlah_paket: "packageQuantity",
   lebar_cm: "packageWidthCm",
@@ -52,6 +54,7 @@ const FIELD_TO_FORM_NAME: Record<(typeof BULK_TEMPLATE_HEADERS)[number], string>
   nama_penerima: "recipientName",
   nama_pengirim: "senderName",
   nilai_barang: "declaredValue",
+  lokasi_tujuan: "destinationAreaLabel",
   panjang_cm: "packageLengthCm",
   telepon_penerima: "recipientPhone",
   telepon_pengirim: "senderPhone",
@@ -70,19 +73,45 @@ export type BulkFileError = {
   message: string;
 };
 export type BulkRowError = {
+  candidateLabels?: string[];
+  code?: BulkDestinationResolutionErrorCode;
   field: (typeof BULK_TEMPLATE_HEADERS)[number];
   message: string;
+  query?: string;
   row: number;
 };
 export type BulkValidRow = {
+  destinationQuery: string;
   input: ShipmentDraftInput;
   row: number;
 };
 export type BulkShipmentPreview = {
   errors: BulkRowError[];
   totalRows: number;
+  uniqueDestinationQueries: number;
   validRows: BulkValidRow[];
 };
+
+export type BulkDestinationResolutionErrorCode =
+  | "ambiguous"
+  | "busy"
+  | "invalid_query"
+  | "no_result"
+  | "rate_limited"
+  | "stale_authority"
+  | "unavailable";
+
+export type BulkDestinationResolution =
+  | { option: MengantarDestinationAreaOption; status: "resolved" }
+  | {
+      candidateLabels?: string[];
+      message: string;
+      status: BulkDestinationResolutionErrorCode;
+    };
+
+export type BulkDestinationResolver = (
+  query: string,
+) => Promise<BulkDestinationResolution>;
 
 export function deriveBulkRowSubmissionId(submissionId: string, row: number) {
   const bytes = createHash("sha256")
@@ -104,18 +133,50 @@ function isExpectedHeader(row: string[]) {
   );
 }
 
-function toFormData(row: string[], outletId: string) {
+function toFormData(
+  row: string[],
+  outletId: string,
+  destination: MengantarDestinationAreaOption,
+) {
   const formData = new FormData();
   for (const [index, header] of BULK_TEMPLATE_HEADERS.entries()) {
     formData.set(FIELD_TO_FORM_NAME[header], row[index] ?? "");
   }
+  formData.set("destinationAreaId", destination.areaId);
+  formData.set("destinationAreaLabel", destination.areaLabel);
   formData.set("outletId", outletId);
   return formData;
+}
+
+async function resolveWithConcurrency(
+  queries: readonly string[],
+  resolveDestination: BulkDestinationResolver,
+) {
+  const results = new Map<string, BulkDestinationResolution>();
+  let nextIndex = 0;
+  await Promise.all(Array.from(
+    { length: Math.min(DESTINATION_RESOLUTION_CONCURRENCY, queries.length) },
+    async () => {
+      while (nextIndex < queries.length) {
+        const query = queries[nextIndex++]!;
+        try {
+          results.set(query, await resolveDestination(query));
+        } catch {
+          results.set(query, {
+            message: "Lokasi Mengantar belum dapat dimuat. Coba unggah ulang.",
+            status: "unavailable",
+          });
+        }
+      }
+    },
+  ));
+  return results;
 }
 
 export async function previewBulkShipmentCsv(
   file: File,
   outletId: string,
+  resolveDestination: BulkDestinationResolver,
 ): Promise<BulkShipmentPreview | BulkFileError> {
   if (!file.name.toLowerCase().endsWith(".csv")) {
     return fileError("file", "Berkas harus CSV (.csv).");
@@ -179,23 +240,71 @@ export async function previewBulkShipmentCsv(
     return fileError("row_limit", "Maksimal 100 baris data per unggahan.");
   }
 
+  const normalizedQueries = new Map<number, string>();
+  const uniqueQueries = new Set<string>();
+  for (const [index, row] of dataRows.entries()) {
+    const query = row[BULK_TEMPLATE_HEADERS.indexOf("lokasi_tujuan")] ?? "";
+    try {
+      const normalized = normalizeMengantarAreaQuery(query);
+      normalizedQueries.set(index, normalized);
+      uniqueQueries.add(normalized);
+    } catch (error) {
+      if (!(error instanceof MengantarLocationQueryError)) throw error;
+    }
+  }
+  if (uniqueQueries.size > MAX_BULK_DESTINATION_QUERIES) {
+    return fileError(
+      "row_limit",
+      `Maksimal ${MAX_BULK_DESTINATION_QUERIES} lokasi tujuan unik per unggahan.`,
+    );
+  }
+  const resolutions = await resolveWithConcurrency([...uniqueQueries], resolveDestination);
+
   const errors: BulkRowError[] = [];
   const validRows: BulkValidRow[] = [];
   for (const [index, row] of dataRows.entries()) {
     const rowNumber = index + 2;
-    const validation = validateShipmentDraft(toFormData(row, outletId));
-    if (validation.ok) {
-      validRows.push({ input: validation.input, row: rowNumber });
-      continue;
+    const query = normalizedQueries.get(index);
+    const resolution = query ? resolutions.get(query) : undefined;
+    const destination = resolution?.status === "resolved"
+      ? resolution.option
+      : { areaId: "unresolved", areaLabel: query || "unresolved" };
+    const validation = validateShipmentDraft(toFormData(row, outletId, destination));
+    if (!query) {
+      errors.push({
+        code: "invalid_query",
+        field: "lokasi_tujuan",
+        message: "Isi lokasi tujuan dengan 3 sampai 100 karakter.",
+        row: rowNumber,
+      });
+    } else if (!resolution || resolution.status !== "resolved") {
+      errors.push({
+        candidateLabels: resolution?.candidateLabels,
+        code: resolution?.status ?? "unavailable",
+        field: "lokasi_tujuan",
+        message: resolution?.message ?? "Lokasi tujuan belum dapat dicocokkan.",
+        query,
+        row: rowNumber,
+      });
     }
-
-    for (const [field, message] of Object.entries(validation.errors) as Array<[
-      ShipmentDraftField,
-      string,
-    ]>) {
-      errors.push({ field: FIELD_TO_HEADER[field], message, row: rowNumber });
+    if (!validation.ok) {
+      for (const [field, message] of Object.entries(validation.errors) as Array<[
+        ShipmentDraftField,
+        string,
+      ]>) {
+        if (field === "destinationAreaId" || field === "destinationAreaLabel") continue;
+        errors.push({ field: FIELD_TO_HEADER[field], message, row: rowNumber });
+      }
+    }
+    if (query && resolution?.status === "resolved" && validation.ok) {
+      validRows.push({ destinationQuery: query, input: validation.input, row: rowNumber });
     }
   }
 
-  return { errors, totalRows: dataRows.length, validRows };
+  return {
+    errors,
+    totalRows: dataRows.length,
+    uniqueDestinationQueries: uniqueQueries.size,
+    validRows,
+  };
 }

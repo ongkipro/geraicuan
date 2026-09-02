@@ -125,16 +125,16 @@ beforeAll(async () => {
     [shipmentId, tenantA],
   );
   await adminPool.query(
-    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address)
-     VALUES ($1, $2, 'SENDER', 'Pengirim Sintetis', '0800000000', 'Alamat sintetis asal'),
-            ($1, $2, 'RECIPIENT', 'Penerima Sintetis', '0800000000', 'Alamat sintetis tujuan')`,
+    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label)
+     VALUES ($1, $2, 'SENDER', 'Pengirim Sintetis', '0800000000', 'Alamat sintetis asal', NULL, NULL),
+            ($1, $2, 'RECIPIENT', 'Penerima Sintetis', '0800000000', 'Alamat sintetis tujuan', 'fixture-destination', 'Tujuan sintetis')`,
     [tenantA, shipmentId],
   );
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
        id, tenant_id, shipment_id, outlet_id, origin_area_id, destination_area_id,
-       weight_grams, is_cod_requested, credential_source
-     ) VALUES ($1, $2, $3, $4, 'fixture-origin-a', 'fixture-destination', 1000, true, 'platform_default')`,
+       destination_area_label, weight_grams, is_cod_requested, credential_source
+     ) VALUES ($1, $2, $3, $4, 'fixture-origin-a', 'fixture-destination', 'Tujuan sintetis', 1000, true, 'platform_default')`,
     [snapshotId, tenantA, shipmentId, outletA],
   );
   await adminPool.query(

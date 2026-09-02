@@ -10,7 +10,7 @@
 - Public direction decision: editorial utility was selected over a conventional centered SaaS hero or a dense application screenshot. It communicates the operating model with no new asset dependency, remains legible at 390px, and reuses the accepted semantic tokens. Design dials are variance 5, motion 2, density 4.
 - CMS Admin: clean, information-dense light operational surface using the repository's shadcn/Radix primitives and Tailwind semantic tokens. Cobalt is the sole interactive accent; neutral surfaces establish hierarchy; semantic green, amber, and red communicate status alongside text or icon cues. Use compact tables, explicit status badges, and no decorative dashboard cards where a queue or filterable table is the decision tool.
 - Presentation is flat and hairline-led. Do not use gradients, backdrop blur, speculative dark mode, decorative shadows, or nested cards. Shadows are reserved for floating overlays.
-- Responsive behavior: desktop full sidebar, tablet icon rail, mobile sheet navigation. Analytics/table filters collapse into one filter drawer below 768px. Narrow table regions retain semantic tables with a sticky leading column, horizontal scroll containment, and visible keyboard focus.
+- Responsive behavior: desktop full sidebar, tablet icon rail, mobile sheet navigation. Ringkasan, Analytics, and Finance retain exactly one server-rendered GET filter form: below 768px one labelled native disclosure controls its visibility; at 768px and above the same form remains inline. Narrow table regions retain semantic tables with a sticky leading column, horizontal scroll containment, and visible keyboard focus.
 - Analytics: show selected timezone and period beside every KPI and chart. Use a two-series line chart for created versus issued shipments, retain its complete tabular data immediately below, and distinguish series by color and dashed stroke.
 - Tenant operational home follows `overview → exceptions → recent detail`: a compact role-specific status strip, the highest-cost action queue, then recent shipments. It is not a decorative KPI grid and does not duplicate the full Analitik page.
 - Product meaning is route-stable: Ringkasan is a daily command center, Analitik is read-only historical exploration, Pengiriman owns lifecycle work, and Keuangan is the authoritative ledger/reconciliation workspace. A cross-route link carries the user to the authority instead of restyling a summary as if it were authoritative.
@@ -28,7 +28,7 @@
 - Filters, status, empty, loading, error, table, and pager surfaces retain semantic labels and never cause horizontal page overflow. Wide table regions scroll locally rather than expanding the document.
 - At every viewport, the selected WIB/IANA timezone, range, active filter count, and generated-at time remain visible without opening a chart tooltip.
 - Loading skeletons mirror the final region, system-empty explains the next setup action, filtered-empty offers filter reset, and a region error retains successful sibling regions with a local retry.
-- On mobile, KPI summaries stack, chart legends move above the plot, annotations become text below it, and dense filters move into one labelled Sheet while the applied filter state remains visible on the page.
+- On mobile, KPI summaries stack, chart legends move above the plot, annotations become text below it, and dense GET filters move behind one labelled 44px disclosure while the applied filter state remains visible on the page. Do not mount separate mobile and desktop forms. Because Chromium does not render descendants of a closed `details` element at desktop merely from responsive `display` utilities, the native mobile `details` summary controls one adjacent form region through `aria-controls`; the region uses open-state CSS below 768px and is unconditionally visible above it.
 
 
 
@@ -45,6 +45,14 @@
 10. Tenant operational overview: role-specific priority summary, outlet/readiness warning where permitted, actionable shipment exception queue, and recent shipment outcomes; every summary links to its filtered source records.
 11. Tenant analytics: period/comparison KPIs, created-versus-issued trend, lifecycle/courier breakdowns only where their denominator and time semantics are valid, and a server-paginated drill-down table whose visible `created`, `issued`, provider-`outcome`, or current-`exceptions` basis persists with the same authorized URL dimensions and export.
 12. Provider mutation release state: production issuance and recovery controls remain unavailable while evidence is fixture-only; explain that the operation is not released without presenting an enabled control that could create a real provider order.
+
+## Cross-screen screening standard
+
+- Review the complete CMS after material workflow changes, but repair only evidenced regressions. A passing screen is not redesigned to make the audit look productive.
+- Tenant review covers all 14 authenticated tenant pages as one system; platform review covers all 4 platform pages as one separate scope; public and login surfaces prove the public/CMS data boundary.
+- At 390px, 768px, and 1280px compare shell gutters, page measure, PageHeader geometry, section rhythm, control and row density, status vocabulary, form behavior, table/chart semantics, and loading/empty/error/stale/pending/success treatments.
+- Reject duplicate responsive form trees, nested cards, decorative KPI grids, ornamental badges, repeated padding, hidden opaque identifiers, desktop layouts merely scaled down for mobile, and any chart or status whose meaning depends only on colour or hover.
+- Visual acceptance requires an operator-complete browser journey, keyboard/focus and overflow evidence, and correct data semantics; a screenshot or green build alone is insufficient.
 
 ## Screen Contracts
 | Screen | Primary job | Critical states | Guardrails |

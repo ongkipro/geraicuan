@@ -12,8 +12,10 @@ import { withTenantContext } from "@/db/tenant-context";
 import { EstimateRateLimitedError, enforceEstimateRateLimit } from "@/lib/estimate-rate-limit";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import {
+  lockMengantarAccountAuthority,
   MengantarConfigurationError,
-  resolveMengantarCredentials,
+  resolveMengantarAccountCredentials,
+  sameMengantarAccountAuthority,
 } from "@/lib/mengantar-credentials";
 import { fetchMengantarEstimate, MengantarEstimateError } from "@/lib/mengantar-estimate";
 import {
@@ -103,21 +105,22 @@ export async function loadShipmentEstimate(
       principal.tenantId,
       async (tx, context) => {
         const draft = await loadDraftEstimateInput(tx, context, shipmentId);
-        if (isSanctionedEstimateFixtureEnabled()) {
-          return { draft, resolved: null };
-        }
-        const resolved = await resolveMengantarCredentials(
+        const resolved = await resolveMengantarAccountCredentials(
           tx,
           context,
           draft.outletId,
         );
-        return { draft, resolved };
+        return {
+          draft,
+          resolved,
+          useSanctionedFixture: isSanctionedEstimateFixtureEnabled(),
+        };
       },
     );
     estimateScope = {
       ...verifiedContext,
       outletId: prepared.draft.outletId,
-      credentialSource: prepared.resolved?.source ?? "platform_default",
+      credentialSource: prepared.resolved.source,
     };
 
     const estimateRequest = {
@@ -125,19 +128,40 @@ export async function loadShipmentEstimate(
       originAreaId: prepared.draft.originAreaId,
       weightGrams: prepared.draft.weightGrams,
     };
-    const services = prepared.resolved
-      ? await fetchMengantarEstimate(prepared.resolved.credentials, estimateRequest)
-      : await loadSanctionedEstimateFixture();
+    const services = prepared.useSanctionedFixture
+      ? await loadSanctionedEstimateFixture()
+      : await fetchMengantarEstimate({
+          ...prepared.resolved.credentials,
+          originAreaId: prepared.resolved.originAreaId,
+          pickupAddressId: prepared.resolved.pickupAddressId,
+        }, estimateRequest);
 
-    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      appendEstimateSnapshot(tx, context, shipmentId, {
-        credentialSource: prepared.resolved?.source ?? "platform_default",
+    await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
+      await lockMengantarAccountAuthority(tx, context, prepared.draft.outletId);
+      const current = await resolveMengantarAccountCredentials(
+        tx,
+        context,
+        prepared.draft.outletId,
+      );
+      if (
+        !sameMengantarAccountAuthority(
+          prepared.resolved.authority,
+          current.authority,
+        )
+        || prepared.resolved.originAreaId !== current.originAreaId
+        || prepared.resolved.pickupAddressId !== current.pickupAddressId
+      ) {
+        throw new DraftEstimateUnavailableError();
+      }
+      return appendEstimateSnapshot(tx, context, shipmentId, {
+        credentialSource: prepared.resolved.source,
         destinationAreaId: prepared.draft.destinationAreaId,
+        destinationAreaLabel: prepared.draft.destinationAreaLabel,
         isCodRequested: prepared.draft.isCod,
         originAreaId: prepared.draft.originAreaId,
         weightGrams: prepared.draft.weightGrams,
-      }, services),
-    );
+      }, services);
+    });
     emitShipmentLifecycleEvent({
       operation: "estimate",
       outcome: "success",

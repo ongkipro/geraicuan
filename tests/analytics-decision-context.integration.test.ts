@@ -161,11 +161,16 @@ describe("tenant analytics decision context", () => {
     });
     expect(html.match(/WIT \(UTC\+09:00\)/g)?.length).toBeGreaterThanOrEqual(4);
     expect(html).toContain("Dibandingkan dengan <strong");
+    expect(html).toContain("Wawasan");
     expect(html).toContain('id="analytics-page-heading"');
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain("↑");
     expect(html).toContain("50% lebih tinggi dari periode sebelumnya.");
     expect(html).toContain("Net selisih bertanda");
+    expect(html.match(/aria-label="Net selisih bertanda:[^"]+Lihat record pendukung"/g)).toHaveLength(1);
+    expect(html.match(/aria-label="Kiriman dibuat:[^"]+Lihat record pendukung"/g)).toHaveLength(1);
+    expect(html).not.toContain(">Net selisih bertanda</a>");
+    expect(html).not.toContain(">Kiriman dibuat</a>");
     expect(html).toContain("Data event periode");
     expect(html).toContain("Data tren");
     expect(html).toContain('dateTime="2026-07-07T12:00:00.000Z"');
@@ -180,6 +185,8 @@ describe("tenant analytics decision context", () => {
     expect(html).toContain(
       `href="/app/pengiriman/${fixture.shipmentId}"`,
     );
+    expect(html).toContain("inline-flex min-h-11 items-center text-primary");
+    expect(html.match(/min-h-11 sm:min-h-8/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html.indexOf(">Kiriman</th>")).toBeLessThan(
       html.indexOf(">Dibuat</th>"),
     );

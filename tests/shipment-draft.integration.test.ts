@@ -116,7 +116,12 @@ describe("tenant shipment drafts", () => {
       .from(schema.shipmentDrafts)
       .where(eq(schema.shipmentDrafts.shipmentId, shipmentId));
     const parties = await adminDb
-      .select({ phone: schema.shipmentParties.phone, role: schema.shipmentParties.role })
+      .select({
+        destinationAreaId: schema.shipmentParties.destinationAreaId,
+        destinationAreaLabel: schema.shipmentParties.destinationAreaLabel,
+        phone: schema.shipmentParties.phone,
+        role: schema.shipmentParties.role,
+      })
       .from(schema.shipmentParties)
       .where(eq(schema.shipmentParties.shipmentId, shipmentId));
 
@@ -130,8 +135,18 @@ describe("tenant shipment drafts", () => {
     });
     expect(parties).toHaveLength(2);
     expect(parties).toEqual(expect.arrayContaining([
-      { phone: "081212345678", role: "SENDER" },
-      { phone: "+6281234567890", role: "RECIPIENT" },
+      {
+        destinationAreaId: null,
+        destinationAreaLabel: null,
+        phone: "081212345678",
+        role: "SENDER",
+      },
+      {
+        destinationAreaId: "3171010",
+        destinationAreaLabel: "Gambir, Jakarta Pusat",
+        phone: "+6281234567890",
+        role: "RECIPIENT",
+      },
     ]));
 
     await expect(
@@ -286,7 +301,7 @@ describe("tenant shipment drafts", () => {
   it("creates only CSV rows that passed validation in the tenant transaction", async () => {
     const validRow = [
       "Pengirim", "081212345678", "Jl. Asia Afrika 8", "Penerima", "081234567890",
-      "Jl. Medan Merdeka Barat 1", "3171010", "\"Gambir, Jakarta Pusat\"", "Pakaian", "500",
+      "Jl. Medan Merdeka Barat 1", "Gambir Jakarta Pusat", "Pakaian", "500",
       "1", "", "", "", "150000", "NON_COD",
     ];
     const invalidRow = [...validRow];
@@ -294,6 +309,10 @@ describe("tenant shipment drafts", () => {
     const preview = await previewBulkShipmentCsv(
       new File([bulkCsv([validRow, invalidRow])], "kiriman.csv", { type: "text/csv" }),
       outletA,
+      async () => ({
+        option: { areaId: "3171010", areaLabel: "Gambir, Jakarta Pusat" },
+        status: "resolved",
+      }),
     );
 
     expect("code" in preview).toBe(false);
@@ -404,9 +423,20 @@ describe("tenant shipment drafts", () => {
       })),
     }));
     vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    vi.doMock("@/app/app/location-actions", () => ({
+      validateMengantarDestinationAreaSelection: vi.fn(async (_outletId, _query, areaId, areaLabel) => ({
+        option: { areaId, areaLabel },
+        success: true,
+      })),
+    }));
     const { saveShipmentDraft } = await import("@/app/app/actions");
     const formData = submission();
     formData.set("submissionId", submissionId);
+    formData.set("destinationMode", "manual");
+    formData.set("areaOutletId", outletA);
+    formData.set("areaQuery", "Gambir Jakarta");
+    formData.set("areaId", "3171010");
+    formData.set("areaLabel", "Gambir, Jakarta Pusat");
     formData.set("senderContactId", contactId);
     formData.set("senderContactAddressId", addressId);
     formData.set("senderContactUpdatedAt", selectedAt.toISOString());

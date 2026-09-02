@@ -8,11 +8,17 @@ const errors = vi.hoisted(() => ({
   ContactAddressLabelConflictError: class ContactAddressLabelConflictError extends Error {},
   ContactArchiveDeniedError: class ContactArchiveDeniedError extends Error {},
   ContactUnavailableError: class ContactUnavailableError extends Error {},
+  MengantarConfigurationError: class MengantarConfigurationError extends Error {},
 }));
 
 const mocks = vi.hoisted(() => ({
   addFailure: "" as "" | "duplicate" | "unavailable",
   added: [] as Array<{ contactId: string; input: unknown }>,
+  addressUpdated: [] as Array<{ addressId: string; contactId: string; input: unknown }>,
+  areaValidationFailure: false,
+  areaValidations: [] as Array<{ areaId: string; areaLabel: string; outletId: string; query: string }>,
+  currentAuthorityVersion: 1,
+  validatedAuthorityVersion: 1,
   archiveFailure: "" as "" | "unavailable",
   archived: [] as string[],
   authorizationDenied: false,
@@ -53,6 +59,41 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/db/client", () => ({ db: {} }));
 
+vi.mock("@/db/outlet-readiness-repository", () => ({
+  listReadyShipmentOutlets: vi.fn(async () => [{ id: "00000000-0000-4000-8000-000000000411", name: "Outlet siap" }]),
+}));
+
+vi.mock("@/app/app/location-actions", () => ({
+  validateMengantarDestinationAreaSelection: vi.fn(async (outletId, query, areaId, areaLabel) => {
+    mocks.areaValidations.push({ areaId, areaLabel, outletId, query });
+    return mocks.areaValidationFailure
+      ? { error: "selection_mismatch", message: "Pilihan area berubah.", success: false }
+      : {
+          authority: {
+            connectionUpdatedAt: null,
+            source: "platform_default",
+            version: mocks.validatedAuthorityVersion,
+          },
+          option: { areaId, areaLabel },
+          success: true,
+        };
+  }),
+}));
+
+vi.mock("@/lib/mengantar-credentials", () => ({
+  lockMengantarAccountAuthority: vi.fn(async () => ({
+    connectionUpdatedAt: null,
+    source: "platform_default",
+    version: mocks.currentAuthorityVersion,
+  })),
+  MengantarConfigurationError: errors.MengantarConfigurationError,
+  sameMengantarAccountAuthority: vi.fn((expected, current) => (
+    expected.source === current.source
+    && expected.connectionUpdatedAt === current.connectionUpdatedAt
+    && expected.version === current.version
+  )),
+}));
+
 vi.mock("@/db/tenant-context", () => ({
   withTenantContext: vi.fn(async (_db, userId, tenantId, callback) => {
     mocks.contextCalls += 1;
@@ -89,6 +130,9 @@ vi.mock("@/db/contact-repository", () => ({
     mocks.created.push(input);
     return CONTACT_ID;
   }),
+  hasActiveContactAddressMutationTarget: vi.fn(async (_tx, _context, contactId) => (
+    contactId !== mocks.crossTenantContactId
+  )),
   listContacts: vi.fn(async (_tx, _context, query, status) => {
     mocks.searches.push({ query, status });
     return mocks.searchRows;
@@ -97,6 +141,12 @@ vi.mock("@/db/contact-repository", () => ({
     if (contactId === mocks.crossTenantContactId) throw new errors.ContactUnavailableError();
     if (mocks.updateFailure === "unavailable") throw new errors.ContactUnavailableError();
     mocks.updated.push({ contactId, input });
+  }),
+  updateContactAddress: vi.fn(async (_tx, _context, contactId, addressId, input) => {
+    if (contactId === mocks.crossTenantContactId) throw new errors.ContactUnavailableError();
+    if (mocks.addFailure === "duplicate") throw new errors.ContactAddressLabelConflictError();
+    if (mocks.addFailure === "unavailable") throw new errors.ContactUnavailableError();
+    mocks.addressUpdated.push({ addressId, contactId, input });
   }),
 }));
 
@@ -110,6 +160,8 @@ function validCreateForm() {
   form.set("addressText", "Jl. Kontak 1");
   form.set("areaLabel", "Gambir, Jakarta Pusat");
   form.set("areaId", "3171010");
+  form.set("areaQuery", "Gambir Jakarta");
+  form.set("areaOutletId", "00000000-0000-4000-8000-000000000411");
   return form;
 }
 
@@ -129,6 +181,15 @@ function validAddressForm() {
   form.set("addressText", "Jl. Rumah 2");
   form.set("areaLabel", "Tebet, Jakarta Selatan");
   form.set("areaId", "3171090");
+  form.set("areaQuery", "Tebet Jakarta");
+  form.set("areaOutletId", "00000000-0000-4000-8000-000000000411");
+  return form;
+}
+
+function validAddressUpdateForm() {
+  const form = validAddressForm();
+  form.set("addressId", "00000000-0000-4000-8000-000000000423");
+  form.set("areaSelectionChanged", "1");
   return form;
 }
 
@@ -141,6 +202,11 @@ function archiveForm() {
 beforeEach(() => {
   mocks.addFailure = "";
   mocks.added.length = 0;
+  mocks.addressUpdated.length = 0;
+  mocks.areaValidationFailure = false;
+  mocks.areaValidations.length = 0;
+  mocks.currentAuthorityVersion = 1;
+  mocks.validatedAuthorityVersion = 1;
   mocks.archiveFailure = "";
   mocks.archived.length = 0;
   mocks.authorizationDenied = false;
@@ -166,6 +232,7 @@ describe("contact Server Actions", () => {
     const {
       addContactAddressAction,
       archiveContactAction,
+      updateContactAddressAction,
       updateContactAction,
     } = await import("@/app/app/kontak/[contactId]/actions");
 
@@ -173,6 +240,7 @@ describe("contact Server Actions", () => {
     await expect(searchContacts({ rows: [], searched: false }, new FormData())).rejects.toThrow("REDIRECT:/login/tenant");
     await expect(updateContactAction({}, new FormData())).rejects.toThrow("REDIRECT:/login/tenant");
     await expect(addContactAddressAction({}, new FormData())).rejects.toThrow("REDIRECT:/login/tenant");
+    await expect(updateContactAddressAction({}, new FormData())).rejects.toThrow("REDIRECT:/login/tenant");
     await expect(archiveContactAction({}, new FormData())).rejects.toThrow("REDIRECT:/login/tenant");
     expect(mocks.contextCalls).toBe(0);
     expect(mocks.created).toEqual([]);
@@ -192,6 +260,7 @@ describe("contact Server Actions", () => {
     const {
       addContactAddressAction,
       archiveContactAction,
+      updateContactAddressAction,
       updateContactAction,
     } = await import("@/app/app/kontak/[contactId]/actions");
 
@@ -199,6 +268,7 @@ describe("contact Server Actions", () => {
     await expect(searchContacts({ rows: [], searched: false }, new FormData())).rejects.toThrow("REDIRECT:/login/tenant");
     await expect(updateContactAction({}, validIdentityForm())).rejects.toThrow("REDIRECT:/login/tenant");
     await expect(addContactAddressAction({}, validAddressForm())).rejects.toThrow("REDIRECT:/login/tenant");
+    await expect(updateContactAddressAction({}, validAddressUpdateForm())).rejects.toThrow("REDIRECT:/login/tenant");
     await expect(archiveContactAction({}, archiveForm())).rejects.toThrow("REDIRECT:/login/tenant");
     expect(mocks.contextCalls).toBe(0);
   });
@@ -259,7 +329,6 @@ describe("contact Server Actions", () => {
     });
     expect(addressState.values).toMatchObject({
       addressLabel: "Rumah tetap",
-      areaLabel: "Tebet, Jakarta Selatan",
     });
     expect(mocks.created).toEqual([]);
     expect(mocks.updated).toEqual([]);
@@ -322,6 +391,70 @@ describe("contact Server Actions", () => {
       `/app/kontak/${CONTACT_ID}`,
       `/app/kontak/${CONTACT_ID}`,
     ]);
+  });
+
+  it("keeps destination area optional while rejecting a stale or tampered non-null pair with zero writes", async () => {
+    const { saveContact } = await import("@/app/app/kontak/actions");
+    const { addContactAddressAction } = await import("@/app/app/kontak/[contactId]/actions");
+    const withoutArea = validCreateForm();
+    for (const field of ["areaId", "areaLabel", "areaQuery", "areaOutletId"]) withoutArea.delete(field);
+    await expect(saveContact({}, withoutArea)).resolves.toMatchObject({ successId: CONTACT_ID });
+
+    mocks.areaValidationFailure = true;
+    const stale = await addContactAddressAction({}, validAddressForm());
+    expect(stale).toMatchObject({
+      areaQuery: { query: "Tebet Jakarta" },
+      errors: { areaLabel: "Pilihan area berubah." },
+    });
+    expect(stale).not.toHaveProperty("selectedArea");
+    expect(mocks.added).toEqual([]);
+  });
+
+  it("rejects contact and address writes when Mengantar authority changes after area validation", async () => {
+    const { saveContact } = await import("@/app/app/kontak/actions");
+    const { addContactAddressAction, updateContactAddressAction } = await import("@/app/app/kontak/[contactId]/actions");
+    mocks.currentAuthorityVersion = 2;
+
+    const created = await saveContact({}, validCreateForm());
+    const added = await addContactAddressAction({}, validAddressForm());
+    const updated = await updateContactAddressAction({}, validAddressUpdateForm());
+
+    expect(created).toMatchObject({
+      errors: { areaLabel: "Koneksi Mengantar berubah. Cari dan pilih ulang area tujuan." },
+      selectedArea: { areaId: "3171010", areaLabel: "Gambir, Jakarta Pusat" },
+    });
+    expect(added).toMatchObject({
+      errors: { areaLabel: "Koneksi Mengantar berubah. Cari dan pilih ulang area tujuan." },
+      selectedArea: { areaId: "3171090", areaLabel: "Tebet, Jakarta Selatan" },
+    });
+    expect(updated).toMatchObject({
+      errors: { areaLabel: "Koneksi Mengantar berubah. Cari dan pilih ulang area tujuan." },
+      selectedArea: { areaId: "3171090", areaLabel: "Tebet, Jakarta Selatan" },
+    });
+    expect(mocks.created).toEqual([]);
+    expect(mocks.added).toEqual([]);
+    expect(mocks.addressUpdated).toEqual([]);
+  });
+
+  it("revalidates a selected area again after an edit label conflict before retrying the update", async () => {
+    const { updateContactAddressAction } = await import("@/app/app/kontak/[contactId]/actions");
+    mocks.addFailure = "duplicate";
+    const first = await updateContactAddressAction({}, validAddressUpdateForm());
+    expect(first).toMatchObject({
+      errors: { addressLabel: "Label alamat sudah digunakan pada kontak ini." },
+      selectedArea: { areaId: "3171090", query: "Tebet Jakarta" },
+    });
+    expect(mocks.areaValidations).toHaveLength(1);
+
+    mocks.addFailure = "";
+    const retry = validAddressUpdateForm();
+    const result = await updateContactAddressAction(first, retry);
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.areaValidations).toHaveLength(2);
+    expect(mocks.addressUpdated).toHaveLength(1);
+    expect(mocks.addressUpdated[0].input).toMatchObject({
+      destinationArea: { id: "3171090", label: "Tebet, Jakarta Selatan" },
+    });
   });
 
   it("maps duplicate and unavailable contacts to safe states without leaking internal errors", async () => {

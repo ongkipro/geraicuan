@@ -16,6 +16,7 @@ import {
   listContacts,
   resolveActiveContactAddress,
   updateContact,
+  updateContactAddress,
 } from "@/db/contact-repository";
 import { createShipmentDraft } from "@/db/shipment-draft-repository";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
@@ -220,6 +221,58 @@ describe("tenant contact directory", () => {
     );
     expect(many).toHaveLength(2);
     expect(many.filter(({ isPrimary }) => isPrimary)).toHaveLength(1);
+  });
+
+  it("updates only an active tenant-owned address and keeps the canonical area pair atomic", async () => {
+    const contactId = await withTenantContext(appDb, userAdmin, tenantA, (tx, context) =>
+      createContact(tx, context, {
+        ...input,
+        addressLabel: "Alamat sebelum edit",
+        name: "Kontak Edit Alamat",
+        phone: "081200000030",
+      }),
+    );
+    const [address] = await withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+      listContactAddresses(tx, context, contactId),
+    );
+    if (!address) throw new Error("Address fixture was not created.");
+
+    await withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+      updateContactAddress(tx, context, contactId, address.id, {
+        address: "Jl. Alamat Sesudah Edit 2",
+        addressLabel: "Alamat sesudah edit",
+        destinationArea: {
+          id: "area-provider-2",
+          label: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
+        },
+      }),
+    );
+    const [updated] = await withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+      listContactAddresses(tx, context, contactId),
+    );
+    expect(updated).toMatchObject({
+      address: "Jl. Alamat Sesudah Edit 2",
+      destinationAreaId: "area-provider-2",
+      destinationAreaLabel: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
+      label: "Alamat sesudah edit",
+    });
+
+    await expect(withTenantContext(appDb, userOther, tenantB, (tx, context) =>
+      updateContactAddress(tx, context, contactId, address.id, {
+        address: "Cross tenant",
+        addressLabel: "Cross tenant",
+      }),
+    )).rejects.toBeInstanceOf(ContactUnavailableError);
+
+    await withTenantContext(appDb, userAdmin, tenantA, (tx, context) =>
+      archiveContact(tx, context, contactId),
+    );
+    await expect(withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+      updateContactAddress(tx, context, contactId, address.id, {
+        address: "Archived mutation",
+        addressLabel: "Archived mutation",
+      }),
+    )).rejects.toBeInstanceOf(ContactUnavailableError);
   });
 
   it("serializes concurrent additions at the twenty-address cap and rejects further writes", async () => {

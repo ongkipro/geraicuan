@@ -1,0 +1,23 @@
+{
+  "capability": "admin-dashboard",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "implementation",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-02T01:06:06Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260902T005309Z-cfd95f31",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "better-auth-security",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "181dfed6d6fc9f4abc7357b20479c2bac85ede27990bea1f93eea68c8b3ac993",
+  "verificationFailed": false,
+  "worker": "main"
+}

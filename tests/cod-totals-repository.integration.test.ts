@@ -46,6 +46,7 @@ const nonAppendableShipment = "00000000-0000-0000-0000-000000000723";
 const codRequest = {
   originAreaId: "origin-a",
   destinationAreaId: "destination-a",
+  destinationAreaLabel: "Destination A",
   weightGrams: 1_000,
   isCodRequested: true,
   credentialSource: "platform_default",
@@ -352,5 +353,52 @@ describe("shipment COD totals", () => {
 
     const rows = await adminDb.select().from(schema.shipmentCodTotals);
     expect(rows).toEqual([]);
+  });
+
+  it("rejects a COD snapshot whose readable destination label drifted from the draft", async () => {
+    const snapshotId = await withTenantContext(
+      appDb,
+      "cod-user-a",
+      tenantA,
+      (tx, context) =>
+        appendEstimateSnapshot(tx, context, eligibleShipment, codRequest, services),
+    );
+    await adminDb
+      .update(schema.shipmentDrafts)
+      .set({ destinationAreaLabel: "Destination A changed" })
+      .where(eq(schema.shipmentDrafts.shipmentId, eligibleShipment));
+
+    await expect(
+      withTenantContext(appDb, "cod-user-a", tenantA, (tx, context) =>
+        persistCodTotalsForEstimate(tx, context, {
+          shipmentId: eligibleShipment,
+          snapshotId,
+          providerService: "JNE-COD",
+        }),
+      ),
+    ).rejects.toBeInstanceOf(CodTotalsUnavailableError);
+
+    const [service] = await adminDb
+      .select({ id: schema.shipmentEstimateServices.id })
+      .from(schema.shipmentEstimateServices)
+      .where(eq(schema.shipmentEstimateServices.snapshotId, snapshotId));
+    await expect(
+      withTenantContext(appDb, "cod-user-a", tenantA, (tx) =>
+        tx.insert(schema.shipmentCodTotals).values({
+          currency: "IDR",
+          estimateServiceId: service!.id,
+          goodsValueIdr: 100_000,
+          providerCodAmountIdr: 113_663,
+          serviceFeeIdr: 3_300,
+          shipmentId: eligibleShipment,
+          shippingAmountIdr: 10_000,
+          snapshotId,
+          tenantId: tenantA,
+          vatAmountIdr: 363,
+        }),
+      ),
+    ).rejects.toThrow();
+
+    expect(await adminDb.select().from(schema.shipmentCodTotals)).toEqual([]);
   });
 });

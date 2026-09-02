@@ -15,6 +15,7 @@ export type DraftEstimateInput = {
   outletId: string;
   originAreaId: string;
   destinationAreaId: string;
+  destinationAreaLabel: string;
   weightGrams: number;
   isCod: boolean;
 };
@@ -22,6 +23,7 @@ export type DraftEstimateInput = {
 export type EstimateRequestMetadata = {
   originAreaId: string;
   destinationAreaId: string;
+  destinationAreaLabel: string;
   weightGrams: number;
   isCodRequested: boolean;
   credentialSource: (typeof estimateCredentialSources)[number];
@@ -74,6 +76,7 @@ async function loadEstimateContext(
       outletId: shipments.outletId,
       originAreaId: outlets.defaultOriginAreaId,
       destinationAreaId: shipmentDrafts.destinationAreaId,
+      destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       weightGrams: shipmentDrafts.packageWeightGrams,
       isCod: shipmentDrafts.isCod,
     })
@@ -111,6 +114,7 @@ async function loadEstimateContext(
     outletId: row.outletId,
     originAreaId: row.originAreaId,
     destinationAreaId: row.destinationAreaId,
+    destinationAreaLabel: row.destinationAreaLabel,
     weightGrams: row.weightGrams,
     isCod: row.isCod,
   };
@@ -131,6 +135,7 @@ function requestMatchesDraft(
   return (
     request.originAreaId === draft.originAreaId &&
     request.destinationAreaId === draft.destinationAreaId &&
+    request.destinationAreaLabel === draft.destinationAreaLabel &&
     request.weightGrams === draft.weightGrams &&
     request.isCodRequested === draft.isCod
   );
@@ -185,6 +190,7 @@ export async function appendEstimateSnapshot(
     .values({
       credentialSource: request.credentialSource,
       destinationAreaId: request.destinationAreaId,
+      destinationAreaLabel: request.destinationAreaLabel,
       isCodRequested: request.isCodRequested,
       originAreaId: request.originAreaId,
       outletId: draft.outletId,
@@ -231,6 +237,7 @@ export async function loadLatestEstimateSnapshot(
       outletId: shipmentEstimateSnapshots.outletId,
       originAreaId: shipmentEstimateSnapshots.originAreaId,
       destinationAreaId: shipmentEstimateSnapshots.destinationAreaId,
+      destinationAreaLabel: shipmentEstimateSnapshots.destinationAreaLabel,
       weightGrams: shipmentEstimateSnapshots.weightGrams,
       isCodRequested: shipmentEstimateSnapshots.isCodRequested,
       credentialSource: shipmentEstimateSnapshots.credentialSource,
@@ -284,6 +291,7 @@ export async function loadLatestEstimateSnapshot(
     request: {
       originAreaId: snapshot.originAreaId,
       destinationAreaId: snapshot.destinationAreaId,
+      destinationAreaLabel: snapshot.destinationAreaLabel,
       weightGrams: snapshot.weightGrams,
       isCodRequested: snapshot.isCodRequested,
       credentialSource: snapshot.credentialSource,

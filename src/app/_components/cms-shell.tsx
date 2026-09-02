@@ -2,10 +2,10 @@
 
 import { ChevronDown, PanelLeft, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CmsNavigation } from "@/app/_components/cms-navigation";
-import { SignOutControl } from "@/app/_components/sign-out-control";
+import { SignOutControl, type LoginDestination } from "@/app/_components/sign-out-control";
 import { SkipLink } from "@/app/_components/skip-link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +34,6 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { TenantCmsRole } from "@/lib/cms-shell-navigation";
 
-type LoginDestination = "/login/super-admin" | "/login/tenant";
-
 type CmsShellProps = {
   account: { initials: string; label: string; secondary?: string };
   children: ReactNode;
@@ -49,8 +47,25 @@ type CmsShellProps = {
 );
 
 export function CmsShell(props: CmsShellProps) {
+  const signOutDestinationRef = useRef<LoginDestination | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [navigationOpen, setNavigationOpen] = useState(false);
+
+  useEffect(() => {
+    function revalidateRestoredSession(event: PageTransitionEvent) {
+      if (!event.persisted) return;
+
+      document.documentElement.style.visibility = "hidden";
+      window.location.reload();
+    }
+
+    window.addEventListener("pageshow", revalidateRestoredSession);
+    return () => {
+      window.removeEventListener("pageshow", revalidateRestoredSession);
+    };
+  }, []);
+
   const navigation = (presentation: "rail" | "sheet" | "sidebar") =>
     props.scope === "tenant" ? (
       <CmsNavigation
@@ -136,9 +151,18 @@ export function CmsShell(props: CmsShellProps) {
               </div>
             </div>
 
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={setAccountOpen} open={accountOpen}>
               <DropdownMenuTrigger asChild>
-                <Button className="min-h-11 gap-2 px-2" variant="ghost">
+                <Button
+                  className="min-h-11 gap-2 px-2"
+                  onPointerDown={(event) => {
+                    if (event.button !== 0 || event.ctrlKey) return;
+                    event.preventDefault();
+                    setAccountOpen((open) => !open);
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
                   <Avatar size="sm">
                     <AvatarFallback>{props.account.initials}</AvatarFallback>
                   </Avatar>
@@ -148,7 +172,20 @@ export function CmsShell(props: CmsShellProps) {
                   <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuContent
+                align="end"
+                className="w-64"
+                onCloseAutoFocus={(event) => {
+                  const destination = signOutDestinationRef.current;
+                  if (!destination) return;
+
+                  event.preventDefault();
+                  signOutDestinationRef.current = null;
+                  window.requestAnimationFrame(() => {
+                    window.location.replace(destination);
+                  });
+                }}
+              >
                 <DropdownMenuLabel className="grid gap-0.5 px-2 py-2">
                   <span className="truncate text-sm font-medium text-foreground">
                     {props.account.label}
@@ -164,7 +201,13 @@ export function CmsShell(props: CmsShellProps) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <div className="p-1">
-                  <SignOutControl destination={props.destination} />
+                  <SignOutControl
+                    destination={props.destination}
+                    onSignedOut={(destination) => {
+                      signOutDestinationRef.current = destination;
+                      setAccountOpen(false);
+                    }}
+                  />
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>

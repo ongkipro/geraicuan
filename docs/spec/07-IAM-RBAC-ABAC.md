@@ -3,11 +3,11 @@
 - Status: Accepted
 - Authentication provider: Better Auth with PostgreSQL persistence and server-side authorization
 
-| ID | Role | Scope | Permitted actions |
-|---|---|---|---|
-| IAM-1 | `SUPER_ADMIN` | Platform | Sign in through Super Admin Login; provision/suspend/reactivate tenants; monitor aggregate and tenant-filtered operational/financial health, usage, provider queues, reconciliation state, and audit events; never read credentials. |
-| IAM-2 | `TENANT_ADMIN` | One tenant | Sign in through Tenant Login; manage members, outlets, private Mengantar configuration metadata, and reusable contacts; submit/recover own tenant batches only when the separate provider-mutation release gate is open; view tenant shipment/print history, Analitik, Keuangan ledger, and reconciliation reports. |
-| IAM-3 | `OPERATOR` | One tenant | Sign in through Tenant Login; create/import drafts, estimate, submit permitted shipments only when the separate provider-mutation release gate is open, save/reuse contacts, and print/reprint; no Analitik, Keuangan, membership, connection, tenant lifecycle, ledger adjustment, or reconciliation-close access. |
+| ID | Role | Scope | Permitted actions | Owner |
+|---|---|---|---|---|
+| IAM-1 | `SUPER_ADMIN` | Platform | Sign in through Super Admin Login; provision/suspend/reactivate tenants; monitor aggregate and tenant-filtered operational/financial health, usage, provider queues, reconciliation state, and audit events; never read credentials. | Security owner |
+| IAM-2 | `TENANT_ADMIN` | One tenant | Sign in through Tenant Login; manage members, outlets, private Mengantar configuration metadata, and reusable contacts; submit/recover own tenant batches only when the separate provider-mutation release gate is open; view tenant shipment/print history, Analitik, Keuangan ledger, and reconciliation reports. | Security owner |
+| IAM-3 | `OPERATOR` | One tenant | Sign in through Tenant Login; create/import drafts, estimate, submit permitted shipments only when the separate provider-mutation release gate is open, save/reuse contacts, and print/reprint; no Analitik, Keuangan, membership, connection, tenant lifecycle, ledger adjustment, or reconciliation-close access. | Security owner |
 
 ## Policy
 Authorization evaluates authenticated principal, role, active tenant, target record tenant ID, tenant status, and action. Deny by default. Super Admin has platform monitoring scope but is not an implicit tenant member: monitoring uses a dedicated server-side read model and returns no credentials or unnecessary shipment-party PII. Support impersonation remains out of scope until a separately approved audited design exists.

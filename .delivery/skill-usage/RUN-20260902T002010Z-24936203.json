@@ -1,0 +1,22 @@
+{
+  "capability": "admin-dashboard",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "screening",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-02T00:24:18Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260902T002010Z-24936203",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-dashboard",
+    "shadcn-ui",
+    "testing-engineering",
+    "ui-validation"
+  ],
+  "usageHash": "93f2597089fe929f2df691882f21bb0fc74f8991ef67c887edbe722908e4ccaf",
+  "verificationFailed": false,
+  "worker": "main"
+}

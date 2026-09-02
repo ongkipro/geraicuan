@@ -59,12 +59,42 @@ flowchart TD
 - Every provider submission, ledger entry, audit event, print event, and asynchronous queue item carries tenant and outlet identity.
 
 ## Architecture Decisions
-- **ARCH-1: Shared database with tenant key and PostgreSQL RLS defense in depth.** Application authorization is mandatory; RLS limits blast radius for tenant-owned tables.
-- **ARCH-2: Per-outlet private Mengantar configuration with platform environment fallback.** A complete private configuration wins; otherwise the server resolves platform defaults. The secret is injected server-side from managed configuration; only masked metadata and source classification are persisted.
-- **ARCH-3: Provider AWB is authoritative.** GeraiCUAN stores but never manufactures tracking numbers.
-- **ARCH-4: Dynamic-AWB provider order requests serialize per Mengantar account.** Bulk is a provider order array, not parallel POST requests.
-- **ARCH-5: Super Admin monitoring is a dedicated read model.** It aggregates platform/tenant operational health with explicit filters, but does not turn Super Admin into an implicit tenant member or expose secrets.
-- **ARCH-6: CMS deployment hosts are role-specific.** Tenant operations use
+
+### ARCH-1 — Shared database with tenant key and PostgreSQL RLS defense in depth
+- Status: Accepted
+- Owner: Engineering owner
+- Source: TD-1, TEN-1, TEN-2, DATA-1
+- Decision: Application authorization is mandatory; RLS limits blast radius for tenant-owned tables.
+
+### ARCH-2 — Per-outlet private Mengantar configuration with platform environment fallback
+- Status: Accepted
+- Owner: Engineering owner
+- Source: TD-5, TD-15, DATA-6
+- Decision: A complete private configuration wins; otherwise the server resolves platform defaults. The secret is injected server-side from managed configuration; only masked metadata and source classification are persisted.
+
+### ARCH-3 — Provider AWB is authoritative
+- Status: Accepted
+- Owner: Engineering owner
+- Source: PR-7, TD-3, DATA-2
+- Decision: GeraiCUAN stores but never manufactures tracking numbers.
+
+### ARCH-4 — Dynamic-AWB provider order requests serialize per Mengantar account
+- Status: Accepted
+- Owner: Engineering owner
+- Source: PR-6, TD-3
+- Decision: Bulk is a provider order array, not parallel POST requests.
+
+### ARCH-5 — Super Admin monitoring is a dedicated read model
+- Status: Accepted
+- Owner: Engineering owner
+- Source: PR-11, TD-7, IAM-1
+- Decision: It aggregates platform/tenant operational health with explicit filters, but does not turn Super Admin into an implicit tenant member or expose secrets.
+
+### ARCH-6 — CMS deployment hosts are role-specific
+- Status: Accepted
+- Owner: Engineering owner
+- Source: TD-8
+- Decision: Tenant operations use
   `app.namadomain.com`; Super Admin operations use `cuan.namadomain.com`.
   Reverse-proxy host routing presents the appropriate entry point while
   application authorization remains the enforcement boundary.

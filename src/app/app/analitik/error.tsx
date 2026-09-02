@@ -24,6 +24,7 @@ export default function AnalyticsError({ reset }: AnalyticsErrorProps) {
     <PageContainer width="wide">
       <PageHeader
         description="Ringkasan operasional dan nilai kiriman tenant."
+        eyebrow="Wawasan"
         focusTargetId={HEADING_ID}
         title="Analitik"
       />

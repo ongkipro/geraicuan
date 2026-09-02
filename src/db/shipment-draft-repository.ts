@@ -72,6 +72,8 @@ async function inspectExistingSubmission(
   const parties = await tx
     .select({
       address: shipmentParties.address,
+      destinationAreaId: shipmentParties.destinationAreaId,
+      destinationAreaLabel: shipmentParties.destinationAreaLabel,
       name: shipmentParties.name,
       phone: shipmentParties.phone,
       role: shipmentParties.role,
@@ -102,7 +104,9 @@ async function inspectExistingSubmission(
       sender.address === input.senderAddress &&
       recipient?.name === input.recipientName &&
       recipient.phone === input.recipientPhone &&
-      recipient.address === input.recipientAddress
+      recipient.address === input.recipientAddress &&
+      recipient.destinationAreaId === input.destinationAreaId &&
+      recipient.destinationAreaLabel === input.destinationAreaLabel
     ? "match" as const
     : "conflict" as const;
 }
@@ -179,6 +183,8 @@ export async function createShipmentDraft(
     },
     {
       address: input.recipientAddress,
+      destinationAreaId: input.destinationAreaId,
+      destinationAreaLabel: input.destinationAreaLabel,
       name: input.recipientName,
       phone: input.recipientPhone,
       role: "RECIPIENT",

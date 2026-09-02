@@ -198,6 +198,7 @@ async function loadConfirmationEstimate(
       AND ${shipmentEstimateSnapshots.tenantId} = ${shipments.tenantId}
       AND ${shipmentEstimateSnapshots.originAreaId} = ${outlets.defaultOriginAreaId}
       AND ${shipmentEstimateSnapshots.destinationAreaId} = ${shipmentDrafts.destinationAreaId}
+      AND ${shipmentEstimateSnapshots.destinationAreaLabel} = ${shipmentDrafts.destinationAreaLabel}
       AND ${shipmentEstimateSnapshots.weightGrams} = ${shipmentDrafts.packageWeightGrams}
       AND ${shipmentEstimateSnapshots.isCodRequested} = ${shipmentDrafts.isCod}
     INNER JOIN ${shipmentEstimateServices}
@@ -334,6 +335,7 @@ async function loadSelectedEstimate(
       AND ${shipmentEstimateSnapshots.isCodRequested} = true
       AND ${shipmentEstimateSnapshots.originAreaId} = ${outlets.defaultOriginAreaId}
       AND ${shipmentEstimateSnapshots.destinationAreaId} = ${shipmentDrafts.destinationAreaId}
+      AND ${shipmentEstimateSnapshots.destinationAreaLabel} = ${shipmentDrafts.destinationAreaLabel}
       AND ${shipmentEstimateSnapshots.weightGrams} = ${shipmentDrafts.packageWeightGrams}
       AND NOT EXISTS (
         SELECT 1

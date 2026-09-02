@@ -40,10 +40,38 @@ afterEach(() => {
 });
 
 describe("bulk import confirmation envelope", () => {
-  it("round-trips one canonical row only for its tenant and actor", () => {
-    const token = createBulkImportEnvelope(context, submissionId, 2, input, 1_000);
+  it("encrypts one canonical row and round-trips it only for its tenant and actor", () => {
+    const token = createBulkImportEnvelope(context, submissionId, 2, input, "Gambir Jakarta Pusat", 1_000);
+    expect(token.startsWith("v3.")).toBe(true);
+    expect(createBulkImportEnvelope(context, submissionId, 2, input, "Gambir Jakarta Pusat", 1_000))
+      .not.toBe(token);
+
+    const browserObservableText = [
+      token,
+      ...token.split(".").slice(1).map((part) => Buffer.from(part, "base64url").toString("utf8")),
+    ].join("\n");
+    for (const sensitiveValue of [
+      "recipientName",
+      "recipientPhone",
+      "recipientAddress",
+      "senderName",
+      "senderPhone",
+      "senderAddress",
+      "packageContent",
+      input.recipientName,
+      input.recipientPhone,
+      input.recipientAddress,
+      input.senderName,
+      input.senderPhone,
+      input.senderAddress,
+      input.packageContent,
+    ]) {
+      expect(browserObservableText).not.toContain(sensitiveValue);
+    }
+
     expect(verifyBulkImportEnvelope(token, context, 2_000)).toEqual(expect.objectContaining({
       input,
+      destinationQuery: "Gambir Jakarta Pusat",
       row: 2,
       submissionId,
     }));
@@ -54,14 +82,17 @@ describe("bulk import confirmation envelope", () => {
   });
 
   it("rejects tampering, expiry, and missing signing configuration", () => {
-    const token = createBulkImportEnvelope(context, submissionId, 2, input, 1_000);
-    const [payload, mac] = token.split(".");
-    expect(() => verifyBulkImportEnvelope(`${payload}x.${mac}`, context, 2_000))
+    const token = createBulkImportEnvelope(context, submissionId, 2, input, "Gambir Jakarta Pusat", 1_000);
+    const parts = token.split(".");
+    parts[2] = `${parts[2]!.slice(0, -1)}${parts[2]!.endsWith("A") ? "B" : "A"}`;
+    expect(() => verifyBulkImportEnvelope(parts.join("."), context, 2_000))
       .toThrow(BulkImportEnvelopeError);
     expect(() => verifyBulkImportEnvelope(token, context, 1_000 + 15 * 60 * 1_000 + 1))
       .toThrow(BulkImportEnvelopeError);
     delete process.env.BETTER_AUTH_SECRET;
-    expect(() => createBulkImportEnvelope(context, submissionId, 2, input, 1_000))
+    expect(() => createBulkImportEnvelope(context, submissionId, 2, input, "Gambir Jakarta Pusat", 1_000))
+      .toThrow(BulkImportEnvelopeError);
+    expect(() => verifyBulkImportEnvelope(token, context, 2_000))
       .toThrow(BulkImportEnvelopeError);
   });
 });

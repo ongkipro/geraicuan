@@ -2,6 +2,402 @@
 
 Record only durable implementation changes, validation evidence, and gotchas that the next maintainer needs. Temporary task narration belongs in neither this file nor global memory.
 
+## 2026-09-02 — T-71 estimate endpoint URL boundary
+
+- The estimate adapter now accepts only an HTTPS origin with no userinfo,
+  inherited path, query, or fragment. It constructs the fixed Mengantar route
+  from that origin and percent-encodes the API-key path segment.
+- Hostile-input tests prove HTTP, userinfo, path, query, fragment, malformed
+  origins, and blank keys fail before `fetch`; a sanitized fixture proves the
+  valid encoded endpoint while the existing timeout, response-bound,
+  allowlist, normalization, redirect, and sanitized-error behavior remains.
+- Targeted ESLint, TypeScript, `git diff --check`, and 2 files / 15 integration
+  tests pass. Delivery-ledger run: `RUN-20260902T030834Z-5a0d50c2`. No live
+  provider request, provider mutation, production action, commit, push, deploy,
+  or release occurred. T-62 now awaits a clean, explicitly approved candidate.
+
+## 2026-09-02 — T-62 preflight correctly reopened estimate URL hardening
+
+- Release preflight found that `fetchMengantarEstimate` accepted more than an
+  HTTPS origin-only base URL and interpolated the raw API key into the provider
+  path. This violates the explicit T-62 gate and the location adapter's existing
+  server-only credential boundary.
+- No release verification was waived or continued past the defect. T-71 now
+  owns origin-only parsing, encoded key construction, focused hostile-input
+  tests, and independent security review before T-62 restarts.
+- Delivery-ledger run: `RUN-20260902T030709Z-66764e78`. The working tree also
+  remains local and uncommitted, so there is no clean reviewed candidate or
+  release/deploy authorization. No provider, production, commit, push, deploy,
+  or release action occurred.
+
+## 2026-09-02 — T-61 complete role-discoverable journey closure
+
+- Closed the retained first/second-run findings with explicit evidence: 111
+  navigation captures across all four actors and three widths, final T-66
+  member Collapsible and T-48 sign-out/BFCache matrices, contact and Super
+  Admin lifecycle/audit mutations, reload and forbidden-route checks.
+- A fresh navigation-only tenant journey saved a draft, loaded 14 sanctioned
+  fixture estimate services, and retained them after reload without exposing an
+  issue action or calling the provider. A clean-profile native bulk upload
+  produced a focused preview with one valid row, zero errors, zero selected
+  rows, and no confirmation/draft creation. The earlier ALPN failure reproduced
+  only in the long-lived Chrome network-service state at both local origins.
+- Final automated evidence passed 15 files / 144 role/action tests and 3
+  PostgreSQL ledger/COD/lifecycle files / 10 tests plus `git diff --check`.
+  Independent designer, correctness, and security reviews passed with zero
+  remaining blocker, protected flash, overflow, console/hydration/ARIA error,
+  provider/external request, credential-bearing URL, real order, or recovery.
+  Delivery-ledger run: `RUN-20260902T023444Z-7b34e5df`. No production, commit,
+  push, deploy, or release action occurred; T-62 is next.
+
+## 2026-09-02 — Corrective T-48 modal cleanup and BFCache authorization
+
+- Successful sign-out now reports back to the shared shell, which keeps the
+  account menu mounted for pending/error feedback and closes the controlled
+  Radix portal only after POST 200. Navigation waits for close autofocus and
+  then replaces the current history entry, eliminating retained modal
+  `aria-hidden` attributes and hydration warnings.
+- Replacing one history entry cannot remove earlier CMS routes. The protected
+  shell therefore hides any document restored by persisted `pageshow` and
+  reloads it through server session authorization; normal loads are untouched.
+- Focused verification passed 1 file / 33 tests, targeted ESLint, TypeScript,
+  and `git diff --check`. Nine Tenant Admin, Operator, and Super Admin browser
+  journeys at 390px, 768px, and 1280px passed pending/failure, portal cleanup,
+  exactly one successful POST, cookie removal, hidden BFCache restore, and
+  role-correct session-required login with zero protected flash, overflow,
+  hydration/ARIA/console problem, external/provider request, duplicate success,
+  or credential-bearing URL. Delivery-ledger run:
+  `RUN-20260902T020659Z-1eb98512`. No production, commit, push, deploy, or
+  release action occurred.
+
+## 2026-09-02 — Corrective T-66 member disclosure hydration boundary
+
+- Replaced the native `<details>` that mixed browser-owned `open` state with a
+  React result-derived prop by the official shadcn Collapsible and one
+  controlled state owner. Action results open the disclosure before the dialog
+  closes and receive the existing deterministic focus, while users may still
+  collapse and reopen the result.
+- Focused verification passed 1 file / 11 tests, targeted ESLint, TypeScript,
+  and `git diff --check`. Tenant Admin Chromium at 390px, 768px, and 1280px
+  passed pointer/Enter/Space toggling, `aria-expanded`, pending/success focus,
+  44px actions, close/reopen, role persistence after reload, and fixture restore
+  with zero overflow, hydration/console error, external/provider request, or
+  credential-bearing URL.
+- Delivery-ledger run: `RUN-20260902T014655Z-3106a76c`. No live provider,
+  production, commit, push, deploy, or release action occurred. Corrective T-48
+  remains before the T-61 rerun.
+
+## 2026-09-02 — T-61 second role-journey run correctly failed
+
+- Captured 111 fresh navigation states across Tenant Admin, Operator, Super
+  Admin, and unauthenticated users at 390px, 768px, and 1280px. Dynamic IDs
+  came from rendered links; reload, forbidden routes, contact create/address
+  edit, and Super Admin suspend → audit → reactivate → audit evidence passed
+  with zero external/provider/credential-bearing URL.
+- The run correctly failed instead of waiving two reproducible hydration
+  defects: member role mutation left a native `<details>` DOM open against the
+  next closed server render, and account-menu/history interaction retained
+  modal `aria-hidden` attributes on reused CMS DOM. T-66 and T-48 own separate
+  bounded corrections.
+- Estimate remains blocked until the sanctioned fixture runtime receives
+  complete dummy local credential/origin/pickup resolution; bulk upload needs
+  a network-attributed retry after `ERR_ALPN_NEGOTIATION_FAILED`; full Operator
+  sign-out remains incomplete. Delivery-ledger run:
+  `RUN-20260902T010729Z-b3093c8c`. No live provider, production, commit, push,
+  deploy, or release action occurred.
+
+## 2026-09-02 — Corrective T-48 account menu and sign-out history boundary
+
+- Corrected the shared shadcn account DropdownMenu so trusted primary-pointer
+  activation follows the same controlled open state as keyboard activation,
+  without changing role-filtered navigation or responsive shell ownership.
+- Successful sign-out now replaces the protected history entry. This closes
+  the BFCache/Back path that could briefly restore an authenticated CMS DOM
+  after the server had already invalidated the session; failed sign-out still
+  stays in place and exposes its existing retry alert.
+- Focused verification passed 1 file / 33 tests, targeted ESLint, TypeScript,
+  and `git diff --check`. Fresh Tenant Admin and Super Admin Chromium journeys
+  at 390px, 768px, and 1280px passed pointer and keyboard activation, Escape
+  focus restoration, 44px sizing, zero overflow, sign-out POST 200, cookie
+  removal, role-correct redirect, and settled Back behavior without protected
+  content. Delivery-ledger run: `RUN-20260902T005309Z-cfd95f31`. No provider,
+  production, commit, push, deploy, or release action occurred; T-61 reruns
+  next.
+
+## 2026-09-02 — T-60 public, authentication, and platform closure
+
+- Consolidated 21 primary captures across public sales, both role-specific
+  login entries, and all four platform routes at 390px, 768px, and 1280px,
+  backed by T-67's 36-state evidence and T-68's 93-state plus corrective and
+  settled-boundary evidence. Focused public/auth/platform/inventory checks
+  passed 3 files / 28 tests.
+- Designer comparison confirmed shared typography, semantic tokens, shadcn
+  components, focus treatment, and responsive rhythm without blurring jobs or
+  authority. Public exposes no CMS data/control; login remains role-specific
+  with generic denial; platform retains truthful global/tenant-detail scope and
+  correct current navigation. All primary surfaces retain one main/H1, 44px
+  actions, local table overflow, and safe error copy.
+- Delivery-ledger run: `RUN-20260902T002010Z-24936203`. No unexpected browser
+  or network event, external/provider request, production action, commit, push,
+  deploy, or release occurred. T-61 is next.
+
+## 2026-09-02 — T-59 tenant CMS cross-screen closure
+
+- The first audit-only run correctly failed instead of waiving Analitik's
+  missing shared eyebrow and reopened T-66. After the bounded correction passed,
+  the fresh T-59 run consolidated 42 Tenant Admin populated captures for all 14
+  authenticated tenant page routes, 42 supplemental Operator permitted/denied
+  captures, and 9 corrected Analitik state/viewport captures.
+- Designer comparison passed the shared shell and PageHeader rhythm,
+  route-specific decision density, status vocabulary, shadcn form/card/table/
+  chart composition, role differences, one main/H1/current destination, 44px
+  mobile actions, and local table overflow. The exact inventory guard passed 1
+  file / 10 tests. No unexplained divergence, unexpected browser event,
+  external request, or provider request remains.
+- Delivery-ledger rerun: `RUN-20260902T001809Z-43ae9d34`; the originating FAIL
+  is retained as `RUN-20260902T000605Z-4f9d96e0`. No production action, commit,
+  push, deploy, or release occurred. T-60 is next.
+
+## 2026-09-02 — Corrective T-66 Analitik PageHeader consistency
+
+- T-59's 42-capture tenant comparison exposed Analitik as the only one of 14
+  tenant routes without the required shared page eyebrow. Restored the
+  route-stable `Wawasan` eyebrow on populated, loading, and error PageHeaders;
+  no analytics filter, KPI, chart, table, or layout region changed.
+- Focused verification passed 2 files / 7 tests, targeted ESLint, TypeScript,
+  `git diff --check`, and the 18-page Next.js build. Nine fresh Chromium
+  captures covered all three states at 390px, 768px, and 1280px with one
+  main/H1, coherent PageHeader geometry, zero overflow, browser event,
+  external request, or visible regression.
+- Corrective delivery-ledger run: `RUN-20260902T001113Z-97ce559d`. No provider
+  request, production action, commit, push, deploy, or release occurred. T-59
+  must now rerun its milestone comparison.
+
+## 2026-09-02 — T-68 complete platform workspace screening
+
+- Registered the Super Admin tenant lifecycle action in the deterministic
+  route/state/action inventory and retained denial before input or protected
+  reads, replay-safe lifecycle transitions, redacted monitoring views,
+  append-only audit authority, and COD-liability accounting.
+- Converted platform provisioning and suspend/reactivate confirmations to
+  controlled shadcn dialogs. They stay mounted, busy, disabled, and
+  focus-contained while pending; close only after the result; focus the owning
+  field or result Alert; and restore the trigger after Escape or cancellation.
+  Invalid-query recovery copy is now route-neutral.
+- Final focused verification passed 5 files / 33 tests plus 2 PostgreSQL files
+  / 9 tests, targeted ESLint, TypeScript, `git diff --check`, and the 18-page
+  Next.js 16.3.3 production build. Chromium passed the 93-capture platform
+  state matrix, 15 settled boundary captures, and corrective dialog/copy runs
+  at 390px, 768px, and 1280px with 44px actions, local overflow only, and no
+  secret/PII exposure, unexpected browser/network event, external request, or
+  provider mutation. Designer and independent security reviews passed.
+- Delivery-ledger run: `RUN-20260901T234143Z-6d072914`. No live provider
+  request, production action, commit, push, deploy, or release occurred. T-59
+  is the next executable milestone closure, followed by T-60.
+
+## 2026-09-02 — T-67 public and role-specific authentication screening
+
+- Raised every public/login decision action to the 44px shadcn target contract
+  and retained one focused, responsive login job per tenant/platform entry.
+  Protected redirects now carry only bounded session/access notices; arbitrary
+  query values are ignored and no protected context is rendered.
+- Added a pre-persistence Better Auth session hook that requires a bounded login
+  scope and matches it against the shared server-resolved active CMS principal.
+  Wrong-scope, suspended, inactive, ambiguous, and missing-scope attempts use
+  the same public invalid-credential shape and create neither a session row nor
+  a cookie.
+- Production auth configuration now fails startup unless the base URL and
+  exactly two tenant/platform trusted origins are explicit HTTPS origins with
+  no wildcard/path, and every trusted proxy entry is a valid IP/CIDR. CI uses
+  the same synthetic two-origin contract; `actionlint` and the 18-page build
+  pass.
+- Final focused verification passed 7 files / 70 tests, targeted ESLint,
+  TypeScript, and `git diff --check`. Chromium passed 36 public/login/success
+  captures at 390px, 768px, and 1280px with zero document overflow, denied
+  protected rendering, mismatch cookies, browser errors, external requests, or
+  provider traffic. Independent designer, security, and correctness reviews
+  passed.
+- Delivery-ledger run: `RUN-20260901T231854Z-760de8b7`. No production action,
+  commit, push, deploy, or release occurred.
+
+## 2026-09-02 — T-66 analysis, finance, and governance screening
+
+- Extended the deterministic Server Action inventory to finance
+  reconciliation/reversal, outlet pickup/private-credential operations, and
+  member invite/role/deactivation. This keeps sensitive mutations inside the
+  same route/state/role ownership checks as their rendered controls.
+- Replaced Analitik's duplicate KPI label/value links with one full-card link
+  and one tab stop. Mobile shipment references and pagination now retain 44px
+  targets while wider supporting tables keep their accepted dense geometry.
+- Converted member role and deactivation confirmation dialogs from
+  auto-closing submit actions to controlled dialogs. They remain visible and
+  disabled during pending, close after the result, and restore focus to the
+  invalid field or focusable result. All dialog actions are at least 44px.
+- Final verification passed 21 files / 201 tests against local PostgreSQL admin
+  and runtime roles, targeted ESLint, TypeScript, and `git diff --check`. A
+  108-capture route/state discovery matrix plus warmed targeted browser
+  rechecks passed at 390px, 768px, and 1280px. Real local invite, role,
+  deactivation, reconciliation, and invalid-pickup journeys proved pending and
+  focus recovery with zero provider requests or browser errors. Independent
+  designer and security reviews returned PASS.
+- Delivery-ledger run: `RUN-20260901T225336Z-e9fc9576`. No live provider
+  request, production action, commit, push, deploy, or release occurred.
+
+## 2026-09-02 — T-65 tenant data and print screening
+
+- Extended the deterministic action inventory across contact search/create,
+  contact and address updates, Tenant Admin archive, and issued-label print
+  history. Added render coverage for active, archived, invalid-filter,
+  create-readiness, editable-address, and role-denied states.
+- Kept the sanctioned location-search audit fixture strictly development-only,
+  authenticated, tenant/outlet-readiness scoped, provider-free, and incapable
+  of producing persistence authority. The isolated local seeder now provides
+  15 active contacts and one archived contact for repeatable browser review.
+- Corrected duplicate destination-error announcements and focus, and retained
+  a 44px invalid-label-filter recovery action. No visual system fork or custom
+  component replacement was introduced; the existing shadcn compositions
+  remain authoritative.
+- Focused verification passed 9 files / 77 tests, TypeScript, targeted ESLint,
+  and `git diff --check`. The effective Chromium matrix passed 138
+  role/state/width observations; the clean fixture rerun captured 30 Tenant
+  Admin/Operator states at 390px, 768px, and 1280px with zero document
+  overflow, short actions, external requests, or unexpected browser errors.
+  Local create/address/archive/print journeys proved pending and focus
+  recovery, and label PDFs were each one page at approximately 99.82 ×
+  149.94mm. Designer, security, and correctness reviews returned PASS.
+- The originating ledger run `RUN-20260901T222436Z-74d6e37f` is retained as
+  FAIL because accepted dirty overlap cannot be added after a run starts.
+  Corrective run `RUN-20260901T224927Z-ff0ee43a` explicitly accepts the exact
+  reviewed overlap and owns closure. No live provider request, provider
+  mutation, production action, commit, push, deploy, or release occurred.
+
+## 2026-09-02 — T-64 tenant daily-operation screening
+
+- Replaced browser-decodable HMAC-signed bulk confirmation JSON with a
+  versioned AES-256-GCM envelope. The server derives a purpose-separated key
+  through HKDF, uses a random 12-byte nonce and fixed AAD, authenticates the
+  ciphertext, and retains the existing 15-minute, size, tenant, actor,
+  submission, row, and duplicate-selection boundaries.
+- Reduced the bulk preview return value to the accepted decision fields:
+  recipient name, row, CSV location, canonical Mengantar area, weight, payment,
+  declared value, and opaque confirmation token. Sender identity, both parties'
+  phones and addresses, package content, outlet/provider authority, and the full
+  draft input remain server-only. Confirmation decrypts the original validated
+  input, revalidates destination/account authority, and preserves atomic draft
+  creation and replay behavior.
+- Replaced Ringkasan's duplicate label/value KPI links with one full-card link
+  and raised mobile drill-down/reference/label-history actions to 44px while
+  retaining compact desktop density. The accepted shadcn structure and local
+  table overflow remain unchanged.
+- Final focused verification passed 18 files / 107 tests. Targeted ESLint,
+  TypeScript, and `git diff --check` passed. Chromium 152 captured 30 primary
+  Tenant Admin/Operator screenshots and passed 192 settled-state plus 42 real
+  client-loading/intercepted-pending observations at 390px, 768px, and 1280px.
+  All had zero document overflow, unexpected browser errors, external/provider
+  requests, or unsafe preview fields. Independent designer and security reviews
+  returned PASS.
+- Delivery-ledger run: `RUN-20260901T220337Z-fedf03af`. No live provider
+  request, provider mutation, production action, commit, push, deploy, or
+  release occurred. T-65 is next.
+
+## 2026-09-02 — T-58 post-location cross-layer screening
+
+- Added `docs/system-screening-matrix.md` as the repository-owned screening
+  record for all four actor classes, first-class workflows, lifecycle and
+  concurrency invariants, and static trust boundaries. It distinguishes local
+  fixture-backed PASS from deliberately RELEASE-GATED estimate, issuance,
+  reconciliation, and unpaid-recovery transport.
+- The disposable PostgreSQL 16 integration suite passed 67 files / 500 tests.
+  A fresh representative database upgraded through migration 0029, including
+  destination-pair, authority-version, provider-order, and forced-RLS checks.
+  Static searches found no browser credential import, browser-derived tenant
+  scope, invented AWB writer, mutable ledger/reconciliation history, sensitive
+  logging path, or production sanctioned-fixture bypass.
+- Full ESLint, TypeScript, and `git diff --check` passed; the credential-safe
+  production build immediately preceding this verification generated 18 pages.
+  Independent R3 security review passed authorization/isolation, provider and
+  location authority, redaction, idempotency/concurrency, COD accounting, time
+  semantics, append-only finance/audit, and production fail-closed conclusions.
+- Release hardening observation: before any live estimate release, normalize
+  `fetchMengantarEstimate` to the same HTTPS origin-only base-URL contract used
+  by the location adapter and encode the API-key path segment. This remains a
+  T-62 release gate, not a current fixture-backed correctness blocker.
+- The specification-suite v2 validator exposed 95 pre-existing structural
+  metadata findings (owners, duplicate/incomplete jurisdiction declaration,
+  and unresolved declaration shapes). T-70 owns a metadata-only normalization
+  and now blocks T-62; accepted product behavior must remain unchanged.
+- Delivery-ledger run: `RUN-20260901T213811Z-8264937b`. No live provider
+  request, production action, commit, push, deploy, or release occurred.
+- Skills used: `full-stack-development`, `application-security`,
+  `postgres-drizzle`, `testing-engineering`, `observability-engineering`, and
+  `native-first`.
+
+## 2026-09-02 — T-53 responsive many-outlet settings completion
+
+- Replaced the per-outlet accordion stack with one URL-addressable active-outlet
+  workspace. The server accepts an outlet query only when it belongs to the
+  already-authorized tenant list; invalid or foreign values safely fall back to
+  the first ordered tenant outlet. A keyed detail subtree prevents pickup,
+  credential, or action state from crossing outlet boundaries.
+- Zero and one outlet omit navigation. Ten and twenty outlets share one
+  responsive navigation tree: a 390px/768px selector and a persistent 1280px
+  list-detail rail with bounded local scrolling. The page now uses a compact
+  2-by-2 mobile readiness strip, flat hairline sections, location before
+  connection, a bounded single-outlet detail, and loading geometry that mirrors
+  the final breakpoint composition.
+- Authenticated Chromium covered zero, one, ten, and twenty outlets at 390px,
+  768px, and 1280px. Each state retained one main/H1, at most one active detail,
+  zero document overflow, and no raw provider IDs, secret fragments, console,
+  runtime, network, or provider errors. Keyboard Space/Tab/Enter selected an
+  outlet; click, Back, and reload preserved the URL and returned focus to the
+  detail heading. Twenty-outlet navigation scrolled locally.
+- Focused verification passed 3 files / 49 tests; the full disposable
+  PostgreSQL 16 suite passed 66 files / 493 tests. Full ESLint, TypeScript,
+  `git diff --check`, and the production build (18 generated pages) passed. A
+  bare build correctly failed closed without required runtime settings; the
+  credential-safe CI-equivalent build used only documented synthetic local
+  values. Final designer and independent R3 security reviews returned PASS.
+  No live provider call, provider mutation, production action, commit, push,
+  deploy, or release occurred.
+- Skills used: `admin-product-ux`, `admin-dashboard`, `shadcn-ui`,
+  `ui-validation`, `nextjs-development`, `testing-engineering`,
+  `application-security`, and `native-first`.
+
+## 2026-09-02 — T-57 inventory and T-69 responsive-filter closure
+
+- Extended the existing CMS audit registry instead of creating a parallel
+  harness. It now accounts for `filtered-empty`, `pending`, and `unauthorized`
+  ownership, shared destination/pickup actions, T-53/T-55 scenario ownership,
+  the public page, both login pages, and the auth endpoint.
+- Added static guards for internal destinations, enabled buttons without
+  behavior, client-exposed audit controls, sanctioned fixture import drift,
+  production fail-closed fixture modules, legacy authenticated presentation,
+  and duplicate responsive GET forms.
+- The initial focused inventory suite passed 9 of 10 checks and exposed exactly
+  three material findings: Ringkasan, Analitik, and Keuangan each mounted
+  separate desktop and mobile GET filter forms. T-69 replaced them with one
+  server-rendered GET form and one labelled control set per route. A native
+  mobile disclosure controls an adjacent form region, while the same form is
+  inline from 768px. The adjacency is required because Chromium does not paint
+  descendants of a closed `details` element at desktop merely from responsive
+  display utilities.
+- The corrected inventory passes 10/10 checks; the dedicated responsive-form
+  guard passes 3/3, and the complete focused filter/query set passes 6 files /
+  32 tests. Authenticated Chromium 152 covered all three routes at 390px,
+  768px, and 1280px with one form, one of every expected control, no duplicate
+  IDs, zero document overflow, correct disclosure keyboard order, 44px
+  controls at 390/768, readable desktop values, canonical Apply/reload/Back,
+  deterministic hash focus, and zero unexpected browser/provider events.
+- A credential-safe production build generated 18 pages. Full ESLint,
+  TypeScript, and `git diff --check` passed. Final designer and independent
+  correctness reviews returned PASS; independent inventory review confirmed
+  every previously reported ownership/guard gap is closed. No provider call,
+  provider mutation, production action, commit, push, deploy, or release
+  occurred.
+- Skills used: `admin-product-ux`, `admin-dashboard`, `shadcn-ui`,
+  `ui-validation`, `nextjs-development`, `testing-engineering`, and
+  `native-first`.
+
 ## 2026-09-01 — T-52/T-53 Mengantar pickup authority slice
 
 - Accepted the official 2026-09-01 Mengantar pickup contract: account-scoped
@@ -988,3 +1384,209 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   FAIL and preserve the T-38/T-49 defects they exposed. Release verdict:
   **NO-GO pending a clean, explicitly approved release candidate**. No commit,
   push, provider request, production write, deploy, or release occurred.
+
+## 2026-09-02 — T-54 bounded Mengantar destination-area search
+
+- Added an authenticated server-only destination search boundary for Mengantar
+  `GET /api/public/{API_KEY}/address/search`. It returns only provider area ID
+  and a readable subdistrict-to-province/ZIP label; routing codes, provider
+  identity, credentials, URLs, and response bodies never enter the client DTO
+  or safe errors.
+- Normalized and bounded queries, response bytes and result cardinality;
+  enforced HTTPS platform origin, rejected redirects, a ten-second timeout, no
+  retry, and no cache. Private connection source/version is re-read after the
+  provider response so a concurrent credential replacement or source switch
+  rejects stale results.
+- Migration `0027_location_search_limit.sql` extends the existing forced-RLS
+  tenant/actor limiter with `location-search`. A nonblocking PostgreSQL session
+  advisory lock rejects same-actor concurrent searches without holding a
+  transaction across provider I/O.
+- Fresh disposable PostgreSQL 16 passed the migration chain, representative
+  upgrade through 0027, the durable 20-attempt tenant/actor boundary, real
+  two-client advisory-lock rejection/release, and cross-tenant outlet denial.
+  Hermetic adapter/action tests passed 2 files / 22 tests; the database suite
+  passed 1 file / 3 tests. Targeted ESLint, TypeScript, `git diff --check`, and
+  independent security review passed.
+- Delivery-ledger run: `RUN-20260901T173020Z-7902a6bf`. No live provider call,
+  provider mutation, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-02 — T-55 provider-authoritative contact destinations
+
+- Replaced contact create/add/edit opaque area inputs with a shared shadcn
+  `Command`/`Popover` selector backed by the T-54 server action.
+- Added tenant-scoped ready-outlet gating, exact provider ID/label revalidation,
+  optional destination persistence, explicit clear, and active-address update
+  locking without changing historical shipment snapshots.
+- Added URL-selected inline address editing and deterministic loading,
+  no-result, retryable error, rate-limit, selected, clear, and mutation focus
+  behavior. A corrective designer audit required stale hidden-authority cleanup,
+  focus recovery, and truthful assistive selected-state text; all three were
+  fixed and the re-review passed.
+- Parent verification: focused Vitest 3 files / 24 tests; disposable PostgreSQL
+  16 contact repository 1 file / 9 tests; targeted ESLint; TypeScript; and
+  `git diff --check`, all PASS.
+- Browser verification: Tenant Admin create, edit, reload persistence, second
+  address, no-result, error/retry, change, and clear plus Operator lookup at
+  390px, 768px, and 1280px; 0px document overflow, 44px search target, correct
+  focus/selected semantics, zero raw-ID text, zero console errors, and zero
+  provider network requests. Independent security review PASS.
+- Delivery-ledger run: `RUN-20260901T174637Z-aaf32953`. No live provider call,
+  provider mutation, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-02 — T-56 shipment destination authority through estimation
+
+- Replaced individual shipment destination entry with the shared shadcn
+  Mengantar area selector. The shipment form now chooses the source outlet
+  before destination lookup, hides opaque provider IDs, supports manual search
+  and contact-address prefill, and clears stale area authority when the outlet
+  or query changes.
+- Revalidated every accepted manual destination against the current outlet's
+  area-search authority before draft persistence. Contact-prefilled
+  destinations also re-search their readable stored label under the current
+  outlet account, then must equal the freshly resolved active contact-address
+  pair. Tampered, unavailable, or stale ID/label pairs fail closed with zero
+  draft write.
+- Added migration `0028_shipment_destination_authority.sql` to backfill and
+  enforce readable destination labels on recipient shipment parties, estimate
+  snapshots, and provider-order snapshots. Estimate append and provider-order
+  selection now require the latest draft, estimate, and queued order snapshot
+  destination ID/label pair to match.
+- Verification: the final focused authority set passed 9 files / 50 tests;
+  migration upgrade through `0028` proved legacy recipient-party, estimate,
+  and provider-order backfills; the final full disposable PostgreSQL 16 suite
+  passed 65 files / 478 tests. Targeted ESLint, TypeScript, and
+  `git diff --check` passed. COD creation now rejects destination-label drift in
+  both repository selection and the forced-RLS insert policy.
+- Browser verification: isolated local dev server at `http://127.0.0.1:3110`
+  backed by its own disposable PostgreSQL 16 covered Tenant Admin and Operator
+  at 390px, 768px, and 1280px. Journeys proved manual search, clear/focus
+  recovery, contact-prefill revalidation, non-COD and COD estimate loading,
+  COD breakdown, reload, detail discovery, and retention of a prior estimate
+  snapshot during a retryable error. Screenshots:
+  `/tmp/geraicuan-t56-shipment-draft-390.png`,
+  `/tmp/geraicuan-t56-shipment-draft-768.png`,
+  `/tmp/geraicuan-t56-shipment-draft-1280.png`, and
+  `/tmp/geraicuan-t56-shipment-saved-390.png`. Observed 0px document overflow,
+  no raw area-ID text, no console errors, and zero `mengantar.com` network
+  requests. Independent designer review passed; later T-64 may refine the
+  compact mobile progress strip and saved-state scroll offset.
+- Delivery-ledger run: `RUN-20260901T182613Z-6c377254`. No live provider call,
+  provider mutation, production action, commit, push, deploy, or release
+  occurred.
+- Closure correction: a later independent security re-review returned FAIL.
+  Draft persistence still needs a transaction-bound authority check that cannot
+  race a private/platform account-source change. Migration 0028 also needs
+  estimate and provider-order insert RLS predicates that enforce the exact
+  destination ID/readable-label pair and raw runtime-role acceptance/rejection
+  tests. T-56 is reopened; the evidence above remains valid progress, not final
+  completion evidence, and T-63 must not begin until corrective re-review passes.
+
+## 2026-09-02 — T-56 corrective authority and RLS closure
+
+- Added migration `0029_mengantar_authority_version.sql` with a monotonic,
+  outlet-scoped Mengantar authority version. Credential and pickup/origin
+  mutations increment it under the same outlet row lock used by final writes,
+  preventing private/default ABA races without decrypting a secret during the
+  authority check.
+- Contact create/add/update, manual and contact-prefilled shipment drafts,
+  estimate persistence, and provider-batch preparation now carry the validated
+  authority into the write transaction, lock the current outlet authority, and
+  reject drift before persistence. Existing resumable provider batches recheck
+  the current source before submission.
+- Corrected forced-RLS insert policies bind estimate snapshots to the latest
+  draft destination and current source, and bind provider-order snapshots to
+  the batch, latest estimate/service, recipient/draft destination pair, COD
+  totals, initial status, and current private/platform source. Raw runtime-role
+  tests prove valid inserts and reject destination/source drift.
+- Final verification passed the fresh representative migration upgrade through
+  0029, focused contact/draft/estimate authority checks (3 files / 21 tests),
+  provider batch/order checks (1 file / 21 tests), the full disposable
+  PostgreSQL 16 integration suite (65 files / 486 tests), ESLint, TypeScript,
+  `git diff --check`, and the Next.js 16.3.3 production build.
+- Independent security re-review returned PASS with no remaining blocker for
+  contact authority or provider-order source/RLS binding. Corrective run
+  `RUN-20260901T191208Z-63c6e6c3` remains FAIL only because its original R3
+  boundary could not accept the effective-R4 pre-existing dirty overlap;
+  verification-only R4 closure run `RUN-20260901T194707Z-642c47d5` owns the
+  final documentation and boundary attestation.
+- No live provider request, provider mutation, production action, commit, push,
+  deploy, or release occurred. T-63 is the next executable task.
+
+## 2026-09-02 — T-63 provider-authoritative bulk destinations
+
+- Replaced CSV columns `id_area_tujuan` and `area_tujuan` with required
+  `lokasi_tujuan`; legacy headers fail with current-template guidance.
+- Normalized and deduplicated at most 10 unique destination queries per upload.
+  Resolution is serialized through T-54's existing per-actor concurrency guard,
+  accepts only an exact or single unambiguous result, and returns safe row-level
+  invalid, ambiguous, no-result, and unavailable outcomes. Invalid rows never
+  receive a checkbox, hidden authority, or confirmation token.
+- Upgraded confirmation envelopes to v2 and bound tenant, actor, submission,
+  row, normalized query, resolved provider ID/readable label, and expiry. Before
+  any draft write, confirmation revalidates each unique provider pair and then
+  locks and compares the current outlet authority inside one all-or-nothing
+  tenant transaction.
+- The shadcn preview now reports rows, unique queries, valid rows, and errors;
+  shows original CSV location beside the readable Mengantar match; keeps wide
+  tables in local scroll regions; focuses `#hasil-pemeriksaan`; and preserves
+  valid-row-only selection. A deterministic no-valid audit state was added.
+- Focused parser, envelope, action, database, and inventory verification passed
+  5 files / 32 tests. The full disposable PostgreSQL 16 suite passed 65 files /
+  490 tests. Full ESLint, TypeScript, `git diff --check`, and the Next.js 16.3.3
+  production build passed.
+- Authenticated Chromium 152 covered partial and no-valid states at 390px,
+  768px, and 1280px with one main/H1, deterministic result focus, 44px primary
+  actions, zero document overflow, local table overflow only, no legacy header,
+  valid-only checkboxes, and zero console/network/provider errors. Independent
+  designer and security reviews returned PASS.
+- Implementation run `RUN-20260901T195428Z-066e8cde` remains FAIL only because
+  its initial boundary omitted accepted overlap for an already-dirty database
+  test. Verification-only R3 run `RUN-20260901T201314Z-5da3eadc` reruns the
+  settled checks and owns final closure. No live provider request, provider
+  mutation, production action, commit, push, deploy, or release occurred. T-52
+  milestone closure is next.
+
+## 2026-09-02 — T-52 destination-authority milestone closure
+
+- Added `tests/mengantar-location-authority.integration.test.ts` as one explicit
+  fixture-backed chain from current outlet pickup and tenant contact through the
+  immutable recipient party, draft, estimate, provider-order snapshot, and
+  locally constructed Mengantar payload.
+- The positive chain proves the same destination provider ID/readable-label pair
+  is retained even after the source contact is edited. The stale chain replaces
+  outlet pickup/origin authority after estimation and proves provider-batch
+  preparation fails before creating an order snapshot.
+- The focused location-authority set passed 10 files / 86 tests. The full
+  disposable PostgreSQL 16 suite passed 66 files / 492 tests. Targeted ESLint,
+  TypeScript, and `git diff --check` passed.
+- Accepted T-54 through T-56 and T-63 browser/redaction evidence covers 390px,
+  768px, and 1280px with readable provider labels, no credential-bearing URL,
+  no unnecessary PII exposure, no browser errors, and zero provider mutation.
+  T-52 adds no rendered or logging path, and independent R3 review returned PASS.
+- Delivery-ledger run: `RUN-20260901T201930Z-f34ee8c2`. Two malformed dependency
+  search commands recorded early FAIL events before the corrected executable
+  dependency check passed; final boundary evaluation has no failures. No live
+  sandbox probe, provider request, provider mutation, production action, commit,
+  push, deploy, or release occurred. T-53 is next.
+## 2026-09-02 — T-70 specification traceability normalization
+
+- Normalized the existing `docs/spec` pack in place: accountable-owner metadata
+  is explicit, architecture/security/observability IDs are recognized normative
+  declarations, and the duplicate privacy jurisdiction heading now points to
+  the single canonical `JUR-ID-1` record.
+- Preserved accepted PR/NFR/IAM statements and IDs. The canonical Indonesian
+  jurisdiction row now records the actual shipment personal-data trigger, the
+  official-source status, an explicit privacy/legal owner gate, the precise
+  `PRIV-1`, `SEC-1`, `SEC-2`, and `DATA-1` impact, and keeps the decision
+  `Unknown` pending qualified review.
+- The specification-suite validator passes with 14 files, 122 declarations,
+  zero task-parser entries, and zero findings. Duplicate-ID and unresolved task
+  reference checks report zero gaps; Markdown and `git diff --check` pass.
+- Independent correctness review rejected the first overly generic jurisdiction
+  normalization. The corrected canonical record passed re-review with no
+  remaining blocker. Delivery-ledger run:
+  `RUN-20260901T214801Z-43489cc4`.
+- No runtime behavior, provider request, production action, commit, push,
+  deploy, or release occurred. T-64 is the next executable task.

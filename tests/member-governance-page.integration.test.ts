@@ -253,12 +253,26 @@ describe("Member governance interaction and route-boundary contracts", () => {
       "utf8",
     );
 
-    expect(source).toContain("<details");
+    expect(source).toContain("@/components/ui/collapsible");
+    expect(source).toContain("<Collapsible");
+    expect(source).toContain("<CollapsibleTrigger asChild>");
+    expect(source).toContain("<CollapsibleContent");
+    expect(source).toContain("onOpenChange={setExpanded}");
+    expect(source).toContain("open={expanded}");
+    expect(source).toContain("setExpanded(true)");
+    expect(source).not.toContain("open={expanded || hasResult}");
+    expect(source).not.toContain("onToggle=");
     expect(source).toContain("Kelola akses");
     expect(source).toContain("@/components/ui/alert-dialog");
     expect(source).toContain("AlertDialog");
     expect(source).toContain("resultToken");
     expect(source).toContain("nextAttemptId");
+    expect(source).toContain("open={roleDialogOpen}");
+    expect(source).toContain("open={deactivateDialogOpen}");
+    expect(source).toContain("onCloseAutoFocus");
+    expect(source).toContain("Menyimpan…");
+    expect(source).toContain("Menonaktifkan…");
+    expect(source).not.toContain("AlertDialogAction");
     expect(source).toMatch(/useEffect/);
     expect(source).toMatch(/useRef/);
     expect(source).toMatch(/\.focus\(\)/);

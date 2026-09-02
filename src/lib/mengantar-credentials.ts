@@ -24,8 +24,88 @@ export type MengantarAccountCredentials = Pick<
 
 export type MengantarAccountAuthority = {
   connectionUpdatedAt: Date | null;
+  version: number;
   source: "private" | "platform_default";
 };
+
+export function sameMengantarAccountAuthority(
+  first: MengantarAccountAuthority,
+  second: MengantarAccountAuthority,
+) {
+  return first.source === second.source
+    && first.version === second.version
+    && (first.connectionUpdatedAt?.getTime() ?? null)
+      === (second.connectionUpdatedAt?.getTime() ?? null);
+}
+
+export async function lockMengantarAccountAuthority(
+  tx: TenantTransaction,
+  context: TenantContext,
+  outletId: string,
+) {
+  const [outlet] = await tx
+    .select({ id: schema.outlets.id })
+    .from(schema.outlets)
+    .where(
+      and(
+        eq(schema.outlets.id, outletId),
+        eq(schema.outlets.tenantId, context.tenantId),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!outlet) throw new MengantarConfigurationError();
+  return loadMengantarAccountAuthority(tx, context, outletId);
+}
+
+export async function loadMengantarAccountAuthority(
+  tx: TenantTransaction,
+  context: TenantContext,
+  outletId: string,
+): Promise<MengantarAccountAuthority> {
+  const [outlet] = await tx
+    .select({
+      id: schema.outlets.id,
+      version: schema.outlets.mengantarAuthorityVersion,
+    })
+    .from(schema.outlets)
+    .where(
+      and(
+        eq(schema.outlets.id, outletId),
+        eq(schema.outlets.tenantId, context.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!outlet) throw new MengantarConfigurationError();
+
+  const [connection] = await tx
+    .select({
+      secretReference: schema.mengantarConnections.secretReference,
+      updatedAt: schema.mengantarConnections.updatedAt,
+    })
+    .from(schema.mengantarConnections)
+    .where(
+      and(
+        eq(schema.mengantarConnections.tenantId, context.tenantId),
+        eq(schema.mengantarConnections.outletId, outletId),
+      ),
+    )
+    .limit(1);
+  if (!connection) {
+    return { connectionUpdatedAt: null, source: "platform_default", version: outlet.version };
+  }
+  if (
+    connection.secretReference
+    !== mengantarSecretReference(context.tenantId, outletId)
+  ) {
+    throw new MengantarConfigurationError();
+  }
+  return {
+    connectionUpdatedAt: new Date(connection.updatedAt),
+    source: "private",
+    version: outlet.version,
+  };
+}
 
 export class MengantarConfigurationError extends Error {
   constructor() {
@@ -139,6 +219,7 @@ export async function resolveMengantarAccountCredentials(
       defaultOriginAreaId: schema.outlets.defaultOriginAreaId,
       defaultPickupAddressId: schema.outlets.defaultPickupAddressId,
       id: schema.outlets.id,
+      mengantarAuthorityVersion: schema.outlets.mengantarAuthorityVersion,
     })
     .from(schema.outlets)
     .where(
@@ -176,6 +257,7 @@ export async function resolveMengantarAccountCredentials(
       return {
         authority: {
           connectionUpdatedAt: new Date(connection[0].updatedAt),
+          version: outlet[0].mengantarAuthorityVersion,
           source: "private" as const,
         },
         credentials: requireAccountCredentials({
@@ -204,6 +286,7 @@ export async function resolveMengantarAccountCredentials(
   return {
     authority: {
       connectionUpdatedAt: null,
+      version: outlet[0].mengantarAuthorityVersion,
       source: "platform_default",
     },
     credentials,

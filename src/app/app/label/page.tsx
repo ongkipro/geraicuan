@@ -147,7 +147,7 @@ export default async function LabelIndexPage({
       </Card>
 
     {queryError ? (
-      <AlertRegion className="rounded-lg" id="q-label-error"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Filter tidak dapat diproses</AlertTitle><AlertDescription><a href="#q-label">{queryError}</a></AlertDescription></Alert></AlertRegion>
+      <AlertRegion className="rounded-lg" id="q-label-error"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Filter tidak dapat diproses</AlertTitle><AlertDescription><Button asChild className="h-auto min-h-11 justify-start whitespace-normal px-0 text-left" variant="link"><a href="#q-label">{queryError}</a></Button></AlertDescription></Alert></AlertRegion>
     ) : null}
 
     <section aria-labelledby="hasil-label-title" className="grid min-w-0 gap-3 overflow-hidden" id="hasil-label">

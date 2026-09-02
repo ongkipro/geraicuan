@@ -106,9 +106,11 @@ function outlet(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function renderPage() {
+async function renderPage(activeOutletId?: string) {
   const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/page");
-  return renderToStaticMarkup(await OutletSettingsPage());
+  return renderToStaticMarkup(await OutletSettingsPage({
+    searchParams: Promise.resolve(activeOutletId ? { outlet: activeOutletId } : {}),
+  }));
 }
 
 function occurrences(markup: string, value: string) {
@@ -187,7 +189,7 @@ describe("Outlet settings page acceptance", () => {
     expect(html).not.toContain(SECRET_SENTINEL);
   });
 
-  it("renders many mixed outlets with truthful counts, stable order, and opaque private attention", async () => {
+  it("renders many mixed outlets as one URL-addressable list-detail workspace", async () => {
     mocks.outlets = [
       outlet({
         name: "A — Belum siap",
@@ -226,7 +228,11 @@ describe("Outlet settings page acceptance", () => {
 
     const html = await renderPage();
 
-    expect(occurrences(html, "<form")).toBe(5);
+    expect(occurrences(html, "<form")).toBe(1);
+    expect(occurrences(html, 'id="outlet-detail-title"')).toBe(1);
+    expect(occurrences(html, 'aria-current="page"')).toBe(1);
+    expect(html).toContain('aria-label="Pilih outlet"');
+    expect(html).toContain(`href="/app/pengaturan?outlet=${OUTLET_TWO}#outlet-detail-title"`);
     expect(html.indexOf("A — Belum siap")).toBeLessThan(
       html.indexOf("C — Privat perlu perhatian"),
     );
@@ -236,13 +242,41 @@ describe("Outlet settings page acceptance", () => {
     expect(html).toMatch(/Total outlet<\/dt><dd[^>]*>3<\/dd>/);
     expect(html).toMatch(/Siap dipakai<\/dt><dd[^>]*>1<\/dd>/);
     expect(html).toMatch(/Koneksi privat<\/dt><dd[^>]*>2<\/dd>/);
-    expect(html).toMatch(/Default platform<\/dt><dd[^>]*>1<\/dd>/);
-    expect(html).toContain("API key tersimpan");
-    expect(html).toContain("Tersimpan, belum diverifikasi");
-    expect(html).toContain("API key privat perlu diganti");
+    expect(html).toMatch(/Perlu dilengkapi<\/dt><dd[^>]*>2<\/dd>/);
+    expect(html).not.toContain("API key tersimpan");
+    expect(html).not.toContain("API key privat perlu diganti");
     expect(html).not.toContain(SECRET_SENTINEL);
     expect(html).not.toContain("secretReference");
     expect(html).not.toContain("vault://");
+  });
+
+  it("selects only a tenant-listed outlet from the URL and safely falls back for foreign input", async () => {
+    mocks.outlets = [
+      outlet({ name: "A — Belum siap" }),
+      outlet({
+        connectionSource: "private",
+        connectionStatus: "private_ready",
+        connectionUpdatedAt: new Date("2026-09-01T02:00:00.000Z"),
+        defaultOriginAreaId: "origin-ready",
+        defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
+        defaultPickupAddressId: "pickup-ready",
+        defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
+        id: OUTLET_TWO,
+        name: "B — Privat siap",
+        readinessStatus: "ready",
+      }),
+    ];
+
+    const selected = await renderPage(OUTLET_TWO);
+    expect(selected).toContain("API key tersimpan");
+    expect(selected).toContain("Tersimpan, belum diverifikasi");
+    expect(selected).toMatch(new RegExp(`aria-current="page"[^>]*href="/app/pengaturan\\?outlet=${OUTLET_TWO}`));
+    expect(occurrences(selected, "<form")).toBe(2);
+
+    const fallback = await renderPage("00000000-0000-4000-8000-999999999999");
+    expect(fallback).toContain("A — Belum siap");
+    expect(fallback).not.toContain("API key tersimpan");
+    expect(occurrences(fallback, "<form")).toBe(1);
   });
 
   it("renders the saved readable selection, described errors, and a focusable result", async () => {
@@ -359,7 +393,7 @@ describe("Outlet settings page acceptance", () => {
       "utf8",
     );
 
-    expect(source).toContain("key={outlet.id}");
+    expect(source).toContain("key={activeOutlet.id}");
     expect(source).not.toContain("outlet.id}:${outlet.connectionSource");
   });
 });

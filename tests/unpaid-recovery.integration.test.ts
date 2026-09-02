@@ -88,17 +88,17 @@ async function seedEstimatedShipment(
     [value.shipmentId, tenantId],
   );
   await adminPool.query(
-    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address)
+    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label)
       VALUES
-      ($1, $2, 'SENDER', 'Synthetic Sender', '0000000000', 'Synthetic origin'),
-      ($1, $2, 'RECIPIENT', 'Synthetic Recipient', '0000000000', 'Synthetic destination')`,
+      ($1, $2, 'SENDER', 'Synthetic Sender', '0000000000', 'Synthetic origin', NULL, NULL),
+      ($1, $2, 'RECIPIENT', 'Synthetic Recipient', '0000000000', 'Synthetic destination', 'recovery-destination', 'Recovery destination')`,
     [tenantId, value.shipmentId],
   );
   await adminPool.query(
     `INSERT INTO shipment_estimate_snapshots (
       id, tenant_id, shipment_id, outlet_id, origin_area_id, destination_area_id,
-      weight_grams, is_cod_requested, credential_source
-    ) VALUES ($1, $2, $3, $4, $5, 'recovery-destination', 1000, false, 'platform_default')`,
+      destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES ($1, $2, $3, $4, $5, 'recovery-destination', 'Recovery destination', 1000, false, 'platform_default')`,
     [value.estimateSnapshotId, tenantId, value.shipmentId, outletId, origin],
   );
   await adminPool.query(

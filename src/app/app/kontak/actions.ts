@@ -2,11 +2,19 @@
 
 import { redirect } from "next/navigation";
 
+import { validateMengantarDestinationAreaSelection } from "@/app/app/location-actions";
 import { createContact, listContacts } from "@/db/contact-repository";
 import { db } from "@/db/client";
+import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { validateContactDirectory } from "@/lib/contact-directory";
+import {
+  lockMengantarAccountAuthority,
+  MengantarConfigurationError,
+  type MengantarAccountAuthority,
+  sameMengantarAccountAuthority,
+} from "@/lib/mengantar-credentials";
 
 const CONTACT_FIELDS = [
   "contactName",
@@ -15,15 +23,20 @@ const CONTACT_FIELDS = [
   "roleRecipient",
   "addressLabel",
   "addressText",
-  "areaLabel",
-  "areaId",
 ] as const;
 
 type ContactValues = Partial<Record<(typeof CONTACT_FIELDS)[number], string>>;
 
 export type CreateContactState = {
+  areaQuery?: { outletId: string; query: string };
   errors?: Record<string, string>;
   message?: string;
+  selectedArea?: {
+    areaId: string;
+    areaLabel: string;
+    outletId: string;
+    query: string;
+  };
   successId?: string;
   values?: ContactValues;
 };
@@ -111,13 +124,99 @@ export async function saveContact(
   const principal = await requireTenantPrincipal();
   const validation = validateContactDirectory(formData);
   const values = valuesFrom(formData);
-  if (!validation.ok) return { errors: validation.errors, values };
 
-  const contactId = await withTenantContext(
-    db,
-    principal.userId,
-    principal.tenantId,
-    (tx, context) => createContact(tx, context, validation.input),
-  );
+  const outletId = formData.get("areaOutletId");
+  const query = formData.get("areaQuery");
+  const areaId = formData.get("areaId");
+  const areaLabel = formData.get("areaLabel");
+  const selectionParts = [outletId, query, areaId, areaLabel];
+  const hasSelectionPart = selectionParts.some((value) => typeof value === "string" && value);
+  let selectedArea: CreateContactState["selectedArea"];
+  let validatedAuthority: MengantarAccountAuthority | null = null;
+  let areaQuery: CreateContactState["areaQuery"];
+  let areaError: string | undefined;
+  if (hasSelectionPart) {
+    if (!selectionParts.every((value) => typeof value === "string" && value)) {
+      areaError = "Cari dan pilih ulang area tujuan.";
+    } else {
+      areaQuery = { outletId: outletId as string, query: query as string };
+      const outletReady = await withTenantContext(
+        db,
+        principal.userId,
+        principal.tenantId,
+        async (tx, context) => (await listReadyShipmentOutlets(tx, context))
+          .some((outlet) => outlet.id === outletId),
+      );
+      if (!outletReady) {
+        areaError = "Outlet tidak siap atau tidak tersedia.";
+      } else {
+        const authority = await validateMengantarDestinationAreaSelection(
+          outletId as string,
+          query as string,
+          areaId as string,
+          areaLabel as string,
+        );
+        if (!authority.success || !authority.option) {
+          areaError = authority.message ?? "Cari dan pilih ulang area tujuan.";
+        } else {
+          validatedAuthority = authority.authority ?? null;
+          selectedArea = {
+            ...authority.option,
+            outletId: outletId as string,
+            query: query as string,
+          };
+        }
+      }
+    }
+  }
+  if (!validation.ok || areaError) {
+    return {
+      errors: { ...(!validation.ok ? validation.errors : {}), ...(areaError ? { areaLabel: areaError } : {}) },
+      areaQuery: selectedArea ? undefined : areaQuery,
+      selectedArea,
+      values,
+    };
+  }
+
+  let contactId: string;
+  try {
+    contactId = await withTenantContext(
+      db,
+      principal.userId,
+      principal.tenantId,
+      async (tx, context) => {
+        if (selectedArea) {
+          const currentAuthority = await lockMengantarAccountAuthority(
+            tx,
+            context,
+            selectedArea.outletId,
+          );
+          if (
+            !validatedAuthority
+            || !sameMengantarAccountAuthority(validatedAuthority, currentAuthority)
+          ) {
+            throw new MengantarConfigurationError();
+          }
+        }
+        return createContact(tx, context, {
+          ...validation.input,
+          destinationAreaId: selectedArea?.areaId ?? null,
+          destinationAreaLabel: selectedArea?.areaLabel ?? null,
+        });
+      },
+    );
+  } catch (error) {
+    if (error instanceof MengantarConfigurationError) {
+      return {
+        areaQuery: selectedArea
+          ? { outletId: selectedArea.outletId, query: selectedArea.query }
+          : areaQuery,
+        errors: { areaLabel: "Koneksi Mengantar berubah. Cari dan pilih ulang area tujuan." },
+        selectedArea,
+        values,
+      };
+    }
+    throw error;
+  }
   return { message: "Kontak tersimpan dan siap dipakai pada draf baru.", successId: contactId };
 }

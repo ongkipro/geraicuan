@@ -182,6 +182,7 @@ describe("label route render contracts", () => {
     expect(html).toContain('aria-describedby="q-label-help q-label-error"');
     expect(html).toContain('id="q-label-error"');
     expect(html).toContain('href="#q-label"');
+    expect(html).toMatch(/href="#q-label"[^>]*class="[^"]*min-h-11[^"]*"/);
     expect(html).toContain('role="alert"');
     expect(html).toContain('tabindex="-1"');
   });

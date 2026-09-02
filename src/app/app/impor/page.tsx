@@ -40,19 +40,27 @@ export default async function BulkImportPage() {
   }
   const loadedOutlets = await outletsPromise;
   const configuredOutlets = auditScenario === "bulk-import-unconfigured" ? [] : loadedOutlets;
-  const auditPreview = auditScenario === "bulk-import-mixed" && configuredOutlets[0] ? {
-    errors: [{ field: "telepon_penerima" as const, message: "Nomor telepon penerima tidak valid.", row: 3 }],
+  const auditPreview = (auditScenario === "bulk-import-mixed" || auditScenario === "bulk-import-no-valid") && configuredOutlets[0] ? {
+    errors: auditScenario === "bulk-import-no-valid"
+      ? [{
+          code: "no_result" as const,
+          field: "lokasi_tujuan" as const,
+          message: "Lokasi tidak ditemukan. Tambahkan detail wilayah lalu unggah ulang.",
+          query: "Jakarta",
+          row: 2,
+        }]
+      : [{ field: "telepon_penerima" as const, message: "Nomor telepon penerima tidak valid.", row: 3 }],
     submissionId: "00000000-0000-4000-8000-000000000141",
     totalRows: 2,
-    validRows: [{
+    uniqueDestinationQueries: 2,
+    validRows: auditScenario === "bulk-import-no-valid" ? [] : [{
       confirmationToken: "development-only-invalid-confirmation-token",
-      input: {
-        declaredValueIdr: 150_000, destinationAreaId: "3171010", destinationAreaLabel: "Gambir, Jakarta Pusat", isCod: false,
-        outletId: configuredOutlets[0].id, packageContent: "Paket audit", packageHeightCm: null, packageLengthCm: null,
-        packageQuantity: 1, packageWeightGrams: 500, packageWidthCm: null, recipientAddress: "Alamat penerima audit",
-        recipientName: "Penerima audit", recipientPhone: "081234567890", senderAddress: "Alamat pengirim audit",
-        senderName: "Pengirim audit", senderPhone: "081212345678",
-      },
+      declaredValueIdr: 150_000,
+      destinationAreaLabel: "Gambir, Jakarta Pusat",
+      destinationQuery: "Gambir Jakarta Pusat",
+      isCod: false,
+      packageWeightGrams: 500,
+      recipientName: "Penerima audit",
       row: 2,
     }],
   } : undefined;

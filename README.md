@@ -58,3 +58,7 @@ The future production entry points are intentionally role-specific:
 Host routing improves entry-point clarity but does not replace server-side role
 and tenant authorization. Configure Better Auth trusted origins and cookies for
 only these exact hosts; do not enable cross-subdomain cookie sharing by default.
+Production startup fails closed unless `BETTER_AUTH_URL` is one of exactly two
+explicit HTTPS origins in `BETTER_AUTH_TRUSTED_ORIGINS` (tenant and platform),
+with no wildcard, credentials, path, query, or fragment. A trusted proxy CIDR
+allowlist is also required.

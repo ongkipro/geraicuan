@@ -1,0 +1,2 @@
+ALTER TABLE "shipment_rate_limits" DROP CONSTRAINT "shipment_rate_limits_operation_valid";--> statement-breakpoint
+ALTER TABLE "shipment_rate_limits" ADD CONSTRAINT "shipment_rate_limits_operation_valid" CHECK (operation IN ('estimate', 'location-search', 'order-submit', 'bulk-import'));

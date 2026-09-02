@@ -7,6 +7,8 @@
 
 ## UX-1 — Operational frame
 
+- Owner: Product owner
+
 | Actor | Primary job | Success condition | Highest failure cost |
 |---|---|---|---|
 | Operator | Turn valid shipment data into a provider-issued AWB and printable label | The provider AWB is issued once and the label is reachable from the shipment | Duplicate or unknown provider submission |
@@ -14,6 +16,8 @@
 | Super Admin | Detect platform exceptions and govern tenant lifecycle | Affected tenant and safe next action are identifiable without shipment PII | Incorrect lifecycle action or credential/PII exposure |
 
 ## UX-2 — Information architecture
+
+- Owner: Product owner
 
 ### Tenant CMS
 
@@ -43,6 +47,8 @@ One **Platform** group contains:
 
 ## UX-3 — Shared shell contract
 
+- Owner: Product owner
+
 - One shadcn-based shell serves tenant and platform scope without sharing authorization.
 - Desktop uses a full sidebar, tablet uses an icon rail with tooltips and visible current location, and mobile uses a labelled Sheet.
 - The top bar persistently identifies tenant/platform scope and authenticated role.
@@ -52,6 +58,8 @@ One **Platform** group contains:
 - Navigation is derived from authorized destinations. A forbidden direct request is redirected or rejected before protected data reads and never produces a denial page with Ringkasan falsely marked current. Operator requests for Tenant Admin-only tenant destinations redirect server-side to `/app`.
 
 ## UX-4 — Shipment lifecycle journey
+
+- Owner: Product owner
 
 `DRAFT → ESTIMATED → SUBMISSION_QUEUED → ISSUED | AWAITING_UPSTREAM_PAYMENT | SUBMISSION_UNKNOWN | FAILED`
 
@@ -69,6 +77,8 @@ The lifecycle describes the accepted product flow, not current production releas
 
 ## UX-5 — Screen contracts
 
+- Owner: Product owner
+
 | Screen | Primary job | Presentation | Required states | Primary components |
 |---|---|---|---|---|
 | CMS shell | Retain location and scope while moving between jobs | Persistent sidebar/rail/sheet plus compact top bar | active, collapsed, mobile open, sign-out pending/error | `Sidebar`, `Sheet`, `Tooltip`, `DropdownMenu`, `Separator`, `Button` |
@@ -80,13 +90,15 @@ The lifecycle describes the accepted product flow, not current production releas
 | Contacts | Find and maintain reusable party data | Searchable directory and dedicated detail form with provider-authoritative address-area selection | system empty, filtered empty, archived, destination loading/no-result/error, validation error | `Input`, `Command`, `Popover`, `Badge`, `Table`, `Field`, `AlertDialog` |
 | Outlet settings | Restore or maintain outlet readiness | One outlet selector/list-detail context followed by location and Mengantar connection sections | no outlet, incomplete, pickup loading/account-empty/query-empty/error, legacy unlabelled, platform fallback, private unstored, private stored-unverified, connected, credential rejected, provider unavailable, secret missing, replacement pending/error/success, safe switch confirmation | `Badge`, `Alert`, `Field`, `RadioGroup`, `Input`, `Command`, `Popover`, `Select`, `AlertDialog`, `Button` |
 | Members | Govern tenant access | Compact member list/table with contextual actions | empty, invited, active, deactivated, last-admin blocked | `Table`, `Badge`, `Select`, `AlertDialog`, `Button` |
-| Analytics | Explore historical lifecycle performance without replacing financial authority | Four period/snapshot KPIs, trend and breakdowns, a separate latest tenant-wide signed variance exception, then supporting table/export | no data, filtered empty, adjusted filter, loading, partial error, stale | `Card`, `Chart`, `Table`, `Sheet`, `Button` |
+| Analytics | Explore historical lifecycle performance without replacing financial authority | Four period/snapshot KPIs, trend and breakdowns, a separate latest tenant-wide signed variance exception, then supporting table/export | no data, filtered empty, adjusted filter, loading, partial error, stale | `Card`, `Chart`, `Table`, native filter disclosure, `Button` |
 | Finance | Reconcile money exceptions and inspect source entries | Summary strip, variance queue, then ledger table | matched, variance, reversal, loading, error | `Badge`, `Alert`, `Table`, `AlertDialog`, `Button` |
 | Platform monitoring | Triage platform and tenant exceptions | Exception queue before trend and aggregate detail | healthy, warning, critical, degraded, empty | `Alert`, `Badge`, `Table`, `Chart`, `Sheet` |
 | Label preview | Verify and print an issued provider label | Domain-specific 100×150 mm sheet plus compact toolbar/history | unavailable, overflow warning, COD mismatch, print success/error | `Button`, `Alert`, `Table`; semantic print markup remains custom |
 | Tenant overview | Choose the next permitted operational action | Role-specific summary strip, exception queue, recent shipment table | first-run, healthy, actionable exceptions, partial/stale, loading, error | `Card`, `Alert`, `Badge`, `Table`, `Skeleton`, `Button` |
 
 ## UX-6 — Component and visual rules
+
+- Owner: Product owner
 
 - shadcn/ui is the source for the complete interactive vocabulary; native semantic HTML remains valid when it is smaller and equally accessible.
 - Use one semantic token graph. Legacy `sales-*`, `ship-*`, `ops-*`, `an-*`, and `bulk-*` presentation classes are migration-only and must not appear in new CMS components.
@@ -98,12 +110,17 @@ The lifecycle describes the accepted product flow, not current production releas
 
 ## UX-7 — Responsive acceptance
 
+- Owner: Product owner
+
 - `390px`: mobile Sheet navigation, locally contained data overflow, no document overflow, and 44px minimum primary touch targets.
 - `768px`: icon rail retains current-location meaning through icon, active state, and tooltip.
 - `1280px`: full sidebar and dense tables preserve readable hierarchy without decorative empty space.
+- Breakpoint-sensitive GET filters mount one form and one labelled control set only. At 390px a native disclosure hides the adjacent form region from layout and keyboard order until opened; at 768px and 1280px the same server-rendered form is inline. URL submission, reset, reload, and Back preserve canonical values and focus targets without `matchMedia`, portal relocation, or duplicated IDs.
 - Every migrated screen is checked for keyboard order, visible focus, accessible names/states, loading, empty, error, and its primary success path.
 
 ## UX-8 — Tenant overview contract
+
+- Owner: Product owner
 
 The overview borrows the useful completeness of a mature shipping dashboard—summary, exceptions, trends, and source records—without copying another product's branding, information hierarchy, or unsupported business metrics.
 
@@ -125,9 +142,11 @@ Public Indonesian shipping-dashboard evidence supports this coverage: Mengantar 
 
 ## UX-9 — Tenant analytics contract
 
+- Owner: Product owner
+
 **Decision sequence:** understand the selected period → compare against the prior equal period → identify lifecycle/courier change → inspect the exact filtered records.
 
-1. **Filter bar:** preset/custom range, outlet, courier, lifecycle, timezone, and the detail/export basis (`created`, `issued`, provider `outcome`, or current `exceptions`). URL parameters are the shareable source of view state; mobile moves controls into one Sheet but retains active filter chips/count and reset on the page. Unknown tenant scope or basis fails closed rather than broadening the result.
+1. **Filter bar:** preset/custom range, outlet, courier, lifecycle, timezone, and the detail/export basis (`created`, `issued`, provider `outcome`, or current `exceptions`). URL parameters are the shareable source of view state; mobile uses the accepted native disclosure around the same server-rendered form tree and retains active filter chips/count plus reset on the page. Unknown tenant scope or basis fails closed rather than broadening the result.
 2. **KPI row:** created, issued, issuance success rate with denominator, and unresolved operational exceptions. Each includes basis, prior-period delta where valid, non-colour direction cue, and a link to supporting rows. Snapshot KPIs say `Saat ini` and cannot masquerade as period events.
 3. **Primary trend:** two-series line chart for created versus issued by WIB/local day. Series differ by colour plus dash/marker; axes and units are named; every datum exists in an immediately associated semantic table.
 4. **Breakdown:** a sorted courier comparison or lifecycle table appears only when the metric can answer an operator decision. Bars start at zero; low-volume rates show their denominator and do not imply certainty.
@@ -137,6 +156,8 @@ Public Indonesian shipping-dashboard evidence supports this coverage: Mengantar 
 Required independent states are representative skeleton loading, no event data for the selected period, filtered empty, invalid/adjusted range, partial chart failure with retained KPIs/table, whole-query failure with retry, and stale/generated-at notice. Accessible text summarizes the chart's key comparison; tooltip-only values, colour-only series, and canvas-only data are prohibited.
 
 ## UX-10 — Provider location and outlet configuration contract
+
+- Owner: Product owner
 
 - Contact-address and shipment destination fields use server-backed Mengantar area search. The user searches and selects a readable area hierarchy; opaque provider IDs are hidden values and never editable text fields.
 - A selected destination keeps its provider ID and displayed hierarchy as one value. Contact reuse may prefill that pair, but the server revalidates authority before a new operational snapshot proceeds. Clearing or changing the query cannot silently retain an old hidden ID.
@@ -149,3 +170,14 @@ Required independent states are representative skeleton loading, no event data f
 - `Tersambung` means a safe non-mutating provider verification succeeded. A database reference alone is labelled `Tersimpan, belum diverifikasi`. Authentication failure, provider unavailability, and missing/unreadable secret have distinct non-secret recovery guidance.
 - Switching from private to platform default uses a named `AlertDialog`, keeps the existing private key until the server proves the platform default complete, and returns focus to the initiating control.
 - Secret submission preserves non-secret outlet/location values, focuses the first safe field error or result summary, provides 44px actions, and never returns the submitted secret through action state.
+
+## UX-11 — Post-change whole-system screening contract
+
+- Owner: Paduka Ongki
+
+- Screening is route- and job-complete, not screenshot-complete: 14 authenticated tenant pages, 4 authenticated platform pages, the public sales page, and both login entries must map to an actor, primary job, entry point, state matrix, permission boundary, and executable browser journey.
+- Review operational correctness before presentation. Trace rendered information and actions through server authorization, validation, data ownership, lifecycle, audit/ledger effects, and recovery; visual polish cannot approve a broken or unreachable workflow.
+- Reuse the existing deterministic scenario registry. Every applicable screen covers initial loading, system empty, filtered/query empty, populated, partial/stale, route or lookup error, unauthorized/read-only, pending mutation, conflict where possible, and primary success without exposing test controls in production.
+- Screen tenant routes as one product across Ringkasan, Pengiriman, Kontak, Impor, Label, Analitik, Keuangan, Outlet & koneksi, and Anggota & akses. Screen platform monitoring, tenant governance, and audit as a separate platform job; never blur global and tenant scope.
+- UI/UX review compares 390px, 768px, and 1280px for hierarchy, density, shell/page rhythm, tables/charts/forms, status language, keyboard/focus, accessible names/states, 44px applicable actions, local overflow, and zero unexpected browser/runtime/network errors. Screens that already satisfy the contract remain unchanged.
+- A material finding fails the screening boundary and names one owning requirement/task plus a reproducible state. Repair occurs in that atomic owner, receives the capability-appropriate independent review, and the failed screening reruns from a fresh baseline.

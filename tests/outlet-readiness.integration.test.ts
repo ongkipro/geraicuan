@@ -126,6 +126,10 @@ describe("tenant outlet readiness", () => {
   it("updates platform-default pickup/origin once and emits one redacted audit for identical concurrent replay", async () => {
     const pickup = "pickup-sensitive-sentinel";
     const origin = "origin-sensitive-sentinel";
+    const authorityBefore = await adminPool.query<{ mengantar_authority_version: number }>(
+      "SELECT mengantar_authority_version FROM outlets WHERE tenant_id = $1 AND id = $2",
+      [tenantA, outletA],
+    );
     await withTenantContext(db, adminA, tenantA, async (tx, context) => {
       const initial = await listOutletReadiness(tx, context);
       expect(initial).toHaveLength(1);
@@ -201,6 +205,12 @@ describe("tenant outlet readiness", () => {
     expect(auditPayload).not.toContain(pickup);
     expect(auditPayload).not.toContain(origin);
     expect(auditPayload).not.toContain("managed://");
+    const authorityAfter = await adminPool.query<{ mengantar_authority_version: number }>(
+      "SELECT mengantar_authority_version FROM outlets WHERE tenant_id = $1 AND id = $2",
+      [tenantA, outletA],
+    );
+    expect(authorityAfter.rows[0].mengantar_authority_version)
+      .toBe(authorityBefore.rows[0].mengantar_authority_version + 1);
   });
 
   it("uses but never creates, repairs, overwrites, or downgrades an authoritative private reference", async () => {

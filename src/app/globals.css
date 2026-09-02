@@ -99,7 +99,6 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
   background:var(--surface-sunken);
 }
 .auth-demo-callout code { font-family:var(--font-mono); font-size:.8125rem; font-weight:600; }
-.auth-demo-fill { justify-self:start; min-height:2.25rem; margin:0; }
 .auth-return {
   display:flex;
   align-items:center;

@@ -1,0 +1,19 @@
+{
+  "capability": "full-stack-development",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "development",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-01T22:23:58Z",
+  "result": "PASS",
+  "risk": "R3",
+  "runId": "RUN-20260901T220337Z-fedf03af",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "ui-validation"
+  ],
+  "usageHash": "1e28c7dff63c18cb3782292a638f4958437657eb51eff54f53e894cc4a731036",
+  "verificationFailed": false,
+  "worker": "main"
+}

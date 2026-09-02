@@ -222,7 +222,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                     <TableRow key={row.shipmentId}>
                       <TableCell className="sticky left-0 z-10 bg-card font-medium group-hover:bg-muted/50">
                         <Link
-                          className="text-primary underline-offset-4 hover:underline"
+                          className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline sm:min-h-8"
                           href={`/app/pengiriman/${encodeURIComponent(row.shipmentId)}`}
                         >
                           {shipmentReference(row.shipmentId)}

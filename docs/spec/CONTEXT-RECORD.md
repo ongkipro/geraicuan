@@ -74,7 +74,7 @@
 
 | ID | Territory | Trigger facts | Authority/source | Source status | Publication date | Effective date | Retrieved date | Decision | Qualified owner | Engineering impact | Next review |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| JUR-ID-1 | Indonesia | CTX-20 | Badan Pemeriksa Keuangan — official legislation database: https://peraturan.bpk.go.id/Details/229798/uu-no-27-tahun-2022 | unknown | Unknown | Unknown | 2026-08-28 | Unknown | Specification owner | PRIV-*, SEC-*, LOC-* as applicable | Before applicability approval or source-status change |
+| JUR-ID-1 | Indonesia | CTX-18, CTX-20; GeraiCUAN processes names, phones, and addresses of Indonesian senders and recipients for tenant shipment creation | Badan Pemeriksa Keuangan — official legislation database: https://peraturan.bpk.go.id/Details/229798/uu-no-27-tahun-2022 | unknown | Unknown | Unknown | 2026-08-28 | Unknown | [TBD owner=privacy/legal owner; due=before production approval] | PRIV-1, SEC-1, SEC-2, DATA-1 | Before production deployment, qualified applicability approval, a source-status change, or a material processing/location change |
 
 ## Sector Decisions
 

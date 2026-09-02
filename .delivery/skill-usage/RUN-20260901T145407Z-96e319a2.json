@@ -1,0 +1,19 @@
+{
+  "capability": "product-ux-planning",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "specification-update",
+  "model": "gpt-5.6",
+  "provider": "openai-codex",
+  "reasoningEffort": "xhigh",
+  "recordedAt": "2026-09-01T15:01:15Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260901T145407Z-96e319a2",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "prd-taskbreaker"
+  ],
+  "usageHash": "6c353157da49637de34e8736252fe8f4f9714b7768c319a14a1585ee1225af4c",
+  "verificationFailed": false,
+  "worker": "codex"
+}

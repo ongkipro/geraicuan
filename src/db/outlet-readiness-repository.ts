@@ -307,6 +307,7 @@ export async function updateOutletReadiness(
       defaultOriginAreaLabel,
       defaultPickupAddressId,
       defaultPickupAddressLabel,
+      mengantarAuthorityVersion: sql`${outlets.mengantarAuthorityVersion} + 1`,
       updatedAt,
     })
     .where(

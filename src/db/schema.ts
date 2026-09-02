@@ -61,6 +61,7 @@ export const shipmentPartyRoles = ["SENDER", "RECIPIENT"] as const;
 
 export const shipmentRateLimitOperations = [
   "estimate",
+  "location-search",
   "order-submit",
   "bulk-import",
 ] as const;
@@ -268,7 +269,7 @@ export const shipmentRateLimits = pgTable(
     }),
     check(
       "shipment_rate_limits_operation_valid",
-      sql`operation IN ('estimate', 'order-submit', 'bulk-import')`,
+      sql`operation IN ('estimate', 'location-search', 'order-submit', 'bulk-import')`,
     ),
     check("shipment_rate_limits_count_positive", sql`count > 0`),
   ],
@@ -285,6 +286,9 @@ export const outlets = pgTable(
     defaultPickupAddressLabel: text("default_pickup_address_label"),
     defaultOriginAreaId: text("default_origin_area_id"),
     defaultOriginAreaLabel: text("default_origin_area_label"),
+    mengantarAuthorityVersion: integer("mengantar_authority_version")
+      .notNull()
+      .default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -296,6 +300,10 @@ export const outlets = pgTable(
     unique("outlets_id_tenant_key").on(table.id, table.tenantId),
     index("outlets_tenant_idx").on(table.tenantId),
     check("outlets_name_not_blank", sql`char_length(btrim(name)) > 0`),
+    check(
+      "outlets_mengantar_authority_version_nonnegative",
+      sql`mengantar_authority_version >= 0`,
+    ),
     check(
       "outlets_pickup_label_not_blank",
       sql`default_pickup_address_label IS NULL OR char_length(btrim(default_pickup_address_label)) > 0`,
@@ -571,6 +579,7 @@ export const shipmentEstimateSnapshots = pgTable(
     outletId: uuid("outlet_id").notNull(),
     originAreaId: text("origin_area_id").notNull(),
     destinationAreaId: text("destination_area_id").notNull(),
+    destinationAreaLabel: text("destination_area_label").notNull(),
     weightGrams: integer("weight_grams").notNull(),
     isCodRequested: boolean("is_cod_requested").notNull(),
     credentialSource: text("credential_source", {
@@ -609,6 +618,10 @@ export const shipmentEstimateSnapshots = pgTable(
     check(
       "shipment_estimate_snapshots_destination_area_id_valid",
       sql`char_length(btrim(destination_area_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "shipment_estimate_snapshots_destination_area_label_valid",
+      sql`char_length(btrim(destination_area_label)) BETWEEN 1 AND 160`,
     ),
     check(
       "shipment_estimate_snapshots_weight_grams_positive",
@@ -882,6 +895,8 @@ export const providerOrderSnapshots = pgTable(
     estimateServiceId: uuid("estimate_service_id").notNull(),
     position: integer("position").notNull(),
     providerService: text("provider_service").notNull(),
+    destinationAreaId: text("destination_area_id").notNull(),
+    destinationAreaLabel: text("destination_area_label").notNull(),
     currency: text("currency", { enum: ["IDR"] }).notNull(),
     shippingAmountIdr: integer("shipping_amount_idr").notNull(),
     insuranceAmountIdr: integer("insurance_amount_idr"),
@@ -949,6 +964,14 @@ export const providerOrderSnapshots = pgTable(
     check(
       "provider_order_snapshots_provider_service_valid",
       sql`char_length(btrim(provider_service)) BETWEEN 1 AND 80`,
+    ),
+    check(
+      "provider_order_snapshots_destination_area_id_valid",
+      sql`char_length(btrim(destination_area_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "provider_order_snapshots_destination_area_label_valid",
+      sql`char_length(btrim(destination_area_label)) BETWEEN 1 AND 160`,
     ),
     check("provider_order_snapshots_currency_idr", sql`currency = 'IDR'`),
     check(
@@ -1438,6 +1461,8 @@ export const shipmentParties = pgTable(
     name: text("name").notNull(),
     phone: text("phone").notNull(),
     address: text("address").notNull(),
+    destinationAreaId: text("destination_area_id"),
+    destinationAreaLabel: text("destination_area_label"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1455,6 +1480,18 @@ export const shipmentParties = pgTable(
     check("shipment_parties_name_not_blank", sql`char_length(btrim(name)) > 0`),
     check("shipment_parties_phone_not_blank", sql`char_length(btrim(phone)) > 0`),
     check("shipment_parties_address_not_blank", sql`char_length(btrim(address)) > 0`),
+    check(
+      "shipment_parties_destination_area_valid",
+      sql`(
+          role = 'SENDER'
+          AND destination_area_id IS NULL
+          AND destination_area_label IS NULL
+        ) OR (
+          role = 'RECIPIENT'
+          AND char_length(btrim(destination_area_id)) BETWEEN 1 AND 160
+          AND char_length(btrim(destination_area_label)) BETWEEN 1 AND 160
+        )`,
+    ),
   ],
 );
 

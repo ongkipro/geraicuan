@@ -11,6 +11,10 @@ import {
   shipments,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import {
+  lockMengantarAccountAuthority,
+  MengantarConfigurationError,
+} from "@/lib/mengantar-credentials";
 
 export type OrderConfirmation = {
   shipmentId: string;
@@ -30,6 +34,7 @@ export type ProviderOrderSource = {
   recipientPhone: string;
   recipientAddress: string;
   destinationAreaId: string;
+  destinationAreaLabel: string;
   packageContent: string;
   weightGrams: number;
   quantity: number;
@@ -73,6 +78,28 @@ export class OrderBatchUnavailableError extends Error {
 
 export const PROVIDER_BATCH_CLAIM_STALE_AFTER_SECONDS = 120;
 
+async function requireCurrentMengantarSource(
+  tx: TenantTransaction,
+  context: TenantContext,
+  scope: Pick<ProviderBatchScope, "credentialSource" | "outletId">,
+) {
+  try {
+    const authority = await lockMengantarAccountAuthority(
+      tx,
+      context,
+      scope.outletId,
+    );
+    if (authority.source !== scope.credentialSource) {
+      throw new OrderBatchUnavailableError();
+    }
+  } catch (error) {
+    if (error instanceof MengantarConfigurationError) {
+      throw new OrderBatchUnavailableError();
+    }
+    throw error;
+  }
+}
+
 export function deriveProviderAccountKey(accountIdentity: string): string {
   if (!accountIdentity.trim()) throw new OrderBatchUnavailableError();
   return createHash("sha256").update(accountIdentity, "utf8").digest("hex");
@@ -105,6 +132,7 @@ type SelectedOrderRow = {
   shippingAmountIdr: number;
   insuranceAmountIdr: number | null;
   destinationAreaId: string;
+  destinationAreaLabel: string;
   packageContent: string;
   weightGrams: number;
   quantity: number;
@@ -187,7 +215,8 @@ async function loadAndLockSelections(
       service.currency AS "currency",
       service.shipping_amount_idr AS "shippingAmountIdr",
       service.insurance_amount_idr AS "insuranceAmountIdr",
-      draft.destination_area_id AS "destinationAreaId",
+      estimate.destination_area_id AS "destinationAreaId",
+      estimate.destination_area_label AS "destinationAreaLabel",
       draft.package_content AS "packageContent",
       draft.package_weight_grams AS "weightGrams",
       draft.package_quantity AS "quantity",
@@ -220,6 +249,7 @@ async function loadAndLockSelections(
       AND estimate.tenant_id = shipment.tenant_id
       AND estimate.origin_area_id = outlet.default_origin_area_id
       AND estimate.destination_area_id = draft.destination_area_id
+      AND estimate.destination_area_label = draft.destination_area_label
       AND estimate.weight_grams = draft.package_weight_grams
       AND estimate.is_cod_requested = draft.is_cod
       AND NOT EXISTS (
@@ -251,6 +281,8 @@ async function loadAndLockSelections(
       ON recipient.shipment_id = shipment.id
       AND recipient.tenant_id = shipment.tenant_id
       AND recipient.role = 'RECIPIENT'
+      AND recipient.destination_area_id = draft.destination_area_id
+      AND recipient.destination_area_label = draft.destination_area_label
     WHERE NOT draft.is_cod OR cod.id IS NOT NULL
     ORDER BY shipment.id
     FOR UPDATE OF shipment
@@ -318,7 +350,8 @@ async function loadExistingConfirmationBatches(
       provider_order.currency,
       provider_order.shipping_amount_idr AS "shippingAmountIdr",
       provider_order.insurance_amount_idr AS "insuranceAmountIdr",
-      draft.destination_area_id AS "destinationAreaId",
+      provider_order.destination_area_id AS "destinationAreaId",
+      provider_order.destination_area_label AS "destinationAreaLabel",
       draft.package_content AS "packageContent",
       draft.package_weight_grams AS "weightGrams",
       draft.package_quantity AS "quantity",
@@ -350,6 +383,8 @@ async function loadExistingConfirmationBatches(
     JOIN shipment_drafts AS draft
       ON draft.shipment_id = shipment.id
       AND draft.tenant_id = shipment.tenant_id
+      AND draft.destination_area_id = provider_order.destination_area_id
+      AND draft.destination_area_label = provider_order.destination_area_label
     JOIN shipment_parties AS sender
       ON sender.shipment_id = shipment.id
       AND sender.tenant_id = shipment.tenant_id
@@ -358,6 +393,8 @@ async function loadExistingConfirmationBatches(
       ON recipient.shipment_id = shipment.id
       AND recipient.tenant_id = shipment.tenant_id
       AND recipient.role = 'RECIPIENT'
+      AND recipient.destination_area_id = provider_order.destination_area_id
+      AND recipient.destination_area_label = provider_order.destination_area_label
   `);
   if (existing.rows.length === 0) return null;
   if (existing.rows.length !== confirmations.length) throw new OrderBatchUnavailableError();
@@ -428,6 +465,7 @@ async function loadExistingConfirmationBatches(
               recipientPhone: row.recipientPhone,
               recipientAddress: row.recipientAddress,
               destinationAreaId: row.destinationAreaId,
+              destinationAreaLabel: row.destinationAreaLabel,
               packageContent: row.packageContent,
               weightGrams: row.weightGrams,
               quantity: row.quantity,
@@ -450,6 +488,7 @@ export async function prepareProviderBatches(
   if (existing) {
     for (const batch of existing) {
       if (batch.orders.length === 0) continue;
+      await requireCurrentMengantarSource(tx, context, batch);
       const providerAccountKey = await resolveProviderAccountKey(batch);
       if (providerAccountKey !== batch.providerAccountKey) {
         throw new OrderBatchUnavailableError();
@@ -485,6 +524,7 @@ export async function prepareProviderBatches(
       courier,
       credentialSource: first.credentialSource,
     };
+    await requireCurrentMengantarSource(tx, context, scope);
     const providerAccountKey = await resolveProviderAccountKey(scope);
     if (!/^[0-9a-f]{64}$/.test(providerAccountKey)) {
       throw new OrderBatchUnavailableError();
@@ -565,6 +605,8 @@ export async function prepareProviderBatches(
         estimateServiceId: row.estimateServiceId,
         position,
         providerService: row.providerService,
+        destinationAreaId: row.destinationAreaId,
+        destinationAreaLabel: row.destinationAreaLabel,
         currency: row.currency,
         shippingAmountIdr: row.shippingAmountIdr,
         insuranceAmountIdr: row.insuranceAmountIdr,
@@ -602,6 +644,7 @@ export async function prepareProviderBatches(
         recipientPhone: row.recipientPhone,
         recipientAddress: row.recipientAddress,
         destinationAreaId: row.destinationAreaId,
+        destinationAreaLabel: row.destinationAreaLabel,
         packageContent: row.packageContent,
         weightGrams: row.weightGrams,
         quantity: row.quantity,

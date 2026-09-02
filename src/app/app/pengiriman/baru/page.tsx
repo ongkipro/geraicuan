@@ -19,7 +19,7 @@ import { calculateCodAmountsOrNull } from "@/db/cod-totals-repository";
 import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
-import { shipmentDrafts, shipments } from "@/db/schema";
+import { outlets, shipmentDrafts, shipments } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
@@ -61,8 +61,10 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
       ? await tx
           .select({
             declaredValueIdr: shipmentDrafts.declaredValueIdr,
+            destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
             id: shipments.id,
             isCod: shipmentDrafts.isCod,
+            outletName: outlets.name,
             status: shipments.status,
           })
           .from(shipments)
@@ -71,6 +73,13 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
             and(
               eq(shipmentDrafts.shipmentId, shipments.id),
               eq(shipmentDrafts.tenantId, shipments.tenantId),
+            ),
+          )
+          .innerJoin(
+            outlets,
+            and(
+              eq(outlets.id, shipments.outletId),
+              eq(outlets.tenantId, shipments.tenantId),
             ),
           )
           .where(
@@ -97,14 +106,17 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
   const auditDraftId = "00000000-0000-4000-0000-000000000001";
   const auditSavedDraft = {
     declaredValueIdr: 100_000,
+    destinationAreaLabel: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
     id: auditDraftId,
     isCod: true,
+    outletName: "Outlet Bandung",
     status: "ESTIMATED" as const,
   };
   const auditSnapshot = {
     request: {
       credentialSource: "platform_default" as const,
       destinationAreaId: "AUDIT-DESTINATION",
+      destinationAreaLabel: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
       isCodRequested: true,
       originAreaId: "AUDIT-ORIGIN",
       weightGrams: 1_000,
@@ -164,6 +176,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
           <div className="grid gap-1">
             <h2 className="font-medium">Draf kiriman tersimpan</h2>
             <p>Nomor draf: <span className="font-mono">{data.savedDraft.id.slice(0, 8).toUpperCase()}</span> · <strong>{data.savedDraft.status}</strong></p>
+            <p className="text-emerald-800">{data.savedDraft.outletName} → {data.savedDraft.destinationAreaLabel}</p>
             <p className="text-emerald-800">Muat estimasi di bawah untuk membandingkan layanan. Belum ada pesanan yang dikirim ke penyedia.</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Button asChild className="min-h-11" size="sm">

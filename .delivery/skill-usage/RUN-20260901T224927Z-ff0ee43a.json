@@ -1,0 +1,19 @@
+{
+  "capability": "full-stack-development",
+  "head": "2b3bd18121325ac70d153dd2bb38809cc8612e65",
+  "job": "corrective-screening",
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-01T22:53:14Z",
+  "result": "PASS",
+  "risk": "R2",
+  "runId": "RUN-20260901T224927Z-ff0ee43a",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "full-stack-development"
+  ],
+  "usageHash": "f532c2797d7d0991c583543d2525ff69a1263a3597efe94a2be72a4c0ee6dc6f",
+  "verificationFailed": false,
+  "worker": "main"
+}
