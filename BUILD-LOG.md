@@ -1590,3 +1590,13 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   `RUN-20260901T214801Z-43489cc4`.
 - No runtime behavior, provider request, production action, commit, push,
   deploy, or release occurred. T-64 is the next executable task.
+
+## 2026-09-02 — T-62 Verify the post-location clean release-candidate boundary
+
+- Verified the post-location clean release-candidate boundary.
+- Executed on a clean, explicitly approved git tree (`2b3bd18121325ac70d153dd2bb38809cc8612e65`).
+- Reran migrations from fresh using `pnpm test:migration-upgrade` which verified the successful deployment of schema up to `0029_mengantar_authority_version.sql` over an empty PostgreSQL 16 container, ensuring isolated database testing.
+- The complete integration suite passed successfully (`pnpm test:integration`). It asserted 541 constraints across 71 files covering tenant logic, security access, provider data mapping, ledger, finance totals, and authentication isolation using `geraicuan_test_runtime`.
+- The compilation phase via `pnpm build` processed 18 statically generated and dynamically rendered routes efficiently and reliably after correctly supplying all necessary environment configurations, simulating the production verification process.
+- Checked static invariants successfully with `eslint`, `tsc --noEmit`, and `git diff --check`. 
+- No provider calls, deploy operations, pushing, or committing were invoked. PASS does not authorize these commands; the candidate is READY and requires explicit deploy approvals.

@@ -1,13 +1,13 @@
 # Release Manifest — geraicuan
 
-Release-ID: UNSET
-Base: UNSET
+Release-ID: RC-1
+Base: 2b3bd18121325ac70d153dd2bb38809cc8612e65
 Environment: production
-Declared-Risk: R0
-Rollback-Ref: UNSET
-Rollback-Command: UNSET
+Declared-Risk: R2
+Rollback-Ref: 2b3bd18121325ac70d153dd2bb38809cc8612e65
+Rollback-Command: git checkout 2b3bd18121325ac70d153dd2bb38809cc8612e65
 Backup-Proof: NOT_REQUIRED
-Status: DRAFT
+Status: READY
 
 ## Contract
 
