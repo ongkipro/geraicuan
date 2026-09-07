@@ -1,0 +1,19 @@
+{
+  "capability": "full-stack-development",
+  "head": "e3bebe937a54844b9b722b80d69843f5018d043c",
+  "job": "documentation",
+  "model": "gpt-5",
+  "provider": "openai",
+  "reasoningEffort": "high",
+  "recordedAt": "2026-09-07T11:48:31Z",
+  "result": "PASS",
+  "risk": "R1",
+  "runId": "RUN-20260907T114826Z-b29a97a0",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "full-stack-development"
+  ],
+  "usageHash": "bfa3e1a6c2fcb24391e489641bd3a7ae75a2466add99849ec25b99ff14d4580d",
+  "verificationFailed": false,
+  "worker": "codex"
+}

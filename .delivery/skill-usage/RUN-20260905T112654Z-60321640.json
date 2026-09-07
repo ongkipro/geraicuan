@@ -1,0 +1,21 @@
+{
+  "capability": "admin-product-ux",
+  "head": "e3bebe937a54844b9b722b80d69843f5018d043c",
+  "job": "documentation",
+  "model": "gpt-5",
+  "provider": "openai",
+  "reasoningEffort": "inherited",
+  "recordedAt": "2026-09-05T11:34:01Z",
+  "result": "PASS",
+  "risk": "R1",
+  "runId": "RUN-20260905T112654Z-60321640",
+  "schemaVersion": 1,
+  "skillsUsed": [
+    "admin-product-ux",
+    "mermaid-diagram",
+    "nextjs-development"
+  ],
+  "usageHash": "4a881f3f0693ed75880ab8a7993b37d782b9c9bb698edce5cfebb3a136a75b61",
+  "verificationFailed": false,
+  "worker": "Main"
+}

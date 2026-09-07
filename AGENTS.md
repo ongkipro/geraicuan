@@ -16,6 +16,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Architecture and data: `docs/spec/04-SYSTEM-ARCHITECTURE.md`, `docs/spec/05-DATA-MODEL.md`.
 - Tenancy, IAM, security, privacy, operations, and UX: `docs/spec/06-TENANT-ISOLATION.md` through `docs/spec/16-OBSERVABILITY-RATE-LIMITING.md`.
 - AI Code Navigation Map: `docs/spec/18-AI-ROUTE-MAP.md`.
+- Route-map maintenance is mandatory: every added, renamed, or removed `page.tsx`, `route.ts`, navigation destination, Server Action, or route-owned state boundary must update `docs/spec/18-AI-ROUTE-MAP.md` in the same change. Keep its inventory counts, maturity labels, ownership, URL state, and verification evidence synchronized with repository truth.
 - Execution queue: root `TASKS.md`. Execute one task only after its requirement and constraints are accepted.
 - Runtime and release truth: `STATUS.md`, `BUILD-LOG.md`, `OBSERVABILITY.md`, and `RELEASE.md`.
 
