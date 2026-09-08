@@ -1,12 +1,12 @@
 # Status — geraicuan
 
-Updated: 2026-09-02
+Updated: 2026-09-08
 Status: Active
-State: PRODUCTION_READY
+State: IMPLEMENTED
 Review-Risk: R2
 Independent-Review: PASS
 Primary-Worker: Main
-Independent-Reviewer: AI (delivery-ledger verify)
+Independent-Reviewer: AI (delivery-ledger & static check)
 Independent-Review-Head: 2b3bd18121325ac70d153dd2bb38809cc8612e65
 
 ## Delivery state machine

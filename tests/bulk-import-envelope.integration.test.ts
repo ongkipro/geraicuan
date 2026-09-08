@@ -14,7 +14,7 @@ const input: ShipmentDraftInput = {
   declaredValueIdr: 150_000,
   destinationAreaId: "3171010",
   destinationAreaLabel: "Gambir, Jakarta Pusat",
-  isCod: false,
+  isCod: false, cogsAmountIdr: null,
   outletId: "00000000-0000-4000-8000-000000000111",
   packageContent: "Paket fixture",
   packageHeightCm: null,

@@ -102,3 +102,10 @@ erDiagram
 
 ## Migration rule
 Add `tenant_id` and tenant indexes before any tenant data. Expand-contract migrations only; backfill and constraint enforcement are separate deploy steps. Retention periods are pending privacy review.
+
+## DATA-8 — Market Expansion (Phase 2 Roadmap)
+- Owner: Engineering owner
+
+To support market standards (Return to Sender and Net Margin), new schema expansions are planned:
+1. **RTS Tracking:** `shipments` table will receive an expanded status enum covering `RTS_QUEUED`, `RTS_IN_TRANSIT`, and `RTS_RECEIVED`. A new `shipment_rts_events` table will record the return timeline.
+2. **COGS Tracking:** `shipments` table will optionally persist `cogs_amount` as IDR integer to represent Cost of Goods Sold. The analytics queries will compute Net Margin dynamically based on this field without altering the authoritative ledger.

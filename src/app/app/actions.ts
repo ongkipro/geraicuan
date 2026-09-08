@@ -12,6 +12,7 @@ import {
 } from "@/db/contact-repository";
 import {
   createShipmentDraft,
+  checkDuplicateShipment,
   DraftSubmissionConflictError,
   OutletUnavailableError,
   resolveExistingShipmentDraftReplay,
@@ -110,8 +111,10 @@ const FORM_FIELDS = [
   "packageWidthCm",
   "packageHeightCm",
   "declaredValue",
+  "cogsAmount",
   "paymentType",
   "outletId",
+  "confirmDuplicate",
 ] as const;
 
 type DraftFormValues = Partial<Record<(typeof FORM_FIELDS)[number], string>>;
@@ -673,8 +676,7 @@ export async function saveShipmentDraft(
               ok: false,
               state: {
                 errors: {
-                  destinationAreaLabel:
-                    "Koneksi Mengantar tidak tersedia. Cari ulang area tujuan setelah koneksi diperbaiki.",
+                  destinationAreaLabel: "Koneksi Mengantar tidak tersedia. Cari ulang area tujuan setelah koneksi diperbaiki."
                 },
                 values,
               },
@@ -682,6 +684,22 @@ export async function saveShipmentDraft(
           }
           throw error;
         }
+
+        if (values.confirmDuplicate !== "true") {
+          const isDuplicate = await checkDuplicateShipment(tx, context, input.recipientPhone);
+          if (isDuplicate) {
+            return {
+              ok: false,
+              state: {
+                errors: {
+                  form: "Ditemukan pesanan dengan nomor telepon penerima yang sama dalam 7 hari terakhir. Centang konfirmasi jika ingin tetap melanjutkan."
+                } as Record<string, string>,
+                values,
+              }
+            };
+          }
+        }
+
         const shipmentId = await createShipmentDraft(
           tx,
           context,

@@ -55,6 +55,12 @@ export const shipmentStatuses = [
   "ISSUED",
   "AWAITING_UPSTREAM_PAYMENT",
   "FAILED",
+  "RTS_QUEUED",
+  "RTS_IN_TRANSIT",
+  "RTS_RECEIVED",
+  "IN_TRANSIT",
+  "DELIVERED",
+  "PROBLEM",
 ] as const;
 
 export const shipmentPartyRoles = ["SENDER", "RECIPIENT"] as const;
@@ -477,6 +483,7 @@ export const shipments = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     outletId: uuid("outlet_id").notNull(),
     status: text("status", { enum: shipmentStatuses }).notNull().default("DRAFT"),
+    cogsAmountIdr: integer("cogs_amount_idr"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -506,8 +513,38 @@ export const shipments = pgTable(
         'SUBMISSION_UNKNOWN',
         'ISSUED',
         'AWAITING_UPSTREAM_PAYMENT',
-        'FAILED'
+        'FAILED',
+        'RTS_QUEUED',
+        'RTS_IN_TRANSIT',
+        'RTS_RECEIVED',
+        'IN_TRANSIT',
+        'DELIVERED',
+        'PROBLEM'
       )`,
+    ),
+  ],
+);
+
+export const shipmentRtsEvents = pgTable(
+  "shipment_rts_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    status: text("status", { enum: ["RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED"] }).notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "shipment_rts_events_shipment_tenant_fkey",
+      columns: [table.shipmentId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.tenantId],
+    }).onDelete("restrict"),
+    index("shipment_rts_events_tenant_shipment_idx").on(table.tenantId, table.shipmentId),
+    check(
+      "shipment_rts_events_status_valid",
+      sql`status IN ('RTS_QUEUED', 'RTS_IN_TRANSIT', 'RTS_RECEIVED')`
     ),
   ],
 );
@@ -527,6 +564,7 @@ export const shipmentDrafts = pgTable(
     packageHeightCm: integer("package_height_cm"),
     declaredValueIdr: integer("declared_value_idr").notNull(),
     isCod: boolean("is_cod").notNull().default(false),
+    cogsAmountIdr: integer("cogs_amount_idr"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

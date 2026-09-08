@@ -84,6 +84,12 @@ const statusLabels: Record<(typeof shipmentStatuses)[number], string> = {
   ISSUED: "Resi terbit",
   AWAITING_UPSTREAM_PAYMENT: "Menunggu pembayaran upstream",
   FAILED: "Gagal",
+  RTS_QUEUED: "RTS (Antrean)",
+  RTS_IN_TRANSIT: "RTS (Proses)",
+  RTS_RECEIVED: "RTS (Diterima)",
+  IN_TRANSIT: "Dalam Perjalanan",
+  DELIVERED: "Selesai",
+  PROBLEM: "Bermasalah",
 };
 const tenantStatusLabels: Record<string, string> = {
   ACTIVE: "Aktif",

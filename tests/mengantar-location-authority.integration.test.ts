@@ -95,7 +95,7 @@ async function createEstimatedContactShipment() {
     resolveActiveContactAddress(tx, context, contactId, contactAddress.id, "RECIPIENT"));
   const shipmentId = await withTenantContext(appDb, operatorId, tenantId, (tx, context) =>
     createShipmentDraft(tx, context, {
-      declaredValueIdr: 125_000,
+      declaredValueIdr: 125_000, cogsAmountIdr: null,
       destinationAreaId: recipient.destinationAreaId ?? "",
       destinationAreaLabel: recipient.destinationAreaLabel ?? "",
       isCod: false,

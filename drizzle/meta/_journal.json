@@ -211,6 +211,20 @@
       "when": 1788290120376,
       "tag": "0029_mengantar_authority_version",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788374740014,
+      "tag": "0030_add_market_expansion_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788374844465,
+      "tag": "0031_cultured_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

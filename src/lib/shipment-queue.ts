@@ -60,7 +60,7 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     label: "Menunggu pembayaran",
     tone: "warn",
   },
-  FAILED: {
+  RTS_QUEUED: { guidance: "Menunggu dikembalikan", label: "RTS Antre", tone: "warn" }, RTS_IN_TRANSIT: { guidance: "Sedang dikembalikan", label: "RTS Perjalanan", tone: "warn" }, RTS_RECEIVED: { guidance: "Sudah dikembalikan", label: "RTS Selesai", tone: "neutral" }, IN_TRANSIT: { guidance: "Dalam perjalanan", label: "Perjalanan", tone: "neutral" }, DELIVERED: { guidance: "Terkirim", label: "Terkirim", tone: "ok" }, PROBLEM: { guidance: "Bermasalah", label: "Bermasalah", tone: "danger" }, FAILED: {
     guidance: "Pengiriman tidak berhasil. Periksa konteks aman di bawah sebelum membuat draf baru.",
     label: "Gagal",
     tone: "danger",
@@ -233,6 +233,8 @@ export function shipmentLifecycleActions(
             label: "Rekonsiliasi hasil penyedia",
           }]
         : [];
+    default:
+      return [];
     case "SUBMISSION_QUEUED":
       return [];
   }

@@ -25,6 +25,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 const FIELD_TO_HEADER: Record<ShipmentDraftField, (typeof BULK_TEMPLATE_HEADERS)[number]> = {
   declaredValue: "nilai_barang",
+  cogsAmount: "nilai_barang",
   destinationAreaId: "lokasi_tujuan",
   destinationAreaLabel: "lokasi_tujuan",
   outletId: "nama_pengirim",

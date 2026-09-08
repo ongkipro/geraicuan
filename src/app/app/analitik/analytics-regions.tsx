@@ -136,9 +136,11 @@ function RegionHeading({
 function MetricsGrid({ metrics }: { metrics: Metric[] }) {
   const responsiveColumns = metrics.length === 1
     ? ""
-    : metrics.length > 4
-      ? "sm:grid-cols-2 xl:grid-cols-5"
-      : "sm:grid-cols-2 xl:grid-cols-4";
+    : metrics.length === 6
+      ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+      : metrics.length > 4
+        ? "sm:grid-cols-2 xl:grid-cols-5"
+        : "sm:grid-cols-2 xl:grid-cols-4";
   return (
     <dl className={`grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border ${responsiveColumns}`}>
       {metrics.map((metric) => (
@@ -212,6 +214,8 @@ export async function AnalyticsSummaryRegion({
     { current: kpis.codServiceFeeIdr, label: "Biaya layanan COD", previous: previous.codServiceFeeIdr, value: idrFormatter.format(kpis.codServiceFeeIdr) },
     { current: kpis.codVatIdr, label: "PPN biaya layanan", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
     { context: "Titipan penerima, bukan pendapatan GeraiCUAN.", current: kpis.codPrincipalIdr, label: "Pokok COD (liabilitas)", previous: previous.codPrincipalIdr, value: idrFormatter.format(kpis.codPrincipalIdr) },
+    { current: kpis.cogsIdr, label: "COGS / Modal HPP", previous: previous.cogsIdr, value: idrFormatter.format(kpis.cogsIdr) },
+    { context: "Pokok COD dikurangi COGS, Ongkir, Layanan, & PPN.", current: kpis.netMarginIdr, label: "Net Margin (Estimasi)", previous: previous.netMarginIdr, value: idrFormatter.format(kpis.netMarginIdr) },
   ];
 
   return (

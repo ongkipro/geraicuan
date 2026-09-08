@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 
 import { requireReadyShipmentOutlet } from "@/db/outlet-readiness-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
@@ -140,7 +140,7 @@ export async function createShipmentDraft(
   const outletId = await requireConfiguredShipmentOutlet(tx, context, input.outletId);
   const created = await tx
     .insert(shipments)
-    .values({ id: submissionId, outletId, tenantId: context.tenantId })
+    .values({ id: submissionId, outletId, tenantId: context.tenantId, cogsAmountIdr: input.cogsAmountIdr ?? null })
     .onConflictDoNothing({ target: shipments.id })
     .returning({ id: shipments.id });
 
@@ -162,6 +162,7 @@ export async function createShipmentDraft(
     destinationAreaId: input.destinationAreaId,
     destinationAreaLabel: input.destinationAreaLabel,
     isCod: input.isCod,
+    cogsAmountIdr: input.cogsAmountIdr ?? null,
     packageContent: input.packageContent,
     packageHeightCm: input.packageHeightCm,
     packageLengthCm: input.packageLengthCm,
@@ -194,4 +195,30 @@ export async function createShipmentDraft(
   ]);
 
   return shipment.id;
+}
+
+
+export async function checkDuplicateShipment(
+  tx: TenantTransaction,
+  context: TenantContext,
+  recipientPhone: string,
+) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const result = await tx
+    .select({ id: shipments.id })
+    .from(shipments)
+    .innerJoin(shipmentParties, eq(shipments.id, shipmentParties.shipmentId))
+    .where(
+      and(
+        eq(shipments.tenantId, context.tenantId),
+        eq(shipmentParties.role, 'RECIPIENT'),
+        eq(shipmentParties.phone, recipientPhone),
+        gte(shipments.createdAt, sevenDaysAgo)
+      )
+    )
+    .limit(1);
+    
+  return result.length > 0;
 }

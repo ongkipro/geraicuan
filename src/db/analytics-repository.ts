@@ -45,6 +45,8 @@ export type ShipmentKpis = {
   codServiceFeeIdr: number;
   codVatIdr: number;
   codPrincipalIdr: number;
+  cogsIdr: number;
+  netMarginIdr: number;
 };
 
 export type CourierPerformanceRow = {
@@ -287,6 +289,7 @@ async function loadShipmentKpisUnchecked(
   const [created] = await tx
     .select({
       createdCount: sql<number>`count(*)::int`.mapWith(Number),
+      cogsIdr: sql<number>`coalesce(sum(${shipments.cogsAmountIdr}), 0)`.mapWith(Number),
     })
     .from(shipments)
     .leftJoin(
@@ -359,7 +362,8 @@ async function loadShipmentKpisUnchecked(
   if (!created || !providerOutcomes || !financials) {
     throw new Error("Shipment analytics were not loaded.");
   }
-  return { ...created, ...providerOutcomes, ...financials };
+  const netMarginIdr = financials.codPrincipalIdr - financials.providerShippingIdr - financials.codServiceFeeIdr - financials.codVatIdr - created.cogsIdr;
+  return { ...created, ...providerOutcomes, ...financials, netMarginIdr };
 }
 
 export async function loadShipmentKpis(

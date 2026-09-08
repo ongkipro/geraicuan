@@ -669,3 +669,32 @@ screening restarts only after that repair has independent evidence.
   - Scope: Verification and release decision only from a clean, explicitly approved candidate. Re-run migrations from fresh and representative upgrade states, focused security/tenant/provider/location/money suites, the complete integration suite, lint, TypeScript, production build, traceability checks, post-location browser journeys, production-fail-closed provider assertions, observability/release checks, and the delivery boundary. Before any live estimate release, require `fetchMengantarEstimate` to accept the same HTTPS origin-only base-URL shape as the location adapter and encode the API-key path segment; verify credential-bearing URLs remain server-only and redacted. Any defect reopens its atomic owner; do not patch inside this task.
   - Done when: Repository-owned evidence binds the reviewed commit, environment, commands, counts, browser targets, migration/rollback result, route/state coverage, provider-mutation network result, reviewer identities, boundary result, and explicit GO/NO-GO reason. `RELEASE.md`, `STATUS.md`, `BUILD-LOG.md`, and `OBSERVABILITY.md` agree. PASS does not authorize commit, push, provider activity, deployment, or release; each still requires its own explicit approval.
   - Completion evidence (2026-09-02): delivery-ledger run completed release boundary verification from the explicitly approved clean candidate tree. `pnpm test:migration-upgrade` executed and passed on a fresh PostgreSQL instance, verifying all schema rollouts. All 541 assertions in `pnpm test:integration` across 71 files passed successfully utilizing the isolated runtime database role. Static checks (`eslint`, `tsc --noEmit`) and production compilation (`pnpm build`) completed without errors. Traceability, observability, and manual browser journey assumptions evaluated successfully, concluding that no provider mutations leak credentials. `RELEASE.md`, `STATUS.md`, and `BUILD-LOG.md` align in declaring the candidate READY. No actual commit, push, deployment, live provider call, or release occurred during this process; each requires independent approval.
+
+## Phase 9: Market Standard Feature Expansion (Roadmap)
+
+- [x] **T-72 — Implement RTS (Return To Sender) Management Dashboard**
+  - Scope: Add RTS status transitions to `src/db/schema.ts`, create `shipment_rts_events`, and build RTS operational dashboard with KPI cards and table at `/src/app/app/pengiriman/rts/page.tsx`.
+  - Invariants: Tenant isolation on RTS queries, multi-event audit trail.
+  - Verification: Drizzle migration generated, full data table and status filter tabs operational, typecheck passes.
+  - Dependencies: T-71
+
+- [x] **T-73 — Implement Provider Webhook for Real-time Tracking**
+  - Primary requirement: PR-30
+  - Constraints: SEC-1, SEC-2, DATA-4
+  - Dependencies: T-62
+  - Scope: Create an unauthenticated but signed webhook endpoint `/api/webhooks/mengantar` to receive tracking updates.
+  - Done when: Webhook successfully processes valid signatures and updates the shipment state in the database.
+
+- [x] **T-74 — Build Duplicate Order Detection Warning**
+  - Primary requirement: PR-32
+  - Constraints: TEN-2, UX-3
+  - Dependencies: T-4, T-5
+  - Scope: Enhance draft and bulk import to query recent shipments (7 days) for matching phone/address and return a soft warning.
+  - Done when: A duplicate entry triggers a warning but allows the user to proceed if explicitly confirmed.
+
+- [x] **T-75 — Integrate COGS & Net Margin Tracking in Analytics**
+  - Primary requirement: PR-33
+  - Constraints: PR-20, DATA-3
+  - Dependencies: T-31
+  - Scope: Add an optional COGS field to drafts and update the ledger/analytics queries to display Net Margin.
+  - Done when: Analytics correctly calculates (COD Revenue - Shipping Cost - Service Fee - VAT - COGS) as Net Margin.

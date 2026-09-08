@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -333,6 +334,31 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               </li>
             ))}
           </ul>
+          {state.errors?.form?.includes("Ditemukan pesanan") && (
+            <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-foreground">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                    Peringatan Pesanan Serupa (Double Order Check)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Nomor telepon penerima ini sudah memiliki pesanan dalam 7 hari terakhir. Untuk menghindari pengiriman ganda yang merugikan ongkir, centang konfirmasi di bawah jika Anda yakin ingin tetap memprosesnya.
+                  </p>
+                  <label className="flex items-center gap-2.5 cursor-pointer pt-1 text-sm font-medium" htmlFor="confirmDuplicate">
+                    <input
+                      type="checkbox"
+                      id="confirmDuplicate"
+                      name="confirmDuplicate"
+                      value="true"
+                      className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                    />
+                    <span>Saya yakin ini bukan pesanan duplikat, tetap buat kiriman ini.</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       ) : null}
 
@@ -471,17 +497,25 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
             <Input className="min-h-11" aria-describedby={describedBy("declaredValue")} aria-invalid={Boolean(fieldError("declaredValue"))} defaultValue={values.declaredValue} id="declaredValue" inputMode="numeric" name="declaredValue" required type="text" />
             <FieldError error={fieldError("declaredValue")} id="declaredValue-error" />
           </label>
+          <label className="grid gap-2 text-sm font-medium" htmlFor="cogsAmount">
+            <span>Modal HPP / COGS (Rp) <span className="font-normal text-muted-foreground">(Opsional)</span></span>
+            <Input className="min-h-11" aria-describedby="cogsAmount-hint cogsAmount-error" aria-invalid={Boolean(fieldError("cogsAmount"))} defaultValue={values.cogsAmount} id="cogsAmount" inputMode="numeric" name="cogsAmount" placeholder="Contoh: 50.000" type="text" />
+            <span className="text-xs text-muted-foreground font-normal" id="cogsAmount-hint">
+              Digunakan untuk kalkulasi estimasi laba bersih (Net Margin) di menu Analitik.
+            </span>
+            <FieldError error={fieldError("cogsAmount")} id="cogsAmount-error" />
+          </label>
           <fieldset
             aria-describedby={describedBy("paymentType")}
             aria-invalid={Boolean(fieldError("paymentType"))}
-            className="grid gap-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="sm:col-span-2 grid gap-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
             id="paymentType"
             tabIndex={-1}
           >
             <legend className="mb-1 text-sm font-medium">Metode pembayaran</legend>
-            <RadioGroup defaultValue={values.paymentType === "COD" ? "COD" : "NON_COD"} name="paymentType" required>
-              <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm"><RadioGroupItem value="NON_COD" />Non-COD</label>
-              <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm"><RadioGroupItem value="COD" />COD</label>
+            <RadioGroup className="grid sm:grid-cols-2 gap-3" defaultValue={values.paymentType === "COD" ? "COD" : "NON_COD"} name="paymentType" required>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-4 text-sm font-normal hover:bg-muted/50 transition-colors"><RadioGroupItem value="NON_COD" />Non-COD (Ongkir dibayar pengirim)</label>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-4 text-sm font-normal hover:bg-muted/50 transition-colors"><RadioGroupItem value="COD" />COD (Bayar di tempat oleh penerima)</label>
             </RadioGroup>
             <FieldError error={fieldError("paymentType")} id="paymentType-error" />
           </fieldset>

@@ -2,6 +2,14 @@
 
 Record only durable implementation changes, validation evidence, and gotchas that the next maintainer needs. Temporary task narration belongs in neither this file nor global memory.
 
+## 2026-09-08 — Phase 9 Market standard expansion (T-72, T-73, T-74, T-75) and UI/UX screening
+
+- Implemented RTS Management Dashboard (T-72): schema migrations 0030/0031 with `shipment_rts_events`, `src/db/rts-repository.ts` data layer with multi-tenant isolation, 4 operational KPI summary cards, interactive status tabs, responsive data table, and registered route in `cms-shell-navigation.ts`.
+- Implemented signed upstream webhook for real-time tracking (T-73): route handler `/api/webhooks/mengantar` with HMAC validation, status normalization, and atomic shipment updates.
+- Implemented duplicate order detection (T-74): 7-day recipient phone/address check in `shipment-draft-repository.ts`, server action validation, and an amber warning banner with explicit confirmation checkbox in `shipment-draft-form.tsx`.
+- Integrated COGS & Net Margin tracking (T-75): optional `cogs_amount_idr` in drafts/shipments, formula `(COD Revenue - Shipping - Fee - VAT - COGS)` in `analytics-repository.ts`, and balanced 6-metric responsive grid layout in `analytics-regions.tsx`.
+- Full UI/UX audit & static verification: corrected single quotes in Postgres check constraint, resolved TypeScript type discrepancies across all new statuses, fixed navigation active state matching with longest-prefix priority, and confirmed `pnpm tsc --noEmit && pnpm lint` pass with 0 errors and 0 warnings.
+
 ## 2026-09-02 — T-71 estimate endpoint URL boundary
 
 - The estimate adapter now accepts only an HTTPS origin with no userinfo,

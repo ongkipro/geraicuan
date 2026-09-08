@@ -83,3 +83,13 @@ GeraiCUAN is a free multi-tenant SaaS CMS for Indonesian shipping outlets. The o
 
 ## Cross-document Contract
 Data: `05-DATA-MODEL.md`; tenant isolation: `06-TENANT-ISOLATION.md`; authorization: `07-IAM-RBAC-ABAC.md`; provider flow: `03-TECHNICAL-DESIGN.md`; controls: `12-SECURITY-ARCHITECTURE.md`; tasks: `TASKS.md`.
+
+## Phase 2 Roadmap: Market Standard Expansion
+Based on Indonesian 3PL aggregator market research (Mengantar, Biteship, Shipper), the following features are planned to meet market completeness:
+| ID | Statement | Priority | Status |
+|---|---|---|---|
+| PR-29 | **RTS (Return To Sender) Management:** System shall provide a dashboard to track failed COD deliveries and manage return workflows to reduce merchant losses. | Must | Queued |
+| PR-30 | **Real-time Webhook / Tracking Updates:** System shall receive and process push webhook events from Mengantar to update shipment status instantly without manual sync. | Must | Queued |
+| PR-31 | **Multi-Courier / Multi-Aggregator Expansion:** System architecture shall support adding secondary aggregators (e.g., AutoLaris, Biteship) for redundancy. | Should | Queued |
+| PR-32 | **Duplicate Order Detection:** System shall warn the Operator if a bulk import or manual draft contains a recipient phone/address matching a recent (last 7 days) shipment to prevent double shipping. | Must | Queued |
+| PR-33 | **COGS & Net Margin Tracking:** System shall allow Tenant Admins to input COGS (Cost of Goods Sold) per shipment to calculate true net margin in Analytics, beyond just gross COD collection. | Should | Queued |

@@ -17,6 +17,7 @@ const SAFE_AREA_LABEL_PATTERN = /^[^\u0000-\u001F\u007F\u202A-\u202E\u2066-\u206
 
 export type ShipmentDraftInput = {
   declaredValueIdr: number;
+  cogsAmountIdr: number | null;
   destinationAreaId: string;
   destinationAreaLabel: string;
   isCod: boolean;
@@ -37,6 +38,7 @@ export type ShipmentDraftInput = {
 
 export type ShipmentDraftField =
   | "declaredValue"
+  | "cogsAmount"
   | "destinationAreaId"
   | "destinationAreaLabel"
   | "outletId"
@@ -90,6 +92,7 @@ function readRupiah(value: string) {
 export function validateShipmentDraft(formData: FormData): ShipmentDraftValidation {
   const raw = {
     declaredValue: readText(formData, "declaredValue"),
+    cogsAmount: readText(formData, "cogsAmount"),
     destinationAreaId: readText(formData, "destinationAreaId"),
     destinationAreaLabel: readText(formData, "destinationAreaLabel"),
     outletId: readText(formData, "outletId"),
@@ -209,6 +212,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   return {
     input: {
       declaredValueIdr,
+      cogsAmountIdr: null,
       destinationAreaId: raw.destinationAreaId,
       destinationAreaLabel: raw.destinationAreaLabel,
       isCod: paymentType === "COD",

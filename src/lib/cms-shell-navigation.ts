@@ -44,6 +44,12 @@ const navigationGroups: readonly {
         shortLabel: "KI",
       },
       {
+        href: "/app/pengiriman/rts",
+        key: "rts",
+        label: "Retur (RTS)",
+        shortLabel: "RT",
+      },
+      {
         href: "/app/kontak",
         key: "contacts",
         label: "Kontak",
@@ -162,6 +168,7 @@ export function tenantCmsNavigation(
     pathname.startsWith("/app/label/");
   const matchedDefinition = navigationGroups
     .flatMap((group) => group.items)
+    .sort((a, b) => b.href.length - a.href.length)
     .find((item) => routeMatches(pathname, item.href));
   const currentKey = contextualShipmentRoute
     ? "shipments"
