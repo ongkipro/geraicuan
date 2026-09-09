@@ -1,3 +1,5 @@
+import "server-only";
+
 import { and, asc, count, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";

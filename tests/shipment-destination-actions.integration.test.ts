@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
   authority: vi.fn(),
+  checkDuplicate: vi.fn(async () => false),
   create: vi.fn(),
   currentAuthority: { connectionUpdatedAt: null, source: "platform_default" as const, version: 4 },
   lockAuthority: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/db/tenant-context", () => ({
   })),
 }));
 vi.mock("@/db/shipment-draft-repository", () => ({
+  checkDuplicateShipment: fixture.checkDuplicate,
   createShipmentDraft: fixture.create,
   DraftSubmissionConflictError: class DraftSubmissionConflictError extends Error {},
   OutletUnavailableError: class OutletUnavailableError extends Error {},

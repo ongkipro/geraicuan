@@ -22,6 +22,7 @@ const expectedStatesByRoute = {
   "/app/analitik": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/analitik/export.csv": ["invalid-query", "primary-success", "route-error", "unauthorized"],
   "/app/pengiriman": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "stale", "unauthorized"],
+  "/app/pengiriman/rts": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/pengiriman/[shipmentId]": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/app/pengiriman/baru": ["healthy-empty", "loading", "populated", "partial-error", "pending", "primary-success", "route-error", "unauthorized"],
   "/app/impor": ["healthy-empty", "loading", "partial-error", "pending", "populated", "primary-success", "route-error", "unauthorized"],
@@ -45,6 +46,7 @@ const expectedOwnerByRoute = {
   "/app/analitik": "T-38",
   "/app/analitik/export.csv": "T-38",
   "/app/pengiriman": "T-39",
+  "/app/pengiriman/rts": "T-72",
   "/app/pengiriman/[shipmentId]": "T-39",
   "/app/pengiriman/baru": "T-40",
   "/app/impor": "T-41",
@@ -365,7 +367,7 @@ describe("CMS UI audit inventory", () => {
     expect(routes.sort()).toEqual(Object.keys(expectedStatesByRoute).sort());
 
     for (const contract of CMS_UI_AUDIT_ROUTE_CONTRACTS) {
-      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7])$/);
+      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72)$/);
       expect(contract.ownerTask).toBe(expectedOwnerByRoute[contract.route]);
       expect(contract.roles.length).toBeGreaterThan(0);
       expect(contract.states.length).toBeGreaterThan(0);
@@ -383,7 +385,7 @@ describe("CMS UI audit inventory", () => {
     }
 
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "page"))
-      .toHaveLength(18);
+      .toHaveLength(19);
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "endpoint"))
       .toHaveLength(2);
 
@@ -694,6 +696,7 @@ describe("CMS UI audit inventory", () => {
       "src/app/app/pengiriman/page.tsx",
       "src/app/app/pengiriman/baru/page.tsx",
       "src/app/app/pengiriman/[shipmentId]/page.tsx",
+      "src/app/app/pengiriman/rts/page.tsx",
       "src/app/platform/_components/monitoring-view.tsx",
     ]);
     const findings: string[] = [];
@@ -760,6 +763,7 @@ describe("CMS UI audit inventory", () => {
       ["src/app/app/pengiriman/page.tsx", "/app/pengiriman"],
       ["src/app/app/pengiriman/baru/page.tsx", "/app/pengiriman/baru"],
       ["src/app/app/pengiriman/[shipmentId]/page.tsx", "/app/pengiriman/[shipmentId]"],
+      ["src/app/app/pengiriman/rts/page.tsx", "/app/pengiriman/rts"],
     ] as const) {
       const source = readFileSync(join(repositoryRoot, file), "utf8");
       expect(source).toContain("parseUiAuditScenarioForRoute(");

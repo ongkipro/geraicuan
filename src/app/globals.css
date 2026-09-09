@@ -14,6 +14,13 @@
   --hairline-strong:var(--input);
   --accent:var(--primary);
   --accent-hover:oklch(0.43 0.22 264);
+  /* Nothing defined --ring, so `:focus-visible { outline:3px solid var(--ring) }`
+     and every `focus-visible:ring-ring/50` on the shadcn primitives resolved to
+     an invalid value. An invalid outline computes to `outline-style:none`,
+     which suppresses the browser's own focus ring too, so keyboard focus was
+     invisible on every surface. Cobalt is the design system's sole interactive
+     accent, so the ring is that accent. */
+  --ring:var(--accent);
   --field-border:var(--input);
   --danger:#b42318;
   --danger-surface:#fff1f0;
@@ -40,7 +47,11 @@
   --accent-foreground:oklch(0.985 0 0);
   --shadcn-accent:oklch(0.944 0.028 260.03);
   --shadcn-accent-foreground:oklch(0.324 0.083 264.376);
-  --destructive:oklch(0.577 0.245 27.325);
+  /* Aligned to --danger, not shadcn's default red. The primitives tint with
+     `bg-destructive/10 text-destructive`; oklch(0.577 0.245 27.325) on that
+     tint measures 3.99:1, below AA 4.5 for the badge and button label. The
+     design-system red measures 5.6:1 on the same tint. */
+  --destructive:var(--danger);
   --border:oklch(0.91 0.009 255);
   --input:oklch(0.82 0.016 255);
   --chart-1:#0072b2;
@@ -529,7 +540,10 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Full alpha, not the scaffold's `outline-ring/50`: the ring at 50% over
+       the canvas measures 2.4:1, below the 3:1 WCAG 1.4.11 asks of a focus
+       indicator. This is the colour the `:focus-visible` rule above paints. */
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;

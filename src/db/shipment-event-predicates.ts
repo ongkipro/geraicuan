@@ -1,3 +1,5 @@
+import "server-only";
+
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 import { providerOrderSnapshots } from "@/db/schema";

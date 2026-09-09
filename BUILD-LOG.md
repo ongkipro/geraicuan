@@ -1608,3 +1608,849 @@ Record only durable implementation changes, validation evidence, and gotchas tha
 - The compilation phase via `pnpm build` processed 18 statically generated and dynamically rendered routes efficiently and reliably after correctly supplying all necessary environment configurations, simulating the production verification process.
 - Checked static invariants successfully with `eslint`, `tsc --noEmit`, and `git diff --check`. 
 - No provider calls, deploy operations, pushing, or committing were invoked. PASS does not authorize these commands; the candidate is READY and requires explicit deploy approvals.
+
+## 2026-09-09 — T-76 Full-codebase integrity screening and Phase 9 regression repair
+
+- Screened the repository after the Phase 9 market-feature commit `67beb92`
+  (RTS dashboard, tracking webhook, duplicate warning, COGS). The screening
+  found that Phase 9 had shipped without ever running the suite: 9 real test
+  failures were waiting, and two of the four features were not functional. The
+  9 failures were observed in this session against the documented test
+  environment, distributed as `analytics-repository` 4, `cms-shell` 1,
+  `cms-ui-audit-inventory` 1, `dashboard-period-page` 1, and
+  `shipment-destination-actions` 2 — reproducible by running
+  `pnpm test:integration` at `67beb92` with `DATABASE_URL`/`APP_DATABASE_URL`
+  set and `BETTER_AUTH_TRUSTED_ORIGINS` at `http://127.0.0.1:3110`. Exporting a
+  different trusted origin or leaving `GERAICUAN_ENABLE_DEMO_LOGIN_HINT` set
+  adds 5 further environment-induced failures that are not code defects; the
+  repository documents the dev environment in `README.md` but not the test
+  environment, which is why that distinction cost a full run to establish.
+- Repaired the stale evidence. `analytics-repository` never asserted the new
+  `cogsIdr`/`netMarginIdr` KPIs, `cms-shell` never learned the `Retur (RTS)`
+  destination, `cms-ui-audit-inventory` never learned the new route,
+  `shipment-destination-actions` was missing the `checkDuplicateShipment` mock,
+  and `dashboard-period-page` had rotted: it derives WIB period buckets from the
+  wall clock while its fixtures are pinned to 2026-08-31, so it began failing
+  once real time moved past the range. It now pins `Date` explicitly.
+- Removed genuinely dead code: the never-called `loadShipmentBacklogSnapshot`
+  public wrapper (its `Unchecked` variant is still live) and the unreferenced
+  `BULK_INPUT_FIELDS` constant.
+- Closed the server/client boundary: `import "server-only"` now guards every
+  module in `src/db` except `schema.ts`, which is excluded because
+  `drizzle.config.ts` loads it directly. `pnpm db:generate` was re-run to prove
+  the exclusion is required and sufficient.
+- Fixed two correctness defects the screening exposed. `checkDuplicateShipment`
+  joined `shipment_parties` on `shipment_id` alone, without the tenant
+  predicate every sibling query carries. `loadRtsShipmentsPage` left-joined
+  `shipment_rts_events` with no cardinality limit, so a shipment with N return
+  events produced N duplicate table rows while `totalCount` counted shipments —
+  broken pagination. The join is now a pair of latest-event scalar subqueries
+  ordered by `created_at desc, id desc` so both resolve the same row.
+- Closed a tenant-isolation gap. Migration 0030 created `shipment_rts_events`
+  with neither row-level security nor any grant to `geraicuan_app`. It was the
+  only tenant-owned table in the database without RLS, and the missing grant
+  meant the RTS page returned `permission denied for table
+  shipment_rts_events` under the application role — the feature had never
+  worked outside a superuser connection. Migration
+  `0032_shipment_rts_events_isolation` adds the revoke, the SELECT/INSERT
+  grant, forced RLS, and tenant-scoped select/insert policies matching
+  `shipment_parties`.
+- Gave `/app/pengiriman/rts` the route contract its registration claimed:
+  dedicated `loading.tsx` and `error.tsx` shaped like the RTS region, the
+  `parseUiAuditScenarioForRoute` hook for its six registered states, and an
+  honest invalid-query surface that reports an adjusted filter instead of
+  silently coercing an unknown status or page.
+- Made the COGS aggregation testable. Every prior expectation asserted
+  `cogsIdr: 0`; a new case seeds non-zero COGS inside and outside both the
+  selected range and the tenant, then asserts `cogsIdr` 25 000 and
+  `netMarginIdr` 53 337.
+- Evidence, all executed: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm build`,
+  `pnpm test:integration` (72 files / 549 tests), and
+  `pnpm test:migration-upgrade` through `0032` on a clean PostgreSQL 16
+  database. Browser evidence was captured in an authenticated Chrome session as
+  Tenant Admin **against the repository fixture only**: the RTS destination was
+  reached through the shell navigation link, all six registered scenarios
+  reproduce their declared state (including 5-of-7 rows across two pages for
+  `shipment-rts-paginated` and a 1792 ms stream against a 545 ms baseline),
+  every status filter returns its exact count, six of the seven return rows
+  render a latest-event note under the application role while the seventh —
+  `PROBLEM` — deliberately carries none and is the row that exercises the
+  no-notes fallback, the document overflow delta is zero at 390/768/1280,
+  exactly one current navigation item is visible per viewport, keyboard focus
+  reaches the first row link, and there are no console errors.
+- Independent review rejected this work repeatedly, and was correct every time.
+  The rounds below are recorded for the defects they found, not as a register of
+  the review process. Nothing records a round count: the delivery-ledger run
+  `RUN-20260908T175002Z-ede3f676` holds only `run_started`, `boundary_check`,
+  `scope_expansion` and `verification` records — executed evidence and boundary
+  state, never a review round — and the review reports live outside the
+  repository. Do not add a count or a per-round register here — a summary of the
+  reviews kept inside the artifact those reviews examine goes stale the moment
+  the next one returns, which cost two rounds of its own before the cause was
+  understood.
+  - Round one: the route had been registered with states it could not produce,
+    the SQL rewrite had no executable check, and the route map was unsynced.
+  - Round two: the `populated`/`paginated` state still could not be produced,
+    because `scripts/seed-local-dev-users.mjs` seeds no return-lifecycle rows —
+    the first round's browser evidence had come from hand-written SQL rather
+    than a repository fixture. The route map also still labelled code committed
+    in `67beb92` as uncommitted worktree, in the very rows the first fix
+    rewrote.
+- Both rounds were repaired. The seed script now creates seven return shipments
+  across `RTS_QUEUED`, `RTS_IN_TRANSIT`, `RTS_RECEIVED`, and `PROBLEM` plus
+  ten `shipment_rts_events`, guarded by the seed's own commit-time
+  assertion, so every registered scenario is reachable from the repository
+  alone. Every maturity label in the route map was re-derived from `git status`
+  against HEAD `67beb92`: no route is `WORKTREE` any more, and the map now says
+  plainly that the Phase 9 additions are committed and NOT reviewed.
+- The latest-event lookup was collapsed from two scalar subqueries into a
+  single `json_build_object` subquery. Round two observed that the tie test
+  passed even with the tiebreak removed, because PostgreSQL happened to order
+  those rows stably. Rather than keep testing a nondeterministic symptom, the
+  class of bug was removed: the note and its timestamp now provably come from
+  one row. The tie test was then mutation-checked by flipping the `id` tiebreak
+  to `asc`, which fails it.
+- Round three returned FAIL on documentation truthfulness and on one real
+  fixture invariant, and was right on both.
+  - The route map still called the Mengantar webhook "worktree only" in its
+    Mermaid graph and, worse, in the `AGENTS.md`-mandated handler-inventory
+    line, contradicting its own section 1. Two further prose sentences still
+    attributed `67beb92`'s lifecycle and financial changes to "the current
+    worktree".
+  - The `TASKS.md` T-79 register bullet still described the
+    `shipment_rts_events` isolation gap in the present tense after this run's
+    own migration closed it. It now reads as CLOSED with the residual audit
+    that T-79 still owns.
+  - The seed's seven return shipments had a provider-accepted snapshot, an AWB,
+    and COD totals but **no ledger entries**, because the ledger loop still
+    filtered on `status === "ISSUED"`. No real transition can produce a
+    provider-accepted COD shipment with no `COD_PRINCIPAL_COLLECTABLE` entry.
+    Returned shipments now carry their issuance ledger; print evidence stays
+    with the genuinely issued ones.
+- Correcting that changed the reconciled totals, which exposed a second
+  problem: `reconciliation_runs` is immutable by database trigger, so a
+  database seeded before the population changed silently keeps totals that
+  disagree with the ledger — the local database was in exactly that state,
+  claiming `MATCHED 425000` against a ledger holding 3 025 000. An upsert is
+  not available and should not be, so the seed now fails loudly with the
+  recovery command instead. Verified on a throwaway PostgreSQL instance
+  migrated from zero: 25 shipments, 10 return events, 30 ledger entries, and
+  reconciliation totals equal to the ledger exactly, reproduced identically on
+  a second run.
+- Smaller round-three items also fixed: the `PROBLEM` fixture no longer carries
+  an `RTS_QUEUED` event narrating a return it never had — the events table has
+  no `PROBLEM` status, and leaving it eventless makes it the one row that
+  exercises the no-notes fallback; the return events are deleted before
+  re-insert so the count assertion cannot pass on stale rows; and `STATUS.md`
+  now agrees with the suite at 549 tests.
+- Round four then failed the run again, on the same class of defect and this
+  time on claims written into this log. Two "Worktree-only" assertions about
+  committed lifecycle code survived at `18-AI-ROUTE-MAP.md` sections 5.1 and 9
+  because the phrase hunt had been run case-sensitively; and the return-event id
+  prefix had been moved to `7d`, which is already the RECIPIENT
+  `shipment_parties` prefix — the earlier check missed it because that call site
+  chooses its prefix through a ternary, `fixedUuid(partyIndex === 0 ? "7c" :
+  "7d", ...)`, which the grep pattern did not match. Both are now fixed, the
+  prefix moved to the genuinely unused `7e`, and every `fixedUuid` prefix was
+  re-enumerated by reading the call sites rather than from a pattern that
+  assumes a literal first argument. That enumeration covers prefix uniqueness
+  only; it did not audit whether a generated id collides with a hardcoded one,
+  and review round five found a pre-existing case of exactly that — recorded in
+  `TASKS.md` rather than repaired here. That also makes the ledger event
+  `seed-id-collision-free` wrong, not merely narrow: its recorded detail claims
+  every seeded table id was unioned and grouped with zero appearing in more than
+  one table, and a check actually matching that description could not have
+  returned zero, because `fixedUuid("70", 1)` and `("70", 2)` are byte-identical
+  to the hardcoded `tenantId` and `outletId`. What the run really proved is that
+  no `7e` id collides. The ledger is append-only and must not be rewritten, so
+  this is the correction of record — do not cite that event as proof the fixture
+  has no colliding ids. The two BUILD-LOG sentences that recorded these as closed have been
+  corrected: an evidence claim written before its verification is the exact
+  failure this screening exists to catch, and writing one here was worse than
+  the defect it described.
+- Round five confirmed every engineering item closed and reproduced the seed,
+  the `7e` prefix and all four gates on its own database. It failed the run on
+  two documentation claims: the round-four correction to the `WORKTREE` label
+  had overshot into "only migration 0032 and the RTS route boundaries are
+  uncommitted", which `git status` refutes at roughly thirty files; and this log
+  still said the seed creates eleven return events where it creates ten. Both
+  corrected. Round five also surfaced a pre-existing collision — the seed's
+  `fixedUuid("70", 1)` and `("70", 2)` expand to the hardcoded `tenantId` and
+  `outletId` — which is recorded for T-82 rather than repaired here, and asked
+  that the "9 real test failures" claim be made auditable, which it now is
+  through its per-file distribution and reproduction environment.
+- Round six was documentation-only and failed on three more: this log claimed
+  seven return notes render where six do, `STATUS.md` still described a single
+  corrective review, and the `seed-id-collision-free` ledger event overstated
+  its coverage. All three are corrected above.
+- The documentation-only rounds after that found progressively smaller versions
+  of the same defect and then, finally, its cause. `STATUS.md` gained a
+  review-history enumeration that stopped one round short of the rounds it
+  claimed to list; replacing the leading counter with that enumeration did not
+  help, because the enumeration encodes the count just as a number does, and a
+  surviving "four of the six" went stale the moment the next round returned.
+  The real problem was structural: a round-by-round narrative kept inside the
+  artifact under review is invalidated by every review of it, so each round had
+  to reject the summary the previous round had just written. Both documents now
+  describe only the defects and state plainly that no count is recorded, which
+  is the record that does not rot.
+- Screening also opened findings that are NOT fixed here and are recorded in
+  `TASKS.md` as T-83, T-84, T-85 plus routed entries: the COGS value is still
+  discarded by `validateShipmentDraft`, the Drizzle schema still ships to the
+  browser, and the tracking webhook still writes `shipments` without tenant
+  scope and compares its HMAC without a constant-time comparison.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-09 — T-83 Restore COGS persistence from intake to analytics
+
+- T-76's screening found that the shipment draft form collects a Modal HPP /
+  COGS value, the database carries `cogs_amount_idr` on both `shipments` and
+  `shipment_drafts`, the repository writes it, and analytics aggregates it —
+  but `validateShipmentDraft` read the field and then hardcoded
+  `cogsAmountIdr: null`. Nothing ever wrote a COGS, so every reported Net Margin
+  subtracted a zero cost and was overstated by the merchant's real cost.
+- The validator was the only broken link. It now parses `cogsAmount` with the
+  same `readRupiah` rules as `declaredValue`, bounded by the same
+  `MAX_VALUE_IDR`, and keeps an empty field distinct from a recorded zero: an
+  untouched field means the merchant did not record a cost, which is not the
+  same as a cost of zero. A malformed or out-of-range value now fails with a
+  field error instead of being silently dropped.
+- Bulk intake was checked rather than assumed. `toFormData` maps CSV headers
+  through `FIELD_TO_FORM_NAME`, which has no COGS entry, so bulk rows keep a
+  null COGS and the change cannot alter their meaning. The `cogsAmount` entry in
+  `FIELD_TO_HEADER` exists only to keep the error-reporting record exhaustive
+  and is unreachable while bulk has no COGS column.
+- Evidence: three new cases in `tests/shipment-draft.integration.test.ts` cover
+  a parsed amount, an empty field, a recorded zero, four rejected inputs, and
+  persistence to both tables. They were mutation-tested by restoring
+  `cogsAmountIdr: null`, which fails two of them. Full run: `pnpm tsc --noEmit`,
+  `pnpm lint`, `pnpm build`, and `pnpm test:integration` at 72 files / 554
+  tests.
+- The seed now records a COGS on every third shipment and asserts the total, so
+  the KPI has a repository fixture instead of hand-written SQL — the same
+  correction T-76 was forced into for the RTS surface. Browser evidence as
+  Tenant Admin: the draft form exposes an optional, described `#cogsAmount`
+  field, and Analitik moves from `COGS Rp 0 / Net Margin Rp 2.758.353` to
+  `COGS Rp 900.000 / Net Margin Rp 1.858.353` — exactly 900 000 lower, with zero
+  document overflow and no console errors.
+- Independent review then found a second code path that discarded a submitted
+  COGS, which the fix above had missed: `inspectExistingSubmission` compares
+  every persisted draft field to decide whether a resubmission is a safe replay
+  or a conflict, and `cogsAmountIdr` was not among them. That was harmless while
+  COGS was always null and became live the moment it was not. An operator who
+  mistyped Modal HPP, went back, corrected it and resubmitted with the same
+  submission id would have been redirected as though the correction landed while
+  the original figure stayed in the database. The comparison now includes COGS,
+  and a test covers a corrected value, a cleared value, and an identical
+  resubmission that must still replay; it was mutation-tested by removing the
+  new comparison, which fails it.
+- Review also asked for the check the task's own "Done when" specified — one
+  test carrying a COGS through the draft path into the analytics margin rather
+  than two tests covering separate links. That test now exists: it reads the
+  KPIs, submits a draft with a recorded cost, and asserts the margin moved by
+  exactly that cost while every ledger-derived term stayed put. It measures a
+  delta rather than an absolute, because sibling cases in the same file leave
+  their own drafts behind and an absolute assertion silently depended on test
+  order — the first version of it failed for that reason.
+- Smaller review items closed: the unreachable `cogsAmount` entry in
+  `FIELD_TO_HEADER` now carries a comment in the code, not only in `TASKS.md`,
+  warning that a future COGS column must get its own header or a bad cell will
+  report against `nilai_barang`; and the tests now cover whitespace-only input,
+  the `50 000` separator form, and exactly `MAX_VALUE_IDR`.
+- Not addressed here and still open: `netMarginIdr` aggregates COGS over the
+  created cohort while its money terms come from the ledger cohort, so the two
+  do not describe the same shipments. That is T-81's, recorded in `TASKS.md`.
+  A recorded COGS is also write-once — no code path updates
+  `cogs_amount_idr` after creation and draft creation emits no audit event — so
+  a mistyped cost permanently skews that shipment's margin. That matches the
+  existing posture for `declaredValue` and is recorded in `TASKS.md` rather than
+  changed here.
+- The first delivery-ledger run for this task, `RUN-20260908T201839Z-16f37c8e`,
+  was finished `BLOCKED` rather than forced through. Its boundary had been
+  mis-declared at start: `scripts/**` was passed to `--accept-dirty` but not to
+  `--allow`, so the CLI dropped it and the seed file became a pre-existing dirty
+  path changed without an accepted overlap. The tool was right to refuse. The
+  work was re-declared with a correct boundary as
+  `RUN-20260908T205513Z-56f0cdd2` and its evidence re-executed there; nothing
+  about the change itself was altered to make the boundary pass.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-09 — T-79 Application security and multi-tenant isolation audit
+
+- **Closed the provider tracking webhook rather than hardening it.** The
+  handler committed in `67beb92` implemented a contract with no verified
+  provider evidence: the Mengantar integration skill documents no push
+  endpoint, the only sanitized captures are estimate, order, and pay-unpaid,
+  and `PR-30` is still `Queued` in the PRD. Its `x-mengantar-signature` header
+  name, its `cnote_no`/`awb`/`tracking_number` and `status`/`tracking_status`
+  payload fields, and its provider status vocabulary were all invented. It also
+  compared the HMAC with `!==`, read an unbounded body, had no replay window,
+  and wrote `shipments` through the raw pool with no tenant predicate,
+  resolving its target by `cnote_no` across every tenant.
+- It had never worked. Probing the application role directly showed row-level
+  security denies it any read of `provider_order_snapshots` without a tenant
+  context: the resolution returned nothing and the update matched zero rows, so
+  every delivery was silently discarded while the caller was answered
+  `{ success: true }`. The cross-tenant write was blocked by RLS alone; the
+  application layer had no scope of its own.
+- Hardening a signature scheme, timestamp header, and payload shape that no
+  provider is known to send would have been inventing an API. The route now
+  refuses every request and records the four things that must exist before it
+  may accept traffic: the provider's documentation plus a sanitized capture, a
+  tenant-scoped machine principal, constant-time comparison with a bounded body
+  and replay window, and T-80's idempotent transition handling.
+  `tests/provider-webhook-boundary.integration.test.ts` pins the refusal and
+  asserts the route reaches no database, provider, or secret module.
+- **Uniform tenant-table posture.** `memberships` was the last tenant-owned
+  table with row-level security enabled but not forced. Migration `0033` forces
+  it. A new posture test derives the table list from the live catalogue rather
+  than a hardcoded one, so the next tenant-owned table cannot ship without RLS,
+  a policy, and a grant — which is exactly how `shipment_rts_events` slipped
+  through Phase 9.
+- **Least privilege.** `shipments`, `shipment_drafts`, `outlets`, `contacts`,
+  and `contact_addresses` granted `DELETE` to the application role. No code path
+  exercises it; removal in this product is an archive flag or a platform
+  lifecycle action, and the test fixtures delete through the admin pool. `0033`
+  revokes it.
+- **PII redaction had already drifted.** `maskPhone` existed in four copies in
+  two different schemes: the shipment and label surfaces rendered `•••• 7890`
+  while the contact directory rendered `0812••••890`, exposing the carrier
+  prefix and seven of twelve digits instead of four — the densest PII surface
+  had the weakest mask. All four now import one module on the stricter scheme.
+  The RTS queue masks in the repository rather than the page, because a
+  client-side mask still ships the original in the rendered payload.
+- **Authentication** was already sound: sign-up disabled, sessions bound to a
+  login scope, sign-in rate limited at 5 per 60s, CSRF and origin checks
+  enabled, trusted proxies configured. The session cookie was verified against a
+  live response — `HttpOnly`, `SameSite=Lax`, `Path=/`. `Secure` was left to the
+  library's inference from the base URL; it is now stated explicitly for
+  production and asserted, so it cannot be lost to a change in that inference.
+- Independent security review rejected the first attempt, and its three main
+  findings were all about this run's own guard claiming more than it enforced.
+  - The posture test checked row-level security and a policy but never a grant,
+    and the reviewer proved it by adding a tenant-owned table with a policy and
+    no grant at all: the suite stayed green. That is precisely the
+    `shipment_rts_events` failure, which was `permission denied`, not RLS. The
+    grant is now checked separately.
+  - `information_schema.role_table_grants` reports table-level grants only, so
+    the test read `provider_batches`, `provider_order_snapshots`,
+    `provider_unpaid_recoveries` and `memberships` as append-only when each in
+    fact carries a column-scoped `UPDATE` that live code uses. The test now
+    reads column privileges too and asserts the exact column sets, and the
+    comment no longer calls those tables append-only.
+  - "`memberships` was the last table with RLS enabled but not forced" was
+    false: `tenants` was, and the guard's "has a `tenant_id` column" derivation
+    structurally excluded it. `0034` forces `tenants`, and the derivation now
+    names `tenants` and `platform_roles` explicitly.
+- The review also surfaced a privilege gap this run had missed. The five tables
+  whose `DELETE` was revoked still held a table-wide `UPDATE` covering `id`,
+  `tenant_id` and `created_at`, so moving a row to another tenant was refused
+  only by a policy's `WITH CHECK` — the sole-control posture `AGENTS.md`
+  forbids. `0035` replaces the table-wide grant with a column list checked
+  against every `.update()`, `onConflictDoUpdate` and raw-SQL update site, and
+  `0036` narrows the two rate-limit tables the same way. `0034`'s column revokes
+  had been silent no-ops, because a column revoke cannot narrow a table-wide
+  grant. The granted set is a superset of what is written, not exactly it:
+  `shipment_drafts` has no update site but still needs a column grant, because
+  `cod-totals-repository` takes `FOR UPDATE OF ... shipment_drafts` and
+  PostgreSQL requires an `UPDATE` privilege for a row lock; a few other columns
+  are granted while currently insert-only.
+- Smaller review items: `useSecureCookies: false` outside production would have
+  stripped `Secure` and the `__Secure-` prefix from a staging build served over
+  HTTPS, so it now follows the origin instead; the 404 body named the endpoint
+  to any anonymous scanner and is now empty; the boundary test advertised
+  payload-shape coverage it could not have and grepped for six exact strings, so
+  it now asserts the handler takes no argument, imports nothing but
+  `server-only`, and exports no verb but `POST`; and the "stricter mask" claim
+  is now stated with its trade-off — four characters instead of seven, but one
+  more digit of the identifying tail.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm build`,
+  `pnpm test:integration` at 74 files / 565 tests, migration upgrade through
+  `0036` on a clean PostgreSQL 16 database, a client-bundle scan of all 57
+  chunks against the real `MENGANTAR_API_KEY` value finding no credential, and
+  an authenticated browser pass confirming the RTS queue, contact directory, and
+  label queue emit no full recipient number anywhere in the document while the
+  shipment detail and printed label still do.
+- Outlet scope, named in the task requirement, is a filter rather than an
+  authorization boundary here: `docs/spec/06-TENANT-ISOLATION.md` scopes all
+  outlet operational data to the tenant and `memberships` has no outlet column.
+  Recorded so the scope item is answered rather than silently skipped.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-09 — T-84 Remove the Drizzle schema from the client bundle
+
+- One edge caused it. `src/app/app/pengiriman/shipment-queue-filter.tsx` is a
+  client component; it imports `@/lib/shipment-queue`, which took a runtime
+  value import of `shipmentStatuses` from `@/db/schema`. That dragged the entire
+  Drizzle table graph into a 79 KB browser chunk — every table, column and
+  constraint, plus the `MENGANTAR_API_KEY` managed-secret purpose label. No
+  credential value ever leaked; the data model did.
+- `shipmentStatuses` and `membershipRoles` now live in
+  `src/lib/domain-enums.ts` — first added as `shipment-status.ts` and renamed
+  after review — which carries no runtime module edge at all.
+  `src/db/schema.ts` imports and re-exports them, so no server module changed,
+  and `src/lib/shipment-queue.ts` reads the pure source. The three other value
+  importers of the schema were checked rather than assumed: `analytics-filters`,
+  `platform-monitoring-filters` and `analytics-filter-fields` are reached only
+  from Server Components, so they stay as they are.
+- The guard is on the cause, not the symptom.
+  `tests/client-bundle-boundary.integration.test.ts` walks the runtime module
+  graph from every `"use client"` entry, treating `import type` and inline
+  `type` specifiers as erased and stopping at `"use server"` modules because
+  Next.js replaces those with a reference proxy. It fails with the offending
+  path if any of them reaches the schema.
+- Independent review then broke that guard twice, and was right to. The first
+  version visited only `ImportDeclaration` nodes, so an `export { shipments }
+  from "@/db/schema"` in a client-reachable module left every assertion green —
+  including in the literal module itself, which falsified the comment claiming
+  it could not acquire a surviving dependency. A dynamic `import("@/db/schema")`
+  walked past it just as easily, and would have produced a lazily fetched chunk
+  still carrying the whole table graph. The walker now follows import
+  declarations, re-export declarations, dynamic `import()` and `require()`,
+  resolves `.js`/`.jsx`/`.mjs`/`.cjs` as well because `allowJs` is on, and
+  skips a comment or licence header above a `"use client"` directive rather
+  than requiring it at offset zero. All three evasions were reproduced and each
+  now fails with its full path.
+- A confirmation round then found two narrower holes in the same walker and
+  both are closed: a template-literal `import(\`@/db/schema\`)`, which bundlers
+  resolve statically exactly like a string specifier; and a leading comment
+  longer than the 1 000-character window the directive check read, which left an
+  unterminated comment in the slice — silently dropping a client entry in one
+  direction, and in the other making the walker traverse a `"use server"` module
+  and report nine false paths through legitimate server code. The directive is
+  now read from the parse tree rather than a text slice, which removes that
+  class instead of relocating it. Both were reproduced before and after.
+- Smaller review items: the module is now `src/lib/domain-enums.ts`, since
+  `membershipRoles` is an IAM literal and did not belong in a file named for
+  shipment status; `membershipRoles` went back to an `import type` in
+  `shipment-queue.ts`, where it is used only in `typeof` position; and the blank
+  run left in `schema.ts` where the arrays were removed is collapsed.
+- Measured rather than asserted: client JavaScript fell from 1,732,044 to
+  1,657,092 bytes. A rebuilt `.next/static` contains no `notNull`, no
+  `shipment_rts_events`, `managed_secret_payloads` or `ledger_entries`, and no
+  `MENGANTAR_API_KEY` label in any chunk. `drizzle-kit generate` still resolves
+  the schema, which is why `src/db/schema.ts` remains the one `src/db` module
+  without a `server-only` guard.
+- One repair to my own mistake is recorded here rather than hidden: while
+  cleaning up a probe migration I ran `git checkout -- drizzle/meta/_journal.json`,
+  which reverted the journal to HEAD and dropped the entries for migrations
+  `0032` through `0036`. The entries were reconstructed, the snapshot `prevId`
+  chain re-verified link by link, `pnpm test:migration-upgrade` re-run from an
+  empty database through `0036`, and `drizzle-kit migrate` confirmed to be a
+  no-op against the live database with all 37 migrations recorded.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm build`,
+  `pnpm test:integration` at 75 files / 569 tests, and migration upgrade through
+  `0036` on a clean PostgreSQL 16 database.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-09 — T-85 Replace the placeholder lifecycle guidance copy
+
+- The six lifecycle statuses `67beb92` added carried fragments where every
+  sibling carries an instruction: `RTS_QUEUED` read "Menunggu dikembalikan",
+  which is a second label rather than guidance. All six were rewritten in the
+  established voice — state the situation, then the operator's next move or the
+  caution that applies — and each is what the RTS table renders as its no-notes
+  fallback, which is the row the `PROBLEM` fixture exists to exercise.
+- Screening the same surface found a defect the task had not named. The RTS page
+  kept its own filter-tab label vocabulary, so a single table showed
+  "Antre Retur" in the tab above a row badge reading "RTS Antre" for the same
+  status. The page now reads `SHIPMENT_STATUS_PRESENTATION` for both label and
+  description, so there is one vocabulary and no second copy to drift — the same
+  shape as the four `maskPhone` copies T-79 consolidated, caught before it could
+  diverge further.
+- The labels also lost their English `RTS ` prefix and their Title Case. No
+  other status used either, and the queue filter dropdown lists all thirteen
+  side by side.
+- `tests/shipment-status-copy.integration.test.ts` requires every status to have
+  a sentence-ending guidance of at least eight words that is not a restatement
+  of its label, requires labels to be distinct and in sentence case, pins the
+  queue filter to exactly the stored statuses plus its three derived views, and
+  asserts the RTS page references the shared presentation rather than a literal.
+  Mutation-tested by restoring the original `RTS_QUEUED` one-liner, which fails
+  two of the four checks.
+- Independent review rejected the first rewrite, and the finding was the one
+  that matters for copy: two of the six strings told the operator to take
+  actions the product does not offer. `PROBLEM` said "sebelum memutuskan retur
+  atau kirim ulang" and `RTS_RECEIVED` said "sebelum menutup kasus", while
+  `shipmentLifecycleActions` returns nothing for any of these statuses and the
+  shipment detail page renders "Tidak ada tindakan lanjutan untuk status ini"
+  directly beside the same sentence. "Kirim ulang" is the product's named
+  hazard — `SUBMISSION_UNKNOWN` says "Jangan kirim ulang" and the detail page
+  raises it as an alert — so instructing it was worse than the fragment it
+  replaced. Both now describe the state and point at the record, and the guard
+  bans those phrases outright unless they appear as a prohibition.
+- Review also found the deduplication was one third of the problem. Beyond the
+  filter tabs, the RTS page's own KPI cards were a third vocabulary sitting one
+  row above them, and `src/app/platform/_components/monitoring-view.tsx` held a
+  fourth for the entire platform scope — so a super admin filtering on the same
+  stored value read "RTS (Antrean)" where the tenant read "Antre retur". All
+  four now derive from `SHIPMENT_STATUS_PRESENTATION`. The earlier claim that
+  the `RTS ` prefix was gone was true only of the tenant queue.
+- A confirmation round then rejected the rewrite again, and both findings were
+  fair. `PROBLEM` still pointed the operator at "riwayat kiriman ini" — there is
+  no shipment event history anywhere in the CMS; the only "riwayat" on the
+  detail page is print history, which a `PROBLEM` shipment does not have. It now
+  says only that the provider decides the next status. A fifth label map also
+  survived in the reconciliation panel, and the RTS page named one place two
+  ways: "gudang" in its description and KPI card, "outlet asal" in the guidance
+  directly between them.
+- The guard was correspondingly weak, and the confirmation round proved it three
+  ways: an 11-word tautology passed, a `jangan` anywhere in the string licensed
+  an instruction to "kirim ulang" in another sentence, and the one-vocabulary
+  check was defeated by deleting a single space (`STATUS:"` instead of
+  `STATUS: "`). A third round then showed two of those three still passed after
+  the first repair — the phrase patterns were case-sensitive, so an imperative
+  opening a sentence evaded them, and the sentence splitter ignored semicolons.
+  Both are fixed, and the map pattern now recognises a `Map` of tuples, a
+  computed key and a nested `{ label }` in `.js`/`.jsx`/`.mjs` as well. Six
+  evasions were reproduced against the current guard and all six fail it.
+- What the guard does not catch, stated rather than implied: an 11-word
+  tautology passes it. Nothing in it judges whether a sentence carries meaning,
+  and a claim that it did would be false — this was verified by running the
+  tautology, not assumed. It also deliberately does not flag a status mapped to
+  a route, which `shipmentQueueHref` legitimately builds; that was verified as a
+  non-false-positive the same way. Meaning stayed a review judgement, and review
+  is what caught every round of this.
+- The tree scan deliberately does not ban a label string outright. "Resi terbit"
+  is also the name of a dashboard and platform metric counting issued AWBs; the
+  words coincide, the meaning does not, and banning the literal would have been
+  wrong. What it matches is a status key mapped straight to a string, which is
+  the actual defect shape.
+- The guard checks shape and cross-references, not meaning. Whether a sentence
+  is honest about what the product offers stayed a review judgement, and review
+  is what caught both rounds of it.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 76
+  files / 576 tests, and an authenticated browser pass as Tenant Admin and as
+  Super Admin over the RTS queue, the shipment queue and the platform
+  monitoring filter. That pass checked the fourteen strings the four retired
+  vocabularies contributed, widening a first attempt that had curated five;
+  independent review then swept twenty-two, adding the original guidance
+  fragments, and reached the same result. The KPI cards, filter tabs and row
+  badges render identical labels. The one survivor, "Status tidak diketahui" on
+  `/platform`, is correct: there it names `counts.lifecycle.unknown`, a
+  provider-object metric sitting among "Batch" and "Belum dibayar", not a
+  shipment status.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+## 2026-09-09 — T-77 Multi-viewport UI/UX, typography and accessibility screening
+
+- Screening covers all 22 routes on disk at 390/768/1280 — 66 surface/viewport
+  pairs, public, tenant and platform. The four dynamic routes
+  (`/app/pengiriman/[shipmentId]`, `/app/label/[shipmentId]`,
+  `/app/kontak/[contactId]`, `/platform/tenant/[tenantId]`) are resolved against
+  seeded identifiers rather than skipped; an earlier pass swept 18 routes and
+  would have left the shipment detail, label render, contact detail and tenant
+  detail screens unmeasured while reading as complete.
+- Each pair is probed for document-level horizontal overflow, exactly one `main`
+  and one `h1`, one visible `aria-current="page"`, unlabelled horizontal scroll
+  containers, images without `alt`, `role="tablist"` over links, nested cards,
+  the CMS shell gutter, WCAG 2.1 AA text contrast on every visible text element,
+  and a keyboard focus ring meeting the 3:1 of WCAG 1.4.11.
+- The return queue carried the two findings the register had already recorded,
+  and both were measured before being acted on. Its four KPI cards restated
+  `7/3/2/1` — the identical counts the filter chips directly beneath already
+  carried, the chips additionally carrying `Bermasalah 1` and being clickable.
+  The cards were therefore a strictly smaller, unactionable copy of the control
+  below them, and the row is gone: the file falls from 42 lines mentioning a
+  `Card*` component to 8, matching the sibling queue exactly on that count and
+  on the 12 identifier occurrences within them. `role="tablist"` over links that navigate became
+  `<nav aria-label="Filter status retur">`, and the bare `overflow-x-auto`
+  became the labelled, focusable `role="region"` the shipment queue already had.
+  Every row also printed a second field, `ID: 72000000`, beside an AWB that
+  already identified the row and linked to it. The value was identical on every
+  row only because the seed mints `fixedUuid("72", n)` — the seed defect T-82
+  records; production UUIDs would differ there — so the argument for removal is
+  redundancy rather than the fixture. The truncated form survives as the AWB
+  cell's fallback when a shipment has no AWB yet, where it is the only
+  identifier there is.
+- A first repair introduced `aria-current="page"` on the active filter chip,
+  which put two current-page items in one document while the shell already owned
+  the truthful one. It is `aria-current="true"` now, and the guard checks the
+  distinction rather than the attribute's presence.
+- **Keyboard focus was invisible on every surface in the application.** Nothing
+  defined `--ring`, so the global rule
+  `:focus-visible { outline:3px solid var(--ring); outline-offset:2px; }` and
+  every `focus-visible:ring-ring/50` on the shadcn primitives resolved to an
+  invalid value. An invalid `outline` computes to `outline-style:none`, which
+  also suppresses the browser's own ring — measured on a genuinely
+  `:focus-visible` element as `3px none` with a fully transparent ring shadow.
+  `--ring` now resolves to the design system's sole interactive accent, and the
+  scaffold's `@layer base { * { @apply border-border outline-ring/50 } }` went
+  to full alpha: cobalt at 50% over the canvas measures 2.4:1, under the 3:1
+  WCAG 1.4.11 asks of a focus indicator.
+- **The destructive tint failed AA.** `--destructive` carried shadcn's default
+  red while the design system defines its own `--danger`, and `badge.tsx` and
+  `button.tsx` both tint with `bg-destructive/10 text-destructive`. That pairing
+  measures 3.99:1 against a 4.5:1 floor at 12px and 14px — the `Kritis` badges
+  on `/platform` and `/platform/tenant/[tenantId]`, `Admin terakhir` on
+  `/app/anggota`, and the `Arsipkan kontak` and `Tangguhkan tenant` buttons.
+  `--destructive` now resolves to `--danger` at 5.6:1 on the same tint, which
+  also retires a second red for a meaning the system already had one for.
+- Three screening hazards were found and closed, because a probe that measures
+  nothing passes exactly as loudly as one that measures everything.
+  - The first contrast probe parsed only `rgb()`. Tailwind v4 emits oklch and
+    Chrome reports computed colour as `lab()` — 262 of 278 text elements on the
+    shipment queue — so it inspected 12 and certified a sweep it never
+    performed. It normalises through a canvas now, which accepts every colour
+    syntax the engine does, and the sweep fails loudly if any page yields fewer
+    than ten inspected elements.
+  - Headless Chrome does not consider the page focused, so `:focus-visible`
+    never matches and a focus probe finds nothing to look at. The sweep enables
+    `Emulation.setFocusEmulationEnabled` and fails if fewer than three focus
+    rings resolved on a page.
+  - The integration suite tears down the demo seed, so a UI sweep run after it
+    screens empty states and calls them clean. Observed directly: a 256-element
+    page fell to 13. The validation script re-seeds first.
+- The gutter probe first targeted `main`, which has no padding, and reported
+  `0px` on all 66 pairs — a finding that was entirely the probe's. `.cms-main`
+  carries the 16/24/32px responsive gutters, and every CMS pair measures exactly
+  the value its viewport should.
+- Two guards hold the result, both mutation-tested.
+  `tests/design-token-contrast.integration.test.ts` computes AA contrast from
+  the tokens themselves, with an oklch-to-sRGB conversion cross-checked against
+  two known colours, and covers the status colours on their surfaces, the
+  destructive tint at rest and hover, body and muted ink on all three grounds,
+  the accent filled and as a link, and the focus ring at the 3:1 non-text floor.
+  `tests/rts-presentation.integration.test.ts` holds the return-queue decisions.
+  Five mutations against the page and nine against the tokens all fail the
+  guards; the unmutated tree passes.
+- One of those nine initially survived. The assertion that the global
+  `:focus-visible` rule exists was unanchored, and the doc comment above
+  `--ring` quotes that rule verbatim — so the guard matched its own prose and
+  passed with the real declaration deleted. It is anchored to line start now.
+  Two other guards in this repository were weakened the same way earlier in
+  Phase 10; a pattern that can match a comment is not a guard.
+- `docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md` puts dark mode out of MVP scope and
+  forbids speculative dark mode. There is no `.dark` block and nothing sets the
+  class, so the 45 `dark:` utilities inside the vendored shadcn primitives never
+  match. They are inert and are left alone rather than churned across vendored
+  files. A 46th sits in application code at
+  `src/app/app/shipment-draft-form.tsx:342`, on the line T-78 already owns for
+  its hardcoded `amber-*` palette; the vendored-file argument does not cover
+  that one and this task does not claim it does. the token guard asserts no `.dark` palette appears without a decision,
+  because adding one means screening every pairing a second time.
+- Screening also found 117 of the 157 class names in `src/app/globals.css`
+  referenced nowhere under `src` and rendered on none of the 22 routes in any
+  scope — the pre-shadcn shell, sales, analytics, bulk import, contacts, label
+  and shipment-form stylesheets. Two independent checks agree: a substring sweep
+  of every source file, and `getElementsByClassName` against the live DOM of all
+  22 routes as anonymous, Tenant Admin and Super Admin. That is not a rendered
+  defect, so it does not block this task; it is now **T-86**.
+- Evidence for this first pass is superseded by the review round recorded
+  below; the numbers that survived re-measurement are stated there.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+### T-77 review round 1 — rejected, and right on every point
+
+- **The two guards did not bind.** Independent review wrote its own mutations
+  rather than trusting the ones recorded here, and three of four survived on the
+  return-queue guard, three of three on the token guard. Every one of them was
+  the same bug: an assertion bound to a string that happened to be present in
+  the fixed source instead of to the defect.
+  - The KPI row could be rebuilt as plain `div`s, restating the same counts,
+    and pass — the assertion checked for the absence of a *comment*, and the
+    card count was a `<=` against the sibling rather than an equality.
+  - `<nav aria-label="…">` could be downgraded to `<div aria-label="…">` and
+    pass, because the assertion only required the label string to appear
+    somewhere in the file. On a `div` that label is announced to nobody.
+  - The `ID:` line could be rebuilt as a template literal and pass, because the
+    assertion matched the one JSX spelling that had been deleted.
+  - A **second `:root` block** appended at the end of `globals.css`, restoring
+    shadcn's red and a washed-out ring, passed every contrast assertion: the
+    parser sliced from the first `:root {` to the first `}`, so a later override
+    — which is how a theme regression actually arrives — was invisible.
+  - A dark palette written `:root.dark { … }` passed, because the assertion was
+    anchored to a bare `.dark {`.
+- The guards now bind to the defect. Each filter count must be read exactly once
+  and only while building the filter, so a KPI row cannot be reconstructed in
+  any shape without a second read; the label must sit on a `nav` element in the
+  rendered tree; the identifier check matches the composition rather than one
+  spelling; the token parser reads every `:root` block in cascade order; the
+  dark check matches `.dark` in any selector position; and nothing may switch
+  the ring off for a subset of elements. Comments are stripped before any
+  structural parse — the stylesheet quotes its own rules verbatim, braces
+  included, which is what made both the block parser and the earlier
+  `:focus-visible` assertion read prose instead of code.
+- **Scope this task declared and never screened.** The resolution enumerated
+  what the sweep probed and read as complete; it did not say that typographic
+  hierarchy, line length, container tiers, and the empty/loading/error states
+  were absent from it. They are screened now, through the 104 UI-audit
+  scenarios the repository already declares, driven by the `x-geraicuan-ui-audit`
+  header — states the route sweep cannot reach at all. That found four defects,
+  one of them the hardest requirement this task has:
+  - `/app/pengiriman/baru` carried **17-49px of document horizontal overflow at
+    390px** in the three estimate-bearing states, and this run introduced it.
+    The first repair of the estimate panel wrapped `Table` in a second `div` to
+    carry the border; that wrapper had no overflow control, so it grew to the
+    table's natural width and pushed the panel past the viewport. Collapsing it
+    — border and scroll semantics both on `Table`'s own container — is what
+    fixes it. Measured on four trees at 390px: `HEAD` 0px, double wrapper
+    49/17px, collapsed 0px with and without a `min-w-0` guard, so the
+    `[&>*]:min-w-0` added alongside is inert here and has been removed.
+    The first version of this entry said the overflow was pre-existing and that
+    this had been "checked against the pre-fix sweep data". The check was real
+    but read the wrong artifact: `t77-screen3.json` had already been overwritten
+    by a later run, so what looked like pre-fix evidence was the same defect
+    measured after it was introduced. Independent review caught the claim, and
+    re-measuring four trees is what settled it.
+  - `EmptyState` renders an `h3` directly beneath the page `h1`, a skipped
+    level, on the dashboard first-run and on the return queue's own empty and
+    filtered-empty states. The root cause is that `CardTitle` was a `div`, so no
+    CMS page had any outline between its `h1` and an empty state's `h3`.
+    `CardTitle` is an `h2` now, and the layout provably does not move: geometry
+    captured for all 27 page/viewport pairs in both states — 45 card titles,
+    their positions, sizes, font metrics, margins, the card boxes around them
+    and the document height — is identical. The screenshot comparison that was
+    supposed to prove this could not: 13 of 30 captures differ because these
+    pages render live timestamps, so a byte diff cannot separate layout from
+    content. Measuring geometry directly can.
+  - `/app/pengaturan` renders **two** visible `aria-current="page"` at 1280px —
+    the shell's own nav item and the outlet selector, the same defect this task
+    fixed on the return queue. The route sweep passed the page because the demo
+    seed has one outlet and the page renders a different branch below two, so
+    the selector is absent there at every width; it appears only under the
+    many-outlet fixtures. The selector is `aria-current="true"`. An earlier
+    version of this entry blamed the sidebar breakpoint, which was a story
+    rather than a measurement.
+  - `/app/pengiriman/baru` at 390px wraps `Table` in a labelled, focusable div
+    while `Table`'s own container is the one that actually scrolls — unlabelled
+    and unreachable. The label, role and tab stop moved onto the element that
+    scrolls, via `containerProps`, the way both queues already do. The step
+    strip on the same page is 32rem of static text inside `overflow-x-auto`
+    with nothing focusable in it, so a keyboard user could not scroll it at
+    all; it has its own tab stop now.
+  - Six description paragraphs ran to 115-119ch on wide surfaces with nothing
+    capping them, and now carry the `max-w-2xl` the rest of the CMS uses. The
+    threshold is 105ch rather than the textbook 75: the design system's own cap
+    lands near 102ch, and relitigating that value is a design decision, not a
+    screening finding.
+- **Probes that measured the wrong thing.** The container-tier probe matched the
+  first `max-w-*` on the page — a truncation cap — and reported 160px on every
+  surface. The gutter probe read `main`, which has no padding, and reported 0 on
+  the public and auth pages. Under-24px targets were counted and then dropped
+  before the verdict, so 116 of them were measured and none reported; WCAG
+  2.5.8's exemptions are applied now — inline-in-a-sentence, and a 24px circle
+  tested against both other undersized targets' circles and full-size targets'
+  boxes. The redirect check printed a warning the validation script never
+  gated on, and its detector accepted any prefix, so a redirect to `/app` could
+  never have been flagged.
+- **Numbers corrected against the disk.** 159 class names in `globals.css` was
+  157 — the old denominator counted `css` from an `@import` filename and `dark`
+  from a `@custom-variant` reference. 46 `dark:` utilities in vendored
+  primitives was 45; the 46th is in application code, on the line T-78 already
+  owns. The destructive tint measures 3.99:1, not 3.97:1, by this repository's
+  own contrast helper. "42 to 8 `Card` references" was a count of lines
+  mentioning a `Card*` component, and now says so.
+- The `ID:` line's recorded justification generalized a fixture artifact. The
+  eight characters were identical on every row because the seed mints
+  `fixedUuid("72", n)` — the defect T-82 records — and production UUIDs would
+  differ there. The argument for removing it is that it was a redundant second
+  identifier beside an AWB that already identified the row and linked to it.
+- **Evidence.** `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 587 tests, `next build`, and the browser sweep: 66 route pairs and 312
+  scenario pairs, zero findings on either, no console errors. Both mutation
+  suites: 8 mutations against the return-queue page and 13 against the tokens,
+  including every one independent review broke through, and all 21 fail the
+  guards while the unmutated tree passes. Layout parity for the heading change:
+  27 page/viewport pairs and 45 card titles, identical geometry, re-runnable.
+  The dead-CSS audit: 117 of 157 class names unreachable from both source and
+  rendered DOM.
+- One measurement in this evidence is deliberately not quoted as a figure. The
+  count of text elements inspected for contrast is not stable: two route sweeps
+  run back to back against identical code returned 9,479 and 9,515, and
+  independent review's run of the same script returned 8,800 against a
+  differently-seeded database. The earlier claim of "9,467 text elements" read
+  as a measurement of the code and was really a measurement of one database
+  state. What the check enforces is per-page and does not drift: every visible
+  text element on every pair, a hard failure if any page yields fewer than its
+  floor, and zero contrast failures. Focus rings are stable — 697 across the
+  route sweep in both back-to-back runs.
+- Two tests in `tests/outlet-settings-page.integration.test.ts` encoded the old
+  `aria-current="page"` on the outlet selector and failed. They were updated
+  rather than the behaviour reverted, and they now also require zero `"page"`
+  in that document: the browser evidence is two visible current-page markers at
+  1280px, and the shell owns the truthful one.
+- The layout-parity script initially left `card.tsx` mutated. Its EXIT trap
+  restored a relative path while the script had `cd`-ed into the scratchpad, so
+  it wrote the backup to `scratchpad/src/components/ui/card.tsx` and left the
+  real file as a `div`. Caught by checking the file after the run rather than
+  trusting the trap. The path is absolute now and the rerun leaves the tree
+  clean.
+- No provider call, production action, commit, push, deploy, or release
+  occurred.
+
+### T-77 review round 2 — rejected again, and right again
+
+- **Both guards still did not bind.** Review wrote seven new mutations and all
+  seven passed: `role={"tablist"}` in brace spelling, a `shortRowId(row)` helper
+  declared above the component, `className={"overflow-x-auto"}`, a KPI row
+  rebuilt from `filterTabs` (reading no `data.summary` at all, which the guard's
+  own comment claimed was impossible), an **indented** second `:root` block, a
+  `@media (prefers-color-scheme: dark)` palette, and the focus ring switched off
+  by `outline-width: 0` and `outline-color: transparent`.
+- The instrument is different now rather than patched. Matching source text
+  enumerates spellings forever, so the page guard renders the component with
+  `renderToStaticMarkup` and asserts the **output**: how the JSX was written
+  stops mattering. The token guard parses the stylesheet with brace matching
+  instead of regular expressions, so nesting, indentation and at-rules are
+  structure rather than text — a regex that finds a block by looking for the
+  next `}` cannot see into a nested one, which is exactly how the
+  `prefers-color-scheme` palette walked through. Twelve page mutations and
+  seventeen token mutations, including every one either round broke, now fail.
+- **The state sweep was not screening what it claimed.** 47 of 51 loading pairs
+  measured the fully loaded page: navigation waited for `readyState complete`,
+  which for a streamed RSC route is after the very delay the skeleton covers.
+  The sweep stops at the first frame that carries a skeleton *and* has the
+  stylesheet applied — the second half added after a run measured `outline: 1px
+  auto`, a 0px gutter and two visible navs, which is the unstyled document
+  rather than the loading state.
+- Capturing that frame immediately found a defect it had been hiding: two of the
+  sixteen loading skeletons render no `h1` at all, and `src/app/platform/loading.tsx`
+  covers the platform overview, the audit trail and tenant detail, so four
+  routes streamed with no heading. Both now render the same `PageHeader` the
+  other fourteen do.
+- Three `contacts-area-*` scenarios are Server Action states
+  (`src/app/app/location-actions.ts:103`) that a page load cannot reach; nine
+  pairs were counted as screened while rendering the base route. They are
+  excluded by name with the reason recorded, and the sweep now fails when any
+  scenario renders indistinguishably from its base route. That check found its
+  own bug first: a digest of text length plus a 60-character prefix collided on
+  one pair in 303 and reported `analytics-stale` as inert when it demonstrably
+  adds a staleness banner. It hashes the whole text now.
+- **Two claims from round one were wrong.** The 17-49px overflow at 390px was
+  introduced by this run, not pre-existing: measured across four trees, `HEAD`
+  is 0px, the double-wrapper structure this task briefly introduced is 49/17px,
+  and the collapsed structure is 0px with or without the `[&>*]:min-w-0` guard —
+  which is therefore inert and has been removed. The round-one entry said this
+  had been "checked against the pre-fix sweep data"; the check was real but read
+  an artifact a later run had already overwritten.
+- The 105ch line-length threshold rested on a false reading. `max-w-2xl` is
+  672px, which is 72ch at 14px and 84ch at 12px, not the 102ch recorded — 102ch
+  was what *uncapped* prose measured, so the threshold sat above every finding
+  it existed to catch. Prose is measured against the 672px cap directly now, and
+  eleven paragraphs that were over it are capped, including `AlertDescription`
+  in the primitive, which was the last surface with no cap at all.
+- The `/app/pengaturan` screening gap was mis-explained as a sidebar breakpoint.
+  The real reason is that the demo seed has one outlet and the page renders a
+  different branch below two, so the selector does not exist on the base route
+  at any width; the duplicate marker appears only under the many-outlet
+  fixtures.
+- Also closed: the sticky-column half of the wide-table clause, which nothing
+  had ever screened — the return queue had none while the sibling queue it
+  copied did, and neither did the CSV error table; the redirect detector, which
+  accepted any prefix and so could never have flagged a redirect to `/app`; the
+  `current === 0` case, unflagged on 126 pairs; the a11y script's measurements,
+  printed and then discarded by a validation script that gated only on console
+  errors; and the contrast self-test, which re-implemented the probe instead of
+  importing it and so proved only that a copy worked.
+- The redirect gate then earned its place: a later run lost the Super Admin
+  session partway through and reported 35 pairs redirected to
+  `/login/super-admin`. That run is not evidence of anything and is not cited as
+  such.
+- No provider call, production action, deploy, or release occurred.

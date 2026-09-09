@@ -358,7 +358,7 @@ describe("contact Server Actions", () => {
         isRecipient: true,
         isSender: false,
         name: "Kontak Arsip",
-        phoneMasked: "0812••••890",
+        phoneMasked: "•••• 7890",
       }],
       searched: true,
     });

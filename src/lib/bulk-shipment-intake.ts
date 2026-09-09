@@ -25,6 +25,10 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 const FIELD_TO_HEADER: Record<ShipmentDraftField, (typeof BULK_TEMPLATE_HEADERS)[number]> = {
   declaredValue: "nilai_barang",
+  // Bulk intake has no COGS column, so `toFormData` never sets `cogsAmount` and
+  // this entry is unreachable; it exists only to keep the record exhaustive.
+  // If a COGS column is ever added, give it its own header here first —
+  // otherwise a bad COGS cell reports its error against `nilai_barang`.
   cogsAmount: "nilai_barang",
   destinationAreaId: "lokasi_tujuan",
   destinationAreaLabel: "lokasi_tujuan",

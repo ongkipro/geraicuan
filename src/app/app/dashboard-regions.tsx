@@ -182,7 +182,7 @@ export async function DashboardPeriodSummaryRegion({
         {metrics.map((metric) => <div className="relative min-w-0 bg-card p-4 transition-colors hover:bg-muted/40" key={metric.label}><Link aria-label={`${metric.label}: ${metric.value}. Lihat record pendukung`} className="absolute inset-0 z-10 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" href={metric.href} /><dt className="text-sm font-medium text-muted-foreground">{metric.label}</dt><dd className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{metric.value}</dd>{metric.context ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{metric.context}</p> : null}<p className="mt-2 text-xs leading-5 text-muted-foreground"><AnalyticsComparisonCue current={metric.current} previous={metric.previous} /></p></div>)}
       </dl>
       {current.createdCount === 0 ? <Alert><PackageSearch aria-hidden="true" /><AlertTitle>Tidak ada input pada {context.periodLabel}</AlertTitle><AlertDescription>Pilih periode lain atau buat kiriman baru. Pekerjaan saat ini di bawah tetap menampilkan snapshot terbaru.</AlertDescription></Alert> : null}
-      <p className="text-xs leading-5 text-muted-foreground">Dibandingkan dengan {context.previousPeriodLabel} · {context.timezoneLabel}. COD/non-COD mengikuti waktu kiriman dibuat; resi mengikuti waktu outcome provider.</p>
+      <p className="max-w-2xl text-xs leading-5 text-muted-foreground">Dibandingkan dengan {context.previousPeriodLabel} · {context.timezoneLabel}. COD/non-COD mengikuti waktu kiriman dibuat; resi mengikuti waktu outcome provider.</p>
     </CardContent>
   );
 }

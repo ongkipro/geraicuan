@@ -9,6 +9,7 @@ import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { validateContactDirectory } from "@/lib/contact-directory";
+import { maskPhone } from "@/lib/pii-redaction";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -74,12 +75,6 @@ async function requireTenantPrincipal() {
     if (error instanceof CmsAuthorizationDeniedError) redirect("/login/tenant");
     throw error;
   }
-}
-
-function maskPhone(phone: string) {
-  return phone.length <= 7
-    ? `${"•".repeat(Math.max(0, phone.length - 2))}${phone.slice(-2)}`
-    : `${phone.slice(0, 4)}••••${phone.slice(-3)}`;
 }
 
 function safeSearchRows(rows: Awaited<ReturnType<typeof listContacts>>): SafeContactSearchRow[] {

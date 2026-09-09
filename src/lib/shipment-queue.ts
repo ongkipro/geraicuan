@@ -1,5 +1,8 @@
-import { shipmentStatuses } from "@/db/schema";
-import type { membershipRoles } from "@/db/schema";
+// Imported from the pure literal module, never from `@/db/schema`: this file
+// is reachable from a client component, and a value import of the schema would
+// bundle the whole Drizzle table graph into the browser.
+import { shipmentStatuses } from "@/lib/domain-enums";
+import type { membershipRoles } from "@/lib/domain-enums";
 
 export type ShipmentStatus = (typeof shipmentStatuses)[number];
 export type ShipmentQueueStatusFilter =
@@ -60,7 +63,37 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     label: "Menunggu pembayaran",
     tone: "warn",
   },
-  RTS_QUEUED: { guidance: "Menunggu dikembalikan", label: "RTS Antre", tone: "warn" }, RTS_IN_TRANSIT: { guidance: "Sedang dikembalikan", label: "RTS Perjalanan", tone: "warn" }, RTS_RECEIVED: { guidance: "Sudah dikembalikan", label: "RTS Selesai", tone: "neutral" }, IN_TRANSIT: { guidance: "Dalam perjalanan", label: "Perjalanan", tone: "neutral" }, DELIVERED: { guidance: "Terkirim", label: "Terkirim", tone: "ok" }, PROBLEM: { guidance: "Bermasalah", label: "Bermasalah", tone: "danger" }, FAILED: {
+  IN_TRANSIT: {
+    guidance: "Kurir sedang mengantar ke penerima. Jangan membuat kiriman pengganti untuk paket yang sama.",
+    label: "Dalam perjalanan",
+    tone: "warn",
+  },
+  DELIVERED: {
+    guidance: "Paket tercatat sampai ke penerima dan lifecycle kiriman ini sudah selesai.",
+    label: "Terkirim",
+    tone: "ok",
+  },
+  PROBLEM: {
+    guidance: "Kurir melaporkan kendala pengantaran. Penyedia yang menentukan status berikutnya untuk kiriman ini.",
+    label: "Bermasalah",
+    tone: "danger",
+  },
+  RTS_QUEUED: {
+    guidance: "Paket dijadwalkan kembali ke outlet asal dan menunggu dijemput kurir.",
+    label: "Antre retur",
+    tone: "warn",
+  },
+  RTS_IN_TRANSIT: {
+    guidance: "Paket retur sedang dalam perjalanan kembali ke outlet asal dan belum tercatat diterima.",
+    label: "Retur dalam perjalanan",
+    tone: "warn",
+  },
+  RTS_RECEIVED: {
+    guidance: "Barang retur sudah tercatat diterima di outlet asal dan tidak menunggu langkah lifecycle lain.",
+    label: "Retur diterima",
+    tone: "ok",
+  },
+  FAILED: {
     guidance: "Pengiriman tidak berhasil. Periksa konteks aman di bawah sebelum membuat draf baru.",
     label: "Gagal",
     tone: "danger",

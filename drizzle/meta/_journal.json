@@ -225,6 +225,41 @@
       "when": 1788374844465,
       "tag": "0031_cultured_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788374844466,
+      "tag": "0032_shipment_rts_events_isolation",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788374844467,
+      "tag": "0033_least_privilege_and_forced_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788374844468,
+      "tag": "0034_immutable_identity_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788374844469,
+      "tag": "0035_column_scoped_updates",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788374844470,
+      "tag": "0036_rate_limit_column_scoped_updates",
+      "breakpoints": true
     }
   ]
 }

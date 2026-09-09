@@ -138,7 +138,7 @@ export default async function TenantMembersPage() {
       <section aria-labelledby="tenant-members-title" className="grid gap-4">
         <div>
           <h2 className="font-heading text-lg font-medium" id="tenant-members-title">Daftar anggota</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">Anggota aktif ditampilkan lebih dulu. Buka kontrol hanya pada anggota yang ingin dikelola.</p>
+          <p className="max-w-2xl mt-1 text-sm leading-6 text-muted-foreground">Anggota aktif ditampilkan lebih dulu. Buka kontrol hanya pada anggota yang ingin dikelola.</p>
         </div>
         {members.length === 0 ? (
           <EmptyState description="Data anggota tenant belum tersedia. Muat ulang halaman atau hubungi dukungan sebelum mengelola akses." icon={Users} title="Anggota tidak ditemukan" />

@@ -11,6 +11,7 @@ import {
   shipments,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import { maskPhone } from "@/lib/pii-redaction";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
 export const RTS_STATUSES = [
@@ -29,6 +30,8 @@ export type RtsSummary = {
   problemCount: number;
 };
 
+type LatestRtsEvent = { notes: string | null; createdAt: string | null };
+
 export type RtsShipmentRow = {
   shipmentId: string;
   status: string;
@@ -41,7 +44,7 @@ export type RtsShipmentRow = {
   isCod: boolean;
   declaredValueIdr: number;
   recipientName: string;
-  recipientPhone: string;
+  recipientPhoneMasked: string;
   providerService: string | null;
   awb: string | null;
   latestEventNotes: string | null;
@@ -144,7 +147,7 @@ export async function loadRtsShipmentsPage(
 
   const offset = (page - 1) * input.pageSize;
 
-  const rows = await tx
+  const selectedRows = await tx
     .select({
       shipmentId: shipments.id,
       status: shipments.status,
@@ -160,8 +163,20 @@ export async function loadRtsShipmentsPage(
       recipientPhone: shipmentParties.phone,
       providerService: providerOrderSnapshots.providerService,
       awb: providerOrderSnapshots.cnoteNo,
-      latestEventNotes: shipmentRtsEvents.notes,
-      latestEventAt: shipmentRtsEvents.createdAt,
+      // One subquery, so the note and its timestamp can only ever come from the
+      // same event row. Two independent subqueries could disagree on a
+      // created_at tie, which bulk webhook ingestion would produce.
+      latestEvent: sql<LatestRtsEvent | null>`(
+        select json_build_object(
+          'notes', ${shipmentRtsEvents.notes},
+          'createdAt', ${shipmentRtsEvents.createdAt}
+        )
+        from ${shipmentRtsEvents}
+        where ${shipmentRtsEvents.shipmentId} = ${shipments.id}
+          and ${shipmentRtsEvents.tenantId} = ${shipments.tenantId}
+        order by ${shipmentRtsEvents.createdAt} desc, ${shipmentRtsEvents.id} desc
+        limit 1
+      )`,
     })
     .from(shipments)
     .innerJoin(
@@ -193,17 +208,21 @@ export async function loadRtsShipmentsPage(
         eq(providerOrderSnapshots.tenantId, shipments.tenantId),
       ),
     )
-    .leftJoin(
-      shipmentRtsEvents,
-      and(
-        eq(shipmentRtsEvents.shipmentId, shipments.id),
-        eq(shipmentRtsEvents.tenantId, shipments.tenantId),
-      ),
-    )
     .where(where)
     .orderBy(desc(shipments.updatedAt), desc(shipments.id))
     .limit(input.pageSize)
     .offset(offset);
+
+  const rows = selectedRows.map(({ latestEvent, recipientPhone, ...row }) => ({
+    ...row,
+    // Masked here, not in the page: a client-side mask would still ship the
+    // whole number in the server-rendered payload.
+    recipientPhoneMasked: maskPhone(recipientPhone),
+    latestEventNotes: latestEvent?.notes ?? null,
+    // The subquery returns JSON, so the timestamp arrives as a raw string
+    // rather than through the column type mapper.
+    latestEventAt: latestEvent?.createdAt ? new Date(latestEvent.createdAt) : null,
+  }));
 
   return {
     generatedAt: countRow?.generatedAt ? new Date(countRow.generatedAt) : new Date(),

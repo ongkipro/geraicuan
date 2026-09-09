@@ -15,23 +15,3 @@ export const BULK_TEMPLATE_HEADERS = [
   "nilai_barang",
   "metode_pembayaran",
 ] as const;
-
-export const BULK_INPUT_FIELDS = [
-  "senderName",
-  "senderPhone",
-  "senderAddress",
-  "recipientName",
-  "recipientPhone",
-  "recipientAddress",
-  "destinationAreaId",
-  "destinationAreaLabel",
-  "packageContent",
-  "packageWeightGrams",
-  "packageQuantity",
-  "packageLengthCm",
-  "packageWidthCm",
-  "packageHeightCm",
-  "declaredValue",
-  "paymentType",
-  "outletId",
-] as const;

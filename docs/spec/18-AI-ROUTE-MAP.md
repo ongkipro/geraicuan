@@ -14,10 +14,11 @@ disk win.
 
 ## 1. Snapshot and maturity rules
 
-- Audited: 2026-09-07.
+- Audited: 2026-09-09 against HEAD `67beb92` plus the uncommitted T-76, T-83 and T-79 work.
 - Framework: Next.js App Router 16.3.3, React 19.2.8.
-- Inventory: 22 UI pages, three committed Route Handlers, and one new
-  worktree-only webhook handler.
+- Inventory: 22 UI pages and four committed Route Handlers. The Mengantar
+  webhook is mounted but closed — it refuses every request; see its row in
+  section 8.
 - Shared UI: Tailwind CSS and copied shadcn/ui components.
 - Server model: Server Components by default; interactive forms are bounded
   client leaves; Server Actions and Route Handlers are remotely reachable trust
@@ -31,9 +32,9 @@ Maturity labels used below:
 
 | Label | Meaning |
 |---|---|
-| COMMITTED | Present at HEAD e3bebe9 and part of the previously reviewed route surface. |
-| MODIFIED | Committed route whose supporting behavior currently has uncommitted worktree changes. Re-verify before claiming it works. |
-| WORKTREE | New uncommitted route or handler. It is discoverable for development but is not release-reviewed or production-ready. |
+| COMMITTED | Present at HEAD `67beb92`. Committed is not the same as reviewed; the Phase 9 additions in `67beb92` are committed and NOT reviewed. |
+| MODIFIED | Committed route whose supporting behavior has uncommitted worktree changes on top of HEAD. Re-verify before claiming it works. |
+| WORKTREE | New uncommitted route or handler. It is discoverable for development but is not release-reviewed or production-ready. No route carries this label at this snapshot: every page and handler is committed at `67beb92`. That does not mean the tree is clean — T-76, T-83, T-79, T-84, T-85 and T-77 have left uncommitted changes across more than fifty paths, including `src/db/rts-repository.ts`, `src/app/app/pengiriman/rts/page.tsx`, `src/lib/ui-audit-scenario.ts`, `src/lib/pii-redaction.ts`, the closed webhook handler, the `server-only` guards through `src/db`, `scripts/seed-local-dev-users.mjs`, migrations `0032` through `0036`, the design tokens in `src/app/globals.css`, and their tests. Run `git status` rather than reading a maturity label as a statement about the whole tree. |
 | RELEASE-GATED | Code exists, but live Mengantar mutation remains disabled until separately approved and verified. |
 
 Never infer maturity from a checked task alone. Confirm git status, STATUS.md,
@@ -71,7 +72,7 @@ flowchart TD
 
     AuthHandler[Better Auth handler] --> TenantShell
     AuthHandler --> PlatformShell
-    Webhook[Mengantar webhook] -. worktree only .-> Shipments
+    Webhook[Mengantar webhook] -. closed by T-79, reaches nothing .-x Shipments
 ```
 
 ## 3. Shell, role, and navigation contract
@@ -115,19 +116,20 @@ tests/auth-config.integration.test.ts.
 
 | Route | Source and navigation | Actor and primary job | Canonical URL state | Reads and mutation owners | State boundary and completion | Maturity |
 |---|---|---|---|---|---|---|
-| /app | src/app/app/page.tsx; Ringkasan | Both tenant roles choose the next permitted daily action from shallow period analytics, readiness, exceptions, and recent shipments. | rentang, dari, sampai, tz, outlet, support; draft redirects to /app/pengiriman/baru?draft=validated-id. Invalid scope is removed rather than broadened. | src/db/tenant-dashboard-repository.ts and outlet-readiness-repository.ts. Read-only; links to create, queue, analytics, finance, or settings according to role. | Parent loading/error; first-run readiness, healthy empty, filtered empty, partial/stale, actionable exceptions, populated. Must not present COD principal as revenue. | MODIFIED: shared draft/action and navigation support changed in worktree. |
-| /app/pengiriman | src/app/app/pengiriman/page.tsx; Kiriman | Both roles triage lifecycle work and open the one valid next action. | status and page. Status accepts ALL, ACTION_REQUIRED, READY_TO_PROGRESS, ISSUED_TODAY, or a stored shipment status; page is positive integer. | loadShipmentQueuePage in shipment-queue-repository.ts; lifecycle links from src/lib/shipment-queue.ts. | Local loading/error; system empty, filtered empty, invalid filter adjustment, populated, stale, pagination. | MODIFIED: lifecycle/status definitions changed in worktree. |
-| /app/pengiriman/baru | src/app/app/pengiriman/baru/page.tsx; contextual Kiriman | Both roles create or resume one tenant-scoped shipment draft, select destination authority, and load a provider estimate. | Optional draft UUID; invalid or foreign IDs do not become scope. | Common actions in src/app/app/actions.ts; destination actions in location-actions.ts; estimate action in estimate-actions.ts. Repositories: outlet readiness, contact, shipment draft, estimate. | Local loading/error; blocked outlet, pristine, contact search, destination loading/empty/error/selected, validation error, duplicate warning, saved, estimate pending/success/failure. | MODIFIED and RELEASE-GATED: duplicate/COGS work is uncommitted; live provider estimate remains gated. |
+| /app | src/app/app/page.tsx; Ringkasan | Both tenant roles choose the next permitted daily action from shallow period analytics, readiness, exceptions, and recent shipments. | rentang, dari, sampai, tz, outlet, support; draft redirects to /app/pengiriman/baru?draft=validated-id. Invalid scope is removed rather than broadened. | src/db/tenant-dashboard-repository.ts and outlet-readiness-repository.ts. Read-only; links to create, queue, analytics, finance, or settings according to role. | Parent loading/error; first-run readiness, healthy empty, filtered empty, partial/stale, actionable exceptions, populated. Must not present COD principal as revenue. | COMMITTED and UNREVIEWED: navigation and dashboard support changed in `67beb92`. |
+| /app/pengiriman | src/app/app/pengiriman/page.tsx; Kiriman | Both roles triage lifecycle work and open the one valid next action. | status and page. Status accepts ALL, ACTION_REQUIRED, READY_TO_PROGRESS, ISSUED_TODAY, or a stored shipment status; page is positive integer. | loadShipmentQueuePage in shipment-queue-repository.ts; lifecycle links from src/lib/shipment-queue.ts. | Local loading/error; system empty, filtered empty, invalid filter adjustment, populated, stale, pagination. | COMMITTED at `67beb92`. T-85 rewrote the guidance for the six lifecycle statuses it added and folded five label vocabularies into one shared source; that work is uncommitted and under review. The queue's own presentation was never re-reviewed as a whole. |
+| /app/pengiriman/baru | src/app/app/pengiriman/baru/page.tsx; contextual Kiriman | Both roles create or resume one tenant-scoped shipment draft, select destination authority, and load a provider estimate. | Optional draft UUID; invalid or foreign IDs do not become scope. | Common actions in src/app/app/actions.ts; destination actions in location-actions.ts; estimate action in estimate-actions.ts. Repositories: outlet readiness, contact, shipment draft, estimate. | Local loading/error; blocked outlet, pristine, contact search, destination loading/empty/error/selected, validation error, duplicate warning, saved, estimate pending/success/failure. | COMMITTED, UNREVIEWED and RELEASE-GATED: the duplicate warning and COGS field shipped in `67beb92`; the live provider estimate remains gated. The COGS field now persists through `validateShipmentDraft` (T-83). |
 | /app/pengiriman/[shipmentId] | src/app/app/pengiriman/[shipmentId]/page.tsx; child of Kiriman | Both roles inspect immutable shipment context and perform only the action allowed by lifecycle and role. | Dynamic shipment UUID only; malformed or foreign/missing target returns not-found without cross-tenant disclosure. | loadShipmentDetail; confirmShipmentIssuance; checkStaleShipmentOperation; Tenant Admin-only reconcileShipmentUnknownSubmission and recoverShipmentUnpaidPayment. | Local loading/error/not-found; every lifecycle status, stale operation, pending/success/failure, estimate/provider result, label history. | COMMITTED and RELEASE-GATED for issuance/reconciliation/recovery transport. |
-| /app/pengiriman/rts | src/app/app/pengiriman/rts/page.tsx; Retur (RTS) | Both tenant roles scan failed/returning shipments and open shipment detail for follow-up. | status accepts ALL, RTS_QUEUED, RTS_IN_TRANSIT, RTS_RECEIVED, PROBLEM; page is positive integer. | loadRtsShipmentsPage in src/db/rts-repository.ts. Current page is read-only and links to shipment detail. | Inherits /app/pengiriman loading/error; empty, filtered empty, populated, pagination. No dedicated mutation or browser test exists yet. | WORKTREE: new uncommitted page, repository, schema, and migrations 0030-0031; not release-reviewed. |
-| /app/impor | src/app/app/impor/page.tsx; contextual Kiriman | Both roles upload a bounded CSV, review row-level decisions, and create only explicitly selected valid drafts. | Form state, not shareable query state. | uploadBulkIntake and createSelectedDrafts in app/impor/actions.ts; bulk contract, intake, and signed envelope in src/lib. | Local loading/error; invalid file, mixed rows, no valid rows, preview, pending confirmation, partial result, success. | MODIFIED: duplicate-detection behavior changed in worktree. |
+| /app/pengiriman/rts | src/app/app/pengiriman/rts/page.tsx; Retur (RTS) | Both tenant roles scan failed/returning shipments and open shipment detail for follow-up. | status accepts ALL, RTS_QUEUED, RTS_IN_TRANSIT, RTS_RECEIVED, PROBLEM; page is positive integer. An unrecognised status or page is reported as an adjusted filter rather than silently coerced. | loadRtsShipmentsPage in src/db/rts-repository.ts. Read-only; links to shipment detail. | Local loading/error; system empty, filtered empty, invalid query adjustment, populated, pagination. No mutation surface exists. | COMMITTED and UNREVIEWED at `67beb92` (page, repository, schema, migrations 0030-0031); MODIFIED in worktree by T-76, which added the route boundaries, the audit-scenario hook, the repository test, the local RTS fixture, and migration 0032, and by T-77, which removed the KPI card row that restated the filter counts, replaced `role="tablist"` over links with a labelled `nav` carrying `aria-current="true"`, moved the wide table into the labelled focusable scroll region the sibling queue already used, and dropped the non-identifying `ID:` line. T-77 passed one round of independent review that rejected it, and its repairs are verified but not yet re-reviewed. |
+| /app/impor | src/app/app/impor/page.tsx; contextual Kiriman | Both roles upload a bounded CSV, review row-level decisions, and create only explicitly selected valid drafts. | Form state, not shareable query state. | uploadBulkIntake and createSelectedDrafts in app/impor/actions.ts; bulk contract, intake, and signed envelope in src/lib. | Local loading/error; invalid file, mixed rows, no valid rows, preview, pending confirmation, partial result, success. | COMMITTED and UNREVIEWED: duplicate-detection behavior shipped in `67beb92`. |
 | /app/label | src/app/app/label/page.tsx; contextual Kiriman | Both roles find issued or unpaid shipments eligible for label-related work. | q is a validated AWB suffix; status is the supported label queue view. | listPrintableShipments in label-print-repository.ts. Read-only index. | Local loading/error; invalid query, system empty, filtered empty, populated. | COMMITTED |
 | /app/label/[shipmentId] | src/app/app/label/[shipmentId]/page.tsx; child of Label | Both roles verify provider-authoritative label data and print/reprint an issued shipment. | Dynamic shipment UUID only. | loadPrintableLabel, listPrintEvents, and recordLabelPrint. Provider cnote_no is the only AWB authority. | Local loading/error/not-found; label unavailable, printable, print pending/error/success, no history/history, print CSS at 100 by 150 mm. | COMMITTED |
 
 Shipment lifecycle authority is src/db/schema.ts plus
 src/lib/shipment-queue.ts. The committed lifecycle is documented in UX-4.
-Worktree-only RTS, delivery, problem, and in-transit additions must not be
-silently treated as reviewed lifecycle transitions.
+The RTS, delivery, problem, and in-transit statuses are committed at
+`67beb92` (`src/db/schema.ts` plus migration 0031) but were never independently
+reviewed. Do not treat them as reviewed lifecycle transitions.
 
 ### 5.2 Contacts
 
@@ -145,7 +147,7 @@ in src/app/app/location-actions.ts.
 
 | Route | Source and navigation | Actor and primary job | Canonical URL state | Reads and mutation owners | State boundary and completion | Maturity |
 |---|---|---|---|---|---|---|
-| /app/analitik | src/app/app/analitik/page.tsx; Analitik | Tenant Admin compares lifecycle performance, finds causes, and drills into exact supporting shipments. Operator is redirected to /app before protected analytics reads. | rentang, dari, sampai, tz, outlet, kurir, status, basis, halaman. basis is created, issued, outcome, or exceptions. Unknown dimensions are rejected and a canonical URL is offered. | src/db/analytics-repository.ts and analytics filter/range helpers. Read-only; export uses the same canonical filters. | Local loading/error plus region-level partial errors; no data, filtered empty, adjusted filter, stale, KPI comparison, accessible trend/table, pagination. | MODIFIED: analytics repository/region includes uncommitted COGS/net-margin work. |
+| /app/analitik | src/app/app/analitik/page.tsx; Analitik | Tenant Admin compares lifecycle performance, finds causes, and drills into exact supporting shipments. Operator is redirected to /app before protected analytics reads. | rentang, dari, sampai, tz, outlet, kurir, status, basis, halaman. basis is created, issued, outcome, or exceptions. Unknown dimensions are rejected and a canonical URL is offered. | src/db/analytics-repository.ts and analytics filter/range helpers. Read-only; export uses the same canonical filters. | Local loading/error plus region-level partial errors; no data, filtered empty, adjusted filter, stale, KPI comparison, accessible trend/table, pagination. | COMMITTED and UNREVIEWED: the COGS/net-margin KPIs shipped in `67beb92`. They are now covered by a discriminating test and the draft path writes a COGS value (T-83), but `cogsIdr` is aggregated over the created cohort while the money terms come from the ledger cohort (T-81). |
 | /app/keuangan | src/app/app/keuangan/page.tsx; Keuangan | Tenant Admin reconciles signed money variances and inspects append-only ledger evidence. | Range parameters plus outlet, status, halaman, and rekonsiliasiId focus target. Invalid scope never widens results. | list/summarize ledger and reconciliation reads; runLedgerReconciliation and reverseLedgerEntry. | Local loading/error; matched, variance, invalid/adjusted filters, pending/error/success, reversal, pagination. COD principal remains liability, never revenue. | COMMITTED |
 | /app/pengaturan | src/app/app/pengaturan/page.tsx; Outlet & koneksi | Tenant Admin restores one outlet's readiness, chooses provider-authoritative pickup/origin, and manages platform-default or private Mengantar credentials. | outlet selects only an outlet already returned inside the tenant. | listOutletReadiness; loadMengantarPickupOptions, saveOutletSettings, savePrivateMengantarCredential, switchMengantarToPlatformDefault. Credentials resolve server-side only. | Local loading/error; zero/one/many outlets, incomplete, pickup loading/empty/error/legacy, private saved-unverified/connected/rejected, replacement/switch confirmation. | COMMITTED |
 | /app/anggota | src/app/app/anggota/page.tsx; Anggota & akses | Tenant Admin invites staff, changes role, or deactivates membership while preserving an active admin. Operator redirects to /app. | No shareable query state. | listTenantMembers; inviteMemberAction, changeMemberRoleAction, deactivateMemberAction. Every outcome is audited and replay-safe. | Local loading/error; empty, invited, active, deactivated, validation, pending, success, last-admin/conflict. | COMMITTED |
@@ -164,10 +166,10 @@ regions.
 
 | Route | Source and navigation | Super Admin job | Canonical URL state | Reads and actions | State boundary and completion | Maturity |
 |---|---|---|---|---|---|---|
-| /platform | src/app/platform/page.tsx; Ringkasan | Triage cross-tenant provider, queue, failure, latency, volume, usage, and audit exceptions. | Range/timezone plus optional tenant, outlet, kurir, status, halaman. q and hasil are route-invalid. | Platform health/count/trend/usage/audit repositories; read-only plus monitoring-access audit. | Shared loading/error; healthy, warning, critical, degraded region, empty, stale, invalid query. | MODIFIED: shared monitoring view has uncommitted worktree changes. |
-| /platform/tenant | src/app/platform/tenant/page.tsx; Tenant | Find tenant, compare usage, and provision a tenant with an explicit governed action. | Platform filters plus q of 2-80 characters; hasil is invalid here. | listTenantUsage and submitPlatformTenantLifecycle for provisioning. | Shared loading/error; empty, filtered, paginated, provision dialog pending/error/success. | MODIFIED through shared monitoring view. |
-| /platform/tenant/[tenantId] | src/app/platform/tenant/[tenantId]/page.tsx; child of Tenant | Inspect one tenant's lifecycle, outlets, membership/configuration health, operations, finance summary, and suspend/reactivate it. | UUID path forces tenant scope; range/outlet/courier/status/page remain validated; tenant query cannot override the path. | readTenantDetail, health/count/trend/audit/finance reads; submitPlatformTenantLifecycle. | Shared loading/error plus local not-found; zero/one/many outlets, stale/degraded, lifecycle confirmation pending/error/success. | MODIFIED through shared monitoring view. |
-| /platform/audit | src/app/platform/audit/page.tsx; Audit | Review redacted append-only platform actions and denied outcomes. | Range/timezone, tenant/outlet/courier/status, hasil=SUCCESS or DENIED, halaman. q is invalid here. | listAuditEvents plus monitoring-access audit; no audit mutation. | Shared loading/error; empty, filtered, paginated, stale/degraded, invalid query. | MODIFIED through shared monitoring view. |
+| /platform | src/app/platform/page.tsx; Ringkasan | Triage cross-tenant provider, queue, failure, latency, volume, usage, and audit exceptions. | Range/timezone plus optional tenant, outlet, kurir, status, halaman. q and hasil are route-invalid. | Platform health/count/trend/usage/audit repositories; read-only plus monitoring-access audit. | Shared loading/error; healthy, warning, critical, degraded region, empty, stale, invalid query. | COMMITTED and UNREVIEWED: the shared monitoring view changed in `67beb92`. |
+| /platform/tenant | src/app/platform/tenant/page.tsx; Tenant | Find tenant, compare usage, and provision a tenant with an explicit governed action. | Platform filters plus q of 2-80 characters; hasil is invalid here. | listTenantUsage and submitPlatformTenantLifecycle for provisioning. | Shared loading/error; empty, filtered, paginated, provision dialog pending/error/success. | COMMITTED and UNREVIEWED through the shared monitoring view. |
+| /platform/tenant/[tenantId] | src/app/platform/tenant/[tenantId]/page.tsx; child of Tenant | Inspect one tenant's lifecycle, outlets, membership/configuration health, operations, finance summary, and suspend/reactivate it. | UUID path forces tenant scope; range/outlet/courier/status/page remain validated; tenant query cannot override the path. | readTenantDetail, health/count/trend/audit/finance reads; submitPlatformTenantLifecycle. | Shared loading/error plus local not-found; zero/one/many outlets, stale/degraded, lifecycle confirmation pending/error/success. | COMMITTED and UNREVIEWED through the shared monitoring view. |
+| /platform/audit | src/app/platform/audit/page.tsx; Audit | Review redacted append-only platform actions and denied outcomes. | Range/timezone, tenant/outlet/courier/status, hasil=SUCCESS or DENIED, halaman. q is invalid here. | listAuditEvents plus monitoring-access audit; no audit mutation. | Shared loading/error; empty, filtered, paginated, stale/degraded, invalid query. | COMMITTED and UNREVIEWED through the shared monitoring view. |
 
 Filter ownership: src/lib/platform-monitoring-filters.ts. Data ownership:
 src/db/platform-monitoring-repository.ts and src/db/platform-context.ts.
@@ -210,7 +212,7 @@ and observability.
 | /api/auth/[...all] | src/app/api/auth/[...all]/route.ts | Better Auth methods used by login and sign-out. | Better Auth configuration, trusted origins, scoped pre-session authorization, secure cookies, and generic failures. | COMMITTED |
 | /app/impor/template.csv | src/app/app/impor/template.csv/route.ts | GET by authenticated tenant user. | Re-authorizes tenant scope before returning the bounded CSV template. | COMMITTED |
 | /app/analitik/export.csv | src/app/app/analitik/export.csv/route.ts | GET by Tenant Admin. | Re-authorizes Tenant Admin, canonicalizes analytics scope/basis, exports the full filtered set up to the explicit limit, and returns safe HTTP errors. | COMMITTED |
-| /api/webhooks/mengantar | src/app/api/webhooks/mengantar/route.ts | POST from Mengantar, not a browser page. | Intended contract is signed tracking ingestion, replay-safe transition validation, tenant/account resolution, append-only event/audit evidence, and sanitized logs. The current worktree implementation has no route test and must not be assumed to satisfy that contract. | WORKTREE and unreviewed. Do not expose or deploy until independent provider-contract and security review pass. |
+| /api/webhooks/mengantar | src/app/api/webhooks/mengantar/route.ts | Would be POST from Mengantar, not a browser page. Currently refuses every request with 404. | T-79 closed it: no provider push contract has been verified — the integration skill documents none, there is no sanitized capture, and `PR-30` is `Queued`. The handler committed in `67beb92` invented its headers, payload fields, and status vocabulary, and was inert anyway because RLS denies the application role a tenant-less read. | CLOSED by T-79. `tests/provider-webhook-boundary.integration.test.ts` pins the refusal and forbids the route reaching the database, provider, or secret modules. Reopening requires a verified contract and fixture, a tenant-scoped machine principal, constant-time comparison with a bounded body and replay window, and T-80's idempotent transition handling. |
 
 ## 9. Mutation ownership map
 
@@ -230,7 +232,7 @@ and observability.
 | Save pickup/credential mode | Outlet settings, Tenant Admin | app/pengaturan/actions.ts | outlet readiness, managed secret, Mengantar authority |
 | Invite/change/deactivate member | Members, Tenant Admin | app/anggota/actions.ts | member governance repository and audit |
 | Provision/suspend/reactivate tenant | Platform tenant pages | app/platform/tenant/actions.ts | platform tenant repository and audit |
-| Apply provider tracking event | Webhook only | Route Handler, not a Server Action | Worktree RTS/event schema; contract not yet verified |
+| Apply provider tracking event | None — the route is closed | Route Handler, not a Server Action | T-79 closed it: no verified provider push contract exists. Nothing applies tracking events today |
 
 Every mutation must follow this order:
 authenticate, derive actor scope, validate untrusted input, resolve the target
@@ -245,12 +247,14 @@ revalidate/redirect or return a sanitized result.
 - Tenant routes with dedicated loading/error:
   analitik, anggota, impor, keuangan, kontak, kontak/baru,
   kontak/[contactId], label, label/[shipmentId], pengaturan, pengiriman,
-  pengiriman/baru, and pengiriman/[shipmentId].
+  pengiriman/baru, pengiriman/[shipmentId], and pengiriman/rts.
 - Dedicated not-found:
   label/[shipmentId], pengiriman/[shipmentId], and
   platform/tenant/[tenantId]. Contact detail renders its own safe missing state.
-- RTS currently inherits the pengiriman loading/error boundary and has no
-  dedicated route-state inventory.
+- RTS owns its own loading/error boundary and is registered in the audit
+  scenario inventory as `shipment-rts-empty`, `shipment-rts-error`,
+  `shipment-rts-filtered-empty`, `shipment-rts-invalid-query`,
+  `shipment-rts-paginated`, and `shipment-rts-stream`.
 - Platform loading/error are shared by all platform routes.
 - Development-only scenario coverage is owned by
   src/lib/ui-audit-scenario.ts. A new visible route is incomplete until this
@@ -266,7 +270,7 @@ revalidate/redirect or return a sanitized result.
 | /app/pengiriman | shipment-queue, shipment-route-states, cms-ui-audit-inventory |
 | /app/pengiriman/baru | shipment-draft, shipment-actions, shipment-destination-actions, shipment-estimate-authority-action |
 | /app/pengiriman/[shipmentId] | shipment-actions, shipment-issuance, shipment-reconciliation, shipment-unpaid-recovery, shipment-route-states |
-| /app/pengiriman/rts | No dedicated test yet; this is an explicit gap. |
+| /app/pengiriman/rts | rts-repository, rts-presentation, cms-shell, cms-ui-audit-inventory. Browser evidence recorded under T-76's boundary and re-taken under T-77's sweep: 66 route pairs at 390/768/1280 plus 312 UI-audit scenario pairs covering the empty, filtered-empty, loading, error, invalid-query and paginated states. |
 | /app/impor | bulk-shipment-intake, bulk-import-envelope, bulk-import-actions |
 | /app/kontak | contact-directory, contact-render, contact-actions |
 | /app/kontak/baru | contact-actions, location-search-actions |
@@ -281,7 +285,7 @@ revalidate/redirect or return a sanitized result.
 | Platform tenant lifecycle | platform-tenant-actions plus platform monitoring evidence |
 | Better Auth handler | auth-config, auth-session-boundary, public-auth-render |
 | CSV handlers | bulk-import actions/template assertions and analytics-export-route |
-| Mengantar webhook | No route-contract, signature, replay, transition, or redaction test yet. |
+| Mengantar webhook | provider-webhook-boundary. The route is closed; the test pins the refusal and the modules it must not reach. |
 
 Names above refer to matching files under tests with the
 .integration.test.ts suffix. Repository and database tests remain required
@@ -322,8 +326,9 @@ rg -n 'href: "/(app|platform)' src/lib/cms-shell-navigation.ts
 git status --short --branch
 ```
 
-Expected page count for this snapshot: 22. Expected handler count: 4,
-including the worktree-only Mengantar webhook. Any count or route change
+Expected page count for this snapshot: 22. Expected handler count: 4, all
+committed at HEAD `67beb92`; the Mengantar webhook is mounted but closed by
+T-79 and reaches nothing. Any count or route change
 requires a page-by-page review of navigation, authorization, URL state,
 loading/error/not-found behavior, action reachability, tests, and this map.
 
@@ -336,13 +341,25 @@ change.
 ## 14. Known gaps at this snapshot
 
 - The RTS route, tracking webhook, duplicate warning, and COGS/net-margin work
-  are uncommitted worktree changes after HEAD e3bebe9.
-- RTS has no dedicated automated/browser route evidence in the current test
-  inventory.
-- The webhook has no route-contract test in the current test inventory; its
-  stated signed/replay-safe security contract must be proven rather than
-  inferred from TASKS.md.
-- The current worktree changes the shipment lifecycle and financial semantics.
-  These require canonical cross-document review, migration verification,
-  tenant-isolation/security review, and fresh whole-system browser screening
-  before release readiness can be restored.
+  were COMMITTED at HEAD `67beb92` without independent review and without a
+  passing test suite. T-76 screened and repaired the RTS surface, T-83 the COGS
+  path, and T-79 closed the tracking webhook; the duplicate warning is still
+  unreviewed and is T-78's. Committed is not reviewed.
+- Migration 0030 created `shipment_rts_events` with neither row-level security
+  nor a grant to `geraicuan_app`, so the RTS page could not read its own event
+  table under the application role. Migration 0032 adds the forced RLS,
+  tenant-scoped select/insert policies, and the grant.
+- T-83 repaired the COGS path: `validateShipmentDraft` parses and persists the
+  value, the draft replay guard compares it, and the local seed records one so
+  the KPI is exercisable. `netMarginIdr` still mixes the created and ledger
+  cohorts, which is T-81.
+- The webhook is closed by T-79 and has a boundary test. Its stated
+  signed/replay-safe contract was never proven and the provider is not known to
+  send one at all; it must be verified against provider documentation and a
+  sanitized capture before the route may accept traffic again.
+- `67beb92` changed the shipment lifecycle and financial semantics without
+  independent review. Those changes still require canonical cross-document
+  review, tenant-isolation/security review, and fresh whole-system browser
+  screening before release readiness can be restored. The T-76 worktree adds
+  migration 0032, the RTS route boundaries, and their evidence; it does not
+  change lifecycle or financial semantics.

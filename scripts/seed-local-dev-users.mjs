@@ -82,6 +82,15 @@ const archivedContact = {
   isRecipient: true,
 };
 
+// A return only happens to a shipment the provider already accepted, so these
+// statuses keep the ISSUED provider shape and differ only on the shipment row.
+const RETURN_LIFECYCLE_STATUSES = new Set([
+  "RTS_QUEUED",
+  "RTS_IN_TRANSIT",
+  "RTS_RECEIVED",
+  "PROBLEM",
+]);
+
 const shipmentDefinitions = [
   { status: "DRAFT", isCod: false, daysAgo: 0 },
   { status: "DRAFT", isCod: true, daysAgo: 1 },
@@ -101,8 +110,18 @@ const shipmentDefinitions = [
   { status: "AWAITING_UPSTREAM_PAYMENT", isCod: false, daysAgo: 6 },
   { status: "FAILED", isCod: true, daysAgo: 2 },
   { status: "FAILED", isCod: false, daysAgo: 10 },
+  { status: "RTS_QUEUED", isCod: true, daysAgo: 1, cnoteNo: "SANITIZED-CNOTE-0003" },
+  { status: "RTS_QUEUED", isCod: false, daysAgo: 2, cnoteNo: "SANITIZED-CNOTE-0004" },
+  { status: "RTS_QUEUED", isCod: true, daysAgo: 4, cnoteNo: "SANITIZED-CNOTE-0005" },
+  { status: "RTS_IN_TRANSIT", isCod: false, daysAgo: 3, cnoteNo: "SANITIZED-CNOTE-0006" },
+  { status: "RTS_IN_TRANSIT", isCod: true, daysAgo: 6, cnoteNo: "SANITIZED-CNOTE-0007" },
+  { status: "RTS_RECEIVED", isCod: false, daysAgo: 9, cnoteNo: "SANITIZED-CNOTE-0008" },
+  { status: "PROBLEM", isCod: true, daysAgo: 2, cnoteNo: "SANITIZED-CNOTE-0009" },
 ].map((definition, index) => ({
   ...definition,
+  // Every third shipment records a merchant cost, so the COGS and Net Margin
+  // KPIs have a non-zero value to render and a zero cohort to contrast with.
+  cogsAmountIdr: index % 3 === 0 ? 40_000 + index * 5_000 : null,
   index,
   id: fixedUuid("72", index + 1),
   estimateSnapshotId: fixedUuid("73", index + 1),
@@ -273,15 +292,17 @@ try {
     const destinationAreaLabel = ["Gambir, Jakarta Pusat", "Tebet, Jakarta Selatan", "Kebayoran Baru, Jakarta Selatan", "Kebon Jeruk, Jakarta Barat", "Kelapa Gading, Jakarta Utara"][areaIndex];
 
     await client.query(
-      `INSERT INTO shipments (id, tenant_id, outlet_id, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO shipments (
+         id, tenant_id, outlet_id, status, cogs_amount_idr, created_at, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (id) DO UPDATE SET
          tenant_id = EXCLUDED.tenant_id,
          outlet_id = EXCLUDED.outlet_id,
          status = EXCLUDED.status,
+         cogs_amount_idr = EXCLUDED.cogs_amount_idr,
          created_at = EXCLUDED.created_at,
          updated_at = EXCLUDED.updated_at`,
-      [shipment.id, tenantId, outletId, shipment.status, createdAt, updatedAt],
+      [shipment.id, tenantId, outletId, shipment.status, shipment.cogsAmountIdr, createdAt, updatedAt],
     );
     await client.query(
       `INSERT INTO shipment_drafts (
@@ -453,7 +474,9 @@ try {
          updated_at = EXCLUDED.updated_at`,
       [shipment.batchId, tenantId, outletId, courier, sha256("local-demo-provider-account"), sha256(`local-demo:${shipment.id}`), batchStatus, batchSafeErrorCode, attemptedAt, completedAt, createdAt, updatedAt],
     );
-    const safeResponseCode = shipment.status === "ISSUED" || shipment.status === "AWAITING_UPSTREAM_PAYMENT"
+    const returned = RETURN_LIFECYCLE_STATUSES.has(shipment.status);
+    const providerSnapshotStatus = returned ? "ISSUED" : shipment.status;
+    const safeResponseCode = returned || shipment.status === "ISSUED" || shipment.status === "AWAITING_UPSTREAM_PAYMENT"
       ? "ORDER_ACCEPTED"
       : shipment.status === "SUBMISSION_UNKNOWN"
         ? "PROVIDER_TIMEOUT"
@@ -462,9 +485,11 @@ try {
           : null;
     const providerOrderId = shipment.status === "ISSUED"
       ? shipment.index === 12 ? "SANITIZED-ORDER-0001" : "SANITIZED-ORDER-0002"
-      : shipment.status === "AWAITING_UPSTREAM_PAYMENT"
-        ? `SANITIZED-ORDER-UNPAID-${shipment.index + 1}`
-        : null;
+      : returned
+        ? `SANITIZED-ORDER-RETURN-${shipment.index + 1}`
+        : shipment.status === "AWAITING_UPSTREAM_PAYMENT"
+          ? `SANITIZED-ORDER-UNPAID-${shipment.index + 1}`
+          : null;
     await client.query(
       `INSERT INTO provider_order_snapshots (
          id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
@@ -498,8 +523,8 @@ try {
         shipment.estimateSnapshotId, shipment.estimateServiceId, providerService,
         destinationAreaId, destinationAreaLabel,
         shippingAmountIdr, insuranceAmountIdr, shipment.isCod, providerCodAmountIdr,
-        shipment.status, providerOrderId,
-        shipment.status === "ISSUED" ? true : shipment.status === "AWAITING_UPSTREAM_PAYMENT" ? false : null,
+        providerSnapshotStatus, providerOrderId,
+        shipment.status === "ISSUED" || returned ? true : shipment.status === "AWAITING_UPSTREAM_PAYMENT" ? false : null,
         shipment.cnoteNo ?? null, safeResponseCode, resolvedAt, createdAt,
       ],
     );
@@ -531,8 +556,14 @@ try {
     );
   };
 
-  const issuedShipments = shipmentDefinitions.filter(({ status }) => status === "ISSUED");
-  for (const shipment of issuedShipments) {
+  // A return was issued before it came back, so it carries the same issuance
+  // ledger entries. Keeping these out would leave a provider-accepted COD
+  // shipment with no COD_PRINCIPAL_COLLECTABLE entry, which no real state
+  // transition can produce.
+  const ledgerBearingShipments = shipmentDefinitions.filter(
+    ({ status }) => status === "ISSUED" || RETURN_LIFECYCLE_STATUSES.has(status),
+  );
+  for (const shipment of ledgerBearingShipments) {
     const declaredValueIdr = shipment.isCod ? 125_000 + shipment.index * 25_000 : 90_000 + shipment.index * 20_000;
     const shippingAmountIdr = 12_000 + (shipment.index % 5) * 2_500;
     const insuranceAmountIdr = shipment.index % 3 === 0 ? 2_000 : null;
@@ -548,20 +579,87 @@ try {
       await insertLedgerEntry({ shipment, entryType: "MENGANTAR_INSURANCE_COST", financialClass: "EXPENSE", amountIdr: insuranceAmountIdr });
     }
 
-    await client.query(
-      `INSERT INTO print_events (
-         id, tenant_id, shipment_id, provider_order_snapshot_id, sequence,
-         outcome, reason_code, awb_snapshot, actor_user_id, actor_role, printed_at
-       ) VALUES ($1, $2, $3, $4, 1, 'PRINTED', NULL, $5, $6, 'TENANT_ADMIN', $7)
-       ON CONFLICT (id) DO NOTHING`,
-      [fixedUuid("78", shipment.index + 1), tenantId, shipment.id, shipment.providerOrderSnapshotId, shipment.cnoteNo, adminUserId, at(shipment.daysAgo, 17)],
-    );
+    if (shipment.status === "ISSUED") {
+      await client.query(
+        `INSERT INTO print_events (
+           id, tenant_id, shipment_id, provider_order_snapshot_id, sequence,
+           outcome, reason_code, awb_snapshot, actor_user_id, actor_role, printed_at
+         ) VALUES ($1, $2, $3, $4, 1, 'PRINTED', NULL, $5, $6, 'TENANT_ADMIN', $7)
+         ON CONFLICT (id) DO NOTHING`,
+        [fixedUuid("78", shipment.index + 1), tenantId, shipment.id, shipment.providerOrderSnapshotId, shipment.cnoteNo, adminUserId, at(shipment.daysAgo, 17)],
+      );
+    }
   }
 
-  const codPrincipalTotal = issuedShipments
+  // Return-lifecycle evidence. Each returned shipment gets a queued event, and
+  // the ones that moved further get a later one, so the RTS list has a latest
+  // note to render and more than one event on a single shipment to prove the
+  // list stays one row per shipment.
+  const returnedShipments = shipmentDefinitions.filter(
+    ({ status }) => RETURN_LIFECYCLE_STATUSES.has(status),
+  );
+  // Re-seeding must be deterministic: without this, a later run that inserts
+  // fewer events still passes its own count check because the previous run's
+  // rows are still there.
+  await client.query(
+    `DELETE FROM shipment_rts_events
+     WHERE tenant_id = $1 AND shipment_id = ANY($2::uuid[])`,
+    [tenantId, shipmentDefinitions.map(({ id }) => id)],
+  );
+  let rtsEventIndex = 1;
+  const insertRtsEvent = async (shipment, status, notes, hoursAfterCreation) => {
+    await client.query(
+      `INSERT INTO shipment_rts_events (id, tenant_id, shipment_id, status, notes, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET
+         status = EXCLUDED.status,
+         notes = EXCLUDED.notes,
+         created_at = EXCLUDED.created_at`,
+      [
+        fixedUuid("7e", rtsEventIndex++),
+        tenantId,
+        shipment.id,
+        status,
+        notes,
+        new Date(at(shipment.daysAgo, 9).getTime() + hoursAfterCreation * 3_600_000),
+      ],
+    );
+  };
+  for (const shipment of returnedShipments) {
+    if (shipment.status === "PROBLEM") {
+      // shipment_rts_events has no PROBLEM status, and a delivery problem is
+      // not yet a return. Leaving it eventless is the honest fixture and is
+      // also the only row that exercises the no-notes fallback in the list.
+      continue;
+    }
+    await insertRtsEvent(
+      shipment,
+      "RTS_QUEUED",
+      "Penerima tidak dapat dihubungi setelah tiga percobaan antar; paket dijadwalkan kembali ke outlet asal.",
+      1,
+    );
+    if (shipment.status === "RTS_IN_TRANSIT" || shipment.status === "RTS_RECEIVED") {
+      await insertRtsEvent(
+        shipment,
+        "RTS_IN_TRANSIT",
+        "Paket retur sudah dijemput kurir dan sedang dalam perjalanan ke outlet asal.",
+        5,
+      );
+    }
+    if (shipment.status === "RTS_RECEIVED") {
+      await insertRtsEvent(
+        shipment,
+        "RTS_RECEIVED",
+        "Barang retur diterima dan diverifikasi fisik di outlet asal.",
+        11,
+      );
+    }
+  }
+
+  const codPrincipalTotal = ledgerBearingShipments
     .filter(({ isCod }) => isCod)
     .reduce((total, shipment) => total + 125_000 + shipment.index * 25_000, 0);
-  const shippingLedgerTotal = issuedShipments
+  const shippingLedgerTotal = ledgerBearingShipments
     .reduce((total, shipment) => total + 12_000 + (shipment.index % 5) * 2_500, 0);
   const reconciliationDefinitions = [
     {
@@ -620,6 +718,33 @@ try {
     );
   }
 
+  // reconciliation_runs is immutable by trigger, so a database seeded before
+  // the reconciled population changed keeps totals that silently disagree with
+  // the ledger. Fail loudly with the recovery step instead.
+  for (const reconciliation of reconciliationDefinitions) {
+    const { rows: persisted } = await client.query(
+      `SELECT source_total_idr, ledger_total_idr, variance_idr, status
+       FROM reconciliation_runs WHERE id = $1`,
+      [reconciliation.id],
+    );
+    const row = persisted[0];
+    if (
+      row
+      && (Number(row.source_total_idr) !== reconciliation.sourceTotalIdr
+        || Number(row.ledger_total_idr) !== reconciliation.ledgerTotalIdr
+        || Number(row.variance_idr) !== reconciliation.varianceIdr
+        || row.status !== reconciliation.status)
+    ) {
+      throw new Error(
+        `Stale reconciliation run ${reconciliation.id}: the database holds `
+        + `${row.status} ${row.source_total_idr}/${row.ledger_total_idr} but this seed computes `
+        + `${reconciliation.status} ${reconciliation.sourceTotalIdr}/${reconciliation.ledgerTotalIdr}. `
+        + "reconciliation_runs is immutable by trigger, so recreate the local database "
+        + "(docker compose down -v, docker compose up -d db, pnpm db:migrate) before re-seeding.",
+      );
+    }
+  }
+
   const counts = await client.query(
     `SELECT
        (SELECT count(*)::int FROM memberships WHERE tenant_id = $1 AND status = 'ACTIVE') AS memberships,
@@ -633,6 +758,9 @@ try {
           SELECT status, count(*)::int AS total FROM shipments
           WHERE tenant_id = $1 AND id = ANY($3::uuid[]) GROUP BY status
         ) statuses) AS shipment_statuses,
+       (SELECT count(*)::int FROM shipment_rts_events WHERE tenant_id = $1) AS rts_events,
+       (SELECT coalesce(sum(cogs_amount_idr), 0)::int FROM shipments
+          WHERE tenant_id = $1 AND id = ANY($3::uuid[])) AS cogs_total_idr,
        (SELECT count(*)::int FROM shipment_estimate_snapshots WHERE tenant_id = $1) AS estimate_snapshots,
        (SELECT count(*)::int FROM shipment_estimate_services WHERE tenant_id = $1) AS estimate_services,
        (SELECT count(*)::int FROM shipment_cod_totals WHERE tenant_id = $1) AS cod_totals,
@@ -650,9 +778,27 @@ try {
     ESTIMATED: 4,
     FAILED: 2,
     ISSUED: 2,
+    PROBLEM: 1,
+    RTS_IN_TRANSIT: 2,
+    RTS_QUEUED: 3,
+    RTS_RECEIVED: 1,
     SUBMISSION_QUEUED: 2,
     SUBMISSION_UNKNOWN: 3,
   };
+  const expectedCogsTotalIdr = shipmentDefinitions.reduce(
+    (total, { cogsAmountIdr }) => total + (cogsAmountIdr ?? 0),
+    0,
+  );
+  const expectedRtsEvents = returnedShipments.reduce(
+    (total, { status }) =>
+      status === "PROBLEM"
+        ? total
+        : total
+          + 1
+          + (status === "RTS_IN_TRANSIT" || status === "RTS_RECEIVED" ? 1 : 0)
+          + (status === "RTS_RECEIVED" ? 1 : 0),
+    0,
+  );
   if (
     seedSummary.seed_contacts !== contacts.length + 1
     || seedSummary.archived_contacts < 1
@@ -661,6 +807,8 @@ try {
     || Object.entries(expectedStatuses).some(
       ([status, total]) => seedSummary.shipment_statuses?.[status] !== total,
     )
+    || seedSummary.rts_events !== expectedRtsEvents
+    || seedSummary.cogs_total_idr !== expectedCogsTotalIdr
   ) {
     throw new Error("Local demo seed verification failed; transaction was not committed.");
   }

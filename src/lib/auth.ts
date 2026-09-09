@@ -8,7 +8,7 @@ import * as schema from "@/db/schema";
 import { resolveBetterAuthRuntimeConfig } from "@/lib/auth-config";
 import { resolveCmsPrincipal } from "@/lib/cms-principal";
 
-const { baseURL, trustedOrigins, trustedProxies } =
+const { baseURL, trustedOrigins, trustedProxies, useSecureCookies } =
   resolveBetterAuthRuntimeConfig(process.env);
 
 export const auth = betterAuth({
@@ -62,6 +62,7 @@ export const auth = betterAuth({
   advanced: {
     disableCSRFCheck: false,
     disableOriginCheck: false,
+    useSecureCookies,
     ipAddress: {
       trustedProxies,
     },

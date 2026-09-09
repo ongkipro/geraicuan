@@ -69,8 +69,12 @@ export function OutletSettingsWorkspace({
               const active = outlet.id === activeOutlet.id;
               return (
                 <li key={outlet.id}>
+                  {/* A selector within the current page, not a second current
+                      page: the shell nav already marks "Outlet & koneksi" as
+                      `page`, and browser screening found two of them at
+                      1280px. */}
                   <Link
-                    aria-current={active ? "page" : undefined}
+                    aria-current={active ? "true" : undefined}
                     className={`relative flex min-h-11 items-start gap-2 px-3 py-3 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50 ${active ? "bg-accent text-accent-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary" : "hover:bg-muted/60"}`}
                     href={`/app/pengaturan?outlet=${encodeURIComponent(outlet.id)}#outlet-detail-title`}
                     onClick={() => setOpen(false)}

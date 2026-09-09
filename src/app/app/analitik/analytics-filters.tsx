@@ -29,7 +29,7 @@ export function AnalyticsFilters({ activeCount, options, todayLocalDate, values 
           <CardContent className="border-t pt-4 md:border-t-0">
             <form action="/app/analitik#analytics-page-heading" className="space-y-4" method="get">
               <AnalyticsFilterFields options={options} todayLocalDate={todayLocalDate} values={values} />
-              <p className="text-xs leading-5 text-muted-foreground">Tanggal awal dan akhir dipakai saat memilih Rentang khusus. Menerapkan filter selalu kembali ke halaman pertama.</p>
+              <p className="max-w-2xl text-xs leading-5 text-muted-foreground">Tanggal awal dan akhir dipakai saat memilih Rentang khusus. Menerapkan filter selalu kembali ke halaman pertama.</p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button className="min-h-11 xl:min-h-8 xl:h-8" type="submit">Terapkan filter</Button>
                 {activeCount > 0 ? <Button asChild className="min-h-11 xl:min-h-8 xl:h-8" variant="ghost"><Link href="/app/analitik#analytics-page-heading">Reset semua</Link></Button> : null}

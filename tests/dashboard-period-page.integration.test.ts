@@ -1,5 +1,5 @@
 import { renderToReadableStream } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TenantDashboardPage from "@/app/app/page";
 
@@ -105,6 +105,15 @@ async function renderDashboard(
 }
 
 describe("analytics-led tenant dashboard", () => {
+  // The dashboard derives its period buckets from the current clock, so the
+  // fixture dates below only stay inside the rendered range with a pinned Date.
+  beforeAll(() => {
+    vi.useFakeTimers({ now: new Date("2026-08-31T12:00:00.000Z"), toFake: ["Date"] });
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     fixture.outletReady = true;
     fixture.role = "TENANT_ADMIN";

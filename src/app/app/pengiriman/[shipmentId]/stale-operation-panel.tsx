@@ -18,7 +18,7 @@ export function ShipmentStaleOperationPanel({ shipmentId }: { shipmentId: string
       <input name="shipmentId" type="hidden" value={shipmentId} />
       <div>
         <h2 className="font-medium">Periksa upaya tersendat</h2>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">Pemeriksaan ini hanya mengamankan state lokal yang melewati batas waktu. Tidak ada permintaan baru yang dikirim ke penyedia.</p>
+        <p className="max-w-2xl mt-1 text-sm leading-6 text-muted-foreground">Pemeriksaan ini hanya mengamankan state lokal yang melewati batas waktu. Tidak ada permintaan baru yang dikirim ke penyedia.</p>
       </div>
       <Button className="min-h-11 justify-self-start sm:min-h-9" disabled={pending} type="submit" variant="outline">
         {pending ? "Memeriksa…" : "Periksa status aman"}

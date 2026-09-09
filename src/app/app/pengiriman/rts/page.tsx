@@ -2,13 +2,10 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  PackageCheck,
   PackageSearch,
-  PackageX,
-  Truck,
 } from "lucide-react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -16,6 +13,7 @@ import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +35,10 @@ import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatIdr, formatWeight, formatWibDateTime } from "@/lib/label-format";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
+import {
+  parseUiAuditScenarioForRoute,
+  UI_AUDIT_HEADER,
+} from "@/lib/ui-audit-scenario";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -60,24 +62,41 @@ async function requireTenantPrincipal() {
   }
 }
 
-function parseFilterStatus(status: SearchValue): RtsFilterStatus {
-  const val = Array.isArray(status) ? status[0] : status;
-  if (
-    val === "RTS_QUEUED" ||
-    val === "RTS_IN_TRANSIT" ||
-    val === "RTS_RECEIVED" ||
-    val === "PROBLEM"
-  ) {
-    return val;
+type RtsQuery = { issues: string[]; page: number; status: RtsFilterStatus };
+
+function parseRtsQuery(input: { page?: SearchValue; status?: SearchValue }): RtsQuery {
+  const issues: string[] = [];
+
+  const requestedStatus = Array.isArray(input.status) ? input.status[0] : input.status;
+  let status: RtsFilterStatus = "ALL";
+  if (requestedStatus && requestedStatus !== "ALL") {
+    if (
+      requestedStatus === "RTS_QUEUED" ||
+      requestedStatus === "RTS_IN_TRANSIT" ||
+      requestedStatus === "RTS_RECEIVED" ||
+      requestedStatus === "PROBLEM"
+    ) {
+      status = requestedStatus;
+    } else {
+      issues.push(`Status "${requestedStatus}" tidak dikenal; seluruh retur ditampilkan.`);
+    }
   }
-  return "ALL";
+
+  const requestedPage = Array.isArray(input.page) ? input.page[0] : input.page;
+  let page = 1;
+  if (requestedPage) {
+    const parsed = Number.parseInt(requestedPage, 10);
+    if (Number.isSafeInteger(parsed) && parsed > 0) {
+      page = parsed;
+    } else {
+      issues.push(`Halaman "${requestedPage}" tidak valid; halaman pertama ditampilkan.`);
+    }
+  }
+
+  return { issues, page, status };
 }
 
-function parsePageNumber(page: SearchValue): number {
-  const val = Array.isArray(page) ? page[0] : page;
-  const parsed = val ? Number.parseInt(val, 10) : 1;
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
-}
+const RTS_PAGE_SIZE = 20;
 
 function rtsHref(status: RtsFilterStatus, page: number): string {
   const params = new URLSearchParams();
@@ -87,24 +106,56 @@ function rtsHref(status: RtsFilterStatus, page: number): string {
   return `/app/pengiriman/rts${query ? `?${query}` : ""}`;
 }
 
+function delayResult<T>(promise: Promise<T>, delayMs: number) {
+  return promise.then((value) => new Promise<T>((resolve) => {
+    setTimeout(() => resolve(value), delayMs);
+  }));
+}
+
 export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
   const principal = await requireTenantPrincipal();
-  const resolvedParams = await searchParams;
-  const statusFilter = parseFilterStatus(resolvedParams.status);
-  const requestedPage = parsePageNumber(resolvedParams.page);
+  const query = parseRtsQuery(await searchParams);
+  const auditScenario = process.env.NODE_ENV === "development"
+    ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/pengiriman/rts")
+    : null;
+  if (auditScenario === "shipment-rts-error") {
+    throw new Error("Intentional development-only RTS dashboard failure.");
+  }
+  const statusFilter = auditScenario === "shipment-rts-filtered-empty"
+    ? "RTS_RECEIVED"
+    : query.status;
+  const pageSize = auditScenario === "shipment-rts-paginated" ? 5 : RTS_PAGE_SIZE;
 
-  const data = await withTenantContext(
+  let dataPromise = withTenantContext(
     db,
     principal.userId,
     principal.tenantId,
     (tx, context) =>
       loadRtsShipmentsPage(tx, context, {
-        page: requestedPage,
-        pageSize: 20,
+        page: query.page,
+        pageSize,
         status: statusFilter,
       }),
   );
+  if (auditScenario === "shipment-rts-stream") dataPromise = delayResult(dataPromise, 1_200);
+  const loadedData = await dataPromise;
+  const data = auditScenario === "shipment-rts-empty" || auditScenario === "shipment-rts-filtered-empty"
+    ? { ...loadedData, page: 1, rows: [], totalCount: 0, totalPages: 1 }
+    : loadedData;
 
+  const issues = [
+    ...query.issues,
+    ...(auditScenario === "shipment-rts-invalid-query"
+      ? ['Status "TIDAK_ADA" tidak dikenal; seluruh retur ditampilkan.']
+      : []),
+    ...(data.page !== query.page && data.totalCount > 0
+      ? [`Halaman ${query.page} tidak tersedia; halaman terakhir ditampilkan.`]
+      : []),
+  ];
+
+  // Labels come from the shared lifecycle presentation, not a second copy: the
+  // status badge in this same table reads from there, and two vocabularies for
+  // one status is what this page used to show.
   const filterTabs: {
     key: RtsFilterStatus;
     label: string;
@@ -113,33 +164,33 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
   }[] = [
     {
       key: "ALL",
-      label: "Semua Retur",
+      label: "Semua retur",
       count: data.summary.totalRtsCount,
       description: "Seluruh kiriman retur dan bermasalah",
     },
     {
       key: "RTS_QUEUED",
-      label: "Antre Retur",
+      label: SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.label,
       count: data.summary.queuedCount,
-      description: "Menunggu penjemputan/pengembalian kurir",
+      description: SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.guidance,
     },
     {
       key: "RTS_IN_TRANSIT",
-      label: "Dalam Perjalanan",
+      label: SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.label,
       count: data.summary.inTransitCount,
-      description: "Sedang dikirim balik ke gudang",
+      description: SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.guidance,
     },
     {
       key: "RTS_RECEIVED",
-      label: "Diterima Gudang",
+      label: SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.label,
       count: data.summary.receivedCount,
-      description: "Barang retur sudah sampai dan diverifikasi",
+      description: SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.guidance,
     },
     {
       key: "PROBLEM",
-      label: "Bermasalah",
+      label: SHIPMENT_STATUS_PRESENTATION.PROBLEM.label,
       count: data.summary.problemCount,
-      description: "Kendala kurir / gagal kirim",
+      description: SHIPMENT_STATUS_PRESENTATION.PROBLEM.guidance,
     },
   ];
 
@@ -154,100 +205,42 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
             </Link>
           </Button>
         }
-        description="Pantau kiriman Return to Sender (RTS), tindak lanjuti kendala kurir, dan verifikasi barang yang sudah diterima kembali di gudang."
+        description="Pantau kiriman Return to Sender (RTS), tindak lanjuti kendala kurir, dan verifikasi barang yang sudah diterima kembali di outlet asal."
         eyebrow="Operasional kiriman"
         focusTargetId="rts-dashboard-heading"
         title="Manajemen Retur (RTS)"
       />
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <Card className="shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
-              Total Retur & Masalah
-            </CardTitle>
-            <PackageX className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold tabular-nums sm:text-2xl">
-              {data.summary.totalRtsCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Kiriman tidak terkirim
-            </p>
-          </CardContent>
-        </Card>
+      {issues.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertTitle>Filter disesuaikan</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc pl-4">
+              {issues.map((issue) => <li key={issue}>{issue}</li>)}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        <Card className="shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
-              Antre Dikembalikan
-            </CardTitle>
-            <Clock className="h-4 w-4 text-[var(--warn)]" aria-hidden="true" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold tabular-nums text-[var(--warn)] sm:text-2xl">
-              {data.summary.queuedCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Menunggu proses kurir
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
-              Dalam Perjalanan (RTS)
-            </CardTitle>
-            <Truck className="h-4 w-4 text-primary" aria-hidden="true" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold tabular-nums sm:text-2xl">
-              {data.summary.inTransitCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sedang dikirim balik
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
-              Selesai Diterima
-            </CardTitle>
-            <PackageCheck className="h-4 w-4 text-[var(--ok)]" aria-hidden="true" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold tabular-nums text-[var(--ok)] sm:text-2xl">
-              {data.summary.receivedCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Fisik kembali di gudang
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Table Card */}
-      <Card className="mt-6 rounded-lg shadow-none">
-        <CardHeader className="border-b pb-4">
+      <Card className="rounded-lg shadow-none">
+        <CardHeader className="border-b">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Daftar Kiriman Retur</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                Kelola paket gagal serah dan verifikasi barang sampai kembali ke outlet pengirim.
+              <CardTitle>Temukan kiriman retur</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Kelola paket gagal serah dan verifikasi barang sampai kembali ke outlet asal.
               </p>
             </div>
-            <div className="text-xs text-muted-foreground sm:text-sm">
-              {data.totalCount} kiriman ditemukan · Halaman {data.page} dari {data.totalPages}
-            </div>
+            <p className="text-sm tabular-nums text-muted-foreground">
+              {data.totalCount} kiriman · halaman {data.page} dari {data.totalPages}
+            </p>
           </div>
 
-          {/* Status Filter Tabs */}
-          <div className="mt-4 flex flex-wrap gap-1.5 pt-2" role="tablist" aria-label="Filter status RTS">
+          {/* Each chip navigates, so this is a filter navigation rather than a
+              tablist: there are no tab panels and no roving focus. The selected
+              chip is `aria-current="true"`, not `"page"` — the shell already
+              owns the one truthful current page, and this is a filter on it. */}
+          <nav aria-label="Filter status retur" className="mt-4 flex flex-wrap gap-1.5 pt-2">
             {filterTabs.map((tab) => {
               const active = statusFilter === tab.key;
               return (
@@ -263,7 +256,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                   size="sm"
                   variant={active ? "default" : "ghost"}
                 >
-                  <Link href={rtsHref(tab.key, 1)}>
+                  <Link aria-current={active ? "true" : undefined} href={rtsHref(tab.key, 1)}>
                     {tab.label}
                     <Badge
                       className={cn(
@@ -280,7 +273,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                 </Button>
               );
             })}
-          </div>
+          </nav>
         </CardHeader>
 
         <CardContent className="p-0">
@@ -297,14 +290,26 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="overflow-hidden">
+              <Table
+                className="min-w-[70rem]"
+                containerClassName="focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                containerProps={{
+                  "aria-label": "Daftar kiriman retur; geser horizontal untuk melihat seluruh kolom",
+                  role: "region",
+                  tabIndex: 0,
+                }}
+              >
                 <TableCaption className="sr-only">
                   Daftar kiriman retur to sender (RTS) dan detail statusnya.
                 </TableCaption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[140px]">Resi & ID</TableHead>
+                    {/* The identifying column stays put while the other
+                        seven scroll under it, and is opaque so the scrolled
+                        content does not read through — the same treatment the
+                        shipment queue gives its reference column. */}
+                    <TableHead className="sticky left-0 z-10 min-w-[140px] bg-card">Resi</TableHead>
                     <TableHead className="min-w-[150px]">Penerima & Tujuan</TableHead>
                     <TableHead className="min-w-[120px]">Outlet & Kurir</TableHead>
                     <TableHead className="min-w-[120px]">Nilai & Berat</TableHead>
@@ -324,26 +329,22 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                       };
 
                     return (
-                      <TableRow key={row.shipmentId} className="hover:bg-muted/40">
-                        <TableCell className="font-mono text-xs">
+                      <TableRow key={row.shipmentId} className="group hover:bg-muted/40">
+                        <TableCell className="sticky left-0 z-10 bg-card font-mono text-xs group-hover:bg-muted/40">
                           <Link
                             className="font-semibold text-primary underline-offset-4 hover:underline"
                             href={`/app/pengiriman/${row.shipmentId}`}
                           >
                             {row.awb ? row.awb : row.shipmentId.slice(0, 8).toUpperCase()}
                           </Link>
-                          {row.awb ? (
-                            <div className="text-[10px] text-muted-foreground">
-                              ID: {row.shipmentId.slice(0, 8).toUpperCase()}
-                            </div>
-                          ) : null}
+
                         </TableCell>
                         <TableCell>
                           <div className="font-medium text-xs sm:text-sm">
                             {row.recipientName}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {row.recipientPhone}
+                            {row.recipientPhoneMasked}
                           </div>
                           <div className="truncate text-xs text-muted-foreground" title={row.destinationAreaLabel}>
                             {row.destinationAreaLabel}

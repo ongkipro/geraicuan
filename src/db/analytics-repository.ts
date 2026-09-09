@@ -1,3 +1,5 @@
+import "server-only";
+
 import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import {
@@ -418,16 +420,6 @@ async function loadShipmentBacklogSnapshotUnchecked(
 
   if (!snapshot) throw new Error("Shipment backlog snapshot was not loaded.");
   return { ...snapshot, asOf: new Date(snapshot.asOf) };
-}
-
-export async function loadShipmentBacklogSnapshot(
-  tx: TenantTransaction,
-  context: TenantContext,
-  filters: AnalyticsFilters = EMPTY_ANALYTICS_FILTERS,
-): Promise<ShipmentBacklogSnapshot> {
-  requireTenantAdmin(context);
-  await requireAnalyticsFilterAccess(tx, context, filters);
-  return loadShipmentBacklogSnapshotUnchecked(tx, context, filters);
 }
 
 export async function loadShipmentKpiComparison(

@@ -12,6 +12,8 @@ import {
 } from "@/db/shipment-draft-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import * as schema from "@/db/schema";
+import { loadShipmentKpis } from "@/db/analytics-repository";
+import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
 import { deriveBulkRowSubmissionId, previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
@@ -79,16 +81,21 @@ beforeAll(async () => {
     "TRUNCATE shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
   );
   await adminPool.query(
-    "INSERT INTO users (id, name, email) VALUES ($1, $2, $3), ($4, $5, $6)",
-    ["draft-user-a", "Draft User A", "draft-a@example.test", "draft-user-b", "Draft User B", "draft-b@example.test"],
+    "INSERT INTO users (id, name, email) VALUES ($1, $2, $3), ($4, $5, $6), ($7, $8, $9)",
+    [
+      "draft-user-a", "Draft User A", "draft-a@example.test",
+      "draft-user-b", "Draft User B", "draft-b@example.test",
+      "draft-admin-a", "Draft Admin A", "draft-admin-a@example.test",
+    ],
   );
   await adminPool.query(
     "INSERT INTO tenants (id, name, status) VALUES ($1, $2, 'ACTIVE'), ($3, $4, 'ACTIVE')",
     [tenantA, "Draft Tenant A", tenantB, "Draft Tenant B"],
   );
   await adminPool.query(
-    "INSERT INTO memberships (tenant_id, user_id, role) VALUES ($1, $2, 'OPERATOR'), ($3, $4, 'OPERATOR')",
-    [tenantA, "draft-user-a", tenantB, "draft-user-b"],
+    `INSERT INTO memberships (tenant_id, user_id, role) VALUES
+       ($1, $2, 'OPERATOR'), ($3, $4, 'OPERATOR'), ($1, $5, 'TENANT_ADMIN')`,
+    [tenantA, "draft-user-a", tenantB, "draft-user-b", "draft-admin-a"],
   );
   await adminPool.query(
     "INSERT INTO outlets (id, tenant_id, name, default_pickup_address_id, default_origin_area_id) VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)",
@@ -102,6 +109,143 @@ afterAll(async () => {
 });
 
 describe("tenant shipment drafts", () => {
+  it("parses an optional COGS amount and keeps empty distinct from zero", () => {
+    const withCogs = validateShipmentDraft(submission({ cogsAmount: "50.000" }));
+    expect(withCogs.ok).toBe(true);
+    if (withCogs.ok) expect(withCogs.input.cogsAmountIdr).toBe(50_000);
+
+    const zeroCogs = validateShipmentDraft(submission({ cogsAmount: "0" }));
+    expect(zeroCogs.ok).toBe(true);
+    if (zeroCogs.ok) expect(zeroCogs.input.cogsAmountIdr).toBe(0);
+
+    // An untouched field means "not recorded", which is not a recorded zero.
+    // Whitespace is trimmed away, so it means the same thing.
+    for (const blank of ["", "   "]) {
+      const noCogs = validateShipmentDraft(submission({ cogsAmount: blank }));
+      expect(noCogs.ok, JSON.stringify(blank)).toBe(true);
+      if (noCogs.ok) expect(noCogs.input.cogsAmountIdr, JSON.stringify(blank)).toBeNull();
+    }
+
+    // Both separator forms readRupiah accepts, and the exact upper bound.
+    for (const [input, expected] of [
+      ["50 000", 50_000],
+      ["2.147.483.647", 2_147_483_647],
+    ] as const) {
+      const result = validateShipmentDraft(submission({ cogsAmount: input }));
+      expect(result.ok, input).toBe(true);
+      if (result.ok) expect(result.input.cogsAmountIdr, input).toBe(expected);
+    }
+  });
+
+  it("rejects a malformed or out-of-range COGS instead of dropping it", () => {
+    for (const value of ["abc", "-1", "12.34", "2147483648"]) {
+      const result = validateShipmentDraft(submission({ cogsAmount: value }));
+      expect(result.ok, value).toBe(false);
+      if (!result.ok) expect(result.errors.cogsAmount, value).toBeTruthy();
+    }
+  });
+
+  it("treats a corrected COGS as a conflicting replay rather than silently keeping the old one", async () => {
+    // The replay guard compares every persisted draft field. If COGS were left
+    // out, an operator who fixed a mistyped Modal HPP and resubmitted with the
+    // same submission id would be redirected as though the correction landed
+    // while the original figure stayed in the database.
+    const submissionId = "00000000-0000-4000-8000-00000000c065";
+    const original = validateShipmentDraft(submission({ cogsAmount: "40.000" }));
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    await expect(
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, original.input, submissionId)),
+    ).resolves.toBe(submissionId);
+
+    const corrected = validateShipmentDraft(submission({ cogsAmount: "400.000" }));
+    expect(corrected.ok).toBe(true);
+    if (!corrected.ok) return;
+    await expect(
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, corrected.input, submissionId)),
+    ).rejects.toBeInstanceOf(DraftSubmissionConflictError);
+
+    // Clearing a previously recorded COGS is a change too, not a no-op replay.
+    const cleared = validateShipmentDraft(submission({ cogsAmount: "" }));
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) return;
+    await expect(
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, cleared.input, submissionId)),
+    ).rejects.toBeInstanceOf(DraftSubmissionConflictError);
+
+    // An identical resubmission still replays instead of duplicating.
+    await expect(
+      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+        createShipmentDraft(tx, context, original.input, submissionId)),
+    ).resolves.toBe(submissionId);
+
+    const [stored] = await adminDb
+      .select({ cogsAmountIdr: schema.shipmentDrafts.cogsAmountIdr })
+      .from(schema.shipmentDrafts)
+      .where(eq(schema.shipmentDrafts.shipmentId, submissionId));
+    expect(stored?.cogsAmountIdr).toBe(40_000);
+  });
+
+  it("carries a COGS submitted through the draft path into the analytics net margin", async () => {
+    // The chain the repair exists for, end to end in one check: form input to
+    // validator to repository to the KPI a Tenant Admin actually reads.
+    const range = parseAnalyticsRange({ rentang: "30-hari", tz: "Asia/Jakarta" }, new Date());
+    const readKpis = () =>
+      withTenantContext(appDb, "draft-admin-a", tenantA, (tx, context) =>
+        loadShipmentKpis(tx, context, range),
+      );
+
+    // Sibling cases in this file leave their own drafts behind, so measure the
+    // delta this submission causes rather than an absolute total.
+    const before = await readKpis();
+
+    const validated = validateShipmentDraft(submission({ cogsAmount: "65.000" }));
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+
+    await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, validated.input),
+    );
+
+    const after = await readKpis();
+
+    // A draft has no ledger entries, so every money term is unchanged and the
+    // margin moves by exactly the negated cost the operator just recorded.
+    expect(after.cogsIdr).toBe(before.cogsIdr + 65_000);
+    expect(after.codPrincipalIdr).toBe(before.codPrincipalIdr);
+    expect(after.providerShippingIdr).toBe(before.providerShippingIdr);
+    expect(after.codServiceFeeIdr).toBe(before.codServiceFeeIdr);
+    expect(after.codVatIdr).toBe(before.codVatIdr);
+    expect(after.netMarginIdr).toBe(before.netMarginIdr - 65_000);
+    expect(after.createdCount).toBe(before.createdCount + 1);
+  });
+
+  it("persists the submitted COGS on both the shipment and its draft", async () => {
+    const validated = validateShipmentDraft(submission({ cogsAmount: "75.000" }));
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+
+    const shipmentId = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, validated.input),
+    );
+
+    const [shipment] = await adminDb
+      .select({ cogsAmountIdr: schema.shipments.cogsAmountIdr })
+      .from(schema.shipments)
+      .where(eq(schema.shipments.id, shipmentId));
+    const [draft] = await adminDb
+      .select({ cogsAmountIdr: schema.shipmentDrafts.cogsAmountIdr })
+      .from(schema.shipmentDrafts)
+      .where(eq(schema.shipmentDrafts.shipmentId, shipmentId));
+
+    expect(shipment?.cogsAmountIdr).toBe(75_000);
+    expect(draft?.cogsAmountIdr).toBe(75_000);
+  });
+
   it("persists a valid tenant-scoped draft and immutable parties", async () => {
     const validated = validateShipmentDraft(submission());
     expect(validated.ok).toBe(true);

@@ -10,12 +10,15 @@ import {
 } from "@/app/app/pengiriman/[shipmentId]/reconciliation-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 
 const initialState: ShipmentReconciliationActionState = {};
+// Reconciliation reports the lifecycle status the provider resolved to, so it
+// reads from the shared presentation rather than a sixth private copy.
 const resultLabel = {
-  AWAITING_UPSTREAM_PAYMENT: "Menunggu pembayaran",
-  FAILED: "Gagal",
-  ISSUED: "Resi terbit",
+  AWAITING_UPSTREAM_PAYMENT: SHIPMENT_STATUS_PRESENTATION.AWAITING_UPSTREAM_PAYMENT.label,
+  FAILED: SHIPMENT_STATUS_PRESENTATION.FAILED.label,
+  ISSUED: SHIPMENT_STATUS_PRESENTATION.ISSUED.label,
 } as const;
 
 export function ShipmentReconciliationPanel({ fixtureEnabled, shipmentId }: { fixtureEnabled: boolean; shipmentId: string }) {

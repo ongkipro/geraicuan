@@ -441,7 +441,7 @@ export function OutletSettingsForm({
           <form
             action={locationAction}
             aria-busy={locationPending}
-            className="space-y-5 border-b pb-8"
+            className="max-w-2xl space-y-5 border-b pb-8"
             noValidate
           >
             <input name="outletId" type="hidden" value={outlet.id} />

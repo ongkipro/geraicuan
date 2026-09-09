@@ -358,6 +358,8 @@ describe("tenant shipment analytics repository", () => {
         codServiceFeeIdr: 3_300,
         codVatIdr: 363,
         codPrincipalIdr: 100_000,
+        cogsIdr: 0,
+        netMarginIdr: 78_337,
       });
       expect(result.trend.generatedAt).toBeInstanceOf(Date);
       expect(result.trend.points.reduce((sum, row) => sum + row.createdCount, 0)).toBe(4);
@@ -482,6 +484,8 @@ describe("tenant shipment analytics repository", () => {
         codServiceFeeIdr: 0,
         codVatIdr: 0,
         codPrincipalIdr: 0,
+        cogsIdr: 0,
+        netMarginIdr: -7_000,
       },
       count: 1,
     });
@@ -546,6 +550,8 @@ describe("tenant shipment analytics repository", () => {
       codServiceFeeIdr: 3_300,
       codVatIdr: 363,
       codPrincipalIdr: 100_000,
+      cogsIdr: 0,
+      netMarginIdr: 86_337,
     });
     expect(result.comparison.previous).toMatchObject({
       createdCount: 1,
@@ -590,7 +596,48 @@ describe("tenant shipment analytics repository", () => {
       codServiceFeeIdr: 0,
       codVatIdr: 0,
       codPrincipalIdr: 0,
+      cogsIdr: 0,
+      netMarginIdr: 0,
     });
+  });
+
+  it("sums only the created-cohort COGS and subtracts it from net margin", async () => {
+    // The shared fixture leaves every cogs_amount_idr null, which cannot tell a
+    // correct aggregation apart from one that reads the wrong column or cohort.
+    await adminPool.query(
+      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
+      [failed, 20_000],
+    );
+    await adminPool.query(
+      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
+      [awaiting, 5_000],
+    );
+    // Outside the selected created range, so it must not reach the total.
+    await adminPool.query(
+      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
+      [createdBeforeIssuedInside, 999_000],
+    );
+    // Another tenant entirely.
+    await adminPool.query(
+      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
+      [tenantBShipment, 777_000],
+    );
+
+    try {
+      const kpis = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
+        loadShipmentKpis(tx, context, range("Asia/Jakarta")),
+      );
+
+      expect(kpis.cogsIdr).toBe(25_000);
+      // 100_000 principal - 18_000 shipping - 3_300 fee - 363 VAT - 25_000 COGS.
+      expect(kpis.netMarginIdr).toBe(53_337);
+      expect(kpis.createdCount).toBe(4);
+    } finally {
+      await adminPool.query(
+        "UPDATE shipments SET cogs_amount_idr = NULL WHERE id = ANY($1)",
+        [[failed, awaiting, createdBeforeIssuedInside, tenantBShipment]],
+      );
+    }
   });
 
   it("reports courier issuance rates with an explicit resolved denominator", async () => {

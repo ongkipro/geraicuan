@@ -296,7 +296,7 @@ export function DestinationAreaSelector({
             </Button>
           ) : null}
 
-          <p aria-live={searchError ? undefined : "polite"} className="rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id={`${id}-status`} ref={statusRef} tabIndex={-1}>{searchError ? null : message}</p>
+          <p aria-live={searchError ? undefined : "polite"} className="max-w-2xl rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id={`${id}-status`} ref={statusRef} tabIndex={-1}>{searchError ? null : message}</p>
         </div>
       )}
       <input name={names.areaId} type="hidden" value={selected?.areaId ?? ""} />
@@ -304,7 +304,7 @@ export function DestinationAreaSelector({
       <input name={names.areaQuery} type="hidden" value={selected?.query ?? ""} />
       <input name={names.areaOutletId} type="hidden" value={selected?.outletId ?? (submitOutletWithoutSelection ? outletId : "")} />
       <input name={names.areaSelectionChanged} type="hidden" value={selectionChanged ? "1" : "0"} />
-      <FieldDescription id={`${id}-help`}>Cari dengan nama kelurahan atau kecamatan, lalu pilih hierarki yang sesuai. ID provider tidak ditampilkan.{required ? " Area wajib dipilih untuk draf kiriman." : ""}</FieldDescription>
+      <FieldDescription className="max-w-2xl" id={`${id}-help`}>Cari dengan nama kelurahan atau kecamatan, lalu pilih hierarki yang sesuai. ID provider tidak ditampilkan.{required ? " Area wajib dipilih untuk draf kiriman." : ""}</FieldDescription>
       <FieldError id={`${id}-error`}>{error}</FieldError>
     </Field>
   );

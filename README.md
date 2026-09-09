@@ -48,6 +48,61 @@ origin checks for the same explicit host.
 `127.0.0.1/geraicuan_test`. It refreshes the local fixture users and the
 runtime role password from `DEV_LOCAL_PASSWORD`.
 
+## Running the checks
+
+The integration suite needs a **different** environment from the dev server
+above. `tests/auth-session-boundary.integration.test.ts` hardcodes its origin,
+and the demo login hint changes rendered output, so reuse of the dev values
+produces five failures that look exactly like code defects.
+
+```bash
+export DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:55433/geraicuan_test"
+export APP_DATABASE_URL='postgresql://geraicuan_test_runtime:admin123@127.0.0.1:55433/geraicuan_test'
+export BETTER_AUTH_URL='http://127.0.0.1:3110'
+export BETTER_AUTH_TRUSTED_ORIGINS='http://127.0.0.1:3110'
+export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
+unset GERAICUAN_ENABLE_DEMO_LOGIN_HINT
+
+pnpm tsc --noEmit
+pnpm lint
+pnpm test:integration
+```
+
+**The suite destroys the local demo data.** Several suites tear down with
+`TRUNCATE ... tenants, users CASCADE`, which removes the seeded
+`Local Development Tenant` along with everything else. Nothing is corrupted, but
+open the browser after a suite run and the CMS looks empty. Re-seed first:
+
+```bash
+pnpm db:seed-local
+```
+
+`pnpm build` needs a production-shaped configuration, because startup fails
+closed without it — two exact HTTPS origins and a trusted proxy allowlist:
+
+```bash
+BETTER_AUTH_URL='https://app.example.com' BETTER_AUTH_TRUSTED_ORIGINS='https://app.example.com,https://cuan.example.com' BETTER_AUTH_TRUSTED_PROXY_CIDRS='10.0.0.0/8' pnpm build
+```
+
+`pnpm test:migration-upgrade` verifies the migration chain from an empty
+database and takes `MIGRATION_CHECK_DATABASE_URL`, which must point at a
+database with no tables:
+
+```bash
+MIGRATION_CHECK_DATABASE_URL='postgresql://postgres:'"${POSTGRES_PASSWORD}"'@127.0.0.1:55433/geraicuan_migration_check' pnpm test:migration-upgrade
+```
+
+## Provider integration surface
+
+The verified Mengantar surface is estimate, order and pay-unpaid; each has a
+sanitized capture under `tests/fixtures/`. `/api/webhooks/mengantar` is mounted
+but **closed** — it refuses every request. No provider push contract has been
+verified, so the handler that previously implemented one had invented its
+headers, payload fields and status vocabulary. See the comment in
+`src/app/api/webhooks/mengantar/route.ts` for what must exist before it may
+accept traffic. `MENGANTAR_WEBHOOK_SECRET` is read by nothing while it is
+closed.
+
 ## Deployment host boundary
 
 The future production entry points are intentionally role-specific:

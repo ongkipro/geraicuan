@@ -100,7 +100,13 @@ export type UiAuditScenario =
   | "shipment-queue-error"
   | "shipment-queue-paginated"
   | "shipment-queue-stale"
-  | "shipment-queue-stream";
+  | "shipment-queue-stream"
+  | "shipment-rts-empty"
+  | "shipment-rts-error"
+  | "shipment-rts-filtered-empty"
+  | "shipment-rts-invalid-query"
+  | "shipment-rts-paginated"
+  | "shipment-rts-stream";
 
 export type CmsUiAuditState =
   | "first-run"
@@ -146,6 +152,7 @@ type UiAuditScenarioContract = {
     | "/app/label/[shipmentId]"
     | "/app/pengiriman"
     | "/app/pengiriman/baru"
+    | "/app/pengiriman/rts"
     | "/app/pengiriman/[shipmentId]"
     | "/platform"
     | "/platform/audit"
@@ -253,6 +260,12 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "shipment-queue-paginated": { mode: "read-only", route: "/app/pengiriman", state: "populated" },
   "shipment-queue-stale": { mode: "read-only", route: "/app/pengiriman", state: "stale" },
   "shipment-queue-stream": { mode: "read-only", route: "/app/pengiriman", state: "loading" },
+  "shipment-rts-empty": { mode: "read-only", ownerTask: "T-72", route: "/app/pengiriman/rts", state: "healthy-empty" },
+  "shipment-rts-error": { mode: "read-only", ownerTask: "T-72", route: "/app/pengiriman/rts", state: "route-error" },
+  "shipment-rts-filtered-empty": { mode: "read-only", ownerTask: "T-72", route: "/app/pengiriman/rts", state: "filtered-empty" },
+  "shipment-rts-invalid-query": { mode: "read-only", ownerTask: "T-72", route: "/app/pengiriman/rts", state: "invalid-query" },
+  "shipment-rts-paginated": { mode: "read-only", ownerTask: "T-72", route: "/app/pengiriman/rts", state: "populated" },
+  "shipment-rts-stream": { mode: "read-only", ownerTask: "T-72", route: "/app/pengiriman/rts", state: "loading" },
 } as const satisfies Record<UiAuditScenario, UiAuditScenarioContract>;
 
 const UI_AUDIT_SCENARIOS = new Set<UiAuditScenario>(
@@ -323,6 +336,14 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
     route: "/app/pengiriman",
     source: "src/app/app/pengiriman/page.tsx",
     states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "stale", "unauthorized"],
+  },
+  {
+    kind: "page",
+    ownerTask: "T-72",
+    roles: ["TENANT_ADMIN", "OPERATOR"],
+    route: "/app/pengiriman/rts",
+    source: "src/app/app/pengiriman/rts/page.tsx",
+    states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "unauthorized"],
   },
   {
     kind: "page",

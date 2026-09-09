@@ -256,7 +256,7 @@ export default async function ShipmentDetailPage({
             <li className="flex flex-col items-start gap-1 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between" key={action.id}>
               <div>
                 <p className="text-sm font-medium">{action.label}</p>
-                <p className="text-sm text-muted-foreground">{action.description}</p>
+                <p className="max-w-2xl text-sm text-muted-foreground">{action.description}</p>
               </div>
               {action.kind === "link" && action.href ? (
                 <Button asChild className="mt-2 min-h-11 sm:mt-0 sm:min-h-9" size="sm"><Link href={action.href}>{action.label}</Link></Button>
@@ -358,7 +358,7 @@ export default async function ShipmentDetailPage({
     <DetailSection id="estimasi-heading" title="Estimasi tersimpan">
       {detail.estimate ? (
         <>
-          <p className="text-sm leading-6 text-muted-foreground">
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             Diambil {formatWibDateTime(detail.estimate.retrievedAt)} · {" "}
             {detail.estimate.isCodRequested ? "COD diminta" : "Non-COD"}.
             Daftar ini hanya-baca; belum ada konfirmasi layanan dari halaman

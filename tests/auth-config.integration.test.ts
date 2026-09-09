@@ -19,6 +19,7 @@ describe("Better Auth production origin boundary", () => {
         "https://cuan.example.com",
       ],
       trustedProxies: ["10.0.0.0/8"],
+      useSecureCookies: true,
     });
   });
 
@@ -46,6 +47,27 @@ describe("Better Auth production origin boundary", () => {
       baseURL: undefined,
       trustedOrigins: undefined,
       trustedProxies: undefined,
+      useSecureCookies: false,
     });
+  });
+
+  it("states the secure-cookie flag rather than leaving it to library inference", () => {
+    // Production origins are already forced to HTTPS, so the flag is true there
+    // and does not depend on how the auth library reads the base URL.
+    expect(resolveBetterAuthRuntimeConfig(production).useSecureCookies).toBe(true);
+
+    // Outside production the flag follows the origin. Forcing it false would
+    // strip Secure and the __Secure- prefix from a staging or preview build
+    // served over HTTPS, which would be a downgrade rather than hardening.
+    expect(
+      resolveBetterAuthRuntimeConfig({ ...production, NODE_ENV: "development" })
+        .useSecureCookies,
+    ).toBe(true);
+    expect(
+      resolveBetterAuthRuntimeConfig({
+        BETTER_AUTH_URL: "http://localhost:3000",
+        NODE_ENV: "development",
+      }).useSecureCookies,
+    ).toBe(false);
   });
 });

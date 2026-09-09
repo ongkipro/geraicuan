@@ -39,6 +39,7 @@ import {
   type PlatformTenantFinanceSummary,
 } from "@/db/platform-tenant-repository";
 import { shipmentStatuses } from "@/db/schema";
+import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
   ANALYTICS_PRESETS,
   ANALYTICS_TIMEZONES,
@@ -76,21 +77,14 @@ const signedIdrFormatter = new Intl.NumberFormat("id-ID", {
   signDisplay: "always",
 });
 
-const statusLabels: Record<(typeof shipmentStatuses)[number], string> = {
-  DRAFT: "Draf",
-  ESTIMATED: "Sudah diestimasi",
-  SUBMISSION_QUEUED: "Menunggu pengiriman",
-  SUBMISSION_UNKNOWN: "Status tidak diketahui",
-  ISSUED: "Resi terbit",
-  AWAITING_UPSTREAM_PAYMENT: "Menunggu pembayaran upstream",
-  FAILED: "Gagal",
-  RTS_QUEUED: "RTS (Antrean)",
-  RTS_IN_TRANSIT: "RTS (Proses)",
-  RTS_RECEIVED: "RTS (Diterima)",
-  IN_TRANSIT: "Dalam Perjalanan",
-  DELIVERED: "Selesai",
-  PROBLEM: "Bermasalah",
-};
+// One vocabulary for one lifecycle. A super admin filtering on a status must
+// read the same words the tenant sees on the shipment itself; this used to be a
+// second map, so the same stored value read "Antre retur" in one scope and
+// "RTS (Antrean)" in the other.
+const statusLabels: Record<(typeof shipmentStatuses)[number], string> =
+  Object.fromEntries(
+    shipmentStatuses.map((status) => [status, SHIPMENT_STATUS_PRESENTATION[status].label]),
+  ) as Record<(typeof shipmentStatuses)[number], string>;
 const tenantStatusLabels: Record<string, string> = {
   ACTIVE: "Aktif",
   SUSPENDED: "Ditangguhkan",
@@ -103,7 +97,9 @@ const controlClass = "min-h-11 w-full min-w-0 rounded-lg border border-input bg-
 const sectionClass = "grid min-w-0 gap-4 border-t pt-6";
 const tableWrapClass = "w-full min-w-0 overflow-x-auto rounded-xl border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 const tableClass = "w-full min-w-max caption-bottom text-sm [&_caption]:sr-only [&_thead]:border-b [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-card [&_tbody_tr]:border-b [&_tbody_tr:last-child]:border-0 [&_tbody_tr>*:first-child]:sticky [&_tbody_tr>*:first-child]:left-0 [&_tbody_tr>*:first-child]:z-10 [&_tbody_tr>*:first-child]:bg-background [&_th]:h-10 [&_th]:whitespace-nowrap [&_th]:px-3 [&_th]:text-left [&_th]:font-medium [&_td]:whitespace-nowrap [&_td]:px-3 [&_td]:py-2.5";
-const hintClass = "text-sm leading-6 text-muted-foreground";
+// Capped like every other description in the CMS: uncapped, these run to 102ch
+// on the wide platform container.
+const hintClass = "max-w-2xl text-sm leading-6 text-muted-foreground";
 const metricClass = "grid gap-1 rounded-lg border bg-background p-3 [&_dt]:text-sm [&_dt]:text-muted-foreground [&_dd]:text-xl [&_dd]:font-semibold [&_dd]:tabular-nums";
 
 function severityVariant(severity: string): "destructive" | "outline" | "secondary" {

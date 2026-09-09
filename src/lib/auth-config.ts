@@ -85,8 +85,20 @@ export function resolveBetterAuthRuntimeConfig(environment: AuthEnvironment) {
       baseURL: exactBaseURL,
       trustedOrigins: uniqueOrigins,
       trustedProxies,
+      // Stated rather than left to the library's inference: production origins
+      // are already forced to HTTPS above, so the session cookie must carry
+      // Secure regardless of how that inference might change.
+      useSecureCookies: true,
     };
   }
 
-  return { baseURL, trustedOrigins, trustedProxies };
+  // Outside production, follow the origin rather than forcing false: a staging
+  // or preview build served over HTTPS must still get Secure and the
+  // __Secure- prefix, which a flat false would take away.
+  return {
+    baseURL,
+    trustedOrigins,
+    trustedProxies,
+    useSecureCookies: baseURL?.startsWith("https://") ?? false,
+  };
 }

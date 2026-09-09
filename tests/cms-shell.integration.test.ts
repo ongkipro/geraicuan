@@ -25,7 +25,7 @@ describe("tenant CMS shell contract", () => {
       (item) => item.label,
     );
 
-    expect(operatorLabels).toEqual(["Ringkasan", "Kiriman", "Kontak"]);
+    expect(operatorLabels).toEqual(["Ringkasan", "Kiriman", "Retur (RTS)", "Kontak"]);
     expect(operatorLabels).not.toContain("Analitik");
     expect(operatorLabels).not.toContain("Outlet & koneksi");
     expect(operatorLabels).not.toContain("Anggota & akses");
@@ -40,6 +40,7 @@ describe("tenant CMS shell contract", () => {
     ["/app/pengiriman", "Kiriman"],
     ["/app/pengiriman/baru", "Kiriman"],
     ["/app/pengiriman/3b4f", "Kiriman"],
+    ["/app/pengiriman/rts", "Retur (RTS)"],
     ["/app/label", "Kiriman"],
     ["/app/label/3b4f", "Kiriman"],
     ["/app/analitik", "Analitik"],

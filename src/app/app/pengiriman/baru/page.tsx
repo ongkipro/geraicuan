@@ -152,7 +152,15 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
         title="Buat draf kiriman"
       />
 
-      <nav aria-label="Tahapan pembuatan kiriman" className="overflow-x-auto border-y bg-card">
+      {/* The step strip is 32rem wide and scrolls at 390px, and every child is
+          static text — nothing inside it can take focus, so without a tab stop
+          a keyboard user cannot scroll it at all. Screening found it in five
+          draft states. */}
+      <nav
+        aria-label="Tahapan pembuatan kiriman"
+        className="overflow-x-auto border-y bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+        tabIndex={0}
+      >
         <ol className="grid min-w-[32rem] grid-cols-4 divide-x text-sm">
           {[
             ["1", "Draf", data.savedDraft ? "Selesai" : "Saat ini"],

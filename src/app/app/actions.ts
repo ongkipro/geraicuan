@@ -13,6 +13,7 @@ import {
 import {
   createShipmentDraft,
   checkDuplicateShipment,
+  DUPLICATE_SHIPMENT_WINDOW_DAYS,
   DraftSubmissionConflictError,
   OutletUnavailableError,
   resolveExistingShipmentDraftReplay,
@@ -24,6 +25,7 @@ import {
   type TenantTransaction,
 } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { maskPhone } from "@/lib/pii-redaction";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -164,11 +166,6 @@ class DraftContactUnavailableError extends Error {
 
 function isContactRole(value: unknown): value is ShipmentContactRole {
   return value === "SENDER" || value === "RECIPIENT";
-}
-
-function maskPhone(phone: string) {
-  const suffix = phone.replace(/\D/g, "").slice(-4);
-  return suffix ? `•••• ${suffix}` : "Nomor tersimpan";
 }
 
 function selectionFrom(formData: FormData): ContactPickerSelector | null {
@@ -692,7 +689,7 @@ export async function saveShipmentDraft(
               ok: false,
               state: {
                 errors: {
-                  form: "Ditemukan pesanan dengan nomor telepon penerima yang sama dalam 7 hari terakhir. Centang konfirmasi jika ingin tetap melanjutkan."
+                  form: `Ditemukan pesanan dengan nomor telepon penerima yang sama dalam ${DUPLICATE_SHIPMENT_WINDOW_DAYS} hari terakhir. Centang konfirmasi jika ingin tetap melanjutkan.`,
                 } as Record<string, string>,
                 values,
               }

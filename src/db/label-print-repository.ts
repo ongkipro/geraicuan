@@ -21,6 +21,7 @@ import {
   users,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import { maskPhone } from "@/lib/pii-redaction";
 
 export type PrintableLabel = {
   shipmentId: string;
@@ -106,11 +107,6 @@ export class PrintAttemptConflictError extends Error {
 }
 
 const AWB_SUFFIX_PATTERN = /^[a-z0-9]{3,24}$/i;
-
-function maskPhone(phone: string) {
-  const suffix = phone.replace(/\D/g, "").slice(-4);
-  return suffix ? `•••• ${suffix}` : "Nomor tersimpan";
-}
 
 function maskActorName(name: string | null) {
   const initial = Array.from(name?.trim() ?? "")[0];

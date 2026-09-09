@@ -152,13 +152,20 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
               <AlertDescription>Tidak ada layanan yang mendukung COD untuk rute ini.</AlertDescription>
             </Alert>
           ) : null}
-          <div
-            aria-label="Daftar estimasi layanan Mengantar"
-            className="overflow-x-auto rounded-lg border"
-            role="region"
-            tabIndex={0}
+          {/* The label, the role and the tab stop belong on the element that
+              actually scrolls. Wrapping `Table` in a second div left the outer
+              one labelled and static while `Table`'s own container scrolled
+              unlabelled and unreachable — browser screening caught it at
+              390px. `containerProps` puts them on the real one, the way the
+              shipment and return queues already do. */}
+          <Table
+            containerClassName="rounded-lg border"
+            containerProps={{
+              "aria-label": "Daftar estimasi layanan Mengantar",
+              role: "region",
+              tabIndex: 0,
+            }}
           >
-            <Table>
               <TableCaption className="sr-only">Tarif layanan Mengantar</TableCaption>
               <TableHeader>
                 <tr>
@@ -185,7 +192,6 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
                 ))}
               </TableBody>
             </Table>
-          </div>
           {codBreakdowns.length > 0 ? (
             <section
               aria-labelledby="draft-cod-explanation-title"

@@ -65,8 +65,8 @@ export function InviteMemberForm({ attemptId }: { attemptId: string }) {
         <FieldGroup className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_13rem]">
           <Field data-invalid={Boolean(emailError)}>
             <FieldLabel htmlFor="member-invite-email">Email akun GeraiCUAN</FieldLabel>
-            <Input aria-describedby={emailError ? "member-invite-email-error" : "member-invite-email-help"} aria-invalid={Boolean(emailError)} autoComplete="email" className="min-h-11" defaultValue={state.values?.email ?? ""} id="member-invite-email" key={`${state.resultToken ?? "initial"}-email`} maxLength={254} name="email" ref={emailRef} type="email" />
-            <FieldDescription id="member-invite-email-help">Gunakan akun aktif yang belum menjadi anggota tenant lain. Token dan sesi tidak ditampilkan.</FieldDescription>
+            <Input aria-describedby={emailError ? "member-invite-email-error" : "member-invite-email-help"} aria-invalid={Boolean(emailError)} autoComplete="email" className="max-w-2xl min-h-11" defaultValue={state.values?.email ?? ""} id="member-invite-email" key={`${state.resultToken ?? "initial"}-email`} maxLength={254} name="email" ref={emailRef} type="email" />
+            <FieldDescription className="max-w-2xl" id="member-invite-email-help">Gunakan akun aktif yang belum menjadi anggota tenant lain. Token dan sesi tidak ditampilkan.</FieldDescription>
             <FieldError id="member-invite-email-error">{emailError}</FieldError>
           </Field>
           <Field data-invalid={Boolean(roleError)}>
@@ -137,7 +137,7 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
   if (status === "SUSPENDED") {
     return (
       <div className="grid gap-3">
-        <p className="text-sm leading-6 text-muted-foreground" role="status">Anggota nonaktif tidak dapat memakai CMS tenant. Undang ulang email yang sama untuk mengaktifkannya kembali.</p>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground" role="status">Anggota nonaktif tidak dapat memakai CMS tenant. Undang ulang email yang sama untuk mengaktifkannya kembali.</p>
         <ActionMessage resultRef={deactivateResultRef} state={deactivateState} />
       </div>
     );

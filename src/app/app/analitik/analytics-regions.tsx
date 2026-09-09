@@ -221,7 +221,7 @@ export async function AnalyticsSummaryRegion({
   return (
     <div className="space-y-6">
       <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Data event periode</p><DataFreshnessControl formattedGeneratedAt={formatInZone(eventGeneratedAt, context.range.timezone)} generatedAtIso={eventGeneratedAt.toISOString()} initiallyStale={isDataStale(eventGeneratedAt, new Date())} /></div>
-      <p className="text-xs leading-5 text-muted-foreground">Snapshot pengecualian saat ini diambil pada <time dateTime={backlog.asOf.toISOString()}>{formatInZone(backlog.asOf, context.range.timezone)}</time>. Timestamp ini tidak mewakili tren, tabel kiriman, atau rekonsiliasi tenant-wide.</p>
+      <p className="max-w-2xl text-xs leading-5 text-muted-foreground">Snapshot pengecualian saat ini diambil pada <time dateTime={backlog.asOf.toISOString()}>{formatInZone(backlog.asOf, context.range.timezone)}</time>. Timestamp ini tidak mewakili tren, tabel kiriman, atau rekonsiliasi tenant-wide.</p>
       <Card>
         <RegionHeading description={`Event ${context.periodLabel} dibanding ${context.previousPeriodLabel}; antrean tindakan adalah snapshot saat halaman dimuat.`} id="analytics-summary-heading" title="Ringkasan operasional" />
         <CardContent><MetricsGrid metrics={operationalMetrics} /></CardContent>

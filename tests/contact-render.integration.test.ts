@@ -129,7 +129,9 @@ describe("contact route render contracts", () => {
 
     const populated = await renderDirectory();
     expect(populated).toContain("Penerima Aman");
-    expect(populated).toContain("0812••••890");
+    expect(populated).toContain("•••• 7890");
+    // The old mask revealed the carrier prefix as well; it must not come back.
+    expect(populated).not.toContain("0812••••890");
     expect(populated).not.toContain("081234567890");
     expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru"/);
 

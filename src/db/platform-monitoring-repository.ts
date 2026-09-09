@@ -1,3 +1,5 @@
+import "server-only";
+
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { PlatformTransaction } from "@/db/platform-context";

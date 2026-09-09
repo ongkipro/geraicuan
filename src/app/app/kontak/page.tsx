@@ -15,6 +15,7 @@ import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
+import { maskPhone } from "@/lib/pii-redaction";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -23,12 +24,6 @@ type ContactDirectoryPageProps = { searchParams: Promise<{ status?: SearchValue 
 
 function firstValue(value: SearchValue) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function maskPhone(phone: string) {
-  return phone.length <= 7
-    ? `${"•".repeat(Math.max(0, phone.length - 2))}${phone.slice(-2)}`
-    : `${phone.slice(0, 4)}••••${phone.slice(-3)}`;
 }
 
 export default async function ContactDirectoryPage({ searchParams }: ContactDirectoryPageProps) {

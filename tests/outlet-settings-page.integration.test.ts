@@ -230,7 +230,12 @@ describe("Outlet settings page acceptance", () => {
 
     expect(occurrences(html, "<form")).toBe(1);
     expect(occurrences(html, 'id="outlet-detail-title"')).toBe(1);
-    expect(occurrences(html, 'aria-current="page"')).toBe(1);
+    // The selector marks the active outlet with `aria-current="true"`, not
+    // `"page"`. The shell navigation already owns the one truthful current
+    // page, and browser screening found two visible `aria-current="page"` in
+    // this document at 1280px — this selector and the shell's own nav item.
+    expect(occurrences(html, 'aria-current="page"')).toBe(0);
+    expect(occurrences(html, 'aria-current="true"')).toBe(1);
     expect(html).toContain('aria-label="Pilih outlet"');
     expect(html).toContain(`href="/app/pengaturan?outlet=${OUTLET_TWO}#outlet-detail-title"`);
     expect(html.indexOf("A — Belum siap")).toBeLessThan(
@@ -270,7 +275,7 @@ describe("Outlet settings page acceptance", () => {
     const selected = await renderPage(OUTLET_TWO);
     expect(selected).toContain("API key tersimpan");
     expect(selected).toContain("Tersimpan, belum diverifikasi");
-    expect(selected).toMatch(new RegExp(`aria-current="page"[^>]*href="/app/pengaturan\\?outlet=${OUTLET_TWO}`));
+    expect(selected).toMatch(new RegExp(`aria-current="true"[^>]*href="/app/pengaturan\\?outlet=${OUTLET_TWO}`));
     expect(occurrences(selected, "<form")).toBe(2);
 
     const fallback = await renderPage("00000000-0000-4000-8000-999999999999");

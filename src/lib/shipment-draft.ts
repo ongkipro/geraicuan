@@ -201,6 +201,18 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     errors.declaredValue = "Nilai barang COD harus lebih dari Rp0.";
   }
 
+  // COGS is optional: an empty field means the merchant did not record a cost,
+  // which is different from a recorded cost of zero.
+  let cogsAmountIdr: number | null = null;
+  if (raw.cogsAmount !== "") {
+    const parsed = readRupiah(raw.cogsAmount);
+    if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > MAX_VALUE_IDR) {
+      errors.cogsAmount = "Modal HPP harus berupa rupiah bulat yang valid atau dikosongkan.";
+    } else {
+      cogsAmountIdr = parsed;
+    }
+  }
+
   if (paymentType !== "COD" && paymentType !== "NON_COD") {
     errors.paymentType = "Pilih metode pembayaran yang valid.";
   }
@@ -212,7 +224,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   return {
     input: {
       declaredValueIdr,
-      cogsAmountIdr: null,
+      cogsAmountIdr,
       destinationAreaId: raw.destinationAreaId,
       destinationAreaLabel: raw.destinationAreaLabel,
       isCod: paymentType === "COD",

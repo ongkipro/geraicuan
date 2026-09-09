@@ -16,6 +16,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { membershipRoles, shipmentStatuses } from "@/lib/domain-enums";
+
+// Re-exported so server modules may keep importing them from the schema.
+export { membershipRoles, shipmentStatuses };
+
 export const tenantStatuses = [
   "PROVISIONING",
   "ACTIVE",
@@ -42,25 +47,6 @@ export const auditEventTargetTypes = [
   "PLATFORM",
   "MEMBERSHIP",
   "OUTLET",
-] as const;
-
-
-export const membershipRoles = ["TENANT_ADMIN", "OPERATOR"] as const;
-
-export const shipmentStatuses = [
-  "DRAFT",
-  "ESTIMATED",
-  "SUBMISSION_QUEUED",
-  "SUBMISSION_UNKNOWN",
-  "ISSUED",
-  "AWAITING_UPSTREAM_PAYMENT",
-  "FAILED",
-  "RTS_QUEUED",
-  "RTS_IN_TRANSIT",
-  "RTS_RECEIVED",
-  "IN_TRANSIT",
-  "DELIVERED",
-  "PROBLEM",
 ] as const;
 
 export const shipmentPartyRoles = ["SENDER", "RECIPIENT"] as const;

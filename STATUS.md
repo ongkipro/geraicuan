@@ -1,13 +1,22 @@
 # Status — geraicuan
 
-Updated: 2026-09-08
+Updated: 2026-09-09
 Status: Active
-State: IMPLEMENTED
-Review-Risk: R2
-Independent-Review: PASS
+State: IMPLEMENTING
+Review-Risk: R4
+Independent-Review: PENDING — T-76, T-83, T-79, T-84 and T-85 each passed
+independent review on their own run. T-77 has been through two review rounds,
+both of which rejected it, and every finding from both is repaired; a third
+round has not run. This field returns to PASS only when it does.
 Primary-Worker: Main
-Independent-Reviewer: AI (delivery-ledger & static check)
-Independent-Review-Head: 2b3bd18121325ac70d153dd2bb38809cc8612e65
+Independent-Reviewer: Separate review agent (adversarial diff review)
+Independent-Review-Head: not bound — T-76, T-83, T-79, T-84 and T-85 each
+passed independent review on their own delivery-ledger run, but no single
+attestation
+covers the whole worktree and further Phase 10 tasks will change it again.
+`Review-Risk: R4` is the highest risk any of those reviews found, set by T-79's
+security audit; each ledger run carries its own declared risk, so a lower value
+in `.delivery/current.json` describes that run rather than this tree.
 
 ## Delivery state machine
 
@@ -22,6 +31,126 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 `OBSERVABILITY.md` owns post-deploy verification probes. After deployment, transition to `SMOKE_TESTING` and run `release-check`. Every configured observability probe must pass before transition to `VERIFIED`.
 
 ## Current state
+
+**2026-09-09 — Phase 10 screening is in progress and the release candidate is
+no longer clean.** T-76's full-codebase screening opened the Phase 9 commit
+`67beb92` and found it had been marked complete without ever running the
+suite. Nine real test failures were waiting, and two of its four features were
+not functional: `shipment_rts_events` was created with neither row-level
+security nor a grant to the application role, so the RTS page could only ever
+work on a superuser connection; and the COGS value the shipment form collects
+was discarded before persistence, so every reported Net Margin subtracted a
+zero cost. Both are now repaired — the first by T-76, the second by T-83.
+
+T-76 has repaired the stale evidence, removed the dead code, completed the
+`server-only` boundary across `src/db`, fixed a missing tenant predicate in
+`checkDuplicateShipment`, fixed a row fan-out that broke RTS pagination, landed
+migration `0032_shipment_rts_events_isolation`, and given `/app/pengiriman/rts`
+the loading, error, audit-scenario, and invalid-query contract its registration
+claimed. Evidence at T-76's boundary: 72 files / 549 integration tests, which
+later Phase 10 tasks have since taken to 75 files / 569; clean
+`tsc`/`lint`/`build`,
+migration upgrade through 0032 on a fresh database, and an authenticated
+390/768/1280 browser journey.
+
+Independent review rejected this work repeatedly, and was right every time.
+Neither this document nor the delivery ledger records how many rounds ran: the
+ledger run `RUN-20260908T175002Z-ede3f676` holds only `run_started`,
+`boundary_check`, `scope_expansion` and `verification` records — executed
+evidence and boundary state, never a review round — and the review reports
+themselves live outside the repository. That is deliberate rather than an
+omission — a round-by-round narrative kept inside the artifact under review is
+invalidated by every review of it, so each round ends up rejecting the summary
+the previous round just wrote. `BUILD-LOG.md` records what review rejected;
+nothing records a count.
+
+What review rejected falls into two kinds. The first was real engineering: a
+route registered with states it could not produce, a SQL rewrite with no
+executable check, browser evidence taken from hand-written SQL instead of a
+repository fixture, and return fixtures carrying provider-accepted snapshots
+with no ledger entries. The second, and the majority, was this repository's own
+documents asserting a closure the disk contradicted — a route map calling
+committed code uncommitted, log sentences recording repairs that had not
+happened, an overcorrected maturity label, stale counts. Both kinds are
+addressed. The second kind is the reason this tree is not a release candidate
+yet: evidence written before the check that proves it is exactly the failure
+this screening exists to catch.
+
+T-76, T-83, T-79, T-84 and T-85 are complete. T-77's screening and repairs are
+complete and verified, and it is awaiting independent review. The remaining
+Phase 10 queue is T-86, T-78, T-80, T-81, T-82, in that corrected order.
+
+T-77 screened all 22 routes on disk at 390/768/1280 — 66 surface/viewport pairs
+across public, tenant and platform scope — and found two defects the register
+had recorded plus two the task named but no earlier round had measured. The
+return queue lost a KPI row that restated the counts its own filter chips
+already carried, gained a labelled focusable scroll region and a `nav` in place
+of a `role="tablist"` over links, and stopped printing a UUID prefix as a row
+identifier. In the token layer: **keyboard focus was invisible on every surface
+in the application** — nothing defined `--ring`, so the global focus rule and
+every primitive's ring resolved invalid, and an invalid `outline` computes to
+`outline-style:none`, suppressing the browser's own ring as well. The
+destructive tint measured 3.99:1 against a 4.5:1 floor because `--destructive`
+carried shadcn's default red rather than the design system's `--danger`. Both
+are fixed at the token, and
+`tests/design-token-contrast.integration.test.ts` now computes AA and 1.4.11
+contrast from the tokens themselves.
+Three probe hazards were also closed: a contrast probe that parsed only `rgb()`
+inspected 12 of 278 elements and would have certified a sweep it never ran;
+headless Chrome never matches `:focus-visible` without focus emulation; and the
+integration suite tears down the demo seed, so a sweep after it screens empty
+states. Each is now a hard failure rather than a silent pass. Screening
+additionally found 117 of 157 class names in `globals.css` dead in both source
+and rendered DOM, which is now **T-86**.
+
+Independent review rejected T-77 twice, and was right both times.
+The two guards it rested on did not bind: review wrote its own mutations and six
+of seven passed, each bound to text that merely happened to sit in the fixed
+source rather than to the defect. Both guards were rewritten to bind
+structurally and now kill all 21 mutations, including every one review broke.
+The task had also declared scope it never screened — typographic hierarchy, line
+length, container tiers, and the empty/loading/error states — and reads as
+complete. Those are screened now through the 104 UI-audit scenarios the
+repository already declares, 312 further scenario/viewport pairs, which found
+four more defects: **17-49px of document horizontal overflow at 390px** on
+`/app/pengiriman/baru` in the estimate-bearing states (the base route was
+clean); `EmptyState` rendering an `h3` under the page `h1` because `CardTitle`
+was a `div` and no CMS page had an outline below its heading; a second visible
+`aria-current="page"` on `/app/pengaturan`; and a scroll region whose label sat
+on the wrong element plus a step strip no keyboard could reach. All four are
+fixed. Five recorded numbers were also wrong against the disk and are corrected.
+
+Round two rejected it again with eighteen findings, and the important ones were
+the same shape: seven new mutations still walked through both guards, because
+both were written against enumerated spellings. `role={"tablist"}`, a helper
+holding the truncated identifier, a KPI row rebuilt from `filterTabs` rather
+than the summary, an **indented** second `:root`, and a
+`@media (prefers-color-scheme: dark)` palette all passed. The instrument is
+different now rather than patched: the page guard asserts rendered HTML through
+`renderToStaticMarkup`, and the token guard parses the stylesheet with brace
+matching instead of regular expressions. Twelve page mutations and seventeen
+token mutations, including every one both rounds broke, now fail.
+Round two also found that the state sweep was not screening what it claimed —
+47 of 51 loading pairs were measuring the fully loaded page, because navigation
+waited for `readyState complete`, which for a streamed route is after the very
+delay the skeleton covers. Capturing the loading frame revealed a real defect it
+had been hiding: two of sixteen loading skeletons render no `h1` at all, and one
+of them covers three platform routes. Three `contacts-area-*` scenarios are
+Server Action states a page load cannot reach, so nine pairs were counted as
+screened while rendering the base route; they are excluded by name now, and the
+sweep fails when any scenario renders indistinguishably from its base.
+Two claims recorded in round one were wrong and are corrected in `BUILD-LOG.md`:
+the 17-49px overflow was **introduced by this run** rather than pre-existing —
+the artifact that seemed to prove otherwise had been overwritten by a later run
+— and the 105ch line-length threshold rested on a false reading of `max-w-2xl`
+(672px is 72ch at 14px, not 102ch), so it sat above every finding it was meant
+to catch. Prose is measured against the pixel cap now, and eleven paragraphs
+that were over it are capped. Every finding is written up in `TASKS.md` under
+"Phase 10 findings register and repair tasks". **T-62's release-candidate PASS
+no longer describes this tree** and must be rerun from a clean boundary once the
+queue is genuinely complete. All of this work is local and uncommitted.
+
+### Prior recorded state
 
 The verified pickup-authority increment and its documentation were committed as
 `2b3bd18` and pushed to `origin/feat/cms-ui-mengantar-settings` on 2026-09-01.

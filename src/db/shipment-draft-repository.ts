@@ -1,9 +1,12 @@
+import "server-only";
+
 import { and, eq, gte } from "drizzle-orm";
 
 import { requireReadyShipmentOutlet } from "@/db/outlet-readiness-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { shipmentDrafts, shipmentParties, shipments } from "@/db/schema";
 import type { ShipmentDraftInput } from "@/lib/shipment-draft";
+
 export class OutletUnavailableError extends Error {
   constructor() {
     super("Outlet is not available for shipment drafts.");
@@ -50,6 +53,7 @@ async function inspectExistingSubmission(
 
   const existingDrafts = await tx
     .select({
+      cogsAmountIdr: shipmentDrafts.cogsAmountIdr,
       declaredValueIdr: shipmentDrafts.declaredValueIdr,
       destinationAreaId: shipmentDrafts.destinationAreaId,
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
@@ -90,6 +94,7 @@ async function inspectExistingSubmission(
   const recipient = parties.find((party) => party.role === "RECIPIENT");
   return existingShipment.outletId === input.outletId &&
       draft?.declaredValueIdr === input.declaredValueIdr &&
+      draft.cogsAmountIdr === (input.cogsAmountIdr ?? null) &&
       draft.destinationAreaId === input.destinationAreaId &&
       draft.destinationAreaLabel === input.destinationAreaLabel &&
       draft.isCod === input.isCod &&
@@ -197,28 +202,36 @@ export async function createShipmentDraft(
   return shipment.id;
 }
 
+export const DUPLICATE_SHIPMENT_WINDOW_DAYS = 7;
 
 export async function checkDuplicateShipment(
   tx: TenantTransaction,
   context: TenantContext,
   recipientPhone: string,
 ) {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const windowStart = new Date(
+    Date.now() - DUPLICATE_SHIPMENT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const result = await tx
     .select({ id: shipments.id })
     .from(shipments)
-    .innerJoin(shipmentParties, eq(shipments.id, shipmentParties.shipmentId))
+    .innerJoin(
+      shipmentParties,
+      and(
+        eq(shipmentParties.shipmentId, shipments.id),
+        eq(shipmentParties.tenantId, shipments.tenantId),
+      ),
+    )
     .where(
       and(
         eq(shipments.tenantId, context.tenantId),
-        eq(shipmentParties.role, 'RECIPIENT'),
+        eq(shipmentParties.role, "RECIPIENT"),
         eq(shipmentParties.phone, recipientPhone),
-        gte(shipments.createdAt, sevenDaysAgo)
-      )
+        gte(shipments.createdAt, windowStart),
+      ),
     )
     .limit(1);
-    
+
   return result.length > 0;
 }
