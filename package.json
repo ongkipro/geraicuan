@@ -11,7 +11,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed-local": "node scripts/seed-local-dev-users.mjs",
     "test:integration": "vitest run --config vitest.integration.config.mts",
-    "test:migration-upgrade": "node scripts/verify-migration-upgrade.mjs"
+    "test:migration-upgrade": "node scripts/verify-migration-upgrade.mjs",
+    "test:ui-audit": "bash scripts/ui-audit/run.sh",
+    "test:ui-audit:mutations": "bash scripts/ui-audit/mutate-page.sh && bash scripts/ui-audit/mutate-tokens.sh && bash scripts/ui-audit/mutate-sticky.sh && bash scripts/ui-audit/mutate-outlet-settings.sh"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.2",

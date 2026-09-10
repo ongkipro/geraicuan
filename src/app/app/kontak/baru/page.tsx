@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ContactForm } from "@/app/app/kontak/contact-form";
@@ -8,6 +9,7 @@ import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -20,6 +22,11 @@ export default async function NewContactPage() {
     if (error instanceof CmsAuthorizationDeniedError) redirect("/login/tenant");
     throw error;
   }
+
+  const auditScenario = process.env.NODE_ENV === "development"
+    ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/kontak/baru")
+    : null;
+  if (auditScenario === "contacts-new-error") throw new Error("Intentional development-only new-contact form failure.");
 
   const outlets = await withTenantContext(
     db,

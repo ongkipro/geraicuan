@@ -1,0 +1,468 @@
+{
+ "/app/impor": [
+  {
+   "scenario": "bulk-import-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "bulk-import-mixed",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "bulk-import-no-valid",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "bulk-import-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "bulk-import-unconfigured",
+   "state": "healthy-empty"
+  }
+ ],
+ "/app/kontak": [
+  {
+   "scenario": "contacts-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "contacts-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/kontak/baru": [
+  {
+   "scenario": "contacts-area-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "contacts-area-no-result",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "contacts-area-results",
+   "state": "populated"
+  },
+  {
+   "scenario": "contacts-new-error",
+   "state": "route-error"
+  }
+ ],
+ "/app/label/[shipmentId]": [
+  {
+   "scenario": "label-detail-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "label-detail-inconsistent-cod",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "label-detail-over-capacity",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "label-detail-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "label-detail-zero-history",
+   "state": "healthy-empty"
+  }
+ ],
+ "/app/label": [
+  {
+   "scenario": "label-index-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "label-index-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "label-index-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/analitik": [
+  {
+   "scenario": "analytics-first-run",
+   "state": "first-run"
+  },
+  {
+   "scenario": "analytics-page-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "analytics-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "analytics-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "analytics-trend-error",
+   "state": "partial-error"
+  }
+ ],
+ "/app": [
+  {
+   "scenario": "dashboard-action-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "dashboard-action-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "dashboard-first-run",
+   "state": "first-run"
+  },
+  {
+   "scenario": "dashboard-page-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "dashboard-period-demo",
+   "state": "populated"
+  },
+  {
+   "scenario": "dashboard-period-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "dashboard-period-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "dashboard-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "dashboard-stale",
+   "state": "stale"
+  }
+ ],
+ "/app/keuangan": [
+  {
+   "scenario": "finance-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "finance-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "finance-partial-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "finance-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "finance-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/anggota": [
+  {
+   "scenario": "members-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "members-inactive",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "members-populated",
+   "state": "populated"
+  },
+  {
+   "scenario": "members-single-admin",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "members-stream",
+   "state": "loading"
+  }
+ ],
+ "/platform/audit": [
+  {
+   "scenario": "platform-audit-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "platform-audit-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "platform-audit-invalid-query",
+   "state": "invalid-query"
+  },
+  {
+   "scenario": "platform-audit-paginated",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-audit-populated",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-audit-redacted",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-audit-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "platform-audit-stream",
+   "state": "loading"
+  }
+ ],
+ "/platform": [
+  {
+   "scenario": "platform-overview-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "platform-overview-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "platform-overview-invalid-query",
+   "state": "invalid-query"
+  },
+  {
+   "scenario": "platform-overview-populated",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-overview-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "platform-overview-stream",
+   "state": "loading"
+  }
+ ],
+ "/platform/tenant/[tenantId]": [
+  {
+   "scenario": "platform-tenant-detail-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "platform-tenant-detail-lifecycle-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "platform-tenant-detail-lifecycle-success",
+   "state": "primary-success"
+  },
+  {
+   "scenario": "platform-tenant-detail-many-outlets",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-tenant-detail-not-found",
+   "state": "not-found"
+  },
+  {
+   "scenario": "platform-tenant-detail-one-outlet",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-tenant-detail-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "platform-tenant-detail-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "platform-tenant-detail-zero-outlets",
+   "state": "healthy-empty"
+  }
+ ],
+ "/platform/tenant": [
+  {
+   "scenario": "platform-tenant-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "platform-tenant-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "platform-tenant-invalid-query",
+   "state": "invalid-query"
+  },
+  {
+   "scenario": "platform-tenant-paginated",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-tenant-populated",
+   "state": "populated"
+  },
+  {
+   "scenario": "platform-tenant-provision-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "platform-tenant-provision-success",
+   "state": "primary-success"
+  },
+  {
+   "scenario": "platform-tenant-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/pengaturan": [
+  {
+   "scenario": "settings-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "settings-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "settings-first-run",
+   "state": "first-run"
+  },
+  {
+   "scenario": "settings-many",
+   "state": "populated"
+  },
+  {
+   "scenario": "settings-private-auth-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "settings-private-attention",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "settings-provider-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "settings-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "settings-twenty",
+   "state": "populated"
+  }
+ ],
+ "/app/pengiriman/[shipmentId]": [
+  {
+   "scenario": "shipment-detail-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "shipment-detail-payment-paying",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "shipment-detail-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "shipment-detail-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "shipment-detail-submitting",
+   "state": "partial-error"
+  }
+ ],
+ "/app/pengiriman/baru": [
+  {
+   "scenario": "shipment-draft-cod-ineligible",
+   "state": "populated"
+  },
+  {
+   "scenario": "shipment-draft-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "shipment-draft-estimate-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "shipment-draft-saved",
+   "state": "primary-success"
+  },
+  {
+   "scenario": "shipment-draft-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "shipment-draft-unconfigured",
+   "state": "healthy-empty"
+  }
+ ],
+ "/app/pengiriman": [
+  {
+   "scenario": "shipment-queue-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "shipment-queue-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "shipment-queue-paginated",
+   "state": "populated"
+  },
+  {
+   "scenario": "shipment-queue-stale",
+   "state": "stale"
+  },
+  {
+   "scenario": "shipment-queue-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/pengiriman/rts": [
+  {
+   "scenario": "shipment-rts-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "shipment-rts-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "shipment-rts-filtered-empty",
+   "state": "filtered-empty"
+  },
+  {
+   "scenario": "shipment-rts-invalid-query",
+   "state": "invalid-query"
+  },
+  {
+   "scenario": "shipment-rts-paginated",
+   "state": "populated"
+  },
+  {
+   "scenario": "shipment-rts-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/kontak/[contactId]": [
+  {
+   "scenario": "contact-detail-outlet-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "contact-detail-route-error",
+   "state": "route-error"
+  }
+ ]
+}

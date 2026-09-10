@@ -601,9 +601,13 @@ describe("tenant shipment analytics repository", () => {
     });
   });
 
-  it("sums only the created-cohort COGS and subtracts it from net margin", async () => {
+  it("sums the ledger-effective cohort's COGS, not the created cohort's, and subtracts it from net margin", async () => {
     // The shared fixture leaves every cogs_amount_idr null, which cannot tell a
     // correct aggregation apart from one that reads the wrong column or cohort.
+    //
+    // `failed` and `awaiting` were created inside the selected range but never
+    // submitted to the provider, so they carry no ledger entry at all: their
+    // COGS must NOT reach the total, in either cohort.
     await adminPool.query(
       "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
       [failed, 20_000],
@@ -612,7 +616,11 @@ describe("tenant shipment analytics repository", () => {
       "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
       [awaiting, 5_000],
     );
-    // Outside the selected created range, so it must not reach the total.
+    // Created before the selected range, but its ledger entries (from
+    // `seedIssued`'s resolvedAt) are effective inside it — the exact
+    // creation/issuance straddle netMarginIdr must not mismatch on. Its COGS
+    // must reach the total precisely because it shares the same
+    // ledger-effective cohort as the other four financial terms.
     await adminPool.query(
       "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
       [createdBeforeIssuedInside, 999_000],
@@ -628,9 +636,9 @@ describe("tenant shipment analytics repository", () => {
         loadShipmentKpis(tx, context, range("Asia/Jakarta")),
       );
 
-      expect(kpis.cogsIdr).toBe(25_000);
-      // 100_000 principal - 18_000 shipping - 3_300 fee - 363 VAT - 25_000 COGS.
-      expect(kpis.netMarginIdr).toBe(53_337);
+      expect(kpis.cogsIdr).toBe(999_000);
+      // 100_000 principal - 18_000 shipping - 3_300 fee - 363 VAT - 999_000 COGS.
+      expect(kpis.netMarginIdr).toBe(-920_663);
       expect(kpis.createdCount).toBe(4);
     } finally {
       await adminPool.query(

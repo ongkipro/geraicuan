@@ -5,9 +5,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function PlatformLoading() {
   return (
     <PageContainer aria-busy="true" aria-label="Memuat data pemantauan" width="wide">
-      {/* The heading is real, not a skeleton. This file covers the platform
-          overview, the audit trail and tenant detail, so without it three
-          routes stream with no h1 at all. */}
+      {/* The heading is real, not a skeleton. No platform route has its own
+          loading file, so this one covers all four — overview, tenant list,
+          tenant detail and audit — and without it four routes stream with no
+          h1 at all. The title is the shell's, not any one page's: it is
+          replaced the moment the route's own header streams in. */}
       <PageHeader
         description="Navigasi dan lingkup platform tetap tersedia saat data pemantauan dimuat."
         eyebrow="Platform"

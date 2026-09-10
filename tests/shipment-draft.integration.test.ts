@@ -190,9 +190,14 @@ describe("tenant shipment drafts", () => {
     expect(stored?.cogsAmountIdr).toBe(40_000);
   });
 
-  it("carries a COGS submitted through the draft path into the analytics net margin", async () => {
-    // The chain the repair exists for, end to end in one check: form input to
-    // validator to repository to the KPI a Tenant Admin actually reads.
+  it("leaves the analytics net margin unmoved by a COGS recorded on a draft with no ledger entry yet", async () => {
+    // netMarginIdr's other four terms (COD principal, shipping, service fee,
+    // VAT) are only ever recognized through a ledger entry, which a draft
+    // does not have until it is issued. COGS has to share that same
+    // ledger-effective cohort for the margin's five terms to describe the
+    // same shipments (T-81) — so a COGS recorded on a still-unissued draft
+    // must not move cogsIdr or netMarginIdr at all, even though
+    // `createdCount` (a created-cohort figure) does move.
     const range = parseAnalyticsRange({ rentang: "30-hari", tz: "Asia/Jakarta" }, new Date());
     const readKpis = () =>
       withTenantContext(appDb, "draft-admin-a", tenantA, (tx, context) =>
@@ -213,14 +218,12 @@ describe("tenant shipment drafts", () => {
 
     const after = await readKpis();
 
-    // A draft has no ledger entries, so every money term is unchanged and the
-    // margin moves by exactly the negated cost the operator just recorded.
-    expect(after.cogsIdr).toBe(before.cogsIdr + 65_000);
+    expect(after.cogsIdr).toBe(before.cogsIdr);
     expect(after.codPrincipalIdr).toBe(before.codPrincipalIdr);
     expect(after.providerShippingIdr).toBe(before.providerShippingIdr);
     expect(after.codServiceFeeIdr).toBe(before.codServiceFeeIdr);
     expect(after.codVatIdr).toBe(before.codVatIdr);
-    expect(after.netMarginIdr).toBe(before.netMarginIdr - 65_000);
+    expect(after.netMarginIdr).toBe(before.netMarginIdr);
     expect(after.createdCount).toBe(before.createdCount + 1);
   });
 
@@ -611,6 +614,62 @@ describe("tenant shipment drafts", () => {
       .from(schema.shipments)
       .where(eq(schema.shipments.id, submissionId));
     expect(replayRows).toEqual([{ id: submissionId }]);
+  });
+
+  it("flags a recipient phone reused within the duplicate window until confirmed", async () => {
+    const recipientPhone = "+62 813-0000-0001";
+    const priorSubmissionId = randomUUID();
+
+    vi.resetModules();
+    vi.doMock("@/db/client", () => ({ db: appDb }));
+    vi.doMock("@/lib/cms-auth", () => ({
+      CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
+      requireCmsScope: vi.fn(async () => ({
+        scope: "tenant",
+        userId: "draft-user-a",
+        tenantId: tenantA,
+        role: "OPERATOR",
+      })),
+    }));
+    vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    vi.doMock("@/app/app/location-actions", async () => {
+      const { lockMengantarAccountAuthority } = await import("@/lib/mengantar-credentials");
+      return {
+        validateMengantarDestinationAreaSelection: vi.fn(async (outletId, _query, areaId, areaLabel) => {
+          const authority = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+            lockMengantarAccountAuthority(tx, context, outletId),
+          );
+          return { authority, option: { areaId, areaLabel }, success: true };
+        }),
+      };
+    });
+    const { saveShipmentDraft } = await import("@/app/app/actions");
+
+    const priorFormData = submission({ recipientPhone, submissionId: priorSubmissionId });
+    const priorValidated = validateShipmentDraft(priorFormData);
+    expect(priorValidated.ok).toBe(true);
+    if (!priorValidated.ok) return;
+    await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, priorValidated.input, priorSubmissionId),
+    );
+
+    const secondFormData = submission({ recipientPhone, submissionId: randomUUID() });
+    secondFormData.set("destinationMode", "manual");
+    secondFormData.set("areaOutletId", outletA);
+    secondFormData.set("areaQuery", "Gambir Jakarta");
+    secondFormData.set("areaId", "3171010");
+    secondFormData.set("areaLabel", "Gambir, Jakarta Pusat");
+
+    // The rejection is a structured flag, not a match against the message's
+    // own wording — a copy edit to the Indonesian sentence must not silently
+    // remove the operator's only way to clear the block.
+    await expect(saveShipmentDraft({}, secondFormData)).resolves.toMatchObject({
+      duplicateDetected: true,
+      errors: { form: expect.any(String) },
+    });
+
+    secondFormData.set("confirmDuplicate", "true");
+    await expect(saveShipmentDraft({}, secondFormData)).resolves.toBeUndefined();
   });
 
   it("commits invalid-outlet bulk attempts before returning the generic error", async () => {

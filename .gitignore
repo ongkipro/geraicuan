@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ui-audit run artifacts (screenshots, sweep JSON) - not source
+/scripts/ui-audit/.output/

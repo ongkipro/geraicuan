@@ -106,15 +106,148 @@ const parseCss = (source: string) =>
  * parser and invisible to a pattern.
  */
 const cssRules = parseCss(css);
-const targetsRoot = (selector: string) =>
-  selector.split(",").some((part) => /^(?::root\b|html\b|\*)/.test(part.trim()));
-const tokens = new Map<string, string>();
+
+/**
+ * Does this rule apply on screen?
+ *
+ * `@media print` is not a screen context, so a rule wrapped in it is inert for
+ * every user — independent review moved the one global focus rule into it and
+ * the guard stayed green while the ring vanished from the whole application.
+ * Anything else (a width query, a colour-scheme query, no query at all) can
+ * apply, so it counts.
+ */
+const appliesOnScreen = (rule: Rule) =>
+  ![...rule.path, rule.selector].some((part) => /@media[^{]*\bprint\b/.test(part));
+
+/**
+ * Does this rule set custom properties that reach the whole document?
+ *
+ * Custom properties inherit, so `body` reaches every element the primitives
+ * render, and so does `*`. Matching only `:root` and `html` left
+ * `body { --destructive: … }` free to restore shadcn's red with the guard
+ * green — confirmed in a browser, not argued.
+ */
+/** Split on commas outside parens, brackets, and quoted strings.
+ *
+ * A plain `.split(",")` shreds the selector list inside `:is(:root, .foo)`
+ * into `:is(:root` and `.foo)` — neither unwraps or matches — so that whole
+ * rule went unseen. Tracking only paren depth repeats the same mistake for
+ * `[data-x="a,b"]:root`: the comma sits inside a quoted attribute value, not
+ * a selector list, and a paren-only tracker still splits there, breaking
+ * `:root` off from its attribute selector so neither fragment matches.
+ * Bracket depth and quote state are tracked for the same reason parens are. */
+function splitTopLevel(selector: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+  let start = 0;
+  for (let i = 0; i < selector.length; i++) {
+    const char = selector[i];
+    if (quote) {
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") quote = char;
+    else if (char === "(" || char === "[") depth++;
+    else if (char === ")" || char === "]") depth--;
+    else if (char === "," && depth === 0) {
+      parts.push(selector.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(selector.slice(start));
+  return parts;
+}
+
+/**
+ * Does this one compound selector (no combinators) set a custom property by
+ * *inheritance* from the document root, or *directly* on the elements it
+ * matches?
+ *
+ * The distinction matters because inheritance loses to a direct rule
+ * regardless of which one is later in the file. `:root { --ring: red }` sets
+ * a value every element inherits; `body { --ring: transparent }` sets the
+ * property directly on `<body>` and everything under it, which overrides
+ * whatever it would otherwise have inherited - independent review confirmed
+ * this live and confirmed that treating token collection as "whichever
+ * matching rule is textually last wins" is wrong whenever the two rules
+ * target different real elements. `:root`/`html` are "root": read once at
+ * the top and inherited down. `body`, `*`, and a bare `:not(...)` (matching
+ * everything except what it negates - `:not(html)` reaches the entire
+ * rendered page) are "direct": scoped narrower than the whole document,
+ * `.foo:not(.bar)` does not qualify, which is why `:not` only counts here
+ * when nothing precedes it in the compound.
+ *
+ * `html`/`body` are type selectors: CSS syntax only allows one at the very
+ * start of a compound (`html[lang]`, never `[lang]html`), so anchoring `^` is
+ * correct for those two, and for a leading `:not(...)`. `:root` is a
+ * pseudo-class and may appear anywhere in the compound -
+ * `[data-theme]:root` is exactly how a themed root is usually written - so it
+ * is matched anywhere in `bare`, as a whole token so it cannot match inside a
+ * longer pseudo-class name.
+ */
+type Cascade = "root" | "direct" | null;
+function compoundCascade(bare: string): Cascade {
+  if (/^html\b/.test(bare)) return "root";
+  if (/^body\b/.test(bare)) return "direct";
+  if (/^\*(?![\w-])/.test(bare)) return "direct";
+  if (/^:not\(/.test(bare)) return "direct";
+  if (/:root\b(?!-)/.test(bare)) return "root";
+  return null;
+}
+
+/** Unwrap one layer of `:is(...)`/`:where(...)`, then re-split: the interior
+ * is itself a selector list and may need the same treatment recursively. A
+ * rule matches an element through whichever branch of the list applies to
+ * it, so if any branch is "direct" the rule can act directly on some real
+ * element even though another branch of the same list is merely "root". */
+function unwrapCascade(part: string): Cascade {
+  const bare = part.trim();
+  const own = compoundCascade(bare);
+  if (own) return own;
+  const wrapped = bare.match(/^:(?:where|is)\((.*)\)$/);
+  if (!wrapped) return null;
+  const branches = splitTopLevel(wrapped[1]).map(unwrapCascade);
+  if (branches.includes("direct")) return "direct";
+  if (branches.includes("root")) return "root";
+  return null;
+}
+
+function ruleCascade(selector: string): Cascade {
+  const branches = splitTopLevel(selector).map(unwrapCascade);
+  if (branches.includes("direct")) return "direct";
+  if (branches.includes("root")) return "root";
+  return null;
+}
+
+// Root-level values first, direct-level values layered on top so they always
+// win regardless of which appears later in the file - a full CSS specificity
+// model is out of scope, and this file has no competing rules within either
+// level for the same property, so source order deciding ties within a level
+// is sufficient.
+const rootTokens = new Map<string, string>();
+const directTokens = new Map<string, string>();
 for (const rule of cssRules) {
-  if (!targetsRoot(rule.selector)) continue;
+  if (!appliesOnScreen(rule)) continue;
+  const cascade = ruleCascade(rule.selector);
+  if (!cascade) continue;
+  const target = cascade === "direct" ? directTokens : rootTokens;
   for (const [property, value] of rule.declarations) {
-    if (property.startsWith("--")) tokens.set(property, value);
+    if (property.startsWith("--")) target.set(property, value);
   }
 }
+const tokens = new Map<string, string>([...rootTokens, ...directTokens]);
+
+it("imports no stylesheet this guard cannot see", () => {
+  // The parser does not resolve `@import`, so anything imported is invisible to
+  // every assertion below. The three the file carries are known; a fourth would
+  // silently take the palette out of scope.
+  // Any @import spelling — quoted, or url("…") — not just the one this file
+  // happens to use. An import this pattern misses is invisible to the parser
+  // and could carry an unseen palette.
+  const imports = [...css.matchAll(/^@import\s+(?:url\()?"([^"]+)"\)?/gm)].map((m) => m[1]);
+  expect(imports).toEqual(["tailwindcss", "tw-animate-css", "shadcn/tailwind.css"]);
+});
 
 type Rgb = { r: number; g: number; b: number };
 
@@ -144,8 +277,23 @@ const encode = (v: number) => {
   return Math.min(255, Math.max(0, c * 255));
 };
 
+// A handful of CSS keywords a mutated declaration could plausibly use. Not
+// exhaustive by design: an unrecognised value fails the check that calls
+// parse() rather than passing it, so a real gap here is loud, not silent.
+const NAMED: Record<string, Rgb> = {
+  white: { r: 255, g: 255, b: 255 },
+  black: { r: 0, g: 0, b: 0 },
+  red: { r: 255, g: 0, b: 0 },
+  gray: { r: 128, g: 128, b: 128 },
+  grey: { r: 128, g: 128, b: 128 },
+  silver: { r: 192, g: 192, b: 192 },
+};
+
 function parse(raw: string): Rgb {
-  const value = resolve(raw);
+  const value = resolve(raw).trim();
+
+  const named = NAMED[value.toLowerCase()];
+  if (named) return named;
 
   const hex = value.match(/^#([0-9a-f]{6})$/i);
   if (hex) {
@@ -159,6 +307,27 @@ function parse(raw: string): Rgb {
     const rad = (H * Math.PI) / 180;
     const linear = oklabToLinear(L, C * Math.cos(rad), C * Math.sin(rad));
     return { r: encode(linear.r), g: encode(linear.g), b: encode(linear.b) };
+  }
+
+  const rgbFn = value.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+[\d.]+%?)?\s*\)$/i);
+  if (rgbFn) {
+    return { r: Number(rgbFn[1]), g: Number(rgbFn[2]), b: Number(rgbFn[3]) };
+  }
+
+  // Only the two-argument, unweighted form the design system actually writes
+  // (globals.css's own \`color-mix(in srgb,var(--hairline),transparent 12%)\`
+  // shape, generalised to two opaque colours at a stated percentage of the
+  // first). Anything more exotic falls through to the throw below.
+  const mix = value.match(/^color-mix\(\s*in\s+\w+\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*(.+?)\s*\)$/i);
+  if (mix) {
+    const a = parse(mix[1]);
+    const b = parse(mix[3]);
+    const p = Number(mix[2]) / 100;
+    return {
+      r: a.r * p + b.r * (1 - p),
+      g: a.g * p + b.g * (1 - p),
+      b: a.b * p + b.b * (1 - p),
+    };
   }
 
   throw new Error(`unsupported colour syntax: ${value}`);
@@ -258,6 +427,7 @@ describe("design token contrast", () => {
     // The rule that paints it, found as a rule rather than as a line of text.
     const painter = cssRules.find(
       (rule) => rule.selector === ":focus-visible"
+        && appliesOnScreen(rule)
         && /^3px solid var\(--ring\)$/.test(rule.declarations.get("outline") ?? ""),
     );
     expect(painter, "the global :focus-visible outline rule").toBeDefined();
@@ -266,18 +436,90 @@ describe("design token contrast", () => {
     // make an outline invisible. Independent review turned it off three ways
     // past an earlier version of this check: `outline-width:0`,
     // `outline-color:transparent`, and `outline:none` on a narrower selector.
+    // Whether a ring is visible is a measurement, not a list of spellings.
+    // Independent review hid it three ways past an enumerated check:
+    // `outline-width: 0.5px`, `outline-color: var(--canvas)` (a white ring on
+    // the white canvas), and a `@media print` wrapper. Width and colour are
+    // resolved and judged here instead.
     const invisible = (rule: Rule) => {
       const value = (name: string) => (rule.declarations.get(name) ?? "").trim();
       const shorthand = value("outline");
-      return /^(?:none|0|0px)\b/.test(shorthand)
-        || /\btransparent\b/.test(shorthand)
-        || value("outline-style") === "none"
-        || /^0(?:px)?$/.test(value("outline-width"))
-        || /^(?:transparent|rgba?\([^)]*,\s*0\s*\))$/.test(value("outline-color"));
+      const style = /\b(none|hidden)\b/.test(shorthand) || /^(?:none|hidden)$/.test(value("outline-style"));
+      if (style) return "outline removed";
+
+      // A bare `0` is a length too: matching only `Npx` let `outline-width: 0`
+      // through after this check was rewritten, a mutation an earlier version
+      // had killed.
+      const lengthOf = (text: string) => text.match(/(?:^|\s)(-?[\d.]+)(?:px)?(?:\s|$)/)?.[1];
+
+      // `outline-width` also accepts the keywords `thin`/`medium`/`thick`
+      // (which resolve to concrete browser pixel widths, not to a length
+      // this file can parse as a number) and any other CSS length unit
+      // (`em`, `rem`, `%`, ...), which this static parser cannot resolve to
+      // pixels without the element's live cascade. Independent review found
+      // that `lengthOf`, requiring a literal digit, silently treated both as
+      // "no width found" and let `outline-width: thin` (≈1px) through as if
+      // the ring were unconstrained. Every whitespace-separated token in the
+      // shorthand or the longhand is checked instead of just the first
+      // number: a keyword resolves to its browser pixel width, a plain
+      // number or `Npx` resolves as before, and any other length unit is
+      // unverifiable and fails closed rather than passing silently.
+      const WIDTH_KEYWORD_PX: Record<string, number> = { thin: 1, medium: 3, thick: 5 };
+      const OTHER_LENGTH_UNIT = /^-?[\d.]+(?:em|rem|ex|ch|pt|pc|cm|mm|in|q|vw|vh|vmin|vmax|%)$/i;
+      const widthOf = (text: string): number | "unverifiable" | undefined => {
+        for (const token of text.trim().split(/\s+/)) {
+          const keyword = WIDTH_KEYWORD_PX[token.toLowerCase()];
+          if (keyword !== undefined) return keyword;
+          if (/^-?[\d.]+(?:px)?$/.test(token)) return Number(token.replace(/px$/, ""));
+          if (OTHER_LENGTH_UNIT.test(token)) return "unverifiable";
+        }
+        return undefined;
+      };
+      const widthResolved = widthOf(shorthand) ?? widthOf(value("outline-width"));
+      if (widthResolved === "unverifiable") {
+        return `outline-width "${value("outline-width") || shorthand}" is not a pixel value this check can verify`;
+      }
+      if (widthResolved !== undefined && widthResolved < 2) return `outline ${widthResolved}px is not a visible ring`;
+
+      // A large negative offset pulls the outline behind the element it is
+      // meant to circle, drawn but never seen.
+      const offsetText = lengthOf(value("outline-offset"));
+      if (offsetText !== undefined && Number(offsetText) < -8) {
+        return `outline-offset ${offsetText}px draws the ring off-screen`;
+      }
+
+      const colourText = value("outline-color")
+        || shorthand.replace(/^[\d.]+px\s+\w+\s*/, "").trim();
+      if (!colourText) return null;
+      // `transparent` and a zero alpha are invisible by definition, and the
+      // colour parser cannot represent them — swallowing its throw is how
+      // `outline-color: transparent` slipped back past this check.
+      if (/^transparent$/i.test(colourText) || /rgba?\([^)]*[,/]\s*0(?:\.0+)?\s*\)$/.test(colourText)) {
+        return `outline colour ${colourText} is invisible`;
+      }
+      let colour: Rgb;
+      // Fail closed: a colour syntax `parse()` cannot read is a gap in the
+      // parser, not evidence the ring is fine. Swallowing this and returning
+      // `null` is exactly how `outline-color: white` and `rgb(255 255 255)`
+      // — a white ring on the white canvas — got past this check.
+      try { colour = parse(colourText); }
+      catch (error) { return `outline colour ${colourText} could not be verified (${(error as Error).message})`; }
+      const worst = Math.min(
+        ...(["--canvas", "--surface", "--surface-sunken"] as const)
+          .map((ground) => contrast(colour, token(ground))),
+      );
+      return worst < 3 ? `outline colour ${colourText} measures ${worst}:1` : null;
     };
+    // Any rule capable of drawing an outline on a focused element, not only
+    // one whose selector spells `:focus-visible`. `:focus { outline: none }`
+    // has equal specificity to the global rule and later source order, so it
+    // wins outright — and it never contains the literal text this scan was
+    // looking for.
     const suppressors = cssRules
-      .filter((rule) => rule.selector.includes(":focus-visible") && invisible(rule))
-      .map((rule) => rule.selector);
+      .filter((rule) => /:focus(?:-visible)?\b/.test(rule.selector) && appliesOnScreen(rule))
+      .map((rule) => [rule.selector, invisible(rule)] as const)
+      .filter(([, reason]) => reason !== null)
+      .map(([selector, reason]) => `${selector}: ${reason}`);
     expect(suppressors).toEqual([]);
 
     // The base-layer default has to agree with it, at full alpha.
@@ -296,16 +538,17 @@ describe("design token contrast", () => {
     // versions of this check: a selector carrying `.dark` anywhere, and a
     // `prefers-color-scheme: dark` at-rule redefining the palette. The second
     // is the more common spelling and bypasses every assertion above it.
-    const darkSelectors = cssRules
-      .filter((rule) => !rule.selector.startsWith("@") && /\.dark\b/.test(rule.selector))
-      .map((rule) => rule.selector);
-    expect(darkSelectors).toEqual([]);
-
-    const darkMedia = cssRules
-      .filter((rule) => [...rule.path, rule.selector]
-        .some((part) => /@media[^{]*prefers-color-scheme\s*:\s*dark/.test(part)))
+    // A theme switch is a selector that names a theme, or any colour-scheme
+    // query at all. Matching only `.dark` and only `prefers-color-scheme: dark`
+    // left `[data-theme="dark"]` and the negated
+    // `@media not all and (prefers-color-scheme: light)` free to ship a live
+    // dark palette — both confirmed past an earlier version of this check.
+    const themed = cssRules
       .filter((rule) => [...rule.declarations.keys()].some((name) => name.startsWith("--")))
-      .map((rule) => [...rule.path, rule.selector].join(" > "));
-    expect(darkMedia).toEqual([]);
+      .filter((rule) => [...rule.path, rule.selector].some((part) =>
+        (!part.startsWith("@") && (/\.dark\b/.test(part) || /\[data-theme/.test(part)))
+        || /@media[^{]*prefers-color-scheme/.test(part)))
+      .map((rule) => [...rule.path, rule.selector].filter(Boolean).join(" > "));
+    expect(themed).toEqual([]);
   });
 });

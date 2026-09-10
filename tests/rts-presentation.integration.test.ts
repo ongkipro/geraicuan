@@ -27,11 +27,15 @@ const fixture = {
     totalCount: 7,
     totalPages: 1,
     summary: {
-      totalRtsCount: 7,
-      queuedCount: 3,
-      inTransitCount: 2,
-      receivedCount: 1,
-      problemCount: 1,
+      // Deliberately distinctive values. With 3/2/1/1 the "counts appear only
+      // inside the filter" assertion cannot tell a restated count from a weight
+      // or a page number, so it had to require the number to be a whole text
+      // node — and a tile rendering "3 kiriman" walked straight through it.
+      totalRtsCount: 88,
+      queuedCount: 37,
+      inTransitCount: 23,
+      receivedCount: 11,
+      problemCount: 17,
     },
     rows: [
       {
@@ -122,14 +126,6 @@ const occurrences = (haystack: string, needle: string | RegExp) =>
       : new RegExp(needle.source, needle.flags.includes("g") ? needle.flags : `${needle.flags}g`),
   ) ?? []).length;
 
-/** The rendered markup with the filter navigation removed. */
-function withoutFilterNav(html: string) {
-  const open = html.indexOf('<nav aria-label="Filter status retur"');
-  if (open === -1) return html;
-  const close = html.indexOf("</nav>", open);
-  return html.slice(0, open) + html.slice(close + "</nav>".length);
-}
-
 describe("return queue presentation", () => {
   let html = "";
   beforeEach(async () => {
@@ -143,18 +139,21 @@ describe("return queue presentation", () => {
     // PROBLEM count and being clickable, so the cards were a strictly smaller,
     // unactionable copy of the control beneath them.
     //
-    // Asserted on the rendered document: a KPI row rebuilt from `filterTabs`
-    // reads no `data.summary` at all and defeats any source check, but it
-    // cannot avoid printing the numbers a second time.
-    const outside = withoutFilterNav(html);
+    // Asserted on occurrence count in the whole document, not on DOM position.
+    // `withoutFilterNav` used to define "restated" as "printed outside the
+    // `<nav>` element", and a KPI tile row placed *inside* that element —
+    // structurally part of the filter's markup without being one of its
+    // links — read as zero restatements while printing every count a second
+    // time. Each distinctive value legitimately appears exactly once, in its
+    // one filter chip; a second appearance anywhere is the same defect
+    // whatever element carries it or where it sits in the tree.
+    const text = html.replace(/<[^>]*>/g, " ");
     for (const [label, count] of [
-      ["queued", 3], ["inTransit", 2], ["received", 1], ["problem", 1],
+      ["queued", 37], ["inTransit", 23], ["received", 11], ["problem", 17],
+      ["total", 88],
     ] as const) {
-      expect(occurrences(html, `>${count}</`), `${label} in document`).toBeGreaterThan(0);
-      expect(occurrences(outside, `>${count}</`), `${label} outside the filter`).toBe(0);
+      expect(text.match(new RegExp(`\\b${count}\\b`, "g")) ?? [], label).toHaveLength(1);
     }
-    // The total is legitimately restated once, as the result count.
-    expect(occurrences(outside, ">7</"), "total outside the filter").toBeLessThanOrEqual(1);
 
     // Composition matches its sibling queue exactly rather than out-carding it.
     const cardsIn = (source: string) => (source.match(/\bCard[A-Za-z]*\b/g) ?? []).length;
@@ -187,7 +186,11 @@ describe("return queue presentation", () => {
     expect(region![0]).toMatch(/aria-label="Daftar kiriman retur; geser horizontal/);
 
     // No other horizontal scroller may be left unlabelled and unreachable.
-    for (const opening of html.match(/<[a-z]+[^>]*overflow-x-auto[^>]*>/g) ?? []) {
+    // Any horizontal scroller, not one utility spelling: `overflow-auto` and
+    // `overflow-scroll` scroll horizontally too, and an added
+    // `overflow-auto whitespace-nowrap` strip passed a check bound to
+    // `overflow-x-auto`.
+    for (const opening of html.match(/<[a-z]+[^>]*\boverflow(?:-x)?-(?:auto|scroll)\b[^>]*>/g) ?? []) {
       const announced = /aria-label=|aria-labelledby=|role="region"/.test(opening);
       const reachable = /tabindex="0"/.test(opening);
       expect(announced && reachable, opening.slice(0, 120)).toBe(true);
@@ -198,10 +201,49 @@ describe("return queue presentation", () => {
     // Every row rendered `ID: 72000000` in a field of its own, beside an AWB
     // that already identified the row and linked to it. Matched in the output,
     // so a helper or a template literal rebuilding it is the same finding.
-    expect(html).not.toMatch(/ID:\s*[0-9A-Za-z-]/);
+    // Bound to the identifier, not to the word "ID" or to a slice length.
+    // `Ref {row.shipmentId.slice(0, 7)}` prints a second identifier on every
+    // row just as plainly, and a check looking for `ID:` and exactly eight
+    // characters sees none of it.
+    const rendered = html.replace(/<[^>]*>/g, " ");
+    // Rows with no AWB legitimately print one truncated id as their link
+    // text; rows with one never print any slice of their own id at all.
+    // Prefix and suffix both — `Ref {shipmentId.slice(-8)}` is the same
+    // defect at the other end of the string.
+    //
+    // Grouped by the exact slice value rather than checked per row, because
+    // two ids can share a slice (both start "7200000" through length 7 here)
+    // — skipping a shared slice instead of pooling it let a mutation on the
+    // *other* row hide behind the shared one's own legitimate appearance.
+    // The budget for a group is the number of no-AWB rows in it: any count
+    // above that is a second identifier from whichever row contributed it.
+    //
+    // Every contiguous run of the id, not only its prefix and suffix: a slice
+    // taken from the middle (`shipmentId.slice(9, 17)`) is the same defect and
+    // a check that only looked at the two ends never saw it. The floor is 5,
+    // not the 6 an earlier version used — independent review defeated that
+    // with a 5-character middle slice. It is not lower still: at 4 characters
+    // "0003" collides with the unrelated AWB "SANITIZED-CNOTE-0003" and the
+    // check cannot tell that legitimate coincidence from a real second
+    // identifier, so it would fail on the very fixture that has no defect.
+    for (let length = 5; length <= 12; length++) {
+      const owners = new Map<string, typeof fixture.page.rows[number][]>();
+      for (const row of fixture.page.rows) {
+        const id = row.shipmentId;
+        for (let start = 0; start + length <= id.length; start++) {
+          const slice = id.slice(start, start + length);
+          owners.set(slice, [...(owners.get(slice) ?? []), row]);
+        }
+      }
+      for (const [slice, rows] of owners) {
+        const uniqueRows = [...new Set(rows)];
+        const budget = uniqueRows.filter((row) => !row.awb).length;
+        const seen = (rendered.match(new RegExp(slice, "gi")) ?? []).length;
+        expect(seen, `${length}-char slice ${slice} of ${uniqueRows.map((r) => r.shipmentId).join(", ")}`)
+          .toBeLessThanOrEqual(budget);
+      }
+    }
 
-    // The truncated form survives in exactly one place: as the link text of the
-    // row that has no AWB, where it is the only identifier there is.
     expect(occurrences(html, "SANITIZED-CNOTE-0003")).toBe(1);
     // Counted as rendered text, not as a substring: both fixture ids appear in
     // `href`s, and a check that cannot tell an address from a printed field

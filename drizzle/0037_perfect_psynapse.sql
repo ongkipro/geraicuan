@@ -1,0 +1,2 @@
+ALTER TABLE "shipment_rts_events" DROP CONSTRAINT "shipment_rts_events_status_valid";--> statement-breakpoint
+ALTER TABLE "shipment_rts_events" ADD CONSTRAINT "shipment_rts_events_status_valid" CHECK (status IN ('RTS_QUEUED', 'RTS_IN_TRANSIT', 'RTS_RECEIVED'));

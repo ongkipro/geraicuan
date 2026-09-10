@@ -16,25 +16,38 @@ Status: BLOCKED
 `RC-1` was prepared against `2b3bd18` and marked READY by T-62. That boundary no
 longer describes this repository. Commit `67beb92` then shipped the Phase 9
 market features without independent review or a passing test suite, and the
-Phase 10 screening that followed has not finished.
+Phase 10 screening that followed has now finished.
 
 What has changed since the READY declaration:
 
 - Migrations `0032` through `0036` alter row-level security, table grants and
-  column privileges. `Backup-Proof` is therefore no longer `NOT_REQUIRED`.
-- `Declared-Risk` rises to `R4`: T-79's security audit closed a provider
+  column privileges; `0037` is an additive, independently-verified no-op
+  (drizzle-kit metadata normalization — a stale CHECK-constraint snapshot
+  representation, not a schema change; `pnpm db:generate` now reports "No
+  schema changes"). `Backup-Proof` is therefore still required for `0032`
+  through `0036`, unaffected by `0037`.
+- `Declared-Risk` rose to `R4` when T-79's security audit closed a provider
   ingestion endpoint that implemented an unverified contract, and found the
-  only tenant-owned table shipped without row-level security.
-- `Base` moves to `67beb92`, the commit this work sits on top of. The rollback
+  only tenant-owned table shipped without row-level security. Both are fixed.
+- `Base` moved to `67beb92`, the commit this work sits on top of. The rollback
   reference deliberately stays at `2b3bd18`, the last boundary that passed a
   release gate.
-- Phase 10 tasks T-77, T-78, T-80, T-81 and T-82 are still open, and every
-  change since `67beb92` is uncommitted at the time of writing.
+- Phase 10 (`T-76` through `T-82`) is now complete: every task passed
+  independent review where required (T-77 after twenty-three rounds; T-81 at
+  R3), `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` (591/591),
+  `pnpm test:migration-upgrade` (through `0037`), and `pnpm build` (zero
+  errors or warnings, using the documented production env block) all pass
+  against the current working tree. Every change since `67beb92` remains
+  uncommitted at the time of writing, per this repository's own standing
+  instruction to commit once, at the end, after the full Phase 10 queue is
+  verified — not incrementally per task.
 
 Do not gate or deploy from this file. `STATUS.md` is the runtime authority and
-`TASKS.md` is the execution queue; both describe what remains. T-82 owns
-restoring a truthful release candidate, and T-62's verification must be rerun
-from a clean tree before `Status` returns to `READY`.
+`TASKS.md` is the execution queue; both describe what remains. Phase 10
+verification passing does not by itself return `Status` to `READY`: this
+manifest's own contract requires T-62's verification to be rerun from a clean,
+committed tree first, which has not happened. `Status` stays `BLOCKED` until
+that rerun occurs after this segment's work is committed.
 
 ## Contract
 

@@ -59,6 +59,14 @@ export async function confirmShipmentIssuance(
   }
 
   const principal = await requireTenantPrincipal();
+  // No live Mengantar `/order` transport exists yet — the only
+  // `MengantarOrderTransportLookup` implementation reads a sanitized fixture
+  // (`resolveSanctionedOrderFixtureTransport`) and is disabled outright in
+  // production. Issuance refuses here with an honest message rather than
+  // silently exercising a code path with nothing real behind it; see
+  // `src/lib/sanctioned-order-fixture.ts` and TASKS.md's T-80 entry for what
+  // a real transport needs (verified provider contract, timeout/retry/error
+  // handling, and it must reuse `resolveTransport`'s existing shape here).
   if (!isSanctionedOrderFixtureEnabled()) {
     return {
       error:

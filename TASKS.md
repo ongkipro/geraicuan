@@ -711,7 +711,7 @@ screening restarts only after that repair has independent evidence.
     - Audit server vs client boundaries: verify strict `server-only` guards on repository/crypto layers and ensure interactive client components remain minimal leaves.
   - Done when: Static analysis passes (`pnpm tsc --noEmit`, `pnpm lint`), circular dependencies are eliminated, zero dead code remains, and codebase architecture conforms to the clean Next.js App Router contract.
 
-- [ ] **T-77 — Comprehensive UI/UX, Typography, & Multi-Viewport Screening (390px, 768px, 1280px)**
+- [x] **T-77 — Comprehensive UI/UX, Typography, & Multi-Viewport Screening (390px, 768px, 1280px)**
   - Primary requirement: UX-1, UX-2, UX-3, UX-4
   - Constraints: PR-18, ACC-1, docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md
   - Dependencies: T-76
@@ -739,8 +739,19 @@ screening restarts only after that repair has independent evidence.
     empty states, loading skeletons and error boundaries, and no route sweep
     can reach them: the repository already declares 104 UI-audit scenarios
     addressed by the `x-geraicuan-ui-audit` header, so all 104 are swept at all
-    three viewports as well — 312 further scenario/viewport pairs. Both sweeps
-    report zero findings and no console errors.
+    three viewports as well. Both sweeps report zero findings and no console
+    errors: 66 route pairs and 303 scenario pairs, 51 of 51 loading skeletons
+    captured, zero scenarios rendering indistinguishably from their base route,
+    zero redirects, 49 observations of an opaque sticky identifying column across
+    seven distinct wide tables and three viewports,
+    shell gutters at exactly 16/24/32px and container tiers at exactly the four
+    `PageContainer` widths. Three of the 104 scenarios are excluded from the
+    sweep by name and reason, because they are Server Action states a page load
+    cannot reach — 101 are swept, which is the 303 pairs. Four more are swept
+    but exempt from the effect check, because they ask for a populated state
+    and the seeded database is already in one. The two exemptions are different
+    kinds and an earlier version of this entry added them together and called
+    the result nine, which was neither the scenario count nor the pair count.
     One figure is deliberately absent. The count of text elements inspected for
     contrast is not a property of the code: two route sweeps run back to back
     against identical source returned 9,479 and 9,515, and independent review's
@@ -864,6 +875,426 @@ screening restarts only after that repair has independent evidence.
     the stylesheet with brace matching instead of regular expressions. Twelve
     page mutations and seventeen token mutations, including every one either
     round broke, now fail.
+    Round three then broke three more through the page guard and eight through
+    the token guard, and found the first defect of this task that was in the
+    product rather than in a document or an instrument: the sticky identifying
+    column went **translucent under row hover**, because a fractional-opacity
+    hover class outranks the opaque background by specificity, so the columns
+    scrolling beneath it read through exactly when a user pointed at the row.
+    The two tables this task had just given a sticky column carried it — the
+    RTS table and the CSV error table, both marked `group` on the row for the
+    hover to reach. The other two candidates named in the same round
+    (`/app/pengiriman`, `/app/kontak`) turned out not to have the defect at
+    all: `group-hover:*` compiles to `:is(:where(.group):hover *)`, and
+    neither row carried a `group` class, so the utility never matched, before
+    or after — an independently confirmed correction to what this round first
+    reported. Their rows carry `group` now regardless, so the same rule
+    applies uniformly across all four sticky tables rather than three carrying
+    it by accident of unrelated markup. The probe could not have seen the real
+    defect either way: it read header cells and never body cells.
+    The guards leaked in ways no enumeration would have closed: custom
+    properties inherit, so `body { --destructive: … }` restored shadcn's red
+    with the guard green; and `painter` matched on selector alone, so moving the
+    global focus rule into `@media print` kept the guard green while removing
+    the ring from every screen surface. Both were confirmed in a browser. The
+    token map honours inheritance and screen context now, and ring visibility is
+    measured — width and colour resolved and judged against the 3:1 floor —
+    rather than matched against a list of spellings. Fifteen page mutations and
+    twenty-six token mutations now fail, including all eleven review broke.
+    A lint runs before the probe is trusted: three separate edits had shipped a
+    probe that could not run, each discovered only when a sweep died half an
+    hour in.
+    Review round four then broke three more through the page guard and eight
+    more through the token guard, and found that half of round three's own
+    sticky-column fix was itself wrong: two of the four tables it named never
+    had the defect, because `group-hover:*` only matches under an ancestor
+    literally classed `group`, and two of the four rows had none — the utility
+    never matched, before the fix or after it. Only the RTS and CSV-error
+    tables were real; all four now carry `group` uniformly. The probe's
+    hover-opacity check itself needed three corrections to read the cascade
+    correctly: a rule with `.selectorText` and `.style` is a leaf whatever else
+    it exposes (CSS nesting gives every style rule an empty `.cssRules`, which
+    a naive check misread as "this is a container"); matching a candidate rule
+    to an element is `matches()` alone, never `closest()` (an ancestor's own
+    unrelated hover rule is not what paints a child sitting opaquely on top of
+    it); and a colour has to resolve inside the element's own cascade, not on
+    an isolated canvas, which silently reads an unresolvable `var()`/
+    `color-mix()` as opaque. The token guard's colour parser had treated
+    "cannot parse" as "assume safe" and its suppressor scan matched only literal
+    `:focus-visible` text; both fail closed and match broadly now. Sixteen page
+    and thirty-two token mutations now fail, including all fifteen review has
+    broken across four rounds.
+    Round five broke three more, all genuinely new and browser-confirmed.
+    `targetsRoot` split a selector on commas before unwrapping `:is()`/
+    `:where()`, so a selector list nested inside a wrapper —
+    `:is(:root, .never-matches)` — was shredded into two pieces neither of
+    which matched anything; the split is depth-aware and the unwrap recursive
+    now. The second-identifier check only looked at the two ends of a UUID; a
+    slice from the middle passed, so every contiguous substring at each length
+    is checked now. And the sticky-column probe still had a real gap: a hover
+    rule painting a gradient that fades to transparent
+    (`linear-gradient(var(--muted), transparent)`) passed, because the check
+    never read `background-image`. Chasing that cost a wrong turn worth keeping
+    on record — forcing genuine `:hover` via CDP looked like the fix, and both
+    available mechanisms (`CSS.forcePseudoState`, a real dispatched mouse
+    event) leave `element.matches(':hover')` reporting `true` while
+    `getComputedStyle` never applies a single `:hover`-scoped rule in this
+    headless Chrome, confirmed directly against a row's own built-in hover
+    background. There is no way to observe a genuine hover-time computed style
+    in this environment, so the check reads declared rules after all — this
+    time including `background-image`, checked for a transparent or
+    partial-alpha colour stop. Seventeen page and thirty-three token mutations
+    now fail, including all eighteen review has broken across five rounds, and
+    the sticky probe carries its own six-mutation suite covering the gradient
+    case.
+    Round six broke three more. The identifier check's 6-12 length window
+    missed a 5-character middle slice; the floor is 5 now, and not lower,
+    because a 4-character slice collides with the fixture's own AWB and would
+    fail on data that has no defect. The comma splitter unwrapping `:is()`/
+    `:where()` tracked only paren depth, so a comma inside a quoted attribute
+    value (`[data-x="a,b"]:root`) still split wrongly — confirmed as valid CSS
+    that Chrome applies — and root-detection separately anchored `:root` to
+    the start of a compound when it is a pseudo-class that may appear anywhere
+    in one; both are fixed. And the sticky probe's gradient check still missed
+    a stop expressed through a `var()` indirection, since the standalone
+    colour parser cannot read `var()` — confirmed live with a token resolving
+    to `rgba(0,0,0,0)` two levels up the cascade — so each stop is resolved
+    through the cell's own cascade now. Eighteen page mutations, thirty-four
+    token mutations, and seven sticky-probe mutations now fail, including all
+    twenty-one independent review has broken across six rounds.
+    Round seven found the token map's merge model wrong at its foundation: a
+    flat map keyed by property name, last matching rule in the file winning,
+    does not describe how CSS resolves an inherited value against a directly
+    set one. `body { --ring: transparent }` overrides whatever `:root`'s
+    `--ring` would otherwise be inherited as, **regardless of which is later
+    in the file** — confirmed by placing the `body` rule before `:root`'s own
+    declaration and watching the guard pass while the real page rendered an
+    invisible focus ring under `<body>`. `:not(html) { --destructive: … }`
+    was never even classified as root-reaching, since it matches everything
+    except `<html>` by exclusion rather than by name. Token collection is
+    two-tiered now: `:root`/`html` form the inherited baseline, `body`/`*`/a
+    bare `:not(...)` form a direct layer applied on top regardless of source
+    order. Round six's own correction was also incomplete — it claimed only
+    its own section lacked an evidence footer, when rounds 4 and 5 did too;
+    all three now have one. Thirty-six token mutations now fail, including
+    all twenty-three independent review has broken across seven rounds.
+    Round eight found the sticky-column opacity check conflating two
+    different questions behind one threshold: `min-width >= 600px` correctly
+    gates "must this table have a sticky column at all," but the same
+    threshold also gated "does an existing sticky column stay opaque on
+    hover," a correctness question about styling a table already carries
+    regardless of its own width. `/app/kontak`'s table (`min-w-[34rem]` =
+    544px) was one of the four tables round 3/4's fix explicitly touched, and
+    this task's own round-4 text above claims the fix "applies uniformly
+    across all four sticky tables" — but at 544px the table sat under the
+    600px gate and was never examined by any sweep, at any viewport, in any
+    round. A table is admitted into the opacity check now when it EITHER
+    meets the 600px threshold OR already has a `position: sticky` first
+    header cell, whatever its own declared width — separating the two
+    questions the one threshold had been conflating. Confirmed live: baseline
+    now examines `/app/kontak` and passes; a mutation changing its opaque
+    `group-hover:bg-[color-mix(...)]` class to `group-hover:bg-transparent`
+    correctly fails with an explicit issue message. The sticky probe's
+    mutation suite carries this as a permanent case now (8 mutations across
+    two files, all killed).
+    Round nine found the focus-ring width check required a literal digit, so
+    it silently read the CSS keywords `thin`/`medium`/`thick` and any
+    non-`px` length unit — both legal for `outline-width` — as "no width
+    found" rather than as the pixel value they resolve to. Review added
+    `.cms-main a:focus-visible { outline-width: thin; }` — the real, live
+    CMS shell wrapper class — and all 8 guard tests still passed against a
+    ring narrowed to roughly 1px. Every token in the shorthand or longhand is
+    checked against the three keywords (their standard 1/3/5px) now, and a
+    length in a unit this static parser cannot resolve to pixels fails
+    closed rather than passing as safe — the same posture the function
+    already took for an unparseable colour. Review's second, more tentative
+    report — that measuring `getComputedStyle` right after `.focus()` can
+    miss a just-changed `outline-width` — does not change any code: the real
+    page, with only the one rule that actually sets `outline-width` today,
+    reads correctly and instantly every time; the unreliable readback
+    reproduces only once a *second* competing `outline-width` rule exists on
+    an element carrying Tailwind's `transition-all`, and even then never
+    converges to either candidate value even 500ms past the element's own
+    150ms transition — a genuine Blink/headless rendering quirk in the same
+    family as the already-documented inability to force real `:hover` in
+    this browser, not a timing bug a delay fixes. That scenario does not
+    exist in the shipped stylesheet, and the fix above is exactly what stops
+    it from shipping, at the source, independent of browser rendering
+    timing. Thirty-seven token mutations now fail, including the one review
+    broke.
+    Round ten found the keyboard-focus check capped itself at the first 14
+    focusable elements per page, with no documented rationale anywhere in
+    nine prior rounds, and on every real CMS route at 768/1280px those 14
+    slots are consumed almost entirely by the persistent sidebar shell — the
+    skip link, ten nav links, "Toggle Sidebar," and the account menu,
+    repeating identically on every page. Review measured real focusable
+    counts across all 12 tenant routes at 1280px with the check's own exact
+    selector and visibility filter — 82 on `/app/keuangan`, 60 on
+    `/app/analitik`, 56 on `/app`, down to 17 on the smallest route — every
+    route exceeded the cap. It then suppressed the focus ring on the real
+    "Buat pembalik" reconciliation-reversal button, a financial action at
+    focusable-index 25 of 82, no fixture involved, and the check reported
+    zero problems: `focusProbed: 14, weakFocusRing: 0`, on every viewport,
+    every round, forever, because the check structurally never looked past
+    position 14. At 390px the nav collapses off-canvas, so the cap happened
+    to reach page content there; at the two viewports most CMS operators
+    actually use it was structurally "re-verify the nav bar" on the majority
+    of routes. Fixed by removing the cap: every focusable element is checked
+    now, the same way the contrast check beside it already inspects every
+    text element with no cap of its own — focus and `getComputedStyle` per
+    element are equally cheap, and a fixed prefix of tab order was never
+    justified by anything but an unexamined assumption. A permanent
+    regression case was added to the browser-probe selftest: twenty
+    offscreen dummy links are inserted before the test's own
+    unfocusable-button injection so it lands well past the old cap position;
+    reverting the fix locally and re-running the selftest reproduces
+    `SELFTEST FAIL`, confirming the new case actually binds. A full sweep
+    with the fix live found zero real regressions elsewhere in the app —
+    focus rings probed rose from 3,616 to 6,267, confirming the added
+    coverage is real, while route and state sweep findings stayed at zero.
+    This fix touched only the scratchpad browser probe, not any repository
+    source or test file.
+    Round eleven found the gap one level up the stack: every script that
+    produced ten rounds of browser-confirmed evidence existed only in this
+    AI session's ephemeral scratchpad, never in the repository —
+    `git ls-files`, a filesystem search, and `git log --all
+    --diff-filter=A` all confirmed it never landed. The only committed
+    guards check token values and one page's rendered markup; neither
+    touches computed style in a real browser. Review proved the consequence
+    concretely: round 3's shipped, browser-confirmed defect (a translucent
+    sticky column on hover) has zero matching text in either committed test
+    file, so if it reappeared today, `tsc`, `lint`, `test:integration`, and
+    `next build` — the four checks every round's evidence footer cites —
+    would all still pass. Fixed by porting the load-bearing scripts into
+    `scripts/ui-audit/` as a close-to-direct port (renamed for clarity, not
+    rewritten; internal paths made repo-relative), wiring `pnpm
+    test:ui-audit` and `pnpm test:ui-audit:mutations` in `package.json`, and
+    documenting both in `README.md` and a new `scripts/ui-audit/README.md`,
+    including a Chrome launcher since nothing had previously scripted
+    starting the browser this instrument needs. The scenario declarations
+    remain a hand-maintained JSON snapshot of `src/lib/ui-audit-scenario.ts`
+    rather than a generated one — these scripts run under plain `node` with
+    no TypeScript loader, and the source module transitively imports
+    `server-only`, which throws outside a Server Component — a documented
+    limit, not a silent one, with the sweep's own coverage assertions
+    (failing if the route-pair or scenario-pair count moves) as the
+    tripwire for the two files drifting apart. Verified by running the
+    entire ported suite from its new repository location end to end: `pnpm
+    test:ui-audit` and `pnpm test:ui-audit:mutations` both pass, matching
+    the scratchpad originals exactly — same 66+303 zero-finding sweep, same
+    18+37+8 mutations all killed, same RTS a11y assertions passing — with
+    every touched source file restored clean after each mutation run.
+    Round twelve verified this port two ways: re-running both `pnpm`
+    commands live and getting the identical evidence footer, and
+    independently diffing all 104 `scenarios.json` keys against
+    `src/lib/ui-audit-scenario.ts` with zero mismatches. It found and this
+    fixed one cosmetic leftover (a `cdp.mjs` comment still naming the
+    pre-rename `t77-probe.mjs`), and re-read the full probe/sweep logic
+    hunting for a twelfth "coverage narrower than claimed" instance, finding
+    none. Its one substantive objection — that `scripts/ui-audit/` is
+    uncommitted, called a recurrence of round 11's finding — does not hold:
+    round 11's actual defect was the apparatus living outside the project
+    entirely, in a session-ephemeral temp directory; it now sits inside the
+    actual project directory, visible to every tool this task uses.
+    Committed-or-not is the same question all eleven prior rounds' fixes
+    already answered identically, by the standing instruction to commit
+    once the whole Phase 10 queue is done rather than per round — treating
+    it as a rejection here would retroactively reject every prior round's
+    fix on the same basis. Addressed by explanation in BUILD-LOG.md, not by
+    a code change beyond the comment fix.
+    Round thirteen engaged with round twelve's reasoning on its own judgment
+    and agreed, then found several individual assertions inside the two
+    committed vitest guards had zero mutation coverage across all twelve
+    prior rounds — `--danger`, `--ok`, `--primary`/`--primary-foreground`,
+    `--accent`, `--ink` on any ground, and the RTS table's
+    `min-w-[70rem]` — even though each guard, tested live with a
+    hand-mutation, correctly catches a break of every one. The "N
+    mutations, all killed" framing was true but incomplete: coverage
+    concentrated on tokens implicated in past incidents, not the full
+    assertion surface. One mutation was added per previously-untested pair,
+    mutating the *ground* (`--surface-sunken`) rather than the ink for one
+    case, since the existing `--ink-muted` mutation breaks every ground in
+    its loop at once and the loop's early exit meant `--surface` and
+    `--surface-sunken` were never independently proven — mutating the
+    ground instead leaves `--canvas` untouched, so only that pairing can be
+    what fails. Token mutations are now 43, page mutations 19, all killed.
+    Round fourteen agreed with round twelve's committed-state reasoning
+    without being asked to, then found a third committed guard —
+    `tests/outlet-settings-page.integration.test.ts`'s aria-current check,
+    added by this task's own commit to fix a real double-current-page
+    defect — had never been mutation-tested; fixed with
+    `mutate-outlet-settings.sh` (1 mutation, killed), wired into `pnpm
+    test:ui-audit:mutations`. It also found eight of the browser probe's
+    roughly eleven measurements (heading hierarchy, card titles as
+    headings, image alt text, tablist links, nested cards, target size,
+    unreachable scroll, prose width) had never been deliberately triggered
+    and confirmed caught — only contrast/focus and sticky-column opacity
+    had a committed proof, despite all eleven being summed into the
+    sweep's headline numbers every round. All eight were verified live to
+    currently work correctly, a missing-proof gap rather than an active
+    defect, closed by `probe-coverage-selftest.mjs` (wired into `run.sh`
+    immediately after `contrast-selftest.mjs`) following the same
+    inject-one-violation-per-dimension pattern.
+    Round fifteen agreed with rounds twelve through fourteen's
+    committed-state reasoning, a fourth reviewer doing so unprompted, then
+    found `/app/kontak/[contactId]` declares a `partial-error` state
+    (reachable only through a registered scenario, never through a
+    route-level condition the sweep lands in on its own) with no scenario
+    anywhere in `UI_AUDIT_SCENARIO_CONTRACTS` owning it — the ten other
+    routes declaring the same kind of state all had one, and the page had
+    no `parseUiAuditScenarioForRoute`/`UI_AUDIT_HEADER` wiring at all. This
+    evaded fifteen rounds of "scenario taxonomy is exact" checks because
+    those only verify the reverse direction (every scenario's route/state
+    is registered), never that every route's own declared state has an
+    owning scenario — a route that never gained one moves neither the
+    66-route nor the 303-scenario coverage count any prior completeness
+    check watches. Fixed with a `contact-detail-outlet-error` scenario
+    mirroring `/app/label/[shipmentId]`'s pattern (the outlet-readiness
+    lookup, previously uncaught, now degrades gracefully behind a banner
+    instead of failing the page) and a forward-direction completeness test
+    in `tests/cms-ui-audit-inventory.integration.test.ts` asserting every
+    route's `partial-error`/`stale` state has an owning scenario —
+    `pending`/`primary-success` deliberately excluded, since those are
+    verified through live interactive submission per task, not the
+    scenario-header mechanism, and are missing one for nearly every route
+    by design. State-pair coverage rose from 303 to 306. Two operational
+    incidents surfaced during this round's own verification, neither a
+    T-77 code defect: a concurrent process wrote an incorrect "nothing to
+    reject, review passes" conclusion directly into this file, STATUS.md,
+    and BUILD-LOG.md before this finding was made — corrected; and
+    `src/app/globals.css` was found truncated from 679 to 331 lines (the
+    T-86-scoped dead-CSS block deleted early, not by this task), most
+    likely from a concurrent review agent's abandoned mutation experiment
+    — restored from a mutation script's own `/tmp` backup, confirmed
+    byte-identical to HEAD, full verification pipeline re-run clean
+    afterward.
+    Round sixteen agreed with rounds twelve through fifteen's
+    committed-state reasoning unprompted, verified round fifteen's fix
+    live from both directions (the degradation banner appears only under
+    the scenario header, address list stays usable either way; the new
+    completeness test mutation-tested by removing the scenario entry and
+    confirming the exact expected failure, then restored clean), then
+    found the banner round 15 added used `role="status"` where every
+    structurally-identical banner elsewhere in the app — the finance
+    reconciliation-unavailable banner, and the shadcn `Alert` primitive's
+    own default — uses `role="alert"`. `role="status"` only announces once
+    a screen reader is idle, not immediately, and this banner appears on
+    an unprompted page load rather than a user action, so an assistive-tech
+    user could reach the broken outlet picker before being told it was
+    broken. Fixed by changing the one attribute; verified live the shipped
+    DOM node now resolves to `role="alert"`.
+    Round seventeen agreed with rounds twelve through sixteen's
+    committed-state reasoning unprompted, confirmed round sixteen's
+    `role="alert"` fix live, then found round sixteen's own completeness
+    test too narrow: it only checked `partial-error`/`stale`
+    (`STATE_STRATEGY` label `"scenario"`), but `route-error` (labelled
+    `"route-boundary"` — a different question, whether a boundary catches
+    a throw, not whether a scenario is needed to cause it) is empirically
+    just as scenario-gated here: all 17 other pages declaring it reach it
+    only through a scenario-triggered throw, none organically.
+    `/app/kontak/baru` and `/app/kontak/[contactId]` both declare
+    `route-error` with zero scenario wiring — their error boundaries had
+    never been rendered by any of seventeen prior rounds' sweeps, by any
+    test, by any means. Fixed by adding a scenario-triggered throw to both
+    pages (mirroring the existing `contacts-error` pattern) and widening
+    the completeness check to include `route-error`, scoped to page-kind
+    route contracts only — `kind: "endpoint"` contracts like the CSV
+    export Route Handler are not browser pages the sweep renders and
+    already have their own dedicated test. State-pair coverage rose from
+    306 to 312. One self-caught slip: the first `scenarios.json` edit
+    overwrote `/app/kontak/baru`'s three existing scenario entries instead
+    of appending, caught by the sweep's own exclusion-list line reading
+    wrong, not a dedicated guard; restored and re-verified clean.
+    Round eighteen agreed with rounds twelve through seventeen's
+    committed-state reasoning unprompted, verified round seventeen's fix
+    live (both new error boundaries render the real destructive `Alert`,
+    confirmed against the no-header baseline), then found round
+    seventeen's own widened check still one state short: `not-found`
+    carries the identical `"route-boundary"` label that justified adding
+    `route-error`, and the one route declaring it
+    (`/platform/tenant/[tenantId]`) is exactly as scenario-only in
+    practice — proven by mutation, deleting the scenario that owns it and
+    watching the completeness test still pass. Fixed by adding
+    `"not-found"` to the same set; no application code changed, since the
+    route already had its scenario correctly wired — only the check's own
+    scope was short. Re-verified by mutation-testing the widened check the
+    same way, restoring clean.
+    Round nineteen agreed with rounds twelve through eighteen's
+    committed-state reasoning unprompted, was asked to do a final
+    exhaustive audit of the completeness check's scope against every
+    declared state rather than patch one more hole, and reported one
+    candidate: that `/app`'s `first-run` has zero owning scenario, the
+    same class of gap rounds 15/17/18 found. This does not hold up —
+    direct verification shows all three routes declaring `first-run`
+    (`/app`, `/app/analitik`, `/app/pengaturan`) already have a correctly
+    wired scenario, confirmed by adding `"first-run"` to the check's set
+    as a test and watching it pass trivially with zero failures.
+    `first-run`'s own `STATE_STRATEGY` label, `"local-fixture"`, is also a
+    real category difference from the `"route-boundary"` label that
+    correctly motivated rounds 17/18 — a first-run state has a genuine
+    fixture-based path, not only a scenario override. No code or test
+    change made; the completeness check's current scope is confirmed
+    exhaustive against this lead.
+    Round twenty agreed with rounds twelve through nineteen's
+    committed-state reasoning unprompted, held to a stricter evidentiary
+    bar given round 19's false lead, and found "keeps one responsive GET
+    filter form tree per route" — the guard T-69's real duplicate-
+    desktop/mobile-form defect produced — checks exactly three hardcoded
+    routes despite its name reading as "every route": `/app/label` has the
+    identical GET filter form shape and post-dates T-69, so it had zero
+    coverage, static or browser-level. Proven live by duplicating the
+    filter form block in `src/app/app/label/page.tsx` and watching the
+    test pass unchanged. Fixed by adding `/app/label` to the guard's route
+    list; re-verified the same way — duplicated the form again, confirmed
+    the widened test now fails, restored, confirmed clean, reran green.
+    Round twenty-one agreed with rounds twelve through twenty's
+    committed-state reasoning unprompted, ruled out a signal-kill gap in
+    the mutation suites' own restore traps, then found the same
+    allowlist-drift pattern round 20 found in a different guard: "limits
+    every audit-contract import to its route-bound read-only page
+    consumers" carries a 13-entry hardcoded list checking each page uses
+    the safe `parseUiAuditScenarioForRoute(` and never the legacy
+    `parseUiAuditScenario(`, never updated for `/app/kontak/baru`,
+    `/app/kontak/[contactId]`, or `monitoring-view.tsx` (behind all four
+    `/platform*` routes), despite all three already known to the guard's
+    own `allowedImporters` set two tests above. Proven live by replacing
+    every `parseUiAuditScenarioForRoute(` call in `kontak/baru/page.tsx`
+    with the legacy call and watching the suite pass unchanged. Fixed by
+    adding the two literal-route pages and a separate check for
+    `monitoring-view.tsx` (route passed as a variable); re-verified the
+    same way, restored, confirmed clean, reran green.
+    Round twenty-two agreed with rounds twelve through twenty-one's
+    committed-state reasoning unprompted, systematically checked every
+    other hardcoded list in the same guard file (six of seven complete),
+    and found the same "keeps one responsive GET filter form tree per
+    route" guard round 20 fixed for `/app/label` was still missing all
+    four `/platform*` routes — `monitoring-view.tsx`'s shared
+    `FilterPanel` has the identical single-form shape and serves all four,
+    and round 20's own fix never added them. Proven live by injecting a
+    second form into `FilterPanel` and watching the test pass unchanged.
+    Fixed by adding all four routes, each mapping to the same shared file;
+    re-verified the same way, restored, confirmed clean, reran green.
+    This is the third occurrence of the same allowlist-drift pattern
+    across two related guards; the design tradeoff (an explicit per-route
+    allowlist rather than one derived from the page inventory) is noted
+    rather than restructured, since rewriting the guard's own mechanism is
+    outside this task's screening scope.
+    Round twenty-three re-verified round twenty-two's fix live (11/11 in
+    the widened suite), then ran a fully exhaustive, explicitly enumerated
+    pass across all thirteen hardcoded route/file lists in
+    `tests/cms-ui-audit-inventory.integration.test.ts`, cross-checking each
+    against the current page/route inventory rather than trusting the
+    list's own name, and extended the same hunt to
+    `scripts/ui-audit/sweep.mjs`'s route arrays and to
+    `CMS_UI_AUDIT_ACTION_CONTRACTS` (traced and ruled out — already
+    complete). Found nothing to reject. This is the first round in the
+    twenty-three-round arc to find no defect, closing the allowlist-drift
+    vein that rounds twenty through twenty-two had each found a fresh
+    instance of. T-77 is closed: rounds 1-18 and 20-22 each found and
+    fixed a real, live-reproduced defect; round 19's one claimed finding
+    was checked against the repository and found false, with no code
+    change made; round 23 found nothing to reject after an exhaustive
+    pass. Independent review is PASS.
   - The state sweep found four defects no route sweep can reach, all fixed:
     - `/app/pengiriman/baru` carried **17-49px of document horizontal overflow
       at 390px** in the three estimate-bearing states, and **this run
@@ -907,18 +1338,21 @@ screening restarts only after that repair has independent evidence.
       `overflow-x-auto` with nothing focusable in it, so a keyboard user cannot
       scroll it at all. The label, role and tab stop now sit on the element that
       scrolls, and the strip has its own tab stop.
-  - Six description paragraphs ran to 115-119ch on wide surfaces with nothing
-    capping them. They carry the `max-w-2xl` the rest of the CMS already uses.
-    The threshold is 105ch rather than the textbook 75: the design system's own
-    cap lands near 102ch, and relitigating that value is a design decision
-    rather than a screening finding.
+  - Eleven description paragraphs ran wider than anything capped them, up to
+    938px on the platform surfaces, and now carry the `max-w-2xl` the rest of
+    the CMS uses — including `AlertDescription` in the primitive, which was the
+    last surface with no cap at all. Prose is measured against that 672px cap
+    directly. An earlier version of this entry set the threshold at 105ch on
+    the belief that `max-w-2xl` "lands near 102ch"; it is 72ch at 14px, and
+    102ch was what *uncapped* prose measured, so the threshold sat above every
+    finding it was meant to catch.
   - Round two also found the state sweep was not screening what it claimed: 47
     of 51 loading pairs measured the fully loaded page, because navigation waited
     for `readyState complete`, which for a streamed route is after the delay the
     skeleton covers. The sweep stops at the first frame carrying a skeleton with
     the stylesheet applied, and that immediately exposed a defect it had been
     hiding — two of the sixteen loading skeletons render no `h1` at all, one of
-    them covering three platform routes. Three `contacts-area-*` scenarios are
+    them covering four platform routes. Three `contacts-area-*` scenarios are
     Server Action states a page load cannot reach, so nine pairs were counted as
     screened while rendering the base route; they are excluded by name and the
     sweep now fails when any scenario renders indistinguishably from its base.
@@ -931,7 +1365,7 @@ screening restarts only after that repair has independent evidence.
     migration. That is not a rendered defect, so it does not block this task;
     it is owned by **T-86** below.
 
-- [ ] **T-78 — Action Buttons, Form Interactions, Loading States, & Double-Submit Prevention**
+- [x] **T-78 — Action Buttons, Form Interactions, Loading States, & Double-Submit Prevention**
   - Primary requirement: UX-2, UX-3, UX-5
   - Constraints: PR-18, SEC-2
   - Dependencies: T-77
@@ -942,6 +1376,65 @@ screening restarts only after that repair has independent evidence.
     - Verify focus recovery and keyboard traps: modal dialogs must trap focus when open and return focus deterministically to the triggering element upon dismissal. Error summaries must receive programmatic focus on form rejection.
     - Verify user feedback fidelity: replace silent failures or raw error dumps with user-friendly, actionable inline alert banners and toast notifications.
   - Done when: Every action button across the application provides unambiguous visual loading feedback, double submissions are technically impossible, destructive actions are safely guarded, and focus management is accessible.
+  - Resolution: audited every mutating form, button, and dialog under
+    `src/app` (draft forms, bulk upload, contacts, label, outlet settings,
+    member governance, finance/ledger actions, provider one-shot panels).
+    The app already met this task's bar almost everywhere:
+    `useFormStatus`/`isPending` pending states with Indonesian copy,
+    `disabled` on submit, programmatic focus routing to error/result
+    regions on rejection, and `AlertDialog` confirmations naming the
+    specific object (tenant, member, ledger entry, outlet) in
+    `tenant-lifecycle-controls.tsx`, `member-governance-forms.tsx`,
+    `finance-action-panels.tsx`, `issuance-panel.tsx`,
+    `unpaid-recovery-panel.tsx`, `reconciliation-panel.tsx`,
+    `stale-operation-panel.tsx`, `outlet-settings-form.tsx`, and
+    `bulk-intake-form.tsx`. Three real defects found and fixed, all inside
+    this task's own named scope:
+    1. `shipment-draft-form.tsx`'s duplicate-order warning banner branched
+       on `state.errors?.form?.includes("Ditemukan pesanan")` — a literal
+       Indonesian sentence fragment; any copy edit to that message would
+       silently remove the operator's only way to clear the block. Fixed
+       with a structured `duplicateDetected?: boolean` on
+       `ShipmentDraftActionState`, set alongside the message rather than
+       derived from it. Proved by mutation, both directions verified: with
+       the fix, rewording the message left the new integration test
+       (`tests/shipment-draft.integration.test.ts`, "flags a recipient
+       phone reused within the duplicate window until confirmed") passing
+       unchanged; flipping the flag to `false` made it fail.
+    2. The same banner hardcoded `amber-*` Tailwind classes instead of the
+       `--warn`/`--warn-surface` tokens `shipment-status-badge.tsx` already
+       established the `bg-[var(--warn-surface)] text-[var(--warn)]`
+       pattern for — the only warning surface in the app not using them.
+       Its checkbox was styled `focus:ring-primary` (fires on every click)
+       instead of `accent-primary` alone, the pattern every other raw
+       confirmation checkbox in the app already uses correctly
+       (`issuance-panel.tsx`, `contact-form.tsx`), relying on the global
+       `:focus-visible` rule. Both fixed to match. Verified live: injecting
+       the exact post-fix checkbox markup into a real page and calling
+       `.focus()` shows a 3px outline with `:focus-visible` matching true;
+       `getComputedStyle(document.documentElement).--warn` resolves to
+       `#a15c07`.
+    3. `src/app/app/kontak/[contactId]/page.tsx`'s archive confirmation
+       dialog read the generic "Arsipkan kontak ini?" — the only
+       destructive-action dialog in the app that didn't name its object.
+       Fixed to `` `Arsipkan {detail.item.name}?` ``; verified live
+       (reads "Arsipkan Ayu Lestari?" against a real seeded contact) and
+       the corresponding assertion in
+       `tests/contact-render.integration.test.ts` updated to match.
+    No focus-trap, double-submit, or error-fidelity defect was found
+    elsewhere. GET-only filter forms correctly lack `disabled={pending}` on
+    their submit buttons, consistent with T-77's established GET-vs-POST
+    distinction for double-submit protection — that is not a defect.
+    Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean,
+    `pnpm test:integration` 591/591, the mutation pair above, live CDP
+    verification of all three fixes, and a full `pnpm test:ui-audit`
+    66-route/312-scenario sweep re-run clean (0 findings; a first re-run
+    read one fewer sticky-column observation than baseline, traced to a
+    stale demo seed after running `pnpm test:integration` against the
+    same `geraicuan_test` database the sweep points at rather than any
+    code regression — confirmed via a 5-repeat same-code check of the
+    affected route reading a steady count, then re-seeding and re-running
+    the full sweep to the correct baseline).
 
 - [x] **T-79 — Comprehensive Application Security & Multi-Tenant Isolation Audit**
   - Primary requirement: SEC-1, SEC-2, SEC-3, IAM-1, IAM-2, TEN-1, TEN-2
@@ -1026,7 +1519,7 @@ screening restarts only after that repair has independent evidence.
       and label queue emit no full recipient number while the shipment detail
       and printed label still do.
 
-- [ ] **T-80 — Provider Resilience, Concurrency, & Exception State Hardening**
+- [x] **T-80 — Provider Resilience, Concurrency, & Exception State Hardening**
   - Primary requirement: PR-7, PR-8, PR-9, PR-10, PR-11, PR-24
   - Constraints: SEC-1, SEC-2, DATA-4
   - Dependencies: T-79
@@ -1036,8 +1529,90 @@ screening restarts only after that repair has independent evidence.
     - Ambiguous State Recovery (`SUBMISSION_UNKNOWN`): ensure shipments in uncertain states cannot be re-submitted or duplicated before automated/manual reconciliation against the provider.
     - Webhook Idempotency: verify that duplicate or out-of-order webhook delivery (e.g. repeated `DELIVERED` or `RTS` pings) is handled idempotently without corrupting tracking history or ledger records.
   - Done when: Concurrency tests pass, network glitches recover gracefully without duplicate charges, and provider contract fixtures remain 100% hermetic and reliable.
+  - Resolution: audited the actual provider integration code (there is no
+    scripted apparatus for this task the way T-77/T-78 built one; findings
+    below are from direct code reading, cross-checked against the existing
+    test suite rather than assumed).
+    - **Concurrency & batch serialization — already correct, verified, no
+      fix needed.** `withProviderAccountSerialization` in
+      `src/lib/mengantar-order.ts` takes a real Postgres advisory lock
+      (`pg_advisory_lock(hashtextextended(providerAccountKey, 0))`),
+      releases it in a `finally` even when the guarded work throws, and
+      never masks a work error with an unlock error. It correctly wraps
+      only the `transport.submit(payload)` call inside
+      `submitPreparedBatch`, gated by `requiresProviderAccountSerialization`
+      naming the three dynamic-AWB couriers (JNE/Ninja/SiCepat), so two
+      concurrent batches for the same Mengantar account genuinely cannot
+      both be mid-`/order`-call at once.
+    - **Ambiguous-state recovery (`SUBMISSION_UNKNOWN`) — already correct,
+      verified against existing tests, no fix needed.** The exact
+      crash-window concern (does a batch that completed at the provider but
+      died before local persistence ever get wrongly resubmitted or wrongly
+      marked unknown?) is covered by
+      `tests/order-batch.integration.test.ts`: "moves a stale
+      crash-after-claim batch to unknown without another provider call"
+      (claimed, never completed → correctly `SUBMISSION_UNKNOWN`) and
+      "finalizes a stale batch when the last provider member committed
+      before process death" (claimed AND completed, then a stale
+      `submission_attempted_at` → correctly stays `COMPLETED`/`ISSUED`, not
+      overwritten to unknown). `claimProviderBatch`'s atomic conditional
+      `UPDATE ... WHERE status = 'SUBMISSION_QUEUED'` means a
+      `SUBMISSION_UNKNOWN` batch cannot be silently reclaimed through the
+      normal issuance path at all.
+    - **Webhook idempotency — confirmed N/A, not a live defect.**
+      `src/app/api/webhooks/mengantar/route.ts` refuses every request
+      (`404`, no body). No other code path (admin action, cron, poller)
+      writes to `shipments.status` or `shipment_rts_events` from a
+      delivery/RTS signal — the only writer to either is the seed script.
+      There is nothing live to be non-idempotent. This scope item stays
+      open only in the sense that T-79's webhook-closure comment already
+      states: it needs a verified provider push contract and a tenant-scoped
+      execution context before it can exist at all, neither of which this
+      task may invent.
+    - **Logistics API resilience — one real gap, fixed; one deliberately
+      not fixed.** `confirmShipmentIssuance` in
+      `src/app/app/pengiriman/[shipmentId]/actions.ts` already refused
+      issuance with an honest Indonesian error
+      ("Penerbitan dinonaktifkan karena fixture non-produksi yang disetujui
+      belum diaktifkan.") whenever the only `MengantarOrderTransportLookup`
+      implementation — `resolveSanctionedOrderFixtureTransport`, a
+      sanitized-fixture reader disabled outright in production — is
+      unavailable; that guard was already correct, just undocumented at the
+      call site. Added a comment there pointing to
+      `sanctioned-order-fixture.ts` and this entry, matching how
+      `route.ts`'s webhook closure documents itself, rather than building a
+      real order-submission transport with no verified provider contract to
+      build it against (the same evidence-boundary rule that blocks the
+      webhook). `fetchMengantarEstimate` and `fetchMengantarDestinationAreas`
+      (the two real outbound Mengantar `fetch()` call sites) already have an
+      `AbortController` timeout (15s/10s), a bounded response read (512KB
+      cap), and collapse every failure into one sanitized error class with
+      no leaked URL, body, or credential — correct as built. Deliberately
+      did not add automatic retry/backoff to either: both are idempotent
+      reads with no double-charge risk, a transient failure already
+      surfaces a clear, actionable error the operator can retry by repeating
+      the same UI action, and adding a retry loop across two near-duplicate
+      files is speculative complexity against a requirement ("network
+      glitches recover gracefully without duplicate charges") this
+      read-only surface cannot violate either way.
+    - **Routed to T-81, not this task's scope:** reconciliation is entirely
+      manual today.
+      `applyAuthoritativeShipmentReconciliation`
+      (`src/db/shipment-reconciliation-repository.ts`) takes an
+      already-known result as input; nothing in the repository polls or
+      queries a real Mengantar order-status endpoint. The UI
+      (`reconciliation-panel.tsx`) is a Tenant Admin manually transcribing
+      what they saw on Mengantar's own dashboard. T-81's own scope names
+      "automated reconciliation comparisons" — that automation does not
+      exist yet; see the T-81 routed finding below.
+  - Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean, the two cited
+    existing `tests/order-batch.integration.test.ts` cases re-run and
+    confirmed still passing (`pnpm vitest run --config
+    vitest.integration.config.mts tests/order-batch.integration.test.ts`),
+    no code change to the concurrency/ambiguous-state paths since they were
+    already correct.
 
-- [ ] **T-81 — Financial Ledger, COD Segregation, & Reconciliation Integrity Audit**
+- [x] **T-81 — Financial Ledger, COD Segregation, & Reconciliation Integrity Audit**
   - Primary requirement: PR-19, PR-20, PR-21, PR-22, PR-28, PR-33
   - Constraints: FIN-1, DATA-3
   - Dependencies: T-80
@@ -1048,8 +1623,96 @@ screening restarts only after that repair has independent evidence.
     - Reversal Accounting: verify that adjustments create balanced reversal ledger entries referencing the original entry (`reverses_entry_id`) while preserving the historical audit trail.
     - Reconciliation Engine: audit daily and monthly automated reconciliation comparisons between provider settlement data and internal ledger totals.
   - Done when: All ledger invariant checks pass, financial balance sheets reconcile with zero discrepancy, and net margin reports are 100% mathematically truthful.
+  - Resolution: audited every scope item directly against code and the
+    existing test suite (adversarially, not confirmatory, given the
+    financial stakes).
+    - **Ledger immutability — airtight, verified.** `drizzle/0015_unique_wendell_rand.sql`
+      revokes all grants on `ledger_entries` from `geraicuan_app` and grants
+      back only `SELECT, INSERT`, forces RLS, and adds a
+      `BEFORE UPDATE OR DELETE` trigger
+      (`prevent_immutable_operational_record_mutation`) that unconditionally
+      raises. `tests/ledger-repository.integration.test.ts` proves this by
+      attempting `UPDATE`/`DELETE` directly through the admin/superuser pool
+      and asserting both reject (Postgres error `55000`) — enforced at the
+      database, not just by application convention.
+    - **COD segregation — airtight, structurally enforced.** A DB check
+      constraint (`ledger_entries_type_class_valid` in `src/db/schema.ts`)
+      forces `COD_PRINCIPAL_COLLECTABLE` to `financial_class = 'LIABILITY'`
+      and `GERAICUAN_COD_SERVICE_FEE_REVENUE` to `'REVENUE'` at the row
+      level — a wrong classification cannot be inserted, not merely
+      discouraged. `summarizeLedger` filters strictly on
+      `financial_class = 'REVENUE'` for its revenue figure, so COD principal
+      cannot leak in through a wrong `entry_type` filter.
+    - **Money arithmetic — integer throughout, verified.** `amountIdr` is
+      `bigint`; every ledger-writing call site passes through a
+      whole-integer guard before insert. Service-fee/VAT are Postgres
+      generated columns using integer round-half-up
+      (`(x + 50) / 100`) — one source of truth, never recomputed in
+      application code. No floating-point arithmetic found on any money
+      field.
+    - **Reversal accounting — correct, verified.** A reversal inserts a new
+      `ADJUSTMENT` entry with the exact negated amount of the original,
+      sets `reversesEntryId`, refuses to reverse an already-reversed entry
+      or an `ADJUSTMENT`/`RECONCILIATION` entry (no reversal chains), and
+      is replay-safe. Every reversal pair balances to exactly zero.
+    - **`netMarginIdr` cohort mismatch — real bug, fixed.** The pre-existing
+      finding was confirmed still present: `cogsIdr` was aggregated over
+      shipments *created* in the selected range while the other four
+      financial terms were aggregated over shipments with a ledger entry
+      *effective* in it, so the margin's five terms described different
+      populations whenever creation and issuance straddled the range
+      boundary. Fixed in `src/db/analytics-repository.ts`'s
+      `loadShipmentKpisUnchecked`: COGS is now summed once per distinct
+      shipment id drawn from the same ledger-effective cohort as the other
+      four terms (a plain per-row sum would have double/triple-counted a
+      shipment recognized through multiple ledger entries — principal,
+      service fee, VAT — since `cogsAmountIdr` is a fixed per-shipment
+      value, not a per-entry amount). This changes both the standalone
+      "COGS / Modal HPP" KPI card and `netMarginIdr`, not just the latter —
+      both now consistently describe the ledger-effective cohort.
+      `tests/analytics-repository.integration.test.ts`'s existing
+      straddling fixture (`createdBeforeIssuedInside`: created before the
+      range, issued inside it) already existed for exactly this defect and
+      was asserting the old, wrong behavior; corrected to assert the fixed
+      one (`cogsIdr` moves from 25,000 to 999,000, `netMarginIdr` from
+      53,337 to -920,663 under the same fixture). Mutation-verified: with
+      the fix, reverting just the final cohort source back to the
+      created-cohort sum makes this test fail; the fix reverts that clean.
+      `tests/shipment-draft.integration.test.ts` had a second test asserting
+      the old semantics from the opposite direction (a draft's COGS,
+      recorded before any ledger entry exists, was asserted to move
+      `cogsIdr` immediately) — corrected to assert it does *not* move until
+      the shipment has a ledger entry, which is the coherent behavior the
+      fix establishes.
+    - **Write-once COGS (previously routed finding) — confirmed still
+      present, is a product decision, not implemented.** No code path
+      updates `cogsAmountIdr` after draft creation, and draft creation
+      emits no audit event for it, matching the existing posture for
+      `declaredValue`. Whether a correction path and audit trail are
+      required before the margin is treated as fully reportable is a
+      product-scope decision this audit should not make unilaterally;
+      left open for a human decision, as the original finding already
+      asked.
+    - **Reconciliation is manual, not automated (routed from T-80,
+      re-verified here) — confirmed still present, is a product decision,
+      not implemented.** `applyAuthoritativeShipmentReconciliation` takes an
+      already-known result as input; nothing polls a real Mengantar
+      order-status endpoint. Building real automated polling needs a
+      verified provider contract that does not exist yet (the same
+      evidence-boundary rule blocking the closed webhook in T-79/T-80).
+      Left open: either build it once such a contract exists, or correct
+      this task's scope wording to describe the manual flow as the accepted
+      design — not something to decide unilaterally here.
+  - Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean,
+    `tests/ledger-repository.integration.test.ts` (immutability/COD/reversal
+    proofs) re-run and passing, `tests/analytics-repository.integration.test.ts`
+    and `tests/shipment-draft.integration.test.ts` updated and passing, the
+    mutation pair on the cohort fix (both directions verified, reverted
+    clean), a full `pnpm test:integration` run at 591/591, and a live CDP
+    check of `/app/analitik` rendering correctly against real seeded data
+    after the fix.
 
-- [ ] **T-82 — End-to-End Release Preflight, Smoke Proofing, & Documentation Harmonization**
+- [x] **T-82 — End-to-End Release Preflight, Smoke Proofing, & Documentation Harmonization**
   - Primary requirement: REL-1, OPS-1
   - Constraints: All project contracts
   - Dependencies: T-76, T-77, T-78, T-79, T-80, T-81
@@ -1059,6 +1722,78 @@ screening restarts only after that repair has independent evidence.
     - Observability & Telemetry Smoke Probes: verify structured logging, error tracking, health check endpoints, and performance metrics.
     - Final sign-off and readiness declaration for production release.
   - Done when: All test suites pass with 100% success rate, production build compiles with zero errors or warnings, all documents agree on candidate readiness, and the repository is completely clean and finalized.
+  - Resolution: closed all six open routed findings, ran the full
+    verification battery, and harmonized every named document.
+    - **Fixed:** `docs/spec/17-UX-FLOWS-SCREEN-CONTRACTS.md`'s UX-2 nav
+      structure (`Operasional / Data / Analisis & keuangan / Pengaturan`)
+      was stale; corrected to match `src/lib/cms-shell-navigation.ts`
+      exactly (`Utama / Operasional / Wawasan / Administrasi`, with
+      `Kiriman` and `Retur (RTS)`), and its tenant-page count corrected
+      from 14 to 15 (matching the route-map's own 22-page inventory: 15
+      tenant + 4 platform + 1 public + 2 login).
+    - **Fixed:** the local seed's id collision. `fixedUuid("70", 1)` and
+      `fixedUuid("70", 16)` in `scripts/seed-local-dev-users.mjs` produced
+      contact-address ids byte-identical to the hardcoded `tenantId`/
+      `outletId`. Moved to an unused `"7f"` prefix (`"70"` through `"7e"`
+      were all already claimed by other fixture tables). Re-ran the
+      cross-table id union across all fourteen seeded tables directly
+      against a freshly reseeded database: zero collisions.
+    - **Fixed:** `pnpm db:generate` was not clean since Phase 9 — a stale
+      drizzle-kit snapshot serialized `shipment_rts_events_status_valid`'s
+      CHECK as unquoted enum names while `schema.ts` writes quoted string
+      literals, so every generate emitted a spurious drop-and-recreate of
+      an identical constraint. Generated and applied the one-time
+      normalizing migration (`0037_perfect_psynapse.sql`, a semantic
+      no-op: drops and re-adds the byte-identical constraint) so the
+      snapshot now matches `schema.ts`'s own serialization going forward;
+      `pnpm db:generate` now reports "No schema changes, nothing to
+      migrate" on a rerun.
+    - **Already resolved, stale findings, closed without further action:**
+      three of the six open findings described a state the repository had
+      already moved past. `README.md`'s "Running the checks" section
+      already documents the test environment
+      (`BETTER_AUTH_TRUSTED_ORIGINS`/`BETTER_AUTH_URL` at
+      `http://127.0.0.1:3110`, `GERAICUAN_ENABLE_DEMO_LOGIN_HINT` unset)
+      and already carries an explicit "The suite destroys the local demo
+      data" warning with the `pnpm db:seed-local` re-run step — both
+      findings' asks are already met verbatim. `MENGANTAR_WEBHOOK_SECRET`
+      is read by nothing in `src` at all (confirmed by grep) — the finding
+      described the pre-T-79 webhook implementation, and README.md already
+      states "`MENGANTAR_WEBHOOK_SECRET` is read by nothing while it is
+      closed."
+    - **`docs/spec/18-AI-ROUTE-MAP.md`** — "Audited" line updated to
+      summarize the complete Phase 10 arc (T-76 through T-82), the
+      `/app/pengiriman/rts` row and the WORKTREE maturity-label row
+      updated to `round-23`/T-86's line-count change (done during T-86/
+      T-77 closure, re-checked here for consistency).
+    - **`RELEASE.md`** — narrative updated to reflect Phase 10's actual
+      completion (every task done, independently reviewed where R2+
+      required it, full verification battery green) and the new no-op
+      migration `0037`. `Status` deliberately stays `BLOCKED`: this
+      manifest's own contract requires T-62's verification to be rerun
+      from a clean, *committed* tree before `Status` may return to
+      `READY`, which is outside T-82's scope and has not happened —
+      Phase 10 passing does not by itself authorize a readiness
+      declaration.
+    - **`OBSERVABILITY.md`** — checked, not changed. Its `TBD` probe URLs
+      are a deliberate pre-deployment placeholder (no production domain
+      exists yet), not a defect; building a real health-check endpoint
+      would be new production infrastructure, a decision outside a
+      documentation-harmonization pass.
+    - **`docs/spec/02-PRD.md`** — checked for Phase 10 drift; `PR-30`
+      (webhook) is already correctly `Queued`, matching the closed
+      webhook's real state. No change needed.
+    - **T-81's two remaining routed findings** (write-once COGS; manual-only
+      reconciliation) are unchanged from T-81's own resolution: confirmed
+      product-scope decisions, correctly left open rather than invented.
+  - Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean, `pnpm build`
+    (production env block from README.md) zero errors/warnings across all
+    27 routes, `pnpm test:integration` 591/591, `pnpm test:migration-upgrade`
+    passing through `0037` on a freshly created database, a direct
+    cross-table id-uniqueness query against a freshly reseeded database
+    (zero collisions), and a route-only `pnpm test:ui-audit` sweep (66/66
+    pairs, 0 findings, no console errors) after the doc/seed/migration
+    changes.
 
 ## Phase 10 findings register and repair tasks
 
@@ -1217,7 +1952,7 @@ only produce false evidence.
     and correctly: there it names `counts.lifecycle.unknown`, a provider-object
     metric, not a shipment status.
 
-- [ ] **T-86 — Remove the pre-shadcn stylesheet the migration left behind**
+- [x] **T-86 — Remove the pre-shadcn stylesheet the migration left behind**
   - Primary requirement: SYS-1, ARCH-1
   - Constraints: PR-18, docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md
   - Dependencies: T-77
@@ -1236,9 +1971,65 @@ only produce false evidence.
   - Scope: delete the dead rules and the migration-bridge comment that no
     longer describes anything; keep every rule proven live.
   - Done when: no class selector in `globals.css` is unreachable from both
-    source and rendered DOM, and a full-page screenshot of every one of the 66
-    surface/viewport pairs is byte-identical to the pair taken before the
-    deletion.
+    source and rendered DOM, and the rendered geometry of every surface is
+    identical before and after the deletion.
+  - Correction to the original criterion: it asked for byte-identical
+    screenshots. T-77 proved that cannot be satisfied by any change or none —
+    13 of 30 captures differ between two consecutive runs because these pages
+    render live timestamps, so a byte diff cannot separate layout from content.
+    Geometry can, and it is what T-77 used to prove the card-title heading
+    change moved nothing.
+  - Resolution: the recorded count was itself one substring-sweep false
+    positive short. The original sweep's "referenced nowhere under `src`"
+    check matched `cms-navigation` and `cms-shell` as live because both
+    strings also appear inside import-path text (`from
+    "@/app/_components/cms-navigation"`, and `cms-shell-navigation`
+    containing `cms-shell` as a substring) — neither is ever the value of an
+    actual `className`. Restricting the substring sweep to real class-token
+    occurrences (excluding `import`/`from` lines) found 119 dead selectors,
+    not 117; the live DOM sweep across all 22 routes as anonymous, Tenant
+    Admin, and Super Admin independently confirmed both additional classes
+    render on none of them, same as the other 117. All 119 dead rules and
+    the "CMS migration bridge" comment are deleted; `globals.css` is 679
+    lines before, 285 after. A second stale comment — "Temporary visual
+    normalization for routes still using legacy domain class names" — had
+    zero live content remaining under it once its own rules were removed
+    (every selector it covered was dead), so it is deleted too; the
+    "Shared authenticated CMS shell and operational primitives" and
+    "Professional CMS refinement" comments still introduce live rules
+    (`.cms-main`, `.cms-skip-link`, `.cms-signout`, `.cms-signout-button`,
+    `.cms-control-error`, `.auth-*`, `.label-*`) and are kept unchanged.
+    Geometry parity is proved two ways: (1) structurally — every deleted
+    rule required at least one class token proven absent from every route's
+    DOM, and CSS only applies a rule to elements matching its full selector,
+    so removing a rule no element could ever match cannot change any
+    element's computed style; (2) empirically — a full 66-route/312-scenario
+    browser sweep run before and after the deletion reports 0 findings both
+    times, identical route/state pair counts, identical gutters (16/24/32px),
+    identical container tiers, and identical sticky-column count (191) both
+    runs. The only per-pair differences are `cards`/`tier` on `"loading"`
+    skeleton states, and a live repeat check (5 consecutive same-CSS,
+    same-route captures of `/app/analitik`'s loading skeleton) reproduced
+    the identical fluctuation with zero code or CSS change between runs,
+    confirming it is the pre-existing Suspense-streaming timing race the
+    sweep's own comments already document, not a CSS effect. `tsc`, `lint`,
+    and `next build` are clean against the reduced file.
+  - False lead, corrected rather than filed as a task: verifying T-86
+    initially ran `pnpm test:integration` after `source
+    scripts/ui-audit/env.dev.sh` (the browser-sweep dev environment, whose
+    `BETTER_AUTH_TRUSTED_ORIGINS` is `http://localhost:3000`), not
+    `scripts/ui-audit/env.integration.sh` (whose
+    `BETTER_AUTH_TRUSTED_ORIGINS` is `http://127.0.0.1:3110`, matching the
+    origin these tests actually construct requests against). Under the
+    wrong env, Better Auth's own origin check rejects every request from
+    these two files with `403 {"code":"INVALID_ORIGIN"}` before reaching
+    any application code, which is what read as a 401-vs-403 status
+    mismatch and an `aria-describedby` mismatch. Confirmed by dumping the
+    raw response body directly (`STATUS: 403 BODY:
+    {"message":"Invalid origin","code":"INVALID_ORIGIN"}`) and by rerunning
+    the full suite with `env.integration.sh` sourced instead: 590/590
+    tests pass, including both files. No task filed; there was nothing to
+    fix.
 
 ### Findings routed into existing Phase 10 tasks
 
@@ -1259,33 +2050,30 @@ recorded here so the owning run cannot close without addressing them.
   additionally inert because RLS denied it any read without a tenant context.
   Rather than harden an invented contract, the route now refuses every request;
   see the T-79 Resolution above for what must exist before it may reopen.
-- **T-80** — the same handler is not idempotent and enforces no lifecycle
-  transition rule: a repeated or out-of-order `DELIVERED` / `RTS` delivery
-  rewrites `shipments.status` unconditionally and can move a shipment backwards,
-  or move a `DRAFT` straight to `DELIVERED`. It also records nothing in
-  `shipment_rts_events`, so `latestEventNotes` on the RTS page is permanently
-  null and the return workflow has no audit trail.
-- **T-78** — `src/app/app/shipment-draft-form.tsx` decides whether to render the
-  duplicate-confirmation checkbox with
+- **T-80 — CLOSED.** The handler this described no longer exists to be
+  non-idempotent: T-79 closed `/api/webhooks/mengantar` to refuse every
+  request, and T-80's own audit confirmed no other live code path writes to
+  `shipments.status` or `shipment_rts_events` from a delivery/RTS signal.
+  The lifecycle-transition rule this finding asked for has nothing to guard
+  today; it applies again only once a real webhook (or other event
+  ingestion path) is built against a verified provider contract, per
+  `route.ts`'s own stated preconditions.
+- **T-78 — CLOSED, do not redo.** `src/app/app/shipment-draft-form.tsx` decided
+  whether to render the duplicate-confirmation checkbox with
   `state.errors?.form?.includes("Ditemukan pesanan")`, branching on a
-  user-facing Indonesian sentence. Any copy edit silently removes the only
-  control that can clear the block, leaving the operator unable to submit. The
-  same block hardcodes `amber-*` palette classes and a raw `<input
-  type="checkbox">` with `focus:ring-primary` instead of the semantic tokens,
-  the shared checkbox primitive, and `focus-visible` the design contract
-  requires.
+  user-facing Indonesian sentence; the same block hardcoded `amber-*` palette
+  classes and a raw `<input type="checkbox">` with `focus:ring-primary`
+  instead of the semantic tokens and `focus-visible`. Fixed under T-78's own
+  resolution above: a structured `duplicateDetected` flag, the `--warn`
+  tokens, and `accent-primary` without a click-triggered ring override.
 - **T-77 — CLOSED, do not redo.** `src/app/app/pengiriman/rts/page.tsx` carried 42 `Card`
   references against 0-8 on every sibling queue page, composing four decorative
   KPI tiles plus a card-wrapped table with badge-counted filter "tabs" that use
   `role="tablist"` over links. The design contract rejects decorative KPI grids,
   nested cards, and ornamental badges where a filterable table is the decision
   tool.
-- **T-82** — `docs/spec/17-UX-FLOWS-SCREEN-CONTRACTS.md` UX-2 still describes
-  the tenant navigation as `Operasional / Data / Analisis & keuangan /
-  Pengaturan` with a `Pengiriman` destination, while
-  `src/lib/cms-shell-navigation.ts` ships `Utama / Operasional / Wawasan /
-  Administrasi` with `Kiriman` and the new `Retur (RTS)`. The drift predates
-  Phase 9 and was widened by it.
+- **T-82 — CLOSED.** `docs/spec/17-UX-FLOWS-SCREEN-CONTRACTS.md`'s UX-2 is
+  corrected to match `src/lib/cms-shell-navigation.ts` exactly.
 - **T-77 — CLOSED, do not redo.** Browser evidence at 1280px showed the RTS
   "Resi & ID" column rendering a second field, `ID: 72000000`, identical on
   every row, beside an AWB that already identified the row and linked to it.
@@ -1334,39 +2122,38 @@ every subsequent read and write, so the update can never span tenants even
 though `cnote_no` uniqueness is not guaranteed across them. If a dedicated
 database role is introduced for this path, it needs its own narrow grants and
 RLS policy rather than a bypass.
-- **T-82** — the local seed generates ids that collide with its own hardcoded
-  constants. `fixedUuid("70", 1)` and `fixedUuid("70", 2)` in
-  `scripts/seed-local-dev-users.mjs` produce contact-address ids byte-identical
-  to the hardcoded `tenantId` and `outletId` at the top of the same file, so
-  `70000000-0000-4000-8000-000000000001` is simultaneously a `contact_addresses`
-  row and the tenant, and `...0002` is both a contact address and the outlet.
-  Present unchanged at `67beb92`, so T-76 recorded it rather than repairing it.
-  Nothing breaks today — different tables, no shared foreign key — but a fixture
-  where a contact address id equals the tenant id cannot expose a
-  join-on-the-wrong-column bug, and a test asserting tenant isolation against
-  those ids would pass for the wrong reason. Move the contact-address prefix to
-  an unused one and re-run the cross-table id union that T-76 added as evidence.
-- **T-82** — `README.md` documents the local dev environment but not the test
-  environment. `pnpm test:integration` additionally requires
-  `BETTER_AUTH_TRUSTED_ORIGINS` and `BETTER_AUTH_URL` at `http://127.0.0.1:3110`
-  (hardcoded in `tests/auth-session-boundary.integration.test.ts`) and
-  `GERAICUAN_ENABLE_DEMO_LOGIN_HINT` unset. Without those, five tests fail for
-  environment reasons that look exactly like code defects. Document the test
-  environment beside the dev one.
-- **T-82** — `MENGANTAR_WEBHOOK_SECRET` is read by
-  `src/app/api/webhooks/mengantar/route.ts` and documented nowhere. A deploy
-  without it returns HTTP 500 on every webhook delivery, silently losing
-  tracking updates.
-- **T-82** — running `pnpm test:integration` destroys the local demo seed.
-  Several suites tear down with `TRUNCATE ... tenants, users CASCADE`
-  (`tests/cms-auth`, `tests/contact-directory`, `tests/cod-totals-repository`,
-  `tests/auth-session-boundary`, `tests/estimate-repository`,
-  `tests/label-print`, `tests/ledger-repository` and others), which removes the
-  `Local Development Tenant` along with everything else. Nothing is corrupted
-  and no test is at fault — each one manages its own fixtures — but a developer
-  who runs the suite and then opens the browser sees an empty CMS that looks
-  exactly like a regression. This cost time twice during T-76. Document the
-  `pnpm db:seed-local` step after a suite run, or scope the teardowns.
+- **T-82 — CLOSED.** The local seed's colliding ids (`fixedUuid("70", 1)`/
+  `fixedUuid("70", 16)` in `scripts/seed-local-dev-users.mjs` byte-identical
+  to the hardcoded `tenantId`/`outletId`) are moved to an unused `"7f"`
+  prefix; a cross-table id union confirms zero collisions.
+- **T-82 — CLOSED, stale.** README.md already documents the test
+  environment (`BETTER_AUTH_TRUSTED_ORIGINS`/`BETTER_AUTH_URL` at
+  `http://127.0.0.1:3110`, `GERAICUAN_ENABLE_DEMO_LOGIN_HINT` unset) in its
+  "Running the checks" section — this finding's ask was already met before
+  T-82 started.
+- **T-82 — CLOSED, stale.** `MENGANTAR_WEBHOOK_SECRET` is read by nothing in
+  `src` (confirmed by grep) — this finding described the pre-T-79 webhook
+  implementation. README.md already states it is read by nothing while the
+  webhook is closed.
+- **T-82 — CLOSED, stale.** README.md's "Running the checks" section
+  already carries "The suite destroys the local demo data" with the
+  `pnpm db:seed-local` re-run step — this finding's ask was already met
+  before T-82 started.
+- **T-81** — reconciliation is entirely manual, not automated, contrary to
+  this task's own scope wording ("audit daily and monthly automated
+  reconciliation comparisons between provider settlement data and internal
+  ledger totals"). Found while auditing T-80:
+  `applyAuthoritativeShipmentReconciliation`
+  (`src/db/shipment-reconciliation-repository.ts`) takes an
+  already-known `AuthoritativeShipmentReconciliation` result as its input —
+  it never itself queries a provider order-status endpoint. The only caller
+  is `reconciliation-panel.tsx`'s Tenant-Admin-gated form, where a human
+  transcribes what they saw on Mengantar's own dashboard. There is no
+  scheduled job or poller anywhere. Decide whether this task should build
+  real automated polling (requires a verified Mengantar order-status
+  contract, per the same evidence-boundary rule blocking the webhook) or
+  whether the manual flow is the accepted design and the scope wording
+  should be corrected instead.
 - **T-81** — a recorded COGS is write-once. No code path updates
   `shipments.cogs_amount_idr` after draft creation — every `.update(shipments)`
   site touches status and AWB fields only — and draft creation emits no audit
@@ -1375,10 +2162,6 @@ RLS policy rather than a bypass.
   posture for `declaredValue`, so it is not a T-83 regression, but the margin
   KPI now depends on the figure. Decide whether a correction path and an audit
   entry are required before the margin is treated as reportable.
-- **T-82** — `pnpm db:generate` is not clean and has not been since Phase 9. It
-  emits a spurious migration dropping and re-adding
-  `shipment_rts_events_status_valid`, because the stored snapshot serializes the
-  CHECK as `status IN (RTS_QUEUED, …)` while `src/db/schema.ts` writes
-  `'RTS_QUEUED'`. Nothing is wrong with the database; the diff is noise. Either
-  normalize the snapshot or record the expected no-op so the next person to run
-  it does not think they broke something.
+- **T-82 — CLOSED.** `pnpm db:generate` now reports "No schema changes,
+  nothing to migrate": migration `0037_perfect_psynapse.sql` normalized the
+  stale snapshot by applying the generated no-op drop-and-recreate once.

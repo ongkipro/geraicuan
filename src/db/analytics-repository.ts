@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import {
   ledgerEntries,
@@ -291,7 +291,6 @@ async function loadShipmentKpisUnchecked(
   const [created] = await tx
     .select({
       createdCount: sql<number>`count(*)::int`.mapWith(Number),
-      cogsIdr: sql<number>`coalesce(sum(${shipments.cogsAmountIdr}), 0)`.mapWith(Number),
     })
     .from(shipments)
     .leftJoin(
@@ -361,11 +360,58 @@ async function loadShipmentKpisUnchecked(
     )
     .where(ledgerRangePredicate(context, range, filters));
 
-  if (!created || !providerOutcomes || !financials) {
+  // COGS is recognized over the same population as the other four financial
+  // terms above — shipments with a ledger entry effective in this range — not
+  // shipments created in it. A shipment created near a period boundary
+  // otherwise contributed its COGS to one period and its shipping cost to the
+  // next, so netMarginIdr's five terms never described the same shipments.
+  // `cogsAmountIdr` is a fixed per-shipment value, not a per-entry amount, so
+  // it is summed once per *distinct* shipment id rather than once per ledger
+  // row the flat join above would otherwise produce (a shipment recognized
+  // through three entries — principal, service fee, VAT — would triple-count
+  // its own COGS if this reused that same joined row set).
+  const ledgerCohortShipmentIds = await tx
+    .selectDistinct({ shipmentId: ledgerEntries.shipmentId })
+    .from(ledgerEntries)
+    .innerJoin(
+      shipments,
+      and(
+        eq(shipments.id, ledgerEntries.shipmentId),
+        eq(shipments.tenantId, ledgerEntries.tenantId),
+      ),
+    )
+    .innerJoin(
+      providerBatches,
+      and(
+        eq(providerBatches.id, ledgerEntries.providerBatchId),
+        eq(providerBatches.tenantId, ledgerEntries.tenantId),
+      ),
+    )
+    .where(ledgerRangePredicate(context, range, filters));
+
+  const cohortShipmentIds = ledgerCohortShipmentIds
+    .map((row) => row.shipmentId)
+    .filter((shipmentId): shipmentId is string => shipmentId !== null);
+
+  const [ledgerCogs] = await tx
+    .select({
+      cogsIdr: sql<number>`coalesce(sum(${shipments.cogsAmountIdr}), 0)`.mapWith(Number),
+    })
+    .from(shipments)
+    .where(
+      cohortShipmentIds.length
+        ? and(
+            eq(shipments.tenantId, context.tenantId),
+            inArray(shipments.id, cohortShipmentIds),
+          )
+        : sql`false`,
+    );
+
+  if (!created || !providerOutcomes || !financials || !ledgerCogs) {
     throw new Error("Shipment analytics were not loaded.");
   }
-  const netMarginIdr = financials.codPrincipalIdr - financials.providerShippingIdr - financials.codServiceFeeIdr - financials.codVatIdr - created.cogsIdr;
-  return { ...created, ...providerOutcomes, ...financials, netMarginIdr };
+  const netMarginIdr = financials.codPrincipalIdr - financials.providerShippingIdr - financials.codServiceFeeIdr - financials.codVatIdr - ledgerCogs.cogsIdr;
+  return { ...created, ...providerOutcomes, ...financials, cogsIdr: ledgerCogs.cogsIdr, netMarginIdr };
 }
 
 export async function loadShipmentKpis(

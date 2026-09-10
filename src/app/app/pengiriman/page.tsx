@@ -219,8 +219,8 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                 {data.rows.map((row) => {
                   const status = SHIPMENT_STATUS_PRESENTATION[row.status];
                   return (
-                    <TableRow key={row.shipmentId}>
-                      <TableCell className="sticky left-0 z-10 bg-card font-medium group-hover:bg-muted/50">
+                    <TableRow className="group" key={row.shipmentId}>
+                      <TableCell className="sticky left-0 z-10 bg-card font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                         <Link
                           className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline sm:min-h-8"
                           href={`/app/pengiriman/${encodeURIComponent(row.shipmentId)}`}

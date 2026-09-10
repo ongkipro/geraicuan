@@ -334,12 +334,12 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               </li>
             ))}
           </ul>
-          {state.errors?.form?.includes("Ditemukan pesanan") && (
-            <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-foreground">
+          {state.duplicateDetected && (
+            <div className="mt-4 rounded-md border border-[var(--warn)]/40 bg-[var(--warn)]/10 p-3 text-foreground">
               <div className="flex items-start gap-2.5">
-                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                <AlertTriangle className="h-5 w-5 text-[var(--warn)] shrink-0 mt-0.5" aria-hidden="true" />
                 <div className="space-y-1.5">
-                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                  <p className="text-sm font-semibold text-[var(--warn)]">
                     Peringatan Pesanan Serupa (Double Order Check)
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -351,7 +351,7 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
                       id="confirmDuplicate"
                       name="confirmDuplicate"
                       value="true"
-                      className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                      className="h-4 w-4 rounded border-input accent-primary"
                     />
                     <span>Saya yakin ini bukan pesanan duplikat, tetap buat kiriman ini.</span>
                   </label>

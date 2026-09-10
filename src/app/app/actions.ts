@@ -122,6 +122,7 @@ const FORM_FIELDS = [
 type DraftFormValues = Partial<Record<(typeof FORM_FIELDS)[number], string>>;
 
 export type ShipmentDraftActionState = {
+  duplicateDetected?: boolean;
   errors?: Record<string, string>;
   message?: string;
   values?: DraftFormValues;
@@ -688,6 +689,7 @@ export async function saveShipmentDraft(
             return {
               ok: false,
               state: {
+                duplicateDetected: true,
                 errors: {
                   form: `Ditemukan pesanan dengan nomor telepon penerima yang sama dalam ${DUPLICATE_SHIPMENT_WINDOW_DAYS} hari terakhir. Centang konfirmasi jika ingin tetap melanjutkan.`,
                 } as Record<string, string>,

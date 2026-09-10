@@ -77,6 +77,29 @@ open the browser after a suite run and the CMS looks empty. Re-seed first:
 pnpm db:seed-local
 ```
 
+### Browser-based UI audit
+
+`pnpm test:ui-audit` drives the dev server through headless Chrome (CDP) and
+checks contrast, keyboard focus rings, headings, layout, sticky columns,
+loading skeletons, and every route/scenario/viewport combination the
+repository declares (66 route pairs, 300+ scenario pairs). It needs the dev
+server already running (the "Local development" block above) and
+`POSTGRES_PASSWORD` exported; it starts its own headless Chrome if one is not
+already reachable on `CDP_PORT` (default `9411`), and points at
+`UI_AUDIT_ORIGIN` (default `http://localhost:3000`, matching `pnpm dev`'s
+default port):
+
+```bash
+pnpm test:ui-audit
+```
+
+`pnpm test:ui-audit:mutations` re-runs the guard/probe mutation suites
+under `scripts/ui-audit/` that prove the audit's guards actually bind to the
+defects they claim to catch, not just to incidental spellings in the current
+source. It also needs the dev server running. See
+`scripts/ui-audit/README.md` for what each script does and why the coverage
+looks the way it does.
+
 `pnpm build` needs a production-shaped configuration, because startup fails
 closed without it — two exact HTTPS origins and a trusted proxy allowlist:
 

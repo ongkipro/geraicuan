@@ -497,6 +497,53 @@ describe("CMS UI audit inventory", () => {
     }
   });
 
+  // T-77 round 15 found /app/kontak/[contactId] declares "partial-error" (a
+  // state only reachable through a registered scenario, never through a
+  // route-level condition the sweep can land in on its own) with no scenario
+  // anywhere in UI_AUDIT_SCENARIO_CONTRACTS actually owning it - the
+  // scenario-completeness check above only verifies the reverse direction
+  // (every scenario's route/state is registered), so a route that never
+  // gained a scenario for one of its own declared states was invisible to
+  // it. "pending" and "primary-success" are deliberately excluded here: those
+  // are verified through live interactive submission (recorded per-task in
+  // BUILD-LOG.md), not the scenario-header mechanism, and are missing a
+  // scenario contract for nearly every route in the inventory by design -
+  // asserting them here would not describe a real gap.
+  //
+  // Round 17 found this check itself too narrow: "route-error" carries the
+  // STATE_STRATEGY label "route-boundary" (a real error boundary catches a
+  // thrown error), which is a different thing from whether a scenario is
+  // needed to CAUSE the throw in the first place. Every page-kind route in
+  // this inventory that declares "route-error" only ever reaches it via a
+  // `if (auditScenario === "...") throw new Error(...)` gate - none of these
+  // routes have any other, organic way to fail - so it is scenario-reachable
+  // in exactly the same practical sense as "partial-error"/"stale", and
+  // belongs in this set too. `/app/kontak/baru` and `/app/kontak/[contactId]`
+  // had no scenario for it at all until this round.
+  //
+  // Round 18 found "not-found" carries the identical "route-boundary" label
+  // and the identical characteristic: mutation-tested by deleting the one
+  // scenario that owns it (`platform-tenant-detail-not-found`) and
+  // confirming this check still passed, unaware the route it was
+  // supposedly guarding had lost its only verification path.
+  it("owns a scenario for every route's own scenario-reachable declared state", () => {
+    const scenarioReachable = new Set(["partial-error", "stale", "route-error", "not-found"] as const);
+    // "endpoint"-kind contracts (Route Handlers, e.g. the CSV export) are not
+    // browser pages the sweep's scenario header ever renders - they have
+    // their own dedicated integration tests exercising real request/error
+    // paths instead. This check only describes the page-rendering mechanism.
+    for (const route of CMS_UI_AUDIT_ROUTE_CONTRACTS) {
+      if (route.kind !== "page") continue;
+      for (const state of route.states) {
+        if (!scenarioReachable.has(state as "partial-error" | "stale" | "route-error" | "not-found")) continue;
+        const owned = Object.values(UI_AUDIT_SCENARIO_CONTRACTS).some(
+          (contract) => contract.route === route.route && contract.state === state,
+        );
+        expect(owned, `${route.route}: ${state}`).toBe(true);
+      }
+    }
+  });
+
   it("keeps internal destinations live and enabled buttons bound to behavior", () => {
     const files = [
       ...sourceFiles("src/app"),
@@ -531,6 +578,40 @@ describe("CMS UI audit inventory", () => {
       {
         files: ["src/app/app/keuangan/components/finance-filters.tsx"],
         route: "/app/keuangan",
+      },
+      // T-77 round 20 found this list was a fixed allowlist of the three
+      // routes T-69 fixed, not "every route" as the test's own name reads:
+      // /app/label has the identical GET filter form pattern and post-dates
+      // T-69, so it had zero coverage - static or browser-level - against
+      // the exact duplicate-desktop/mobile-form defect this guard exists to
+      // catch. Confirmed live: duplicating the filter form in
+      // src/app/app/label/page.tsx passed this test unchanged before this
+      // route was added.
+      {
+        files: ["src/app/app/label/page.tsx"],
+        route: "/app/label",
+      },
+      // T-77 round 22 found the same drift again: monitoring-view.tsx's
+      // single FilterPanel form serves all four /platform* routes with the
+      // identical shape, and none of them were ever added to this list.
+      // Confirmed live: injecting a second `<form ... method="get">` into
+      // FilterPanel passed this test unchanged before these routes were
+      // added.
+      {
+        files: ["src/app/platform/_components/monitoring-view.tsx"],
+        route: "/platform",
+      },
+      {
+        files: ["src/app/platform/_components/monitoring-view.tsx"],
+        route: "/platform/tenant",
+      },
+      {
+        files: ["src/app/platform/_components/monitoring-view.tsx"],
+        route: "/platform/tenant/[tenantId]",
+      },
+      {
+        files: ["src/app/platform/_components/monitoring-view.tsx"],
+        route: "/platform/audit",
       },
     ] as const;
     const invalidCounts = surfaces
@@ -689,6 +770,8 @@ describe("CMS UI audit inventory", () => {
       "src/app/app/impor/page.tsx",
       "src/app/app/keuangan/page.tsx",
       "src/app/app/kontak/page.tsx",
+      "src/app/app/kontak/baru/page.tsx",
+      "src/app/app/kontak/[contactId]/page.tsx",
       "src/app/app/location-actions.ts",
       "src/app/app/pengaturan/page.tsx",
       "src/app/app/label/page.tsx",
@@ -764,12 +847,29 @@ describe("CMS UI audit inventory", () => {
       ["src/app/app/pengiriman/baru/page.tsx", "/app/pengiriman/baru"],
       ["src/app/app/pengiriman/[shipmentId]/page.tsx", "/app/pengiriman/[shipmentId]"],
       ["src/app/app/pengiriman/rts/page.tsx", "/app/pengiriman/rts"],
+      // T-77 round 21 found this list unmaintained against pages added
+      // after it was written - these two use the identical pattern as
+      // every entry above and were simply never added.
+      ["src/app/app/kontak/baru/page.tsx", "/app/kontak/baru"],
+      ["src/app/app/kontak/[contactId]/page.tsx", "/app/kontak/[contactId]"],
     ] as const) {
       const source = readFileSync(join(repositoryRoot, file), "utf8");
       expect(source).toContain("parseUiAuditScenarioForRoute(");
       expect(source).toContain(`"${route}"`);
       expect(source).not.toMatch(/\bparseUiAuditScenario\s*\(/);
     }
+
+    // monitoring-view.tsx serves all four /platform* routes from one file
+    // with the route passed as a variable, not a literal string per route -
+    // it can't join the list above, but round 21 found it was missing from
+    // this check entirely, not merely mismatched to the literal-string
+    // assertion the others use.
+    const monitoringViewSource = readFileSync(
+      join(repositoryRoot, "src/app/platform/_components/monitoring-view.tsx"),
+      "utf8",
+    );
+    expect(monitoringViewSource).toContain("parseUiAuditScenarioForRoute(");
+    expect(monitoringViewSource).not.toMatch(/\bparseUiAuditScenario\s*\(/);
 
     const auditSource = readFileSync(
       join(repositoryRoot, "src/lib/ui-audit-scenario.ts"),

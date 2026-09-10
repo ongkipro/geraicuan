@@ -224,7 +224,7 @@ try {
          archived_at = NULL,
          updated_at = EXCLUDED.updated_at`,
       [
-        fixedUuid("70", contacts.indexOf(contact) + 1),
+        fixedUuid("7f", contacts.indexOf(contact) + 1),
         tenantId,
         contact.id,
         `Jl. Demo GeraiCUAN No. ${contacts.indexOf(contact) + 1}, Jakarta`,
@@ -275,7 +275,7 @@ try {
        is_primary = true,
        archived_at = EXCLUDED.archived_at,
        updated_at = EXCLUDED.updated_at`,
-    [fixedUuid("70", 16), tenantId, archivedContact.id, archivedAt, at(22, 8)],
+    [fixedUuid("7f", 16), tenantId, archivedContact.id, archivedAt, at(22, 8)],
   );
 
   for (const shipment of shipmentDefinitions) {

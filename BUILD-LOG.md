@@ -2412,8 +2412,8 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   rather than the loading state.
 - Capturing that frame immediately found a defect it had been hiding: two of the
   sixteen loading skeletons render no `h1` at all, and `src/app/platform/loading.tsx`
-  covers the platform overview, the audit trail and tenant detail, so four
-  routes streamed with no heading. Both now render the same `PageHeader` the
+  covers all four platform routes — none of them has a loading file
+  of its own — so four routes streamed with no heading. Both now render the same `PageHeader` the
   other fourteen do.
 - Three `contacts-area-*` scenarios are Server Action states
   (`src/app/app/location-actions.ts:103`) that a page load cannot reach; nine
@@ -2449,8 +2449,1422 @@ Record only durable implementation changes, validation evidence, and gotchas tha
   printed and then discarded by a validation script that gated only on console
   errors; and the contrast self-test, which re-implemented the probe instead of
   importing it and so proved only that a copy worked.
-- The redirect gate then earned its place: a later run lost the Super Admin
-  session partway through and reported 35 pairs redirected to
-  `/login/super-admin`. That run is not evidence of anything and is not cited as
-  such.
+- The redirect gate then earned its place: a run lost the Super Admin session
+  partway through and reported 35 pairs redirected to `/login/super-admin`. That
+  run is not evidence of anything and is not cited as such. A sweep that takes
+  half an hour outlives its session, so the sweep now re-authenticates once and
+  retries the surface rather than recording a login page as a screened route.
+- Evidence after both rounds: `pnpm tsc --noEmit`, `pnpm lint`,
+  `pnpm test:integration` at 78 files / 588 tests, `next build`, and a clean
+  browser sweep — 66 route pairs and 303 scenario pairs, zero findings on
+  either, 51 of 51 loading skeletons captured, zero scenarios rendering
+  indistinguishably from their base route, zero redirects, no console errors,
+  49 observations of an opaque sticky identifying column across seven distinct
+  wide tables and three viewports, shell gutters measured at exactly 16/24/32px
+  and container tiers at exactly the four `PageContainer` widths. Three
+  scenarios are excluded from the sweep by name and reason, being Server Action
+  states a page load cannot reach; four more are swept but exempt from the
+  effect check, asking for a populated state the seeded database is already in
+  — two different exemptions, not summable into one "nine". Twelve page
+  mutations and seventeen token mutations all fail the guards; the unmutated
+  tree passes.
+- The count of text elements inspected for contrast is still not quoted as a
+  measurement. It moved between 38,040 and 43,205 across runs of identical code
+  while the focus-ring count stayed within three of 3,609, so it describes a
+  database state rather than this tree.
+- One more measurement error of my own, caught by checking rather than
+  trusting: `pgrep -f "node t77-screen3"` matches the shell wrapper that
+  launched it as well as the process itself, so a finished sweep read as still
+  running for half an hour. The result had been sitting in the log the whole
+  time.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 3 — rejected again, and it found a shipped defect
+
+- **A real product defect, not a guard gap.** The sticky identifying column went
+  translucent under row hover. `group-hover:bg-muted/50` compiles to a
+  `:is(:where(.group):hover *)` selector at specificity (0,2,0), which beats
+  `bg-card` at (0,1,0), so the cell the seven scrolled columns pass beneath
+  became see-through exactly when a user pointed at the row. The two tables this
+  task had just given a sticky column carried it. They use an opaque
+  `color-mix(in oklab, var(--muted) 50%, var(--card))` now — the same colour,
+  composited rather than blended at paint time.
+- The probe could not have seen it: it read `thead th` and never a body cell, so
+  all 49 observations were header-only. It reads the first body cells as well
+  now, and rejects a sticky cell whose class carries a fractional-opacity hover
+  — and, once that class-name check itself was replaced with one that reads the
+  actual cascade (below), rejects a sticky cell that paints translucent for any
+  reason at all.
+- **The scenario-effect check was vacuous on every tenant route**, and for two
+  reasons stacked on each other. `document.body.textContent` includes the
+  contents of every `<script>`, so the digest was hashing the RSC flight payload
+  — a fresh `self.__next_r` nonce, module ids and per-request UUIDs on every
+  load. And the whitespace collapse never ran: this probe is a template literal,
+  so `/\s+/` reached the browser as `/s+/` and had been replacing the letter
+  "s". Two loads of the same page therefore never agreed, and review measured
+  all nine tenant routes drifting. The digest now hashes visible text only, with
+  clock-derived strings normalised out, and `digest-stability.mjs` proves nine
+  routes are stable across two loads before the check is trusted.
+- **The token guard leaked through inheritance and through media context.**
+  Custom properties inherit, so `body { --destructive: … }` reaches every
+  element the primitives render; the guard matched only `:root` and `html`, and
+  review restored shadcn's red with it green — confirmed in a browser, not
+  argued. Separately, `painter` matched on selector alone, so moving the one
+  global focus rule into `@media print` kept the guard green while removing the
+  ring from every screen surface. The token map now honours inheritance and
+  ignores rules that cannot apply on screen.
+- Whether a focus ring is visible is a measurement now, not a list of spellings:
+  the rule's width and colour are resolved and the colour is judged against the
+  3:1 floor, which kills `outline-width: 0.5px` and `outline-color: var(--canvas)`
+  — a white ring on the white canvas — that an enumerated check passed. The
+  theme check matches any colour-scheme query and any selector naming a theme,
+  which closes `@media not all and (prefers-color-scheme: light)` and
+  `[data-theme="dark"]`. What the parser still cannot see is an `@import`, so
+  the file's three imports are asserted exactly.
+- Rewriting that check regressed two mutations an earlier version had killed:
+  `outline-width: 0` has no unit and did not match a `Npx` pattern, and
+  `transparent` threw in the colour parser and was swallowed by its own
+  `catch`. Both are handled explicitly. Caught by re-running the whole suite
+  rather than only the new cases.
+- **The page guard was still bound to spellings.** The restated-counts check
+  required the number to be a whole text node, so a tile printing
+  `{count} kiriman` passed while restating every count above the chips. The
+  second-identifier check was bound to the literal `ID:` and an exactly
+  eight-character slice, so `Ref {shipmentId.slice(0, 7)}` passed. The scroller
+  check matched `overflow-x-auto` and not `overflow-auto`. All three are bound
+  to the defect now: counts are matched anywhere in the rendered text with
+  fixture values chosen to be distinctive, id prefixes are counted across all
+  rows at every slice length from six characters up, and any horizontal
+  scrolling utility counts.
+- Fifteen page mutations and twenty-six token mutations now fail the guards,
+  including all eleven independent review broke across rounds two and three.
+- **A new guard for the guards.** Three separate edits shipped a probe that
+  could not run — a backtick inside its template literal, and single backslashes
+  the template swallowed — each discovered only when a sweep died half an hour
+  in. `probe-lint.mjs` checks both and compiles the probe, and the validation
+  script runs it first.
+- Six documented numbers were wrong. "Nine of the 104 scenarios are excluded"
+  added three excluded from the sweep to four exempt from the effect check —
+  two different exemptions, and neither the scenario count nor the pair count.
+  `TASKS.md` still carried the 105ch threshold whose rationale `BUILD-LOG.md`
+  had already retracted. `src/app/platform/loading.tsx` covers four platform
+  routes, not three. "49 wide tables" is 49 observations across seven tables and
+  three viewports. And the route map still described the tree at `67beb92` with
+  T-77 uncommitted and once-reviewed.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, and a clean sweep — 66 route pairs and 303
+  scenario pairs with zero findings, 51 of 51 loading skeletons captured, zero
+  scenarios indistinguishable from their base route, zero redirects, no console
+  errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 4 — rejected again, and half the sticky-column fix was wrong
+
+- **The "four tables carried it" claim in the round-3 section was wrong; two
+  of them never had the defect.** `group-hover:*` only matches inside an
+  ancestor carrying the literal `group` class. `/app/pengiriman` and
+  `/app/kontak` used `group-hover:bg-muted/50` on the sticky cell but their
+  `TableRow` had no `group` class — the utility never matched, before the
+  round-3 repair or after it, so both the pre-existing class and its
+  `color-mix` replacement were dead code on those two files. Only the RTS
+  table and the CSV error table, both marked `group` in the same repair,
+  actually carried the defect. Both files now carry `group` on the row
+  regardless, so the rule the RTS fix established applies uniformly across
+  all four sticky tables rather than two of them by name only.
+- **The probe's own hover check repeated the mistake it was written to stop
+  repeating: a class-name regex, moved from the test into the probe.**
+  `/(?:group-)?hover:bg-[a-z-]+\/[0-9]+/` missed `bg-transparent`,
+  `bg-muted/[40%]`, and any plain-CSS hover rule. It now reads the CSSOM and
+  resolves what actually gets painted, and building that correctly took three
+  wrong turns worth recording:
+  - The first attempt walked `sheet.cssRules` recursively but classed a rule
+    as "a container to recurse into, not a leaf" by testing `if (rule.cssRules)`.
+    CSS nesting means every `CSSStyleRule` now exposes `.cssRules` — an empty
+    list, absent a nested child — so that test is true for nearly every leaf
+    rule in the sheet. 1018 of 1091 style rules in the utilities layer were
+    silently dropped this way; the walk pushed only 96 of what a plain
+    `[...sheet.cssRules]` on the same sheet showed as 417 top-level rules. A
+    rule with `.selectorText` and `.style` is a leaf regardless of what else
+    it exposes, and is pushed before ever checking whether it also has
+    children to recurse into.
+  - The second attempt, once rules were actually found, matched a candidate
+    rule to the cell with `cell.matches(selector) || cell.closest(selector)`.
+    The `closest()` half is wrong: every `TableRow` already carries its own
+    `hover:bg-muted/50` from the shadcn primitive, an ancestor rule that
+    genuinely does paint the row translucent on hover — by design, that is
+    the row-highlight effect — and `closest()` found that ancestor match and
+    reported it as if it painted the sticky cell sitting opaquely on top of
+    it. `matches()` alone already evaluates a full selector, ancestor
+    combinators included, exactly as `querySelectorAll` would; the fallback
+    was unnecessary and wrong.
+  - The third: Tailwind emits a plain fallback (`background-color: var(--muted)`)
+    beside an `@supports (color: color-mix(...))` block carrying the enhanced
+    value, for browsers without the feature. Resolving a candidate's colour
+    requires the cascade, which a canvas — used by the browser-visible
+    contrast probe — cannot evaluate: `var()` and `color-mix()` read back as
+    the canvas's previous fill, silently "resolving" every translucent value
+    to opaque. A hidden `<span>` placed inside the cell and given the
+    candidate value via `element.style`, then read back through
+    `getComputedStyle`, lets the engine resolve it properly.
+  - Mutation-tested against the four spellings review used to break it —
+    `bg-muted/50`, `bg-transparent`, `bg-muted/[40%]`, an arbitrary `rgba()` —
+    plus removing `sticky` itself; all five now fail, and the unmutated tree
+    passes.
+- **The token guard's colour parser treated "cannot parse" as "assume safe".**
+  `outline-color: white` and `outline-color: rgb(255 255 255)` — a white ring
+  on the white canvas — passed because `parse()` only understood hex and
+  `oklch()`, and the catch around it returned `null`, meaning "not flagged."
+  The parser now covers a small set of named colours, `rgb()`/`rgba()`, and
+  the two-argument `color-mix()` form the stylesheet itself uses; anything it
+  still cannot read now fails the check with the parse error attached, rather
+  than passing silently. The suppressor scan itself was also narrower than
+  its own purpose: it matched only selectors containing the literal text
+  `:focus-visible`, so `:focus { outline: none }` — equal specificity to the
+  global rule, later in source order, so it wins outright — passed. It now
+  matches any rule capable of drawing an outline on a focused element. A large
+  negative `outline-offset` (`-9999px`, drawn but pushed off-screen) is
+  checked as well. `targetsRoot` unwrapped `:where()` but not `:is()`, so
+  `:is(:root) { --destructive: … }` restored shadcn's red past the guard; both
+  wrappers are stripped now. The `@import` assertion matched only the quoted
+  form the file happens to use, missing `@import url("...")`; both are
+  recognised now.
+- Rewriting the sticky probe's rule walk needed its own guard: the fix
+  itself, mid-edit, twice hit the same template-literal trap this session
+  already has a lint for — a stray backtick inside a code comment ending the
+  template early. `probe-lint.mjs` caught both immediately rather than
+  letting a sweep discover them thirty minutes in.
+- Sixteen page mutations and thirty-two token mutations now fail the guards,
+  including all fifteen independent review has broken across four rounds. Two
+  new mutations found a real regression in the immediately preceding fix
+  itself and were fixed in the same pass: the restated-count check was scoped
+  to text outside the literal `<nav>…</nav>` region, and moving a KPI tile
+  *inside* that region evaded it by DOM position rather than by not restating
+  anything; it now counts total occurrences of each distinctive fixture value
+  anywhere in the document, which no amount of repositioning can evade. The
+  second-identifier check counted only prefixes; suffixes are counted too, and
+  two ids that happen to share a prefix or suffix are pooled into one shared
+  budget (equal to how many of them lack an AWB) rather than skipped outright,
+  because skipping let a mutation on one row hide behind the other's
+  legitimate rendering at exactly the shared length.
+- Two more document numbers were wrong, both freshly written by the round-3
+  repair rather than inherited: "nine scenarios are excluded" repeated the
+  arithmetic error round 3 had just flagged (3 + 4, two different kinds of
+  exclusion), and "49 wide tables" repeated round 3's own correction to "49
+  observations across seven tables" seventeen lines later in the same file.
+  Both are fixed at the point they were wrong, not only at the point that
+  already had the correction. The route map's worktree note and one route row
+  still described the tree before this session's commit; both are updated
+  for `69e6be6` and for three rounds of review, not one.
+- The digest's own normalisation is described more precisely: it strips
+  clock-like and currency-like digit runs, not only "clock strings" — Rupiah's
+  thousands-separator dot reads like a truncated time otherwise, and while
+  that miscategorisation did not produce a wrong verdict (a money-only change
+  still reads as "no effect" and correctly fails the check, not passes it),
+  the comment describing what it does is now accurate rather than narrower
+  than the code.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, and a clean sweep — 66 route pairs and 303
+  scenario pairs with zero findings, 51 of 51 loading skeletons captured, zero
+  scenarios indistinguishable from their base route, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 5 — rejected again, all three findings real and browser-confirmed
+
+- **`targetsRoot` split on commas before unwrapping `:is()`/`:where()`.**
+  `:is(:root, .never-matches-anything)` was shredded into `:is(:root` and
+  `.never-matches-anything)` by a plain `.split(",")` before either piece
+  reached the unwrap regex, so neither matched and the rule's `--destructive`
+  never entered `tokens` — confirmed live: `getComputedStyle(documentElement)`
+  resolved shadcn's red while the guard still passed 8/8. The comma split is
+  depth-aware now (splits only outside parentheses) and the unwrap is
+  recursive, so a selector list nested inside a wrapper re-splits and
+  re-checks each branch.
+- **The second-identifier check only looked at the two ends of the UUID.**
+  `shipmentId.slice(9, 17)` — a slice from the middle — printed a second
+  identifier on every row and passed both the guard and its own comment's
+  claim to check "any slice length." Every contiguous substring at each
+  length 6-12 is checked now, not only the prefix and the suffix.
+- **A third, real product-visible way to defeat the sticky-column probe:
+  `background-image` was never read.** A hover rule painting
+  `linear-gradient(var(--muted), transparent)` — a gradient fading to
+  see-through — passed silently, because the check only ever inspected
+  `background-color`/the `background` shorthand.
+- **Chasing this one cost a wrong turn worth recording.** The obvious fix
+  looked like forcing genuine `:hover` via CDP and reading whatever the
+  browser's own cascade produces, sidestepping declared-CSS inspection
+  altogether. Both available forcing mechanisms were tried —
+  `CSS.forcePseudoState` on the `.group` ancestor, and a real
+  `Input.dispatchMouseEvent` at the cell's own coordinates — and both leave
+  `element.matches(':hover')` reporting `true` while `getComputedStyle` never
+  applies a single `:hover`-scoped rule: a row's own built-in
+  `hover:bg-muted/50` computed as fully transparent (its resting default)
+  under either. `matches()` reflects DevTools' forced state for inspector
+  purposes; this headless Chrome's actual style recalculation does not follow
+  it. There is no way to observe a genuine hover-time computed style here, so
+  the check reads declared rules after all, this time including
+  `background-image`: any `:hover`-matching rule affecting the cell (matched
+  with `matches()` only, leaf rules detected the way round 4 fixed) is
+  checked for a `background-color`/`background` resolved inside the cell's own
+  subtree, and separately for a `background-image` whose colour stops include
+  a transparent or partial-alpha value.
+- Seventeen page mutations and thirty-three token mutations now fail,
+  including all eighteen independent review has broken across five rounds,
+  and the sticky probe carries its own six-mutation suite
+  (`scratchpad/sticky-mutate.sh`), including the gradient case.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, and a clean sweep — 66 route pairs and 303
+  scenario pairs with zero findings, 51 of 51 loading skeletons captured, zero
+  scenarios indistinguishable from their base route, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 6 — rejected again, three real gaps plus a missing evidence footer
+
+- **The pooled-budget identifier check only checked lengths 6-12.** A 5-character
+  middle slice (`shipmentId.slice(9, 14)`) evaded it entirely — outside the
+  window, not inside it and pooled wrong. The floor is 5 now, not lower: at 4
+  characters `"0003"` collides with the unrelated fixture AWB
+  `"SANITIZED-CNOTE-0003"`, and the check cannot tell that legitimate
+  coincidence from a real second identifier, so a lower floor fails on the very
+  fixture that has no defect.
+- **`splitTopLevel` tracked only paren depth**, so a comma inside a quoted
+  attribute value — `[data-x="a,b"]:root` — was still split at the comma,
+  breaking `:root` off from its attribute selector so neither fragment
+  matched. Confirmed live: Chrome parses and applies that selector as written
+  (`document.documentElement.setAttribute('data-x','a,b')` plus the rule both
+  resolve), so it is valid CSS that would have silently redefined a token past
+  the guard. Bracket depth and quote state are tracked now, alongside parens.
+  A second, related gap surfaced in the same area: the root-detection regex
+  anchored `:root`/`html`/`body`/`*` to the start of the compound, but `:root`
+  is a pseudo-class and may legally appear anywhere in one (`[data-theme]:root`
+  is exactly how a themed root is usually written) — `html`/`body` are type
+  selectors and genuinely can only lead a compound, so those two stay anchored,
+  and `:root` is now matched anywhere in the compound as a whole token.
+- **The sticky probe's gradient check still had a real hole: a stop expressed
+  through a `var()` indirection.** `parse()` only understands literal colour
+  syntax, so `linear-gradient(var(--muted), var(--some-token))` — with the
+  token itself defined elsewhere as a transparent colour — extracted no stops
+  at all and passed. Confirmed live with `--review-ghost: rgba(0,0,0,0)` and a
+  gradient referencing it. Each matched stop, `var()` references included, is
+  now resolved through the cell's own cascade via the existing hidden-span
+  technique rather than parsed as literal text.
+- **This section had no evidence footer** in its first pass — no test count,
+  no `tsc`/`lint`/`build` confirmation. The claim that every round before it
+  had one was itself wrong: rounds 4 and 5 were missing the same thing, caught
+  by review round 7 checking the exact thing this round claimed to have fixed
+  file-wide and finding it had only fixed its own section. Both are filled in
+  now, and so is this one: `pnpm tsc --noEmit`, `pnpm lint`,
+  `pnpm test:integration` at 78 files / 589 tests, `next build`. Eighteen page
+  mutations, thirty-four token mutations, and seven sticky-probe mutations now
+  fail, including all
+  twenty-one independent review has broken across six rounds.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 7 — rejected again, the token map's merge model itself was wrong
+
+- **The root-token map merged rules by "whichever matches and is textually
+  last in the file wins," and that is not how CSS resolves an inherited
+  custom property against a directly-set one.** `:root { --ring: red }` sets
+  a value every element *inherits*; `body { --ring: transparent }` sets the
+  property *directly* on `<body>` and everything under it, which overrides
+  whatever it would otherwise have inherited — **regardless of which rule is
+  later in the file**. The token map treated both the same way, keyed by
+  property name with the last write winning by source position. Independent
+  review demonstrated this twice, live: `body { --ring: transparent }`
+  inserted *before* `:root`'s own `--ring` declaration passed the guard while
+  the real page rendered an invisible focus ring everywhere under `<body>`;
+  and `:not(html) { --destructive: … }` — a selector matching every rendered
+  element except `<html>` itself — was never classified as root-reaching at
+  all, because `targetsThisCompound` only recognised `html`/`body` anchored at
+  the compound's start and a literal `:root` substring, missing a negation
+  that reaches the same audience by exclusion instead of by name.
+- Token collection now runs in two passes rather than one flat merge:
+  `:root`/`html` values go into a "root" map (the inherited baseline), `body`,
+  `*`, and a bare `:not(...)` (matching everything except what it negates —
+  scoped narrower, like `.foo:not(.bar)`, does not qualify, which keeps this
+  from ingesting unrelated component selectors that happen to use `:not()`)
+  go into a "direct" map, and the direct map is layered on top of the root
+  map regardless of source order, because that is the one fact about the real
+  cascade this guard was getting backwards. This is a two-tier model, not a
+  full CSS specificity engine — the file has no competing rules within either
+  tier for the same property, so source order deciding ties within a tier is
+  sufficient for what this stylesheet actually does.
+- **Round 6's own correction was itself incomplete.** It said the round-5
+  section was the only one missing an evidence footer, "unlike every round
+  before it." Rounds 4 and 5 were both missing one — round 6 only fixed its
+  own section and asserted a broader claim than it had verified. All three are
+  filled in now.
+- Thirty-six token mutations now fail, including all twenty-three independent
+  review has broken across seven rounds.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, and a clean sweep — 66 route pairs and 303
+  scenario pairs with zero findings, 51 of 51 loading skeletons captured, zero
+  scenarios indistinguishable from their base route, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 8 — rejected again, one finding: the sticky probe never looked at the table it claimed to cover
+
+- **The sticky-column opacity-on-hover check reused a design-contract
+  threshold as a correctness-check gate, and the two are different
+  questions.** `min-width >= 600px` answers "is this table deliberately wide
+  enough that it must carry a sticky first column" — the right gate for that
+  question. The same threshold also gated "given a table that already has a
+  sticky column, does it stay opaque on hover" — a question about styling a
+  table already carries, independent of its own declared width. `/app/kontak`'s
+  table (`min-w-[34rem]` = 544px) is narrower than 600px but was one of the
+  four tables round 3/4's fix explicitly touched, and this file's own
+  round-4 section claimed the fix "applies uniformly across all four sticky
+  tables." At 544px the table sat under the gate and was never examined, at
+  any viewport, by any round's sweep — the claim was never actually checked
+  for this table.
+- Fixed by admitting a table into the opacity check when it EITHER meets the
+  600px "must have a sticky column" threshold OR already has a
+  `position: sticky` first header cell, regardless of its own width:
+  ```js
+  const isDeclaredWide = Number.isFinite(declared) && declared >= 600;
+  const firstHeaderSticky = getComputedStyle(table.querySelector('thead th') || table).position === 'sticky';
+  if (!isDeclaredWide && !firstHeaderSticky) continue;
+  ```
+  This separates "must this table have a sticky column" (still gated at
+  600px) from "does an existing sticky column stay opaque" (now checked
+  wherever one exists, whatever the table's declared width).
+- Verified live: baseline at 390px now examines `/app/kontak` and passes
+  (`ok=1 []`, previously never entered the check at all). A live mutation —
+  changing the table's opaque `group-hover:bg-[color-mix(...)]` class to
+  `group-hover:bg-transparent` — now correctly fails with
+  `ok=0 ["min-w-[34rem]: sticky column paints a translucent background on
+  hover: rgba(0, 0, 0, 0)"]`. The mutation was folded into the permanent
+  suite (`sticky-mutate.sh`, now 8 mutations across two files, all killed)
+  rather than left as a one-off spot check.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, all three T-77 mutation suites (18 page +
+  36 token + 8 sticky-column mutations, all killed, baselines PASS), and a
+  clean sweep — 66 route pairs and 303 scenario pairs with zero findings, 51
+  of 51 loading skeletons captured, zero scenarios indistinguishable from
+  their base route, no console errors. (An intervening sweep run immediately
+  after restarting a long-lived dev server — reclaiming 10GB of accumulated
+  Turbopack memory under sustained host memory pressure — showed 21 findings,
+  nearly all viewport-inconsistent focus-ring readings for the same scenario
+  plus one page that failed to render; a warm re-run against the same code
+  showed zero findings, confirming the first run was a cold-start artifact of
+  the restart, not a regression.)
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 9 — rejected again, a keyword the width check couldn't read, plus an environment quirk it doesn't need to
+
+- **The focus-ring width check required a literal digit, so a CSS width
+  keyword silently read as "no width found" rather than as the pixel value
+  it resolves to.** `lengthOf`'s regex was `(?:^|\s)(-?[\d.]+)(?:px)?(?:\s|$)`
+  — it cannot match `thin`, `medium`, or `thick`, the three keywords
+  `outline-width` legally accepts, nor any length in a unit other than `px`
+  (`em`, `rem`, `%`, ...). Independent review added
+  `.cms-main a:focus-visible { outline-width: thin; }` to the live
+  stylesheet — `.cms-main` is the real, live CMS shell wrapper class, not a
+  test fixture — and ran `vitest run tests/design-token-contrast.integration.test.ts`:
+  all 8 tests passed against a ring narrowed to roughly 1px. The comment
+  directly above this code already claimed "whether a ring is visible is a
+  measurement, not a list of spellings," which was true for colour but not
+  for width.
+- Fixed by resolving every whitespace-separated token in the shorthand or
+  longhand against the three keywords (mapped to their standard browser
+  pixel widths: thin=1, medium=3, thick=5) or a plain `px`/bare number as
+  before, and by failing closed — the same posture this function already
+  takes for an unparseable colour — when a token carries a length unit this
+  static parser cannot resolve to pixels without the element's live cascade,
+  rather than silently treating it as "no width found, ring is fine."
+  Verified live: the exact reported mutation now fails with
+  `outline 1px is not a visible ring`; the unmutated tree still passes
+  cleanly. Folded into the permanent suite as its own mutation (now 37 token
+  mutations, all killed).
+- **A second, more tentative finding does not change any code.** Review
+  separately reported that measuring `getComputedStyle` immediately after
+  `.focus()` in the same script can miss a just-changed `outline-width`,
+  flagging it explicitly as medium confidence and asking for independent
+  re-verification before hardening any fix around it. Reproducing this
+  directly: the real page, with only the one rule that actually ships
+  setting `outline-width`, reads correctly and instantly in every trial, no
+  delay needed. The unreliable readback only appears once a *second*,
+  competing `outline-width` rule is introduced on an element carrying
+  Tailwind's `transition-all` — confirmed by injecting a second rule with
+  overwhelming specificity (`[data-probe-test="1"]:focus-visible { outline-width: 37px; }`)
+  on an already-rendered real element and watching the computed value settle
+  to neither the old nor the new value (1px, then 2px across trials) even
+  500ms after focus, well past the element's own 150ms transition duration —
+  a genuine Blink/headless rendering quirk, in the same family as the
+  already-documented inability to force real `:hover` state in this browser,
+  rather than a timing bug a delay can paper over. This scenario does not
+  exist in the shipped stylesheet today — nothing else sets `outline-width`
+  on a focus-visible selector — and the guard fixed above is exactly what
+  stops such a second rule from shipping in the first place, at the source
+  level, without depending on live browser rendering timing at all. No probe
+  change was made; making one against data that does not converge to either
+  candidate value would trade a real, working measurement for a fabricated
+  sense of precision.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, all three T-77 mutation suites (18 page +
+  37 token + 8 sticky-column mutations, all killed, baselines PASS), and a
+  clean sweep — 66 route pairs and 303 scenario pairs with zero findings, 51
+  of 51 loading skeletons captured, zero scenarios indistinguishable from
+  their base route, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 10 — rejected again, the focus check never looked past the nav bar on most CMS pages
+
+- **The keyboard-focus check capped itself at the first 14 focusable elements
+  per page, with no documented rationale anywhere in nine prior rounds, and
+  on every real CMS route at 768px/1280px those 14 slots are consumed almost
+  entirely by the persistent sidebar shell** — the skip link, the ten nav
+  links, "Toggle Sidebar," and the account menu button repeat identically on
+  every page and occupy tab stops 0 through roughly 13. Independent review
+  measured real focusable-element counts across all 12 tenant routes at
+  1280px with the probe's own exact selector and visibility filter:
+  `/app/keuangan`=82, `/app/analitik`=60, `/app`=56, `/app/pengiriman`=39,
+  down to 17 on the smallest pages — every route exceeded the cap. It then
+  injected a live stylesheet rule suppressing the focus ring on the real
+  "Buat pembalik" (create reconciliation reversal) button — a financial
+  action at focusable-index 25 of 82, no fixture involved — and re-ran the
+  exact shared probe: `focusProbed: 14, weakFocusRing: 0`, no finding, on
+  every viewport and every round since this check was written. At 390px the
+  nav collapses off-canvas, so the cap happened to reach page content there;
+  at the two viewports most CMS operators actually use, it was structurally
+  "re-verify the nav bar" on the majority of routes.
+- Fixed by removing the cap: every focusable element on the page is checked
+  now, the same way the contrast check above it already inspects every text
+  element with no cap of its own — focus and `getComputedStyle` per element
+  are equally cheap, and a fixed prefix of tab order was never justified by
+  anything but an unexamined assumption. Verified live: the exact reported
+  mutation (outline suppressed on the real reversal button) now fails with
+  `weakFocusRing: 1`. A permanent regression case was added to
+  `t77-contrast-selftest.mjs`: twenty offscreen dummy links are inserted
+  before the test's existing unfocusable-button injection so it lands well
+  past the old cap position; reverting the fix locally and re-running the
+  selftest reproduces `SELFTEST FAIL`, confirming the new case actually
+  binds rather than merely re-testing what already worked. A full sweep with
+  the fix live found zero real regressions elsewhere in the app — focus
+  rings probed rose from 3,616 to 6,267 (confirming the added coverage is
+  real, not cosmetic) while route and state sweep findings stayed at zero —
+  so the missing coverage had been hiding no live defect, only leaving one
+  open on every future change.
+- This fix touched only the scratchpad browser probe, not any repository
+  source or test file, so the tsc/eslint/integration-suite/production-build
+  and mutation-suite evidence already recorded for round 9 still describes
+  the current tree unchanged; only `probe-lint` and a fresh full sweep were
+  re-run for this round.
+- Evidence: `probe-lint` clean, `t77-contrast-selftest.mjs` SELFTEST PASS
+  with the new past-cap regression case verified to bind, and a clean sweep
+  — 66 route pairs and 303 scenario pairs with zero findings, 51 of 51
+  loading skeletons captured, focus rings probed 6,267 (up from 3,616), no
+  console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 11 — rejected again, and this time the gap was one level up: the whole instrument was never part of the deliverable
+
+- **Every script that produced ten rounds of browser-confirmed evidence —
+  `t77-probe.mjs`, `t77-screen3.mjs`, `t77-contrast-selftest.mjs`,
+  `t77-scenarios.json`, `probe-lint.mjs`, all three mutation suites — existed
+  only under this AI session's ephemeral scratchpad, never in the
+  repository.** Independent review confirmed this three ways:
+  `git ls-files | grep -i t77` and a filesystem `find` both returned nothing,
+  and `git log --all --diff-filter=A` showed these files were never
+  committed at any point. `package.json` never referenced `scratchpad/`.
+  The only committed guards are two vitest files
+  (`tests/design-token-contrast.integration.test.ts`,
+  `tests/rts-presentation.integration.test.ts`) plus a static-analysis test
+  (`tests/cms-ui-audit-inventory.integration.test.ts`) that checks scenario
+  *taxonomy* consistency, never rendering or computed style. Review proved
+  the consequence concretely: round 3's shipped, browser-confirmed defect
+  (`group-hover:bg-muted/50` making the RTS sticky column translucent on
+  hover) has zero matching text in either committed test file — `grep -n
+  "group-hover\|color-mix\|sticky\|bg-card\|bg-muted"
+  tests/rts-presentation.integration.test.ts` returns nothing — so if that
+  exact defect reappeared today, `tsc`, `lint`, `test:integration`, and
+  `next build`, the four checks every round's evidence footer cites, would
+  all still pass. This is the same shape as rounds 8-10 (a claim of coverage
+  narrower than stated) one level up the stack: the narrowing wasn't inside
+  a measurement, it was that the measurement itself never outlived the
+  conversation that wrote it.
+- Fixed by porting the load-bearing scripts into the repository at
+  `scripts/ui-audit/` (kept as a close-to-direct port, not a rewrite:
+  renamed for clarity — `t77-probe.mjs` to `probe.mjs`, `t77-screen3.mjs` to
+  `sweep.mjs` — internal cross-file imports and backup-file paths updated to
+  be repo-relative rather than pointing at an absolute scratchpad path that
+  will not exist for anyone else), wiring `pnpm test:ui-audit` (the full
+  sweep) and `pnpm test:ui-audit:mutations` (all three mutation suites) in
+  `package.json`, and documenting both in root `README.md` and a new
+  `scripts/ui-audit/README.md`. A Chrome launcher
+  (`scripts/ui-audit/start-chrome.sh`) was added since nothing had
+  previously scripted starting the headless browser this instrument needs —
+  it had only ever been started by hand.
+- `t77-scenarios.json` (now `scripts/ui-audit/scenarios.json`) remains a
+  hand-maintained snapshot of `src/lib/ui-audit-scenario.ts`'s declarations
+  rather than a generated one: these scripts run under plain `node` with no
+  TypeScript loader, and that module transitively imports `server-only`,
+  which throws outside a Server Component. This is a known, documented
+  limit, not a silent one — `scripts/ui-audit/README.md` names it and points
+  at `sweep.mjs`'s own coverage assertions (`run.sh` fails if the route-pair
+  or scenario-pair count moves) as the tripwire for the two files drifting
+  apart.
+- Verified by running the entire ported suite from its new repository
+  location end to end — `pnpm test:ui-audit` and `pnpm
+  test:ui-audit:mutations` both pass — and confirming parity with the
+  scratchpad originals: same 66+303 zero-finding sweep, same 18+37+8
+  mutations all killed, same RTS a11y assertions passing, files restored
+  clean after every mutation run (`git diff --stat` empty on every touched
+  source file once each script exits).
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, all three T-77 mutation suites now run
+  from `scripts/ui-audit/` (18 page + 37 token + 8 sticky-column mutations,
+  all killed, baselines PASS), and a clean `pnpm test:ui-audit` run — 66
+  route pairs and 303 scenario pairs with zero findings, 51 of 51 loading
+  skeletons captured, RTS a11y assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 12 — the port verified clean; one process question addressed, not treated as a defect
+
+- Independent review spent this round two ways. First, verifying round 11's
+  port is faithful rather than merely present: it re-ran `pnpm test:ui-audit`
+  and `pnpm test:ui-audit:mutations` live end to end and got the exact
+  evidence footer round 11 claimed, number for number; independently
+  extracted `scripts/ui-audit/scenarios.json` and
+  `src/lib/ui-audit-scenario.ts`'s declarations and diffed all 104 scenario
+  keys with zero mismatches; confirmed every mutation script restores its
+  target file byte-for-byte (`git diff --stat` identical before and after);
+  and cross-checked every scratchpad filename BUILD-LOG's ten prior rounds
+  named against the renamed files now in `scripts/ui-audit/`, finding all of
+  them present under their new names. It found one real but cosmetic leftover
+  — a comment in `cdp.mjs` still said `` `t77-probe.mjs` `` after the file was
+  renamed to `probe.mjs` — fixed. Second, it re-read the full probe and sweep
+  orchestration hunting for a twelfth instance of the round 8/9/10 pattern
+  (a check claiming broader coverage than it delivers) and found none: every
+  numeric threshold traced to a documented, prior-round-justified constant.
+- **The one substantive objection it raised does not hold up as a new
+  defect.** It reported that `scripts/ui-audit/` (and every other file this
+  task has touched) is uncommitted — `git ls-files` and `git log --all
+  --diff-filter=A` both show nothing has landed in a commit — and called
+  this the same failure round 11 fixed, recurring one level down. It is not
+  the same failure. Round 11's actual finding was that the verification
+  apparatus lived in a path outside the project entirely
+  (`/tmp/claude-.../scratchpad/`, a directory this session's own tooling
+  documents as ephemeral and tied to the session's lifetime) — nothing about
+  the repository's git state could have made that apparatus discoverable,
+  because it was never inside the repository at all. `scripts/ui-audit/`
+  now sits inside `/home/ongki/Projects/geraicuan`, the actual project
+  directory, where `git status`, `git diff`, and every tool this task uses
+  already show it. Whether it is *committed* is a different question, and
+  this task has answered it the same way since round 3: every fix from
+  round 3 onward has been left uncommitted, by design, per the standing
+  instruction to commit once the whole queue — T-77 and the rest of Phase
+  10 — is genuinely done, not after each review round. Committing
+  `scripts/ui-audit/` alone, mid-review, ahead of the rest of the queue,
+  would be a scope decision this task does not get to make unilaterally.
+  Treating "not yet committed" as a rejection would have rejected every one
+  of the previous eleven rounds' fixes on the same basis, since none of them
+  were committed either — it is a property of the whole task's agreed
+  workflow, not a gap round 11 introduced or missed.
+- Evidence: `pnpm test:ui-audit` and `pnpm test:ui-audit:mutations` both
+  re-run clean after the `cdp.mjs` comment fix (66+303 pairs, 0 findings;
+  18+37+8 mutations, all killed).
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 13 — rejected again: the "N mutations, all killed" count was never proof the whole assertion surface had been exercised
+
+- Independent review engaged with round 12's committed-state reasoning on
+  its own judgment and agreed with it without being asked to; it is settled
+  and not revisited here.
+- **Several individual token-pair and page assertions inside the two
+  committed vitest guards had zero mutation coverage across all twelve
+  prior rounds, even though the guards themselves, tested live, correctly
+  catch a break of each one.** In
+  `tests/design-token-contrast.integration.test.ts`: the "every semantic
+  status colour on its own surface" loop asserts `--danger`/`--ok`/`--warn`,
+  but only `--warn` had ever been mutated; "body and muted text on every
+  ground" loops `--ink`/`--ink-muted` across three grounds, but only
+  `--ink-muted` had ever been mutated, and that single mutation breaks all
+  three grounds in the same test run, so the loop's early exit at the first
+  failing ground (`--canvas`) meant `--surface` and `--surface-sunken` were
+  never independently proven to catch anything on their own; "the one
+  interactive accent" asserts `--primary-foreground`/`--primary`,
+  `--accent`/`--canvas`, and `--accent-hover`/`--canvas`, but only
+  `--accent-hover` had ever been mutated. In
+  `tests/rts-presentation.integration.test.ts`, "keeps the wide table
+  scrollable rather than clipped" asserts a literal `min-w-[70rem]` and had
+  never been mutated at all. Review proved each guard still catches a live
+  break of every one of these — hand-mutating `--ok` and `--primary-foreground`
+  in `globals.css` and the table's `min-w-[70rem]` in the RTS page, running
+  the vitest files directly, confirming each failed correctly, then
+  restoring and confirming a clean diff and a passing re-run — so this was
+  never a broken guard. It was the mutation suites' framing ("37 mutations,
+  all killed," narrated round-by-round and cited in
+  `scripts/ui-audit/README.md` as the reason to trust the guards) implying
+  the whole assertion surface had been exercised, when in practice coverage
+  concentrated on the specific tokens implicated in past incidents. This is
+  the standing meta-pattern one level removed: not the guard claiming
+  broader coverage than it delivers, but the *proof of the guard's
+  hardening* doing so.
+- Fixed by adding one mutation per previously-untested pair: `--danger`,
+  `--ok`, `--primary-foreground`, and `--accent` each lightened/darkened
+  independently of the token they alias underneath (`--accent` is itself
+  `var(--primary)`; overriding the alias directly breaks only the named
+  pair, not every consumer of `--primary`), `--ink` lightened on its own
+  (distinct from `--ink-muted`), and — to close the loop-early-exit gap
+  properly rather than just re-mutating `--ink-muted` again — the *ground*
+  `--surface-sunken` darkened toward `--ink-muted`'s own value, which
+  leaves `--canvas` untouched and so can only be caught by the
+  `--surface-sunken` pairing specifically. `mutate-page.sh` gained a mutation
+  shrinking `min-w-[70rem]` to `min-w-[40rem]`. All seven mutations verified
+  killed; token mutations are now 43, page mutations now 19.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, all three mutation suites (19 page + 43
+  token + 8 sticky-column, all killed, baselines PASS), and a clean `pnpm
+  test:ui-audit` run — 66 route pairs and 303 scenario pairs with zero
+  findings, 51 of 51 loading skeletons captured, RTS a11y assertions
+  passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 14 — rejected again: a third un-mutation-tested guard, and most of the browser probe's own checks had never been proven to catch anything
+
+- Independent review engaged with round 12's committed-state reasoning on
+  its own judgment, agreed, and did not re-flag it — the second reviewer in
+  a row to do so.
+- **Finding 1: `tests/outlet-settings-page.integration.test.ts`'s
+  aria-current guard — added by this task's own commit specifically to fix
+  a real double-`aria-current="page"` defect on `/app/pengaturan` — had
+  never been wired into any mutation script,** unlike the two guards round
+  13 hardened. Review proved live that reverting the fix
+  (`aria-current={active ? "page" : undefined}`) makes two assertions fail
+  correctly, then restored the file clean. Fixed by adding
+  `mutate-outlet-settings.sh` (1 mutation, killed) and wiring it into `pnpm
+  test:ui-audit:mutations`.
+- **Finding 2: eight of the browser probe's ~eleven individual
+  measurements had never been deliberately triggered and confirmed
+  caught** — only contrast/focus (`contrast-selftest.mjs`) and sticky-column
+  opacity (`sticky-check.mjs`/`mutate-sticky.sh`) had a committed proof.
+  `headingSkips`, `titlesNotHeadings`, `imgNoAlt`, `tablistLinks`,
+  `nestedCards`, `smallTargetCount`, `unlabelledScroll`, and `longLineCount`
+  existed, were summed into the sweep's headline numbers, and were narrated
+  throughout this task's evidence footers ("zero findings" across 369
+  pairs) without ever having a tripwire proving any one of them could
+  detect a real violation if it broke. Review verified live, with a
+  throwaway script, that all eight currently work correctly — this was a
+  missing-proof gap, not an active defect, the same shape as round 10's
+  focus-ring cap but caught before it could hide a real regression rather
+  than after. Fixed by adding `probe-coverage-selftest.mjs`, following
+  `contrast-selftest.mjs`'s pattern: inject one violation per dimension
+  into a real page's `<main>`, assert the probe's count for that dimension
+  grows, restore nothing (the injected elements never touch a tracked
+  file — they're added and read within the same page load). Wired into
+  `run.sh` immediately after `contrast-selftest.mjs`.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 589 tests, `next build`, all four mutation suites now wired
+  together via `pnpm test:ui-audit:mutations` (19 page + 43 token + 8
+  sticky-column + 1 outlet-settings, all killed, baselines PASS), and a
+  clean `pnpm test:ui-audit` run including the new probe-coverage selftest
+  — 66 route pairs and 303 scenario pairs with zero findings, 51 of 51
+  loading skeletons captured, RTS a11y assertions passing, no console
+  errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 15 — rejected again: a route with no scenario at all, silently invisible to every prior round's own completeness checks
+
+- Independent review agreed with rounds 12-14's committed-state reasoning
+  without being asked to, a fourth reviewer in a row to do so.
+- **`/app/kontak/[contactId]` declares a `partial-error` state — reachable
+  only through a registered scenario, never through a route-level condition
+  the sweep can land in on its own — with no scenario anywhere in
+  `UI_AUDIT_SCENARIO_CONTRACTS` actually owning it.** Review cross-referenced
+  every route declaring an action-state/scenario-strategy state against
+  `scenarios.json` and `UI_AUDIT_SCENARIO_CONTRACTS`: all ten other routes
+  with a declared `partial-error` had at least one scenario; this one had
+  zero, and `src/app/app/kontak/[contactId]/page.tsx` had no
+  `parseUiAuditScenarioForRoute`/`UI_AUDIT_HEADER` reference at all, unlike
+  its sibling `/app/label/[shipmentId]`. This evaded fifteen rounds of
+  "scenario taxonomy is exact" checks because those checks only verify the
+  reverse direction — every scenario's route/state is registered — never
+  the forward direction, that every route's own declared state has an
+  owning scenario. A route that never gained one moves neither the 66-route
+  nor the 303-scenario coverage count any prior round's completeness checks
+  watch, so it was structurally invisible rather than merely untested.
+- Fixed two ways. First, the capability gap: added a
+  `contact-detail-outlet-error` scenario, mirroring `/app/label/[shipmentId]`'s
+  pattern. The outlet-readiness lookup inside the page's data load was
+  previously uncaught — a failure there would have thrown and failed the
+  whole page rather than degrading gracefully — so it is now caught and
+  renders a partial-degradation banner ("Pemilihan outlet tidak tersedia")
+  while the rest of the page (identity, addresses, archive) stays usable;
+  the scenario override forces the same path for screening. Second, the
+  detection gap: added a forward-direction completeness test to
+  `tests/cms-ui-audit-inventory.integration.test.ts` — for every route's own
+  `partial-error`/`stale` states (the two states whose strategy is
+  `"scenario"`, meaning genuinely unreachable without one; `pending`/
+  `primary-success` are deliberately excluded, since those are verified
+  through live interactive submission per task, recorded in this file, not
+  the scenario-header mechanism, and are missing a scenario for nearly
+  every route in the inventory by design) — at least one scenario must own
+  it. Verified the new test fails exactly on this one route/state before
+  the fix (`AssertionError: /app/kontak/[contactId]: partial-error:
+  expected false to be true`) and passes clean after. State-pair coverage
+  rose from 303 to 306 (one new scenario × 3 viewports); route-pair
+  coverage stayed at 66 (no new route).
+- **Two operational incidents surfaced during this round's verification,
+  neither a T-77 code defect, both worth recording because they affected
+  this round's own evidence trail.** First: an earlier attempt at this
+  round stalled mid-investigation on its own background monitor and never
+  delivered a report; separately, a *different* concurrent process wrote an
+  incorrect "round 15 found nothing to reject, independent review now
+  passes" conclusion directly into this file, `STATUS.md`, and `TASKS.md`
+  — before the finding above had been made. Those entries have been
+  replaced with what was actually found and fixed; T-77's independent
+  review is not closed. Second: during this round's mutation-suite
+  re-verification, `src/app/globals.css` was found truncated from 679 to
+  331 lines — the T-86-scoped dead-CSS block (not due for removal until
+  T-86 runs) had been silently deleted, most likely by a concurrent review
+  agent's own token-mutation experiment left abandoned mid-run rather than
+  cleanly restored. Caught by a routine post-mutation `git diff`/line-count
+  check, not by any dedicated guard. Restored from a `/tmp/tmp.*` backup
+  file the token-mutation script itself had made minutes earlier (confirmed
+  byte-identical to `git show HEAD:src/app/globals.css` via `diff`), and
+  the full verification pipeline — `tsc`, `lint`, integration suite,
+  production build, all four mutation suites, and the complete sweep — was
+  re-run afterward to confirm nothing else was affected. Running multiple
+  file-editing review agents concurrently against the same working tree is
+  the root cause of both incidents; this task's own review agents are
+  dispatched one at a time specifically to avoid this, and will continue to
+  be.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 306 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 16 — rejected again: round 15's own new banner used the wrong ARIA role
+
+- Independent review agreed with rounds 12-15's committed-state reasoning
+  without being asked to, a fifth reviewer in a row to do so. It verified
+  round 15's fix live from both directions before looking for anything new:
+  logged in and navigated to the real contact-detail route with and without
+  the `contact-detail-outlet-error` header, confirming the degradation
+  banner renders only under the scenario and the address list stays usable
+  either way; and mutation-tested the new completeness test itself by
+  temporarily removing the scenario contract entry, confirming the exact
+  expected assertion failure, then restoring and confirming a clean
+  `git diff --stat` and a passing re-run.
+- **The banner round 15 added uses `role="status"` (a polite live region),
+  inconsistent with every other structurally-identical banner in the
+  codebase.** `src/app/app/keuangan/page.tsx`'s reconciliation-unavailable
+  banner — the closest analog, same shape of "one lookup failed, the rest
+  of the page stays usable and editable" — uses `role="alert"` (assertive),
+  as does the shadcn `Alert` primitive's own default when no role is
+  specified at all. `role="status"` only announces once a screen reader is
+  idle, not immediately, and this banner appears on an unprompted page
+  load rather than in response to a user action — an assistive-tech user
+  could reach the address editor and start using the now-broken outlet
+  picker before ever being told it was broken. Confirmed live: the shipped
+  DOM node resolved to `role="status"` exactly as written, not a build
+  artifact.
+- Fixed by changing the one attribute to `role="alert"`, matching the
+  finance banner's explicit pattern. Verified live with the scenario header
+  applied: the DOM node holding "Pemilihan outlet tidak tersedia" now
+  resolves to `role="alert"`.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 306 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 17 — rejected again: round 16's own completeness fix was itself too narrow
+
+- Independent review agreed with rounds 12-16's committed-state reasoning
+  without being asked to, a sixth reviewer in a row to do so, and confirmed
+  round 16's `role="alert"` fix live — same CDP mechanism, scenario header
+  applied, the outlet-error banner resolved to `role="alert"` in the DOM,
+  not a build artifact.
+- **Round 16's own forward-completeness test — written specifically to
+  close round 15's class of bug — was itself too narrow.** It only checked
+  `partial-error`/`stale`, the two states `STATE_STRATEGY` labels
+  `"scenario"`. But `route-error` carries the label `"route-boundary"` — a
+  different thing from whether a scenario is *needed to cause* the throw a
+  boundary catches — and in this codebase, every one of the 17 other pages
+  declaring `route-error` reaches it only through a
+  `if (auditScenario === "...") throw new Error(...)` gate; none has any
+  organic failure path. Review found two pages the check's narrower scope
+  let through: `/app/kontak/baru` and `/app/kontak/[contactId]` both
+  declare `route-error` (via `COMMON_PAGE_STATES`) with zero
+  `parseUiAuditScenarioForRoute`/`UI_AUDIT_HEADER` wiring at all — the
+  error boundary for each has never been rendered by any of seventeen
+  prior rounds' sweeps, by any test, by any means.
+- Fixed by adding a scenario-triggered throw to both pages
+  (`contacts-new-error` for `/app/kontak/baru`,
+  `contact-detail-route-error` for `/app/kontak/[contactId]`, mirroring
+  the existing `contacts-error`/`label-detail-error` pattern exactly), and
+  widening round 16's completeness check to include `route-error` —
+  scoped to `kind: "page"` route contracts only, since `kind: "endpoint"`
+  contracts (the `/app/analitik/export.csv` Route Handler) are not browser
+  pages the sweep's scenario header ever renders and already have their
+  own dedicated integration test (`tests/analytics-export-route.integration.test.ts`)
+  exercising real request/error paths; the widened check's first version,
+  before this exclusion, correctly failed on that endpoint too, which is
+  what surfaced the distinction. Verified the widened test fails exactly on
+  `/app/kontak/baru: route-error` before the fix, passes clean after, and
+  `git diff --stat` matches the pre-mutation baseline. State-pair coverage
+  rose from 306 to 312 (two new scenarios × 3 viewports).
+- One self-caught slip during the fix, corrected before it reached
+  evidence: the first edit to `scripts/ui-audit/scenarios.json` overwrote
+  `/app/kontak/baru`'s existing three scenario entries
+  (`contacts-area-error`/`-no-result`/`-results`) instead of appending to
+  them — caught immediately by the sweep's own
+  "scenarios excluded as server-action-only: none" line reading wrong
+  (it should always list those three), not by any dedicated guard.
+  Restored the three entries and re-ran the sweep clean.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 312 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 18 — rejected again: one more state left out of the same completeness check, found by the same mutation technique
+
+- Independent review agreed with rounds 12-17's committed-state reasoning
+  without being asked to, a seventh reviewer in a row to do so. It began
+  by confirming `git diff --stat` matched the expected accumulated,
+  intentionally-uncommitted state before touching anything, then verified
+  round 17's fix live: navigated to `/app/kontak/baru` and
+  `/app/kontak/[contactId]` with `contacts-new-error` and
+  `contact-detail-route-error` respectively, and confirmed each renders
+  the real Next.js `error.tsx` boundary — a genuine `role="alert"` banner
+  with retry affordances, not a raw stack trace — matched against the
+  no-header baseline rendering the real form/detail page.
+- **Round 17's own widened completeness check was itself still one state
+  short.** `not-found` carries the identical `STATE_STRATEGY` label,
+  `"route-boundary"`, that justified adding `route-error` to the check's
+  scope, and the one route that declares it
+  (`/platform/tenant/[tenantId]`) reaches it only through the
+  `platform-tenant-detail-not-found` scenario — there is a real organic
+  path in the code (`monitoring-view.tsx`'s own `notFound()` call on a
+  missing tenant), but nothing in the test suite or sweep ever exercises
+  it with a bad ID, so in practice it is exactly as scenario-only as
+  `route-error` was. Review proved the check's blindness by mutation:
+  temporarily changed the one `not-found`-owning scenario's `state` field
+  to something else, reran the completeness test, and it passed — 1
+  passed, 10 skipped, zero failures — with the only verification path for
+  that route's error boundary deleted. Restored immediately, confirmed
+  byte-identical to the pre-mutation state.
+- Fixed by adding `"not-found"` to the completeness check's
+  `scenarioReachable` set. No application code changed — the one route
+  declaring `not-found` already had its scenario correctly wired; the gap
+  was purely in what the check verified, not in what the app does.
+  Re-verified the same way as round 17's fix: mutation-tested by
+  invalidating the same scenario's state field again, confirmed the
+  widened check now fails with the exact expected assertion
+  (`/platform/tenant/[tenantId]: not-found: expected false to be true`),
+  restored, confirmed clean, reran green.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 312 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 19 — one claimed finding checked and found false; the completeness check confirmed exhaustive as a result
+
+- Independent review agreed with rounds 12-18's committed-state reasoning
+  without being asked to, an eighth reviewer in a row to do so, and was
+  asked specifically to do a final, exhaustive audit of the completeness
+  check's `scenarioReachable` set (now `partial-error`/`stale`/
+  `route-error`/`not-found`) against every `CmsUiAuditState` value, rather
+  than incrementally patch one more hole the way rounds 17 and 18 had.
+- **It reported one candidate finding — that `/app`'s `first-run` state has
+  zero owning scenario, the same class of gap as rounds 15/17/18 — and this
+  claim does not hold up.** Direct verification against
+  `src/lib/ui-audit-scenario.ts`: all three routes declaring `first-run`
+  (`/app`, `/app/analitik`, `/app/pengaturan`) have a correctly matching,
+  correctly wired scenario (`dashboard-first-run`, `analytics-first-run`,
+  `settings-first-run` respectively) — confirmed both by direct `grep` and
+  by adding `"first-run"` to the completeness check's set as a test: it
+  passed trivially, 11/11, with zero failures, exactly as it should if
+  every declaring route already has an owner. The claim is corrected here
+  rather than accepted, per the standing rule that a claim is verified
+  against the actual repository before being trusted, subagent or not.
+  `first-run`'s own `STATE_STRATEGY` label is `"local-fixture"`, distinct
+  from the `"route-boundary"` label that correctly motivated rounds 17/18's
+  additions — a real category difference, not just a label technicality:
+  a first-run state is reachable through a genuinely empty seed fixture, a
+  scenario override is a convenience on top of that, not the only path — so
+  even setting the false "zero owner" claim aside, `first-run` does not
+  need the same treatment `route-error`/`not-found` did.
+- **No code or test change made.** There was nothing to fix — the
+  completeness check's current scope (`partial-error`, `stale`,
+  `route-error`, `not-found`) is confirmed exhaustive against this specific
+  false lead, and the false lead is documented here so it is not
+  re-investigated identically by a future round.
+- The same round's supplementary hunt across `scripts/ui-audit/probe.mjs`
+  and `sweep.mjs` (display-truncation limits, the `SERVER_ACTION_ONLY`
+  exclusion set, the container-tier list, an unexplained `r.tier < 2000`
+  cap in the tier-mismatch check) found nothing that currently affects
+  shipped code — the tier cap in particular was checked against every
+  `mx-auto` container in `src/`, and none falls outside the four known
+  tiers, so there is nothing live to mutation-test against it.
+- Evidence: `pnpm exec tsc --noEmit`, `pnpm lint` unaffected (no source
+  changed); the completeness test re-run with the hypothetical addition
+  restored clean afterward, `git diff --stat` empty for the touched file.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 20 — rejected again: a static guard's own allowlist missed the newest route with the exact pattern it protects
+
+- Independent review agreed with rounds 12-19's committed-state reasoning
+  without being asked to, a ninth reviewer in a row to do so, and spot-checked
+  round 19's correction (`first-run`'s three owning scenarios all still
+  present) without re-investigating it. Given round 19's false lead, this
+  round was explicitly held to a stricter bar: every claim had to be
+  reproduced live against current file contents, not reasoned about from
+  memory of a pattern.
+- **"Keeps one responsive GET filter form tree per route" checks exactly
+  three hardcoded routes, not "every route" the way its name reads.**
+  `tests/cms-ui-audit-inventory.integration.test.ts`'s `surfaces` array
+  (added to fix T-69's real shipped defect — Ringkasan, Analitik, and
+  Keuangan each mounting separate desktop and mobile GET filter forms) only
+  ever names `/app`, `/app/analitik`, and `/app/keuangan`. `/app/label`
+  has the identical GET filter form shape (status select, AWB-suffix
+  input, Apply/Clear buttons in a responsive grid) and post-dates T-69, so
+  it was never added to either this guard or any browser-level check —
+  `scripts/ui-audit/probe.mjs` and `sweep.mjs` were grepped for any form-
+  count or duplicate-form logic and have none at all. Review proved this
+  live: duplicated the entire filter form block in
+  `src/app/app/label/page.tsx` — the exact T-69 defect shape — and the
+  test passed unchanged, 1 passed, 10 skipped.
+- Fixed by adding `/app/label` to the `surfaces` list. Verified the same
+  way review found it: duplicated the filter form block, confirmed the
+  test now fails with the expected `invalidCounts` assertion, restored the
+  file, confirmed `git diff --stat` empty, reran green (11/11).
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 312 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 21 — rejected again: the same allowlist-drift pattern round 20 found, in a different guard
+
+- Independent review agreed with rounds 12-20's committed-state reasoning
+  without being asked to, a tenth reviewer in a row to do so. It also
+  investigated, and ruled out, whether the four mutation suites' own
+  `trap ... EXIT` restore logic is airtight under a mid-run signal kill —
+  built a scratch copy of `mutate-page.sh` with a blocking, always-failing
+  `run()`, launched it, confirmed the file was live-mutated, sent
+  `SIGTERM`, and confirmed the trap fired and restored the file to its
+  exact original checksum immediately. No gap found there; a `SIGKILL`
+  couldn't be caught regardless, a universal bash limitation unrelated to
+  these scripts specifically.
+- **"Limits every audit-contract import to its route-bound read-only page
+  consumers" carries a second hardcoded list — 13 `[file, route]` pairs
+  asserting each page uses the safe, production-gated
+  `parseUiAuditScenarioForRoute(` and never the legacy, unguarded
+  `parseUiAuditScenario(` — that was never updated for three real
+  consumers of the exact mechanism it checks.** `src/app/app/kontak/baru/page.tsx`
+  and `src/app/app/kontak/[contactId]/page.tsx` both call
+  `parseUiAuditScenarioForRoute` with a literal route string, identical to
+  every entry already in the list; `src/app/platform/_components/monitoring-view.tsx`
+  calls it with a route variable (it serves all four `/platform*` routes
+  from one file), which needed its own check rather than joining the
+  literal-string list. All three are present in the separate
+  `allowedImporters` set two tests above — the guard already knew they
+  import `@/lib/ui-audit-scenario`, it just never verified *how*. Review
+  proved this live: replaced every `parseUiAuditScenarioForRoute(` call in
+  `kontak/baru/page.tsx` with the legacy `parseUiAuditScenario(` and the
+  suite passed unchanged, 11/11 — the regression from the safe,
+  production-gated function to the unguarded one on a real authenticated
+  page went completely undetected.
+- Fixed by adding `/app/kontak/baru` and `/app/kontak/[contactId]` to the
+  literal-string list, and a separate two-assertion check for
+  `monitoring-view.tsx` (uses `parseUiAuditScenarioForRoute(`, never the
+  legacy call, with no literal-route match since none applies). Verified
+  the same way review found it: reproduced the exact mutation, confirmed
+  the widened test now fails, restored, confirmed `git diff --stat` empty,
+  reran green (11/11).
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 312 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 22 — rejected again: the same allowlist gap round 20/21 found, a third time, in the same guard round 20 already touched
+
+- Independent review agreed with rounds 12-21's committed-state reasoning
+  without being asked to, an eleventh reviewer in a row to do so. It then
+  did a full systematic pass over every hardcoded list in
+  `tests/cms-ui-audit-inventory.integration.test.ts`, checking each one
+  bidirectionally or by live grep against the current repository, and
+  found six of seven checked out complete — a full accounting is in the
+  round's own report; the seventh is below.
+- **The same "keeps one responsive GET filter form tree per route" guard
+  round 20 fixed for `/app/label` was still missing all four `/platform*`
+  routes.** `src/app/platform/_components/monitoring-view.tsx`'s shared
+  `FilterPanel` renders exactly one `<form action={actualRoute}
+  method="get">` and serves `/platform`, `/platform/tenant`,
+  `/platform/tenant/[tenantId]`, and `/platform/audit` — the identical
+  single-form-per-route shape every other `surfaces` entry protects — and
+  was never added, even in round 20's own fix. Review proved this live:
+  injected a second `<form ... method="get">` into `FilterPanel` and the
+  test passed unchanged, 1 passed, 10 skipped.
+- Fixed by adding all four `/platform*` routes to `surfaces`, each mapping
+  to `monitoring-view.tsx` (the same file backs every one; `getFormCount`
+  counts matching forms per invocation regardless, so four entries against
+  one file is correct, not redundant). Verified the same way review found
+  it: duplicated the form in `FilterPanel` again, confirmed the widened
+  test now fails on all four routes at once, restored, confirmed
+  `git diff --stat` empty, reran green (11/11). This is the third time
+  this exact drift pattern has appeared in this one guard's route list
+  (rounds 20, 21's related-but-different guard, and now this) — the
+  allowlist is designed to require an explicit entry per route rather than
+  deriving from the actual page inventory, which is why it drifts; that
+  design tradeoff is noted here rather than restructured, since a broader
+  rewrite of the guard's own mechanism is a larger change than this task's
+  screening scope.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` at 78
+  files / 590 tests, `next build`, all four mutation suites (19 page + 43
+  token + 8 sticky-column + 1 outlet-settings, all killed, baselines PASS),
+  and a clean `pnpm test:ui-audit` run — 66 route pairs and 312 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors.
+- No provider call, production action, deploy, or release occurred.
+
+### T-77 review round 23 — the first round to find nothing to reject
+
+- Independent review agreed with rounds 12-22's committed-state reasoning
+  without being asked to, a twelfth reviewer in a row to do so.
+- **Re-verified round 22's fix live**: confirmed the `surfaces` array now
+  lists all four `/platform*` routes mapped to `monitoring-view.tsx`, and
+  reran the full suite directly — 11/11 passing, not merely claimed.
+- **Given three consecutive rounds (20, 21, 22) had found the identical
+  allowlist-drift pattern, this round did one final, fully exhaustive pass
+  specifically for it**: enumerated every single hardcoded array/set of
+  file paths or route strings anywhere in
+  `tests/cms-ui-audit-inventory.integration.test.ts` — thirteen distinct
+  lists — and accounted for every one individually, either by confirming
+  it is bidirectionally cross-checked against a live-computed set (nine
+  lists, structurally drift-proof) or by independently re-deriving the
+  expected set via direct grep/find against the current repository and
+  confirming an exact match (four lists, including the two rounds 20-22
+  fixed). All thirteen check out. The full accounting is in the round's
+  own report.
+- Extended the same hunt to `scripts/ui-audit/sweep.mjs`'s own hardcoded
+  route arrays (`TENANT`, `PLATFORM`, `PUBLIC`) — all three match the
+  actual page inventory exactly, no missing route. Traced one lead that
+  looked promising (`CMS_UI_AUDIT_ACTION_CONTRACTS` omits several real
+  Server Actions) and ruled it out after verification: those actions
+  predate the T-65/T-66 audit-scenario mechanism entirely and never used
+  it, a pre-existing scope boundary from earlier tasks rather than
+  something T-77 introduced, and no test claims "every action" — only
+  "every scenario," a narrower and accurate claim.
+- **No new finding.** This is the first of twenty-three rounds to close
+  with nothing to reject, following a genuinely thorough effort (targeted
+  re-verification, full exhaustive enumeration of the specific pattern
+  that had recurred three times running, and a broader hunt outside the
+  test file), documented in enough detail to distinguish it from round
+  19's superficial, unverified claim.
+- Evidence: `pnpm tsc --noEmit`, `pnpm lint`, all four mutation suites (19
+  page + 43 token + 8 sticky-column + 1 outlet-settings, all killed), and
+  a complete `pnpm test:ui-audit` run — 66 route pairs and 312 scenario
+  pairs with zero findings, 51 of 51 loading skeletons captured, RTS a11y
+  assertions passing, no console errors — all previously recorded this
+  segment and unaffected by this round, which made no code or test
+  changes.
+- No provider call, production action, deploy, or release occurred.
+
+### T-86 — dead CSS removal (pre-shadcn stylesheet)
+
+- T-77's recorded finding of 117 dead class selectors in `src/app/globals.css`
+  was itself one substring-sweep false positive short. The original
+  "referenced nowhere under `src`" check was a naive whole-word grep that
+  counted `cms-navigation` and `cms-shell` as live because both strings also
+  occur inside import-path text (`from "@/app/_components/cms-navigation"`,
+  and `cms-shell-navigation` containing `cms-shell` as a substring) — neither
+  is ever the value of a real `className`. Restricting the sweep to actual
+  class-token occurrences (excluding `import`/`from` lines) found 119 dead
+  selectors. An independent live DOM sweep — `document.querySelectorAll('*')`
+  classList union across all 22 routes at 390px and 1280px, as anonymous,
+  Tenant Admin, and Super Admin — confirmed all 119 render on none of them,
+  the same standard T-77's original check used.
+- Deleted all 119 dead rules with a selector-aware script: every comma-
+  separated selector in every rule was checked for any class token in the
+  dead set (a compound or descendant selector needing an unreachable class
+  can never match, regardless of any live class also present in the same
+  chain); a rule loses only its dead selectors, and is dropped entirely
+  once none remain. Verified by hand against every rule touching a live
+  class token (`.cms-main`, `.cms-skip-link`, `.cms-signout`,
+  `.cms-signout-button`, `.cms-control-error`, `.auth-*`, `.label-*`) to
+  confirm none were caught by the generic pass.
+- Deleted the "CMS migration bridge: shadcn owns shell geometry; legacy
+  route classes retain domain semantics until each screen is migrated."
+  comment — it no longer describes anything once `ship-shell`/`ops-*` are
+  gone, per T-86's own scope note. A second comment, "Temporary visual
+  normalization for routes still using legacy domain class names," had
+  every one of its own rules deleted as dead (all targeted `cms-shell`,
+  `cms-scopebar`, `cms-navigation-panel`, `an-*`, `bulk-*`, `ops-*`, or
+  `cms-button`) and is deleted too, since nothing remained under it. The
+  "Shared authenticated CMS shell and operational primitives" and
+  "Professional CMS refinement" comments still introduce surviving live
+  rules and are kept unchanged. `globals.css`: 679 lines before, 285 after.
+- Geometry parity, proved two ways. Structurally: a CSS rule only applies
+  to an element matching its full selector; every deleted rule required at
+  least one class token proven absent from every route's rendered DOM, so
+  no element anywhere could ever have matched it, and removing a rule
+  nothing could match cannot change any element's computed style — this
+  holds regardless of empirical sampling. Empirically: a full 66-route /
+  312-scenario browser sweep run before and after the deletion (against the
+  same running dev server, same seed) reports 0 findings both times,
+  identical route/state pair counts, identical shell gutters
+  (16/24/32px), identical container tiers, and an identical 191 sticky-
+  column observations both runs. The only per-pair differences are on
+  `"loading"` skeleton states' `cards`/`tier` fields; a live repeat check —
+  five consecutive captures of `/app/analitik`'s loading skeleton against
+  the identical post-deletion CSS with zero change between runs — produced
+  the same fluctuation (`cards` 5/2/2/5/2), confirming this is the
+  pre-existing Suspense-streaming timing race `sweep.mjs`'s own comments
+  already document (the probe stops at the first frame carrying a skeleton,
+  which lands at a different point in the stream every run), not a CSS
+  effect.
+- `pnpm tsc --noEmit` and `pnpm lint` are clean against the reduced file.
+  `pnpm test:integration` was first run under `scripts/ui-audit/env.dev.sh`
+  (the browser-sweep environment) and showed two files failing (5 tests) —
+  a 401-vs-403 status mismatch and an `aria-describedby` mismatch. Re-run
+  against the untouched HEAD `globals.css` to isolate the cause from CSS,
+  the same two files failed identically there too, which looked like a
+  pre-existing defect worth its own task. It was not one: dumping the raw
+  response body directly showed `403 {"code":"INVALID_ORIGIN"}` —
+  `env.dev.sh` sets `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000`,
+  but these two files construct every request against
+  `http://127.0.0.1:3110`, the origin `scripts/ui-audit/env.integration.sh`
+  actually declares trusted. Better Auth's own origin check was rejecting
+  every request from these files before any application code ran; that is
+  the wrong-status and wrong-`aria-describedby` reading, not a real defect.
+  Re-running with `env.integration.sh` sourced instead: 590/590 tests pass.
+  No unrelated defect, no task filed.
+- Evidence: substring-sweep script and live-DOM sweep script (scratchpad,
+  both independently re-run against `dead-classes2.txt`, 119/119 confirmed
+  dead by both); `pnpm tsc --noEmit` clean; `pnpm lint` clean; before/after
+  `pnpm test:ui-audit` full sweeps (`.output/sweep-output.json` captured
+  both runs, 0 findings both), plus the 5-repeat same-CSS loading-skeleton
+  check; `pnpm test:integration` 590/590 passing under the correct
+  `env.integration.sh` environment.
+- No provider call, production action, deploy, or release occurred.
+
+### T-78 — action buttons, form interactions, loading states, double-submit prevention
+
+- A full audit of the interactive surface (every mutating form/button/dialog
+  under `src/app`, not scripted separately this round — see the round's own
+  report) found the app already exemplary almost everywhere: `useFormStatus`/
+  `isPending` pending states with Indonesian copy, `disabled` on submit,
+  programmatic focus routing to error/result regions, `AlertDialog`
+  confirmations naming the specific object (tenant, member, ledger entry) in
+  every one of `tenant-lifecycle-controls.tsx`, `member-governance-forms.tsx`,
+  `finance-action-panels.tsx`, `issuance-panel.tsx`,
+  `unpaid-recovery-panel.tsx`, `reconciliation-panel.tsx`,
+  `stale-operation-panel.tsx`, `outlet-settings-form.tsx`, and
+  `bulk-intake-form.tsx`. Two real defects, both inside T-78's own named
+  scope, were confirmed and fixed:
+  1. `src/app/app/shipment-draft-form.tsx`'s duplicate-order warning banner
+     was gated on `state.errors?.form?.includes("Ditemukan pesanan")` — a
+     literal Indonesian sentence fragment. Any copy edit to that message in
+     `src/app/app/actions.ts` would silently remove the operator's only way
+     to clear the block, leaving a stuck form. Fixed by adding a structured
+     `duplicateDetected?: boolean` field to `ShipmentDraftActionState`, set
+     `true` alongside the message rather than derived from it; the component
+     now checks `state.duplicateDetected`. Proved by mutation: with the fix
+     in place, rewording the Indonesian message left the new integration
+     test (`tests/shipment-draft.integration.test.ts`, "flags a recipient
+     phone reused within the duplicate window until confirmed") passing
+     unchanged; flipping `duplicateDetected` to `false` made it fail — the
+     test is bound to the flag, not the wording, and both directions were
+     verified live before being trusted.
+  2. The same banner hardcoded `border-amber-500/40 bg-amber-500/10`,
+     `text-amber-600`, and `text-amber-900 dark:text-amber-200` instead of
+     the design system's `--warn`/`--warn-surface` tokens — the only warning
+     surface in the app not using them (`shipment-status-badge.tsx` already
+     established the `bg-[var(--warn-surface)] text-[var(--warn)]` Tailwind
+     v4 arbitrary-value pattern this reuses). Its checkbox was also a raw
+     `<input type="checkbox">` styled `focus:ring-primary` — firing the ring
+     on every click, not just keyboard focus, unlike every other raw
+     confirmation checkbox in the app (`issuance-panel.tsx`,
+     `contact-form.tsx`), which use `accent-primary` alone and rely on the
+     global `:focus-visible` rule. Both fixed to match the established
+     pattern. Verified live: injecting the exact post-fix checkbox markup
+     into a real page and calling `.focus()` shows `outline: 3px solid`,
+     `:focus-visible` matching true — the keyboard-focus ring the
+     `focus:`-prefixed version would have shown on every click, correct
+     here; `getComputedStyle(document.documentElement).--warn` resolves to
+     `#a15c07` in the live page.
+  3. `src/app/app/kontak/[contactId]/page.tsx`'s archive confirmation dialog
+     read the generic "Arsipkan kontak ini?" — the only destructive-action
+     confirmation in the app that doesn't name the specific object, unlike
+     every other one T-78 checked. Fixed to `` `Arsipkan {detail.item.name}?` ``.
+     Verified live: navigating to a real contact's archive-confirm state now
+     reads "Arsipkan Ayu Lestari?"; the corresponding
+     `tests/contact-render.integration.test.ts` assertion updated to match.
+- No other double-submit, focus-trap, or error-fidelity defect was found;
+  GET-only filter forms across the app correctly lack `disabled={pending}`
+  on their submit buttons, consistent with T-77's established GET-vs-POST
+  distinction for double-submit protection.
+- Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean,
+  `pnpm test:integration` 591/591 (new test added, all passing), the
+  mutation pair above (message reworded → still passes; flag flipped →
+  fails) reverted cleanly after both directions confirmed, live CDP checks
+  of the archive dialog text, the `--warn` token resolution, and the
+  checkbox's keyboard-focus outline, and a full `pnpm test:ui-audit`
+  66-route/312-scenario sweep re-run after the fixes: 0 findings, no
+  console errors. The first such re-run read 190 sticky-column
+  observations instead of the established 191, isolated to
+  `/platform/tenant/[tenantId]` at 390px (5 before, 4 that run) — traced to
+  running `pnpm test:integration` (which shares `geraicuan_test` with the
+  dev server the sweep points at, and truncates tables per-file) without
+  re-seeding afterward, per `scripts/ui-audit/run.sh`'s own established
+  reason for always re-seeding before a sweep. A 5-repeat same-code check
+  of that one route read a steady 5 every time, ruling out a real
+  regression; re-seeding (`pnpm db:seed-local`) and re-running the full
+  sweep read 191 again, matching baseline.
+- No provider call, production action, deploy, or release occurred.
+
+### T-80 — provider resilience, concurrency, & exception state hardening
+
+- Audited the real provider integration code directly (no scripted
+  apparatus for this task, unlike T-77/T-78). Concurrency and ambiguous-
+  state handling were both already correct: `withProviderAccountSerialization`
+  (`src/lib/mengantar-order.ts`) takes a real Postgres advisory lock keyed
+  by the Mengantar account, releases it in a `finally` without masking a
+  work error, and correctly wraps only the `transport.submit()` call for
+  the three dynamic-AWB couriers; `SUBMISSION_UNKNOWN` recovery's exact
+  crash-window concern (provider succeeded, process died before local
+  persistence) is already covered by two existing
+  `tests/order-batch.integration.test.ts` cases, re-run and confirmed
+  passing (21/21 in that file).
+- Webhook idempotency is confirmed N/A: `/api/webhooks/mengantar` refuses
+  every request (T-79), and no other code path anywhere writes to
+  `shipments.status` or `shipment_rts_events` from a delivery/RTS signal.
+  Nothing live to be non-idempotent.
+- One real gap, fixed: `confirmShipmentIssuance`
+  (`src/app/app/pengiriman/[shipmentId]/actions.ts`) already correctly
+  refused issuance with a clear Indonesian error whenever the only
+  order-submission transport (a sanitized fixture, disabled in production)
+  is unavailable — that guard just had no comment explaining why at the
+  call site, unlike the webhook route's self-documentation. Added one,
+  pointing to `sanctioned-order-fixture.ts` and TASKS.md's T-80 entry.
+  Deliberately did not add automatic retry/backoff to
+  `fetchMengantarEstimate`/`fetchMengantarDestinationAreas` (both already
+  have an `AbortController` timeout, bounded reads, and sanitized errors):
+  both are idempotent reads with no double-charge risk, and a transient
+  failure already surfaces a clear error the operator can retry by
+  repeating the UI action — adding a retry loop is speculative complexity
+  against a requirement this read-only surface cannot violate either way.
+- Routed to T-81, not this task: reconciliation is entirely manual today
+  (`applyAuthoritativeShipmentReconciliation` takes an already-known result
+  as input; nothing polls a real Mengantar order-status endpoint), contrary
+  to T-81's own "automated reconciliation" scope wording.
+- Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean,
+  `tests/order-batch.integration.test.ts` 21/21 re-run and passing,
+  `pnpm test:integration` 591/591 (comment-only application change, no
+  logic touched in the concurrency/ambiguous-state paths since they were
+  already correct).
+- No provider call, production action, deploy, or release occurred.
+
+### T-81 — financial ledger, COD segregation, & reconciliation integrity audit
+
+- Adversarially audited every scope item directly against code and the
+  existing test suite, given the financial stakes. Ledger immutability
+  (DB-enforced via revoked grants plus a raising trigger, not just
+  application convention), COD segregation (a DB check constraint forces
+  the classification at insert time), integer money arithmetic (bigint
+  columns, integer round-half-up generated columns, no floating point
+  found), and reversal accounting (balanced-to-zero, replay-safe,
+  no-double-reversal) are all already correct and already test-proven —
+  no code change needed for any of them.
+- One real bug, confirmed still present and fixed: `netMarginIdr`'s
+  `cogsIdr` term was aggregated over the *created* shipment cohort while
+  its other four terms were aggregated over the *ledger-effective* cohort,
+  so the margin's terms described different shipment populations whenever
+  creation and issuance straddled a period boundary. Fixed in
+  `src/db/analytics-repository.ts`: COGS is now summed once per distinct
+  shipment id in the same ledger-effective cohort as the other terms (a
+  naive per-row sum over the existing flat join would have
+  double/triple-counted a shipment recognized through multiple ledger
+  entries, since COGS is a fixed per-shipment value, not a per-entry
+  amount). This corrects both `netMarginIdr` and the standalone "COGS /
+  Modal HPP" KPI card, not just the margin figure. Two existing tests
+  encoded the old, wrong behavior from opposite directions and both needed
+  correcting, not reverting: `tests/analytics-repository.integration.test.ts`'s
+  straddling fixture (`createdBeforeIssuedInside`) was asserting the old
+  numbers (25,000/53,337); now asserts the corrected ones (999,000/-920,663).
+  `tests/shipment-draft.integration.test.ts` was asserting a draft's COGS
+  moved the KPI immediately, before any ledger entry exists; now asserts it
+  does not move until issuance. Mutation-verified: reverting just the
+  cohort source back to the created-cohort sum makes the analytics test
+  fail; reverted clean after confirming.
+- Two pre-existing routed findings (write-once COGS with no correction
+  path; reconciliation is entirely manual, not automated) were
+  re-verified as still present and left as explicit product-scope
+  decisions rather than implemented unilaterally — both require a human
+  call on scope (a correction/audit UX for COGS; a real provider contract
+  before automated polling can exist at all, the same evidence-boundary
+  rule blocking the closed webhook).
+- Evidence: `pnpm tsc --noEmit` clean, `pnpm lint` clean,
+  `tests/ledger-repository.integration.test.ts` re-run and passing,
+  `tests/analytics-repository.integration.test.ts` (10/10) and
+  `tests/shipment-draft.integration.test.ts` (14/14) updated and passing,
+  the mutation pair on the cohort fix (both directions verified, reverted
+  clean), `pnpm test:integration` 591/591, a route-only `pnpm test:ui-audit`
+  sweep (66/66 pairs, 0 findings, no console errors) after re-seeding, and
+  a live CDP check of `/app/analitik` rendering correctly against real
+  seeded data.
+- No provider call, production action, deploy, or release occurred.
+
+### T-82 — end-to-end release preflight, smoke proofing, & documentation harmonization
+
+- Closed all six open routed findings. Three were real and fixed: (1)
+  `docs/spec/17-UX-FLOWS-SCREEN-CONTRACTS.md`'s UX-2 navigation structure was
+  stale against `src/lib/cms-shell-navigation.ts`; corrected the group names,
+  item labels, and tenant-page count (14 → 15). (2) The local seed's
+  `fixedUuid("70", 1)`/`fixedUuid("70", 16)` produced contact-address ids
+  byte-identical to the hardcoded `tenantId`/`outletId`; moved to an unused
+  `"7f"` prefix and re-ran a direct cross-table id-uniqueness query against
+  a freshly reseeded database — zero collisions across all fourteen seeded
+  tables. (3) `pnpm db:generate` emitted a spurious drop-and-recreate of
+  `shipment_rts_events_status_valid` on every run since Phase 9, because the
+  stored drizzle-kit snapshot serialized the CHECK's enum values unquoted
+  while `schema.ts` writes them quoted; generated and applied the one-time
+  normalizing migration `0037_perfect_psynapse.sql` (a semantic no-op —
+  drops and re-adds the byte-identical constraint), confirmed via
+  `pnpm test:migration-upgrade` passing through it on a clean database and
+  `pnpm db:generate` afterward reporting "No schema changes, nothing to
+  migrate".
+- The other three open findings were already resolved before this task
+  started and are closed as stale rather than re-fixed: README.md's
+  "Running the checks" section already documents the test environment and
+  the post-suite re-seed step, and `MENGANTAR_WEBHOOK_SECRET` is read by
+  nothing in `src` (confirmed by grep) — both findings described states the
+  repository had already moved past.
+- Documentation harmonization: `docs/spec/18-AI-ROUTE-MAP.md`'s "Audited"
+  line now summarizes the complete Phase 10 arc across all seven tasks;
+  `RELEASE.md`'s narrative reflects Phase 10's actual completion and the new
+  no-op migration, while `Status` deliberately stays `BLOCKED` — this
+  manifest's own contract requires T-62's verification to rerun from a
+  clean, committed tree before `READY`, which is outside this task's scope
+  and has not happened; `OBSERVABILITY.md`'s `TBD` probe placeholders were
+  checked and are a deliberate pre-deployment placeholder, not a defect;
+  `docs/spec/02-PRD.md`'s `PR-30` already correctly reads `Queued`, matching
+  the closed webhook.
+- Full verification battery, all green: `pnpm tsc --noEmit`, `pnpm lint`,
+  `pnpm build` (production env block, zero errors or warnings across all 27
+  routes), `pnpm test:integration` (591/591), `pnpm test:migration-upgrade`
+  (clean database, through `0037`), and a route-only `pnpm test:ui-audit`
+  sweep (66/66 pairs, 0 findings, no console errors).
+- T-81's two remaining routed findings (write-once COGS; manual-only
+  reconciliation) are unchanged — confirmed product-scope decisions in
+  T-81's own resolution, correctly left open rather than invented here.
 - No provider call, production action, deploy, or release occurred.

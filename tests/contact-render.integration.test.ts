@@ -165,7 +165,7 @@ describe("contact route render contracts", () => {
 
     const confirmation = await renderDetail({ arsipkan: "1" });
     expect(confirmation).toContain('id="arsip-kontak"');
-    expect(confirmation).toContain("Arsipkan kontak ini?");
+    expect(confirmation).toContain("Arsipkan Penerima Aman?");
     expect(confirmation).toContain("Ya, arsipkan kontak");
 
     mocks.principal.role = "OPERATOR";

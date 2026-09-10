@@ -260,6 +260,13 @@
       "when": 1788374844470,
       "tag": "0036_rate_limit_column_scoped_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789060753173,
+      "tag": "0037_perfect_psynapse",
+      "breakpoints": true
     }
   ]
 }

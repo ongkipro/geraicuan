@@ -21,15 +21,16 @@
 
 ### Tenant CMS
 
-1. **Operasional**
+1. **Utama**
    - **Ringkasan** → `/app` — both tenant roles; daily command center and exception entry point.
-   - **Pengiriman** → `/app/pengiriman` — both tenant roles; lifecycle queue. Create, import, detail, and label routes are contextual descendants and retain Pengiriman as current.
-2. **Data**
+2. **Operasional**
+   - **Kiriman** → `/app/pengiriman` — both tenant roles; lifecycle queue. Create, import, detail, and label routes are contextual descendants and retain Kiriman as current.
+   - **Retur (RTS)** → `/app/pengiriman/rts` — both tenant roles; failed and returning-shipment queue.
    - **Kontak** → `/app/kontak` — both tenant roles; reusable sender and recipient directory.
-3. **Analisis & keuangan**
+3. **Wawasan**
    - **Analitik** → `/app/analitik` — Tenant Admin only; historical exploration, comparison, supporting rows, and export.
    - **Keuangan** → `/app/keuangan` — Tenant Admin only; authoritative ledger, reconciliation history, and permitted mutations.
-4. **Pengaturan**
+4. **Administrasi**
    - **Outlet & koneksi** → `/app/pengaturan` — Tenant Admin only.
    - **Anggota & akses** → `/app/anggota` — Tenant Admin only.
 
@@ -41,7 +42,7 @@ shipment view during migration.
 
 One **Platform** group contains:
 
-1. **Monitoring** → `/platform` — exception-first platform health.
+1. **Ringkasan** → `/platform` — exception-first platform health.
 2. **Tenant** → `/platform/tenant` — tenant list, detail, and lifecycle governance.
 3. **Audit** → `/platform/audit` — append-only governed event history.
 
@@ -175,9 +176,9 @@ Required independent states are representative skeleton loading, no event data f
 
 - Owner: Paduka Ongki
 
-- Screening is route- and job-complete, not screenshot-complete: 14 authenticated tenant pages, 4 authenticated platform pages, the public sales page, and both login entries must map to an actor, primary job, entry point, state matrix, permission boundary, and executable browser journey.
+- Screening is route- and job-complete, not screenshot-complete: 15 authenticated tenant pages, 4 authenticated platform pages, the public sales page, and both login entries must map to an actor, primary job, entry point, state matrix, permission boundary, and executable browser journey.
 - Review operational correctness before presentation. Trace rendered information and actions through server authorization, validation, data ownership, lifecycle, audit/ledger effects, and recovery; visual polish cannot approve a broken or unreachable workflow.
 - Reuse the existing deterministic scenario registry. Every applicable screen covers initial loading, system empty, filtered/query empty, populated, partial/stale, route or lookup error, unauthorized/read-only, pending mutation, conflict where possible, and primary success without exposing test controls in production.
-- Screen tenant routes as one product across Ringkasan, Pengiriman, Kontak, Impor, Label, Analitik, Keuangan, Outlet & koneksi, and Anggota & akses. Screen platform monitoring, tenant governance, and audit as a separate platform job; never blur global and tenant scope.
+- Screen tenant routes as one product across Ringkasan, Kiriman, Retur (RTS), Kontak, Impor, Label, Analitik, Keuangan, Outlet & koneksi, and Anggota & akses. Screen platform monitoring, tenant governance, and audit as a separate platform job; never blur global and tenant scope.
 - UI/UX review compares 390px, 768px, and 1280px for hierarchy, density, shell/page rhythm, tables/charts/forms, status language, keyboard/focus, accessible names/states, 44px applicable actions, local overflow, and zero unexpected browser/runtime/network errors. Screens that already satisfy the contract remain unchanged.
 - A material finding fails the screening boundary and names one owning requirement/task plus a reproducible state. Repair occurs in that atomic owner, receives the capability-appropriate independent review, and the failed screening reruns from a fresh baseline.

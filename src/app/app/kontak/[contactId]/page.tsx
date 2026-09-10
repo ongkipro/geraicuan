@@ -1,5 +1,6 @@
 import { Archive, CircleAlert, ContactRound, MapPin } from "lucide-react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -19,6 +20,7 @@ import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -51,15 +53,31 @@ async function requireTenantPrincipal() {
 export default async function ContactDetailPage({ params, searchParams }: ContactDetailPageProps) {
   const principal = await requireTenantPrincipal();
   const { contactId } = await params;
+  const auditScenario = process.env.NODE_ENV === "development"
+    ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/kontak/[contactId]")
+    : null;
+  if (auditScenario === "contact-detail-route-error") throw new Error("Intentional development-only contact detail failure.");
   const detail = UUID_PATTERN.test(contactId)
     ? await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
         const item = await getContact(tx, context, contactId);
         if (!item) return null;
-        const [addresses, outlets] = await Promise.all([
-          listContactAddresses(tx, context, contactId),
-          listReadyShipmentOutlets(tx, context),
-        ]);
-        return { addresses, item, outlets };
+        const addresses = await listContactAddresses(tx, context, contactId);
+        // Outlet readiness is a separate lookup from the contact's own data:
+        // a failure there degrades the address form's destination picker
+        // without making the rest of the page unusable, so it is caught
+        // rather than allowed to fail the whole page like a missing contact.
+        let outlets: Awaited<ReturnType<typeof listReadyShipmentOutlets>> = [];
+        let outletsUnavailable = false;
+        if (auditScenario === "contact-detail-outlet-error") {
+          outletsUnavailable = true;
+        } else {
+          try {
+            outlets = await listReadyShipmentOutlets(tx, context);
+          } catch {
+            outletsUnavailable = true;
+          }
+        }
+        return { addresses, item, outlets, outletsUnavailable };
       })
     : null;
   if (!detail) return <ContactNotFound />;
@@ -85,6 +103,7 @@ export default async function ContactDetailPage({ params, searchParams }: Contac
         <CardHeader className="border-b"><CardTitle className="flex items-center gap-2" id="alamat-heading"><MapPin aria-hidden="true" className="size-4" />Alamat</CardTitle><CardDescription>{activeAddresses.length} dari maksimal 20 alamat aktif.</CardDescription></CardHeader>
         <CardContent className="grid min-w-0 gap-6">
           {activeAddresses.length > 0 ? <ul className="min-w-0 divide-y" id="alamat">{activeAddresses.map((address) => <li className="grid min-w-0 gap-2 py-4 first:pt-0 last:pb-0" key={address.id}><div className="flex min-w-0 flex-wrap items-center gap-2"><strong className="wrap-anywhere">{address.label}</strong>{address.isPrimary ? <Badge variant="secondary">Alamat utama</Badge> : null}</div><p className="wrap-anywhere text-sm leading-6">{address.address}</p><p className="wrap-anywhere text-sm text-muted-foreground">{address.destinationAreaLabel ? `Area: ${address.destinationAreaLabel}` : "Area belum dipilih"}</p>{!detail.item.archivedAt ? <Button asChild className="min-h-11 justify-self-start" size="sm" variant="outline"><Link href={`/app/kontak/${contactId}?alamat=${address.id}#alamat-edit`}>Edit alamat</Link></Button> : null}</li>)}</ul> : <p className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground" id="alamat" role="status">Belum ada alamat aktif.</p>}
+          {detail.outletsUnavailable ? <Alert role="alert" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Pemilihan outlet tidak tersedia</AlertTitle><AlertDescription>Daftar outlet gagal dimuat. Alamat dapat tetap dibaca dan diedit, tetapi area tujuan baru tidak dapat dipilih sampai outlet tersedia kembali.</AlertDescription></Alert> : null}
           {!detail.item.archivedAt && selectedAddress ? <><Separator /><div className="rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="alamat-edit" tabIndex={-1}><ContactAddressForm address={selectedAddress} contactId={detail.item.id} outlets={detail.outlets} /></div></> : null}
           {!detail.item.archivedAt && !selectedAddress && activeAddresses.length < 20 ? <><Separator /><ContactAddressForm contactId={detail.item.id} outlets={detail.outlets} /></> : !selectedAddress ? <Alert role="status"><AlertTitle>{detail.item.archivedAt ? "Alamat baru dinonaktifkan" : "Batas alamat tercapai"}</AlertTitle><AlertDescription>{detail.item.archivedAt ? "Kontak diarsipkan tidak dapat menerima alamat baru." : "Batas 20 alamat aktif per kontak sudah tercapai."}</AlertDescription></Alert> : null}
         </CardContent>
@@ -92,7 +111,7 @@ export default async function ContactDetailPage({ params, searchParams }: Contac
 
       <Card className="shadow-none">
         <CardHeader className="border-b"><CardTitle className="rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="arsip-heading" tabIndex={-1}>Arsip kontak</CardTitle><CardDescription>Kiriman lama tetap menyimpan snapshot kontak setelah kontak diarsipkan.</CardDescription></CardHeader>
-        <CardContent>{detail.item.archivedAt ? <p className="text-sm text-muted-foreground" role="status">Kontak ini sudah diarsipkan.</p> : principal.role !== "TENANT_ADMIN" ? <p className="text-sm text-muted-foreground" role="status">Arsip kontak dikelola oleh Tenant Admin.</p> : archiveConfirmation ? <AlertRegion className="rounded-lg" id="arsip-kontak"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Arsipkan kontak ini?</AlertTitle><AlertDescription className="grid gap-4"><p>Kontak tidak lagi muncul saat memilih pengirim atau penerima. Kiriman lama tetap menyimpan snapshot; retensi kontak mengikuti kebijakan sistem.</p><ArchiveConfirmationForm contactId={detail.item.id} /></AlertDescription></Alert></AlertRegion> : <Button asChild className="min-h-11" variant="destructive"><Link href={`/app/kontak/${contactId}?arsipkan=1#arsip-kontak`}>Arsipkan kontak</Link></Button>}</CardContent>
+        <CardContent>{detail.item.archivedAt ? <p className="text-sm text-muted-foreground" role="status">Kontak ini sudah diarsipkan.</p> : principal.role !== "TENANT_ADMIN" ? <p className="text-sm text-muted-foreground" role="status">Arsip kontak dikelola oleh Tenant Admin.</p> : archiveConfirmation ? <AlertRegion className="rounded-lg" id="arsip-kontak"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Arsipkan {detail.item.name}?</AlertTitle><AlertDescription className="grid gap-4"><p>Kontak tidak lagi muncul saat memilih pengirim atau penerima. Kiriman lama tetap menyimpan snapshot; retensi kontak mengikuti kebijakan sistem.</p><ArchiveConfirmationForm contactId={detail.item.id} /></AlertDescription></Alert></AlertRegion> : <Button asChild className="min-h-11" variant="destructive"><Link href={`/app/kontak/${contactId}?arsipkan=1#arsip-kontak`}>Arsipkan kontak</Link></Button>}</CardContent>
       </Card>
     </PageContainer>
   );

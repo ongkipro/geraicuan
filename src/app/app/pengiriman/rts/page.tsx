@@ -329,8 +329,8 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                       };
 
                     return (
-                      <TableRow key={row.shipmentId} className="group hover:bg-muted/40">
-                        <TableCell className="sticky left-0 z-10 bg-card font-mono text-xs group-hover:bg-muted/40">
+                      <TableRow key={row.shipmentId} className="group">
+                        <TableCell className="sticky left-0 z-10 bg-card font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                           <Link
                             className="font-semibold text-primary underline-offset-4 hover:underline"
                             href={`/app/pengiriman/${row.shipmentId}`}

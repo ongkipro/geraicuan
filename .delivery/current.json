@@ -1,23 +1,14 @@
 {
-  "activeRun": "RUN-20260909T003545Z-fa5e0811",
-  "activeTask": "T-77",
-  "capability": "admin-dashboard",
-  "job": "screening",
+  "activeRun": null,
   "lastRun": {
-    "finishedAt": "2026-09-09T00:35:14Z",
+    "finishedAt": "2026-09-10T17:27:51Z",
     "result": "PASS",
-    "runId": "RUN-20260908T225837Z-75bb1438"
+    "runId": "RUN-20260910T172732Z-f90aa463"
   },
-  "model": "claude-opus-5",
-  "observedHead": "67beb92e4135da15afc7357d905a4473f7e17020",
+  "observedHead": "69e6be6641e7ae76c08981e65b1bb9b2bdffed67",
   "observedState": "IMPLEMENTING",
   "project": "geraicuan",
-  "provider": "anthropic",
-  "reasoningEffort": "high",
-  "requirement": "UX-1",
-  "risk": "R2",
   "schemaVersion": 1,
   "statusAuthority": "STATUS.md",
-  "updatedAt": "2026-09-09T08:53:09Z",
-  "worker": "main-claude-opus-5"
+  "updatedAt": "2026-09-10T17:27:51Z"
 }

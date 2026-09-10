@@ -77,6 +77,9 @@ export type UiAuditScenario =
   | "contacts-area-no-result"
   | "contacts-area-results"
   | "contacts-stream"
+  | "contacts-new-error"
+  | "contact-detail-outlet-error"
+  | "contact-detail-route-error"
   | "label-detail-error"
   | "label-detail-inconsistent-cod"
   | "label-detail-over-capacity"
@@ -148,6 +151,7 @@ type UiAuditScenarioContract = {
     | "/app/pengaturan"
     | "/app/kontak"
     | "/app/kontak/baru"
+    | "/app/kontak/[contactId]"
     | "/app/label"
     | "/app/label/[shipmentId]"
     | "/app/pengiriman"
@@ -171,6 +175,9 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "contacts-area-error": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "partial-error" },
   "contacts-area-no-result": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "healthy-empty" },
   "contacts-area-results": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "populated" },
+  "contacts-new-error": { mode: "read-only", ownerTask: "T-77", route: "/app/kontak/baru", state: "route-error" },
+  "contact-detail-outlet-error": { mode: "read-only", ownerTask: "T-77", route: "/app/kontak/[contactId]", state: "partial-error" },
+  "contact-detail-route-error": { mode: "read-only", ownerTask: "T-77", route: "/app/kontak/[contactId]", state: "route-error" },
   "contacts-stream": { mode: "read-only", route: "/app/kontak", state: "loading" },
   "label-detail-error": { mode: "read-only", route: "/app/label/[shipmentId]", state: "route-error" },
   "label-detail-inconsistent-cod": { mode: "read-only", route: "/app/label/[shipmentId]", state: "partial-error" },
