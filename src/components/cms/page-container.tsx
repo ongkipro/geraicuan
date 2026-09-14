@@ -3,10 +3,10 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 const widths = {
-  wide: "max-w-7xl",
-  data: "max-w-6xl",
+  wide: "max-w-[88rem]",
+  data: "max-w-7xl",
   standard: "max-w-5xl",
-  form: "max-w-4xl",
+  form: "max-w-5xl",
 } as const;
 
 type PageContainerProps = ComponentProps<"div"> & {

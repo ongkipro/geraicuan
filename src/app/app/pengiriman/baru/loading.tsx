@@ -1,5 +1,6 @@
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function NewShipmentLoading() {
@@ -14,8 +15,13 @@ export default function NewShipmentLoading() {
         title="Buat draf kiriman"
       />
       <div aria-busy="true" aria-label="Memuat formulir draf kiriman" className="grid gap-6" role="status">
-        <Skeleton className="h-28 w-full rounded-lg" />
-        <Skeleton className="h-80 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-xl" />
+        {[0, 1, 2].map((section) => (
+          <Card key={section}>
+            <CardHeader><Skeleton className="h-5 w-32" /><Skeleton className="h-4 w-64 max-w-full" /></CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></CardContent>
+          </Card>
+        ))}
         <span className="sr-only">Memuat formulir draf kiriman…</span>
       </div>
     </PageContainer>

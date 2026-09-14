@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { CircleAlert, Printer } from "lucide-react";
+import { Check, CircleAlert, Printer, Search } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AlertRegion } from "@/app/_components/alert-region";
+import { DataTableFacetFilter } from "@/components/cms/data-table-facet-filter";
+import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -37,6 +37,14 @@ type LabelIndexPageProps = {
 };
 
 const AWB_SUFFIX_PATTERN = /^[a-z0-9]{3,24}$/i;
+
+function labelIndexHref(status: "issued" | "unpaid", awbSuffix: string) {
+  const params = new URLSearchParams();
+  if (status === "unpaid") params.set("status", "unpaid");
+  if (awbSuffix) params.set("q", awbSuffix);
+  const query = params.toString();
+  return query ? `/app/label?${query}` : "/app/label";
+}
 
 function firstQueryValue(value: SearchValue) {
   return Array.isArray(value) ? value[0] : value;
@@ -90,68 +98,67 @@ export default async function LabelIndexPage({
 
   return (
     <PageContainer>
-      <PageHeader description="Cetak hanya kiriman yang sudah memperoleh AWB resmi dari Mengantar." eyebrow="Pengiriman" focusTargetId="label-index-heading" title="Label & riwayat cetak" />
+      <PageHeader description="Label tersedia setelah nomor resi resmi terbit dari Mengantar." eyebrow="Pengiriman" focusTargetId="label-index-heading" title="Label & riwayat cetak" />
 
-      <Card className="shadow-none">
-        <CardHeader className="border-b">
-          <CardTitle>Filter label</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form method="get">
-            <FieldSet>
-              <FieldGroup className="grid min-w-0 items-end lg:grid-cols-[minmax(13rem,0.8fr)_minmax(15rem,1fr)_auto]">
-                <Field>
-                  <FieldLabel htmlFor="status-label">Status kiriman</FieldLabel>
-                  <select
-                    className="flex min-h-11 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    defaultValue={status}
-                    id="status-label"
-                    name="status"
-                  >
-                    <option value="issued">Resi sudah terbit</option>
-                    <option value="unpaid">Menunggu pelunasan</option>
-                  </select>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="q-label">Akhiran nomor resi</FieldLabel>
-                  <Input
-                    aria-describedby={queryError ? "q-label-help q-label-error" : "q-label-help"}
-                    aria-invalid={Boolean(queryError)}
-                    className="min-h-11"
-                    defaultValue={awbSuffix}
-                    id="q-label"
-                    inputMode="text"
-                    maxLength={24}
-                    minLength={3}
-                    name="q"
-                    pattern="[A-Za-z0-9]{3,24}"
-                    placeholder="Contoh: 123ABC"
-                    type="search"
-                  />
-                  <FieldDescription id="q-label-help">
-                    Gunakan 3–24 huruf atau angka terakhir, tanpa data penerima.
-                  </FieldDescription>
-                </Field>
-                <div className="flex flex-wrap gap-2">
-                  <Button className="min-h-11" type="submit">Terapkan filter</Button>
-                  {awbSuffix || status !== "issued" ? (
-                    <Button asChild className="min-h-11" variant="outline">
-                      <Link href="/app/label">Hapus filter</Link>
-                    </Button>
-                  ) : null}
-                </div>
-              </FieldGroup>
-            </FieldSet>
+      {/* One GET form (search) owned by this page; the status facet is a
+          DataTableFacetFilter whose options keep the current suffix. */}
+      <div className="grid gap-2">
+        <DataTableToolbar isFiltered={Boolean(awbSuffix) || status !== "issued"} resetHref="/app/label">
+          <form className="relative flex items-center" method="get" role="search">
+            {status === "unpaid" ? <input name="status" type="hidden" value="unpaid" /> : null}
+            <label className="sr-only" htmlFor="q-label">Akhiran nomor resi</label>
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
+            <Input
+              aria-describedby={queryError ? "q-label-help q-label-error" : "q-label-help"}
+              aria-invalid={Boolean(queryError)}
+              className="h-8 w-[150px] pl-8 max-md:min-h-11 lg:w-[250px]"
+              defaultValue={awbSuffix}
+              id="q-label"
+              inputMode="text"
+              maxLength={24}
+              minLength={3}
+              name="q"
+              pattern="[A-Za-z0-9]{3,24}"
+              placeholder="Akhiran resi, mis. 123ABC"
+              type="search"
+            />
+            {/* Enter submits; the button exists for implicit submission only, so it is kept out of the tab order rather than taking an invisible focus stop. */}
+            <button className="sr-only" tabIndex={-1} type="submit">Terapkan filter</button>
           </form>
-        </CardContent>
-      </Card>
+          <DataTableFacetFilter
+            clearHref={status !== "issued" ? labelIndexHref("issued", awbSuffix) : undefined}
+            options={[
+              { href: labelIndexHref("issued", awbSuffix), label: "Resi sudah terbit", selected: status === "issued" },
+              { href: labelIndexHref("unpaid", awbSuffix), label: "Menunggu pelunasan", selected: status === "unpaid" },
+            ]}
+            title="Status kiriman"
+          />
+        </DataTableToolbar>
+        {/* The facet popover needs JavaScript. Without it the same two status
+            views stay reachable as plain links that keep the current suffix. */}
+        <noscript>
+          <nav aria-label="Status kiriman" className="flex flex-wrap items-center gap-2">
+            {([["issued", "Resi sudah terbit"], ["unpaid", "Menunggu pelunasan"]] as const).map(([value, label]) => (
+              <Button asChild className="h-8 max-md:min-h-11" key={value} size="sm" variant={status === value ? "secondary" : "outline"}>
+                <Link aria-current={status === value ? "true" : undefined} href={labelIndexHref(value, awbSuffix)} prefetch={false}>
+                  {status === value ? <Check aria-hidden="true" /> : null}
+                  {label}
+                </Link>
+              </Button>
+            ))}
+          </nav>
+        </noscript>
+        <p className="text-xs text-muted-foreground" id="q-label-help">
+          Gunakan 3–24 huruf atau angka terakhir, tanpa data penerima.
+        </p>
+      </div>
 
     {queryError ? (
       <AlertRegion className="rounded-lg" id="q-label-error"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Filter tidak dapat diproses</AlertTitle><AlertDescription><Button asChild className="h-auto min-h-11 justify-start whitespace-normal px-0 text-left" variant="link"><a href="#q-label">{queryError}</a></Button></AlertDescription></Alert></AlertRegion>
     ) : null}
 
     <section aria-labelledby="hasil-label-title" className="grid min-w-0 gap-3 overflow-hidden" id="hasil-label">
-      <h2 className="font-heading text-lg font-medium" id="hasil-label-title">Hasil label</h2>
+      <h2 className="sr-only" id="hasil-label-title">Hasil label</h2>
       {rows.length === 0 ? (
         <EmptyState
           description={awbSuffix
@@ -165,9 +172,13 @@ export default async function LabelIndexPage({
             : "Belum ada label yang dapat dicetak."}
         />
       ) : (
+          // The standard PageContainer is 64rem and the scroll container adds a
+          // 1px border on each side, so a 64rem minimum overflowed its own
+          // region by 2px at desktop widths. Keep the minimum below the
+          // container and let the destination wrap instead of forcing width.
           <Table
-            className="min-w-[64rem]"
-            containerClassName="rounded-lg border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+            className="min-w-[56rem]"
+            containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
             containerProps={{ "aria-label": "Daftar label kiriman; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
           >
             <TableCaption className="sr-only">
@@ -212,7 +223,7 @@ export default async function LabelIndexPage({
                       {row.recipientPhoneMasked}
                     </span>
                   </TableCell>
-                  <TableCell>{row.destinationAreaLabel}</TableCell>
+                  <TableCell className="min-w-48 max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell>
                   <TableCell>
                     {row.isCod && row.providerCodAmountIdr !== null
                       ? `COD ${formatIdr(row.providerCodAmountIdr)}`

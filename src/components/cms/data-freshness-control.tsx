@@ -46,16 +46,16 @@ export function DataFreshnessControl({
   }, [pending]);
 
   return (
-    <div className="flex flex-col gap-2 border-y py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-2 py-1 text-xs">
       <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
         <span>
-          {stale ? "Belum diperbarui sejak" : "Dihasilkan"}{" "}
+          {stale ? "Belum diperbarui sejak" : "Diperbarui"}{" "}
           <time dateTime={generatedAtIso}>{formattedGeneratedAt}</time>
         </span>
         {stale ? <Badge variant="secondary">Perlu diperbarui</Badge> : null}
       </div>
       <Button
-        className="min-h-11 sm:min-h-8"
+        className="min-h-11 md:min-h-8"
         disabled={pending}
         onClick={() => {
           setAnnouncement("Memperbarui data…");

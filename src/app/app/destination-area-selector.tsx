@@ -174,7 +174,7 @@ export function DestinationAreaSelector({
               }}
               value={outletId}
             >
-              <SelectTrigger aria-label="Outlet sumber pencarian area" className="min-h-11 w-full">
+              <SelectTrigger aria-label="Outlet sumber pencarian area" className="min-h-11 w-full md:min-h-8">
                 <SelectValue placeholder="Pilih outlet" />
               </SelectTrigger>
               <SelectContent>
@@ -186,7 +186,7 @@ export function DestinationAreaSelector({
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Input
               aria-describedby={`${id}-help ${id}-status`}
-              className="min-h-11"
+              className="min-h-11 md:min-h-8"
               disabled={blocked || pending || !outletId}
               id={`${id}-query`}
               maxLength={100}
@@ -206,7 +206,7 @@ export function DestinationAreaSelector({
               ref={queryRef}
               value={query}
             />
-            <Button className="min-h-11 max-sm:w-full" disabled={blocked || pending || !outletId || searchError === "rate_limited"} onClick={search} type="button" variant="outline">
+            <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={blocked || pending || !outletId || searchError === "rate_limited"} onClick={search} type="button" variant="outline">
               {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Search aria-hidden="true" />}
               {pending ? "Mencari…" : "Cari area"}
             </Button>
@@ -219,7 +219,7 @@ export function DestinationAreaSelector({
                 aria-disabled={options.length === 0}
                 aria-expanded={open}
                 aria-invalid={Boolean(error)}
-                className="min-h-11 w-full min-w-0 justify-between whitespace-normal text-left"
+                className="h-auto min-h-11 w-full min-w-0 justify-between whitespace-normal py-1.5 text-left md:min-h-8"
                 id={names.areaLabel}
                 onClick={(event) => {
                   if (options.length === 0) event.preventDefault();
@@ -238,6 +238,7 @@ export function DestinationAreaSelector({
                   <CommandGroup heading="Hasil Mengantar">
                     {options.map((option) => (
                       <CommandItem
+                        className="max-md:min-h-11"
                         data-checked={selected?.areaId === option.areaId}
                         key={option.areaId}
                         onSelect={() => {
@@ -261,7 +262,7 @@ export function DestinationAreaSelector({
           </Popover>
 
           {pending ? (
-            <div aria-busy="true" aria-live="polite" className="grid min-h-20 content-center rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground" role="status">
+            <div aria-busy="true" aria-live="polite" className="grid min-h-20 content-center rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground" role="status">
               Memuat hasil area Mengantar…
             </div>
           ) : null}
@@ -272,7 +273,7 @@ export function DestinationAreaSelector({
               <AlertDescription className="grid gap-3">
                 <p>{message}</p>
                 {searchError !== "rate_limited" && searchError !== "invalid_query" ? (
-                  <Button className="min-h-11 justify-self-start" onClick={search} ref={retryRef} type="button" variant="outline">Coba lagi pencarian area</Button>
+                  <Button className="min-h-11 justify-self-start md:min-h-8" onClick={search} ref={retryRef} type="button" variant="outline">Coba lagi pencarian area</Button>
                 ) : null}
               </AlertDescription>
             </Alert>
@@ -280,7 +281,7 @@ export function DestinationAreaSelector({
 
           {displayedArea ? (
             <Button
-              className="min-h-11 justify-self-start"
+              className="min-h-11 justify-self-start md:min-h-8"
               onClick={() => {
                 queryRef.current?.focus();
                 clearAuthority();

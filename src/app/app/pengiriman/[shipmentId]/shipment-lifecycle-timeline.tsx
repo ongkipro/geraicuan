@@ -1,6 +1,7 @@
 import { Check, Circle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   SHIPMENT_STATUS_PRESENTATION,
   type ShipmentStatus,
@@ -20,9 +21,12 @@ export function ShipmentLifecycleTimeline({ status }: { status: ShipmentStatus }
   const steps = currentStage === 3 ? [...BASE_STEPS, status] : BASE_STEPS;
 
   return (
-    <section aria-labelledby="shipment-lifecycle-timeline-heading" className="rounded-lg border bg-card p-4 sm:p-5">
-      <h2 className="font-medium" id="shipment-lifecycle-timeline-heading">Jejak lifecycle</h2>
-      <ol className="mt-4 grid gap-0">
+    <Card aria-labelledby="shipment-lifecycle-timeline-heading" className="h-full" role="region">
+      <CardHeader>
+        <CardTitle id="shipment-lifecycle-timeline-heading">Riwayat status</CardTitle>
+      </CardHeader>
+      <CardContent>
+      <ol className="grid gap-0">
         {steps.map((step, index) => {
           const complete = index < currentStage;
           const current = index === currentStage;
@@ -42,6 +46,7 @@ export function ShipmentLifecycleTimeline({ status }: { status: ShipmentStatus }
           );
         })}
       </ol>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

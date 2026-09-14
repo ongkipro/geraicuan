@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 
 import { OutletSettingsForm } from "@/app/app/pengaturan/outlet-settings-form";
 import { OutletSettingsWorkspace } from "@/app/app/pengaturan/outlet-settings-workspace";
+import { administrationNavigation } from "@/app/app/pengaturan/settings-nav";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { SettingsLayout } from "@/components/cms/settings-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { db } from "@/db/client";
 import {
@@ -28,6 +30,7 @@ const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
   timeStyle: "short",
   timeZone: "Asia/Jakarta",
 });
+
 
 const auditUpdatedAt = new Date("2026-09-01T00:00:00.000Z");
 
@@ -76,7 +79,7 @@ type OutletSettingsPageProps = {
 
 export default async function OutletSettingsPage({
   searchParams = Promise.resolve({}),
-}: OutletSettingsPageProps = {}) {
+}: OutletSettingsPageProps) {
   let principal;
   try {
     principal = await requireCmsScope("tenant");
@@ -183,105 +186,96 @@ export default async function OutletSettingsPage({
         }
       : undefined;
 
+  const outletFormProps = activeOutlet
+    ? {
+        id: activeOutlet.id,
+        name: activeOutlet.name,
+        defaultPickupAddressId: activeOutlet.defaultPickupAddressId,
+        defaultPickupAddressLabel: activeOutlet.defaultPickupAddressLabel,
+        defaultOriginAreaId: activeOutlet.defaultOriginAreaId,
+        defaultOriginAreaLabel: activeOutlet.defaultOriginAreaLabel,
+        connectionIssue: activeOutlet.connectionIssue,
+        connectionSource: activeOutlet.connectionSource,
+        connectionStatus: activeOutlet.connectionStatus,
+        connectionUpdatedAtLabel: activeOutlet.connectionUpdatedAt
+          ? `${updatedAtFormatter.format(activeOutlet.connectionUpdatedAt)} WIB`
+          : null,
+        readinessStatus: activeOutlet.readinessStatus,
+        updatedAtLabel: `${updatedAtFormatter.format(activeOutlet.updatedAt)} WIB`,
+      }
+    : null;
+
   return (
     <PageContainer width="wide">
-      <PageHeader
-        description="Lengkapi pickup, area asal, dan sumber koneksi. Nilai kredensial tidak pernah dikirim ke browser."
-        eyebrow="Pengaturan"
-        title="Outlet & koneksi"
-      />
-
-      {outlets.length === 0 ? (
-        <Alert>
-          <CircleAlert aria-hidden="true" />
-          <AlertTitle>Belum ada outlet</AlertTitle>
-          <AlertDescription>
-            Outlet harus tersedia sebelum pickup dan area asal dapat diatur. Hubungi Super Admin
-            untuk menyiapkan outlet tenant ini.
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <>
-          {outlets.length > 1 ? (
-            <dl
-              aria-label="Ringkasan kesiapan outlet"
-              className="grid grid-cols-2 border-y xl:grid-cols-4"
-            >
-              {[
-                ["Total outlet", outlets.length],
-                ["Siap dipakai", readyCount],
-                ["Perlu dilengkapi", outlets.length - readyCount],
-                ["Koneksi privat", privateCount],
-              ].map(([label, value], index) => (
-                <div
-                  className={`grid gap-1 px-3 py-3 ${index % 2 === 1 ? "border-l" : ""} ${index > 1 ? "border-t xl:border-t-0" : ""} ${index > 0 ? "xl:border-l" : ""}`}
-                  key={label}
-                >
-                  <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-                  <dd className="text-sm font-semibold tabular-nums">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-
-          {activeOutlet ? (
-            outlets.length === 1 ? (
-              <div className="max-w-3xl border-y py-6">
-                <OutletSettingsForm
-                  key={activeOutlet.id}
-                  pickupOptionsFixture={activePickupOptionsFixture}
-                  outlet={{
-                    id: activeOutlet.id,
-                    name: activeOutlet.name,
-                    defaultPickupAddressId: activeOutlet.defaultPickupAddressId,
-                    defaultPickupAddressLabel: activeOutlet.defaultPickupAddressLabel,
-                    defaultOriginAreaId: activeOutlet.defaultOriginAreaId,
-                    defaultOriginAreaLabel: activeOutlet.defaultOriginAreaLabel,
-                    connectionIssue: activeOutlet.connectionIssue,
-                    connectionSource: activeOutlet.connectionSource,
-                    connectionStatus: activeOutlet.connectionStatus,
-                    connectionUpdatedAtLabel: activeOutlet.connectionUpdatedAt
-                      ? `${updatedAtFormatter.format(activeOutlet.connectionUpdatedAt)} WIB`
-                      : null,
-                    readinessStatus: activeOutlet.readinessStatus,
-                    updatedAtLabel: `${updatedAtFormatter.format(activeOutlet.updatedAt)} WIB`,
-                  }}
-                />
-              </div>
-            ) : (
-              <OutletSettingsWorkspace
-                activeOutletId={activeOutlet.id}
-                outlets={orderedOutlets.map(({ id, name, readinessStatus }) => ({
-                  id,
-                  name,
-                  readinessStatus,
-                }))}
+      <SettingsLayout
+        currentHref="/app/pengaturan"
+        header={
+          <PageHeader
+            description="Atur pickup, area asal, dan koneksi Mengantar. Nilai kredensial tidak pernah dikirim ke browser."
+            eyebrow="Pengaturan"
+            title="Outlet & koneksi"
+          />
+        }
+        items={administrationNavigation}
+        navLabel="Administrasi"
+      >
+        {outlets.length === 0 ? (
+          <Alert className="lg:max-w-xl">
+            <CircleAlert aria-hidden="true" />
+            <AlertTitle>Belum ada outlet</AlertTitle>
+            <AlertDescription>
+              Outlet harus tersedia sebelum pickup dan area asal dapat diatur. Hubungi Super Admin
+              untuk menyiapkan outlet tenant ini.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="grid min-w-0 gap-6">
+            {outlets.length > 1 ? (
+              <dl
+                aria-label="Ringkasan kesiapan outlet"
+                className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4"
               >
+                {[
+                  ["Total outlet", outlets.length],
+                  ["Siap dipakai", readyCount],
+                  ["Perlu dilengkapi", outlets.length - readyCount],
+                  ["Koneksi privat", privateCount],
+                ].map(([label, value]) => (
+                  <div className="grid gap-1 bg-background px-4 py-3" key={label}>
+                    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                    <dd className="text-2xl font-bold tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+
+            {activeOutlet && outletFormProps ? (
+              outlets.length === 1 ? (
                 <OutletSettingsForm
                   key={activeOutlet.id}
                   pickupOptionsFixture={activePickupOptionsFixture}
-                  outlet={{
-                    id: activeOutlet.id,
-                    name: activeOutlet.name,
-                    defaultPickupAddressId: activeOutlet.defaultPickupAddressId,
-                    defaultPickupAddressLabel: activeOutlet.defaultPickupAddressLabel,
-                    defaultOriginAreaId: activeOutlet.defaultOriginAreaId,
-                    defaultOriginAreaLabel: activeOutlet.defaultOriginAreaLabel,
-                    connectionIssue: activeOutlet.connectionIssue,
-                    connectionSource: activeOutlet.connectionSource,
-                    connectionStatus: activeOutlet.connectionStatus,
-                    connectionUpdatedAtLabel: activeOutlet.connectionUpdatedAt
-                      ? `${updatedAtFormatter.format(activeOutlet.connectionUpdatedAt)} WIB`
-                      : null,
-                    readinessStatus: activeOutlet.readinessStatus,
-                    updatedAtLabel: `${updatedAtFormatter.format(activeOutlet.updatedAt)} WIB`,
-                  }}
+                  outlet={outletFormProps}
                 />
-              </OutletSettingsWorkspace>
-            )
-          ) : null}
-        </>
-      )}
+              ) : (
+                <OutletSettingsWorkspace
+                  activeOutletId={activeOutlet.id}
+                  outlets={orderedOutlets.map(({ id, name, readinessStatus }) => ({
+                    id,
+                    name,
+                    readinessStatus,
+                  }))}
+                >
+                  <OutletSettingsForm
+                    key={activeOutlet.id}
+                    pickupOptionsFixture={activePickupOptionsFixture}
+                    outlet={outletFormProps}
+                  />
+                </OutletSettingsWorkspace>
+              )
+            ) : null}
+          </div>
+        )}
+      </SettingsLayout>
     </PageContainer>
   );
 }

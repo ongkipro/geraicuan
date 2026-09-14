@@ -22,9 +22,7 @@ export default function TenantError({
 
   return (
     <PageContainer width="wide">
-      <PageHeader
-        description="Pantau input kiriman dan pekerjaan operasional tenant."
-        eyebrow="Operasional tenant"
+      <PageHeader eyebrow="Operasional tenant"
         focusTargetId={HEADING_ID}
         title="Ringkasan"
       />

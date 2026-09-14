@@ -35,12 +35,12 @@ export function OutletSettingsWorkspace({
   if (!activeOutlet) return null;
 
   return (
-    <section className="grid min-w-0 border-y xl:grid-cols-[15rem_minmax(0,1fr)]">
-      <div className="min-w-0 xl:border-r">
+    <section className="grid min-w-0 gap-6 xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10">
+      <div className="min-w-0">
         <button
           aria-controls="outlet-navigation-list"
           aria-expanded={open}
-          className="flex min-h-11 w-full items-center justify-between gap-3 px-1 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 xl:hidden"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 xl:hidden"
           onClick={() => setOpen((current) => !current)}
           type="button"
         >
@@ -61,10 +61,10 @@ export function OutletSettingsWorkspace({
 
         <nav
           aria-label="Pilih outlet"
-          className={`${open ? "block" : "hidden"} max-h-[50dvh] overflow-y-auto border-t xl:sticky xl:top-4 xl:block xl:max-h-[calc(100dvh-8rem)] xl:border-t-0`}
+          className={`${open ? "block" : "hidden"} mt-2 max-h-[50dvh] overflow-y-auto rounded-md border p-1 xl:sticky xl:top-4 xl:mt-0 xl:block xl:max-h-[calc(100dvh-8rem)] xl:border-0 xl:p-0`}
           id="outlet-navigation-list"
         >
-          <ul className="divide-y">
+          <ul className="space-y-1">
             {outlets.map((outlet) => {
               const active = outlet.id === activeOutlet.id;
               return (
@@ -75,7 +75,7 @@ export function OutletSettingsWorkspace({
                       1280px. */}
                   <Link
                     aria-current={active ? "true" : undefined}
-                    className={`relative flex min-h-11 items-start gap-2 px-3 py-3 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50 ${active ? "bg-accent text-accent-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary" : "hover:bg-muted/60"}`}
+                    className={`flex min-h-11 items-start gap-2 rounded-md px-3 py-2 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50 ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                     href={`/app/pengaturan?outlet=${encodeURIComponent(outlet.id)}#outlet-detail-title`}
                     onClick={() => setOpen(false)}
                   >
@@ -94,7 +94,7 @@ export function OutletSettingsWorkspace({
         </nav>
       </div>
 
-      <div className="min-w-0 border-t px-0 py-6 xl:border-t-0 xl:px-6">
+      <div className="min-w-0">
         {children}
       </div>
     </section>

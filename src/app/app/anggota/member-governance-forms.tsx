@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { ChevronDown, UserPlus } from "lucide-react";
 
 import { changeMemberRoleAction, deactivateMemberAction, inviteMemberAction, type MemberActionState } from "@/app/app/anggota/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,11 +28,12 @@ function ActionMessage({ resultRef, state }: { resultRef: React.RefObject<HTMLDi
 export function InviteMemberHeaderAction() {
   return (
     <Button
+      className="min-h-11 md:min-h-8"
       onClick={() => {
-        const summary = document.getElementById("invite-member-title");
-        const disclosure = summary?.closest("details");
-        if (disclosure) disclosure.open = true;
-        summary?.scrollIntoView({ behavior: "smooth", block: "center" });
+        // The invite form is an always-visible settings section: bring its heading into
+        // view, then move keyboard focus to the first field so the action is not scroll-only.
+        document.getElementById("invite-member-title")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("member-invite-email")?.focus({ preventScroll: true });
       }}
       type="button"
       variant="outline"
@@ -79,7 +80,7 @@ export function InviteMemberForm({ attemptId }: { attemptId: string }) {
           </Field>
         </FieldGroup>
       </FieldSet>
-      <div className="flex justify-end border-t pt-4"><Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Memproses undangan…" : "Undang anggota"}</Button></div>
+      <div className="flex justify-end"><Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Memproses undangan…" : "Undang anggota"}</Button></div>
       <ActionMessage resultRef={resultRef} state={state} />
     </form>
   );
@@ -147,14 +148,14 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
   }
 
   return (
-    <Collapsible className="rounded-lg border bg-muted/20" onOpenChange={setExpanded} open={expanded}>
+    <Collapsible className="grid gap-3" onOpenChange={setExpanded} open={expanded}>
       <CollapsibleTrigger asChild>
-        <Button className="group min-h-11 w-full justify-between rounded-lg px-4 text-sm font-medium" type="button" variant="ghost">
+        <Button className="group min-h-11 justify-between max-sm:w-full sm:w-fit md:min-h-8" size="sm" type="button" variant="outline">
           Kelola akses
-          <span aria-hidden="true" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180">⌄</span>
+          <ChevronDown aria-hidden="true" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="grid gap-5 border-t p-4 lg:grid-cols-2">
+      <CollapsibleContent className="grid gap-5 rounded-md border bg-muted/30 p-4 lg:grid-cols-2">
         <form action={roleAction} aria-busy={rolePending} className="grid content-start gap-4" id={roleFormId} noValidate>
           <input name="attemptId" type="hidden" value={roleState.nextAttemptId ?? roleAttemptId} />
           <input name="membershipId" type="hidden" value={membershipId} />

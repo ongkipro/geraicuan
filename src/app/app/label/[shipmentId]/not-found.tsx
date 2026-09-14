@@ -15,7 +15,7 @@ export default function LabelNotFound() {
   useFocusTargetOnMount(HEADING_ID);
   return (
     <PageContainer>
-      <PageHeader description="Kiriman mungkin tidak tersedia atau bukan milik tenant aktif." eyebrow="Label kiriman" focusTargetId={HEADING_ID} title="Label tidak ditemukan" />
+      <PageHeader description="Kiriman mungkin tidak tersedia atau bukan milik tenant aktif." eyebrow="Label 100 × 150 mm" focusTargetId={HEADING_ID} title="Label tidak ditemukan" />
       <EmptyState
         action={<div className="flex flex-col gap-2 sm:flex-row"><Button asChild className="min-h-11"><Link href="/app/label">Buka daftar label</Link></Button><Button asChild className="min-h-11" variant="outline"><Link href="/app/pengiriman">Buka daftar kiriman</Link></Button></div>}
         description="Pilih kiriman yang masih tersedia tanpa mengubah riwayat cetak."

@@ -135,6 +135,19 @@ describe("contact route render contracts", () => {
     expect(populated).not.toContain("081234567890");
     expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru"/);
 
+    // The status filter exposes its selection programmatically, not by button
+    // variant alone: exactly one link is current, and it is the requested one.
+    const statusNav = (html: string) => html.match(/<nav[^>]*aria-label="Status kontak"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? "";
+    for (const [requested, href] of [[undefined, "/app/kontak?status=active"], ["archived", "/app/kontak?status=archived"]] as const) {
+      const nav = statusNav(requested === undefined ? populated : await renderDirectory(requested));
+      const current = nav.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? [];
+      expect(current, String(requested)).toHaveLength(1);
+      expect(current[0]).toContain(`href="${href}"`);
+      expect(nav).not.toContain('aria-current="page"');
+      expect(nav.match(/<svg/g) ?? [], "check glyph only on the selected link").toHaveLength(1);
+      expect(nav.match(/<a[^>]*class="[^"]*min-h-11/g) ?? []).toHaveLength(2);
+    }
+
     const invalid = await renderDirectory("unknown");
     expect(invalid).toContain("Filter status disesuaikan");
     expect(invalid).toContain("Status tidak dikenali; kontak aktif ditampilkan.");
@@ -161,7 +174,7 @@ describe("contact route render contracts", () => {
     const selected = await renderDetail({ alamat: ADDRESS_ID });
     expect(selected).toContain('id="alamat-edit"');
     expect(selected).toContain("Edit Rumah");
-    expect(selected).toContain("snapshot lama");
+    expect(selected).toContain("Data pada kiriman sebelumnya tetap tersimpan.");
 
     const confirmation = await renderDetail({ arsipkan: "1" });
     expect(confirmation).toContain('id="arsip-kontak"');

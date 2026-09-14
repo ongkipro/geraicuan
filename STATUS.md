@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-11
+Updated: 2026-09-14
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -30,6 +30,23 @@ covers the whole worktree and further Phase 10 tasks will change it again.
 security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
 
+## Current continuation — T-126 onward (2026-09-14)
+
+Authoritative execution worktree: `/home/ongki/Projects/geraicuan-completion`,
+branch `feat/phase14-completion`, base `3e3ebf6`. T-126 closes T-118–T-125 through successor
+`RUN-20260914T105602Z-2d584dc6`; T-127 closes the long-AWB queue defect; T-128 closes the missing form/Select regression guards; T-129 closes the batch reference collision; T-130 restores named native confirmation validation; T-131 reconciles the residual Phase12 queue; T-134 visual parity passes with final browser/source/build evidence; T-133 integrates the source and history into this branch. The original T-88 run is closed FAIL for incomplete verification, while its residual feature task remains open. Both original worktrees preserve their code; all15missing histories are retained byte-for-byte in completion.
+
+After a machine/runtime restart, the task-owned audit database on 55450 and
+preview on `http://localhost:3127` were resumed. Fresh static checks and live
+browser-probe mutation tests pass. Browser findings distinguished valid separate
+pagination/current sets and scalar KPI labels from genuine audit defects; the
+corrected probe now tests these explicitly. The final route sweep covers all 66 route/viewport pairs. Fresh integration
+verification passed all 655 tests in 82 files, and the production build exited 0.
+See the latest T-126 BUILD-LOG entry for findings and independent review limits.
+
+T-127 resolved long AWBs. T-129 resolved batch reference collisions. T-131 reconciled design prose; T-134 resolved Admin/Super Admin count summaries, filters, table headers and card alignment. Latest full integration passes83files; production build passes. Final browser parity covers18observations with487actual focus probes, plus nine role observations and scoped filter flows. T-126–T-131, T-133 and T-134 are complete. T-132 is the sole remaining task in this authorized follow-up scope: it requires an explicit replacement palette decision. Current neutral identity is retained consistently across Admin/Super Admin. Resume with that decision, designer review, token contrast tests and the requested three-width sweep; do not infer approval from elapsed time.
+Visual parity has independent bounded acceptance; generic loading geometry and native-key delivery limits remain explicit in BUILD-LOG. No deployment readiness, commit or push is claimed.
+
 ## Delivery state machine
 
 Allowed forward path:
@@ -43,6 +60,69 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 `OBSERVABILITY.md` owns post-deploy verification probes. After deployment, transition to `SMOKE_TESTING` and run `release-check`. Every configured observability probe must pass before transition to `VERIFIED`.
 
 ## Current state
+
+**2026-09-14 — T-116 shell recomposed on the shadcn-admin pattern.** Tenant and platform share one inset Sidebar with brand header, grouped icon navigation, and a footer account menu; verified at desktop, tablet, and mobile including sign-out. T-117 closed the analytics filter client-bundle regression. Next: black-and-white tokens, dashboard, data table, and settings patterns. See BUILD-LOG.
+
+
+**2026-09-14 — T-115 complete; focused render suites green.** Inherited T-113 render failures are resolved: RTS queue composition matches Kiriman, page eyebrows are restored on tenant and platform pages, and loading/error headers mirror their pages under an AST guard. Next: T-116 shell recomposition on the `satnaing/shadcn-admin` pattern. See BUILD-LOG.
+
+
+**2026-09-14 — T-114 Ringkasan polish complete; inherited render failures remain.**
+Every shipment now has a distinguishable reference from one shared helper, and
+Ringkasan's chart header, KPI alignment, freshness row, and mobile recent list
+are tidied. Browser-verified at 1440/768/390 on port 3125; independent review
+PASS. Six focused render tests still fail on T-113 container/copy/Card
+assertions outside this change. See BUILD-LOG.
+
+
+**2026-09-14 — T-113 admin recomposition implemented; contrast gate remains FAIL.**
+Shared shadcn shell, typography, filter toolbars, KPI hierarchy, analytics order,
+tables, forms, details, and settings now use the accepted composition across
+19 internal routes. The seven-day line comparison and exact T-112 palette remain.
+Real Chromium screening covered 57 route/viewport pairs with no document overflow;
+24 role/state checks and six filter checks passed separately on localhost.
+TypeScript, targeted lint, and 57 focused tests passed. Independent source and
+visual reviews accepted the presentation; three existing palette contrast tests
+still fail. This is not whole-site accessibility or complete Phase 12 acceptance.
+Evidence, HMR investigation, and final task boundary: BUILD-LOG and ledger
+`RUN-20260914T011345Z-79fc2fb6`. Preview: `http://100.127.67.86:3125/app?demo=grafik`.
+
+**2026-09-14 — T-112 exact palette applied; contrast gate FAIL.**
+The user's complete light/dark tokens now replace T-111 substitutions. Light
+remains the default, with class-based dark CSS available and no toggle added.
+Existing contrast checks retain three failures (destructive tint, muted text,
+focus ring); they were not weakened to bless the requested values. See BUILD-LOG.
+
+**2026-09-14 — T-111 preset and page audit verified in `feat/tokophi-blue-ui`.**
+Requested shadcn preset `b1Ymqvgky` is applied with Inter and blue tokens,
+retaining accessible contrast and application-specific component behavior.
+Ringkasan defaults to seven days with the previous seven-day line comparison;
+`/app?demo=grafik` previews explicitly labelled development-only chart samples.
+The order is summary → trend → current work → recent shipments. All 22 routes
+were screened at three widths; the one table accessibility finding was fixed
+and passed the targeted recheck. Final browser checks: 24 scenarios; focused
+tests: 62 passed. Separate source and visual review passed. Development preview:
+`http://100.127.67.86:3125`. This does not complete the remaining Phase 12 tasks.
+Details and verification limits are recorded in BUILD-LOG.
+
+**2026-09-13 — T-110 blue UI refinement verified in `feat/tokophi-blue-ui`.**
+Shared blue/white presentation, mobile role visibility, tenant summary/work/trend
+order, and flatter analytics metric groups are implemented in the isolated
+`geraicuan-blue-ui` worktree. TypeScript, targeted lint, 23 tests, 66 route/viewport
+checks, and 24 targeted role/state/viewport checks pass. Native CDP keyboard
+arrival and rendered hover have explicit harness limitations in BUILD-LOG.
+The original worktree's T-88 run and inherited Phase 12 changes were preserved.
+This is a presentation increment, not completion of T-94/T-98/T-100 or Phase 12;
+metric dependencies and net-margin decision M-5 D-3 remain open. No commit,
+push, deployment, or release-readiness change was made.
+
+**2026-09-13 — Phase 12 accepted and queued; no code changed yet.** Spec 10
+gained CMS page patterns, spec 19 defines every CMS metric and registers its
+drift against code, and `TASKS.md` Phase 12 (T-87 through T-108) owns the repairs and
+pattern adoption on branch `feat/phase-12-admin-patterns`. T-87 is complete
+except D-3 (net margin), which awaits an explicit product-owner decision and
+blocks only T-91. Next dependency-ready task: T-88.
+
 
 **2026-09-09 — Phase 10 screening is in progress and the release candidate is
 no longer clean.** T-76's full-codebase screening opened the Phase 9 commit

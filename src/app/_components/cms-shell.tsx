@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, PanelLeft, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { ChevronsUpDown } from "lucide-react";
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { CmsNavigation } from "@/app/_components/cms-navigation";
@@ -9,7 +9,6 @@ import { SignOutControl, type LoginDestination } from "@/app/_components/sign-ou
 import { SkipLink } from "@/app/_components/skip-link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,20 +16,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { TenantCmsRole } from "@/lib/cms-shell-navigation";
 
@@ -46,11 +41,14 @@ type CmsShellProps = {
   | { scope: "platform" }
 );
 
+// UX-3: tablet widths start as the icon rail; desktop starts expanded. Mobile
+// widths use the Sidebar's own Sheet regardless of this state.
+const TABLET_QUERY = "(min-width: 768px) and (max-width: 1023px)";
+
 export function CmsShell(props: CmsShellProps) {
   const signOutDestinationRef = useRef<LoginDestination | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [navigationOpen, setNavigationOpen] = useState(false);
 
   useEffect(() => {
     function revalidateRestoredSession(event: PageTransitionEvent) {
@@ -66,25 +64,13 @@ export function CmsShell(props: CmsShellProps) {
     };
   }, []);
 
-  const navigation = (presentation: "rail" | "sheet" | "sidebar") =>
-    props.scope === "tenant" ? (
-      <CmsNavigation
-        onNavigate={
-          presentation === "sheet" ? () => setNavigationOpen(false) : undefined
-        }
-        presentation={presentation}
-        role={props.navigationRole}
-        scope="tenant"
-      />
-    ) : (
-      <CmsNavigation
-        onNavigate={
-          presentation === "sheet" ? () => setNavigationOpen(false) : undefined
-        }
-        presentation={presentation}
-        scope="platform"
-      />
-    );
+  useEffect(() => {
+    const tablet = window.matchMedia(TABLET_QUERY);
+    const applyWidth = () => setSidebarOpen(!tablet.matches);
+    applyWidth();
+    tablet.addEventListener("change", applyWidth);
+    return () => tablet.removeEventListener("change", applyWidth);
+  }, []);
 
   return (
     <TooltipProvider>
@@ -92,131 +78,134 @@ export function CmsShell(props: CmsShellProps) {
         <SkipLink className="cms-skip-link" targetId="konten-utama">
           Lewati ke konten utama
         </SkipLink>
-        <div className="hidden lg:flex">{navigation("sidebar")}</div>
-        <div className="hidden md:flex lg:hidden">{navigation("rail")}</div>
-        <SidebarInset
-          className="min-w-0 bg-background"
-          id="konten-utama"
-          tabIndex={-1}
-        >
-          <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b bg-background px-3 md:px-4">
-            <div className="flex min-w-0 items-center gap-2">
-              <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
-                <SheetTrigger asChild>
-                  <Button
-                    aria-label="Buka navigasi"
-                    className="h-11 gap-2 px-3 md:hidden"
-                    variant="ghost"
-                  >
-                    <PanelLeft aria-hidden="true" />
-                    <span>Menu</span>
-                  </Button>
-                </SheetTrigger>
-                <SheetContent
-                  className="w-72! max-w-[88vw]! gap-0 p-0 sm:max-w-72!"
-                  showCloseButton={false}
-                  side="left"
-                >
-                  <SheetHeader className="sr-only">
-                    <SheetTitle>Navigasi GeraiCUAN</SheetTitle>
-                    <SheetDescription>Pilih halaman CMS yang ingin dibuka.</SheetDescription>
-                  </SheetHeader>
-                  <SheetClose asChild>
-                    <Button
-                      aria-label="Tutup navigasi"
-                      className="absolute right-2 top-1.5 z-10 size-11"
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <X aria-hidden="true" />
-                    </Button>
-                  </SheetClose>
-                  {navigation("sheet")}
-                </SheetContent>
-              </Sheet>
-              <SidebarTrigger
-                aria-label="Buka atau tutup navigasi"
-                className="hidden size-11 lg:inline-flex"
-              />
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <strong className="truncate text-sm font-medium">{props.scopeTitle}</strong>
-                  <Badge className="hidden sm:inline-flex" variant="secondary">
-                    {props.roleLabel}
-                  </Badge>
-                </div>
-                <p className="hidden truncate text-xs text-muted-foreground lg:block">
-                  {props.scopeDescription}
-                </p>
-              </div>
+        {props.scope === "tenant" ? (
+          <CmsNavigation
+            account={<AccountMenu accountOpen={accountOpen} props={props} setAccountOpen={setAccountOpen} signOutDestinationRef={signOutDestinationRef} />}
+            role={props.navigationRole}
+            roleLabel={props.roleLabel}
+            scope="tenant"
+            scopeTitle={props.scopeTitle}
+          />
+        ) : (
+          <CmsNavigation
+            account={<AccountMenu accountOpen={accountOpen} props={props} setAccountOpen={setAccountOpen} signOutDestinationRef={signOutDestinationRef} />}
+            roleLabel={props.roleLabel}
+            scope="platform"
+            scopeTitle={props.scopeTitle}
+          />
+        )}
+        <SidebarInset className="min-w-0" id="konten-utama" tabIndex={-1}>
+          {/* shadcn-admin Header: trigger, separator, then page context. */}
+          <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background px-4 md:rounded-t-xl">
+            <SidebarTrigger
+              aria-label="Buka atau tutup navigasi"
+              className="size-11 md:size-8"
+              variant="outline"
+            />
+            <Separator className="h-6!" orientation="vertical" />
+            <div className="flex min-w-0 flex-col">
+              <span className="flex min-w-0 items-center gap-2">
+                <strong className="truncate text-sm font-medium">{props.scopeTitle}</strong>
+                <Badge variant="secondary">{props.roleLabel}</Badge>
+              </span>
+              <span className="hidden truncate text-xs text-muted-foreground sm:block">
+                {props.scopeDescription}
+              </span>
             </div>
-
-            <DropdownMenu onOpenChange={setAccountOpen} open={accountOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  className="min-h-11 gap-2 px-2"
-                  onPointerDown={(event) => {
-                    if (event.button !== 0 || event.ctrlKey) return;
-                    event.preventDefault();
-                    setAccountOpen((open) => !open);
-                  }}
-                  type="button"
-                  variant="ghost"
-                >
-                  <Avatar size="sm">
-                    <AvatarFallback>{props.account.initials}</AvatarFallback>
-                  </Avatar>
-                  <span className="hidden max-w-40 truncate text-sm sm:inline">
-                    {props.account.label}
-                  </span>
-                  <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-64"
-                onCloseAutoFocus={(event) => {
-                  const destination = signOutDestinationRef.current;
-                  if (!destination) return;
-
-                  event.preventDefault();
-                  signOutDestinationRef.current = null;
-                  window.requestAnimationFrame(() => {
-                    window.location.replace(destination);
-                  });
-                }}
-              >
-                <DropdownMenuLabel className="grid gap-0.5 px-2 py-2">
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {props.account.label}
-                  </span>
-                  {props.account.secondary ? (
-                    <span className="truncate text-xs font-normal text-muted-foreground">
-                      {props.account.secondary}
-                    </span>
-                  ) : null}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {props.roleLabel}
-                  </span>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="p-1">
-                  <SignOutControl
-                    destination={props.destination}
-                    onSignedOut={(destination) => {
-                      signOutDestinationRef.current = destination;
-                      setAccountOpen(false);
-                    }}
-                  />
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </header>
-          <div className="cms-main min-w-0 max-w-screen-2xl self-center px-4 py-6 md:px-6 lg:px-8">
+          <div className="cms-main min-w-0 self-center">
             {props.children}
           </div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+  );
+}
+
+// shadcn-admin NavUser: the account lives in the sidebar footer. It reads the
+// Sidebar context, so it renders inside SidebarProvider; on mobile the menu
+// opens below the trigger or it would open past the Sheet's edge.
+function AccountMenu({
+  accountOpen,
+  props,
+  setAccountOpen,
+  signOutDestinationRef,
+}: {
+  accountOpen: boolean;
+  props: CmsShellProps;
+  setAccountOpen: Dispatch<SetStateAction<boolean>>;
+  signOutDestinationRef: RefObject<LoginDestination | null>;
+}) {
+  const { isMobile } = useSidebar();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu onOpenChange={setAccountOpen} open={accountOpen}>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              onPointerDown={(event) => {
+                if (event.button !== 0 || event.ctrlKey) return;
+                event.preventDefault();
+                setAccountOpen((open) => !open);
+              }}
+              size="lg"
+              type="button"
+            >
+              <Avatar className="size-8 rounded-lg">
+                <AvatarFallback className="rounded-lg">{props.account.initials}</AvatarFallback>
+              </Avatar>
+              <span className="grid flex-1 text-start text-sm leading-tight">
+                <span className="truncate font-semibold">{props.account.label}</span>
+                {props.account.secondary ? (
+                  <span className="truncate text-xs">{props.account.secondary}</span>
+                ) : null}
+              </span>
+              <ChevronsUpDown aria-hidden="true" className="ms-auto size-4" />
+            </SidebarMenuButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            onCloseAutoFocus={(event) => {
+              const destination = signOutDestinationRef.current;
+              if (!destination) return;
+
+              event.preventDefault();
+              signOutDestinationRef.current = null;
+              window.requestAnimationFrame(() => {
+                window.location.replace(destination);
+              });
+            }}
+            side={isMobile ? "bottom" : "right"}
+            sideOffset={4}
+          >
+            <DropdownMenuLabel className="grid gap-0.5 px-2 py-2">
+              <span className="truncate text-sm font-medium text-foreground">
+                {props.account.label}
+              </span>
+              {props.account.secondary ? (
+                <span className="truncate text-xs font-normal text-muted-foreground">
+                  {props.account.secondary}
+                </span>
+              ) : null}
+              <span className="text-xs font-normal text-muted-foreground">
+                {props.roleLabel}
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="p-1">
+              <SignOutControl
+                destination={props.destination}
+                onSignedOut={(destination) => {
+                  signOutDestinationRef.current = destination;
+                  setAccountOpen(false);
+                }}
+              />
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }

@@ -18,7 +18,7 @@ type ShipmentTrendPoint = {
 };
 
 const chartConfig = {
-  createdCount: { color: "var(--chart-1)", label: "Kiriman dibuat" },
+  createdCount: { color: "var(--chart-4)", label: "Kiriman dibuat" },
   issuedCount: { color: "var(--chart-2)", label: "Resi terbit" },
 } satisfies ChartConfig;
 
@@ -31,7 +31,7 @@ export function ShipmentTrendChart({
 }) {
   return (
     <figure className="space-y-3">
-      <ChartContainer className="min-h-72 w-full" config={chartConfig}>
+      <ChartContainer className="h-72 w-full" config={chartConfig}>
         <LineChart
           accessibilityLayer
           data={data}
@@ -52,6 +52,7 @@ export function ShipmentTrendChart({
             activeDot={{ r: 5 }}
             dataKey="createdCount"
             dot={false}
+            isAnimationActive={false}
             stroke="var(--color-createdCount)"
             strokeWidth={2}
             type="monotone"
@@ -60,6 +61,7 @@ export function ShipmentTrendChart({
             activeDot={{ r: 5 }}
             dataKey="issuedCount"
             dot={false}
+            isAnimationActive={false}
             stroke="var(--color-issuedCount)"
             strokeDasharray="5 4"
             strokeWidth={2}
@@ -67,7 +69,7 @@ export function ShipmentTrendChart({
           />
         </LineChart>
       </ChartContainer>
-      <figcaption className="text-xs leading-5 text-muted-foreground">
+      <figcaption className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Perbandingan kiriman dibuat dan resi terbit per {granularity === "harian" ? "hari" : "bulan"}. Garis putus-putus menandai resi terbit.
       </figcaption>
     </figure>

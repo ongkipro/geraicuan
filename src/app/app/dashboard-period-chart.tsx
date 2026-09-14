@@ -1,6 +1,6 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import {
   ChartContainer,
@@ -12,31 +12,35 @@ import {
 } from "@/components/ui/chart";
 
 type DashboardPeriodChartPoint = {
-  codCount: number;
+  currentCount: number;
   label: string;
-  nonCodCount: number;
+  previousCount: number | null;
+  previousLabel: string;
 };
 
-const chartConfig = {
-  codCount: { color: "var(--chart-1)", label: "COD" },
-  nonCodCount: { color: "var(--chart-2)", label: "Non-COD" },
-} satisfies ChartConfig;
+export function DashboardPeriodChart({ data, sevenDays, compare }: { data: DashboardPeriodChartPoint[]; sevenDays: boolean; compare: boolean }) {
+  const chartConfig = {
+    currentCount: { color: "var(--primary)", label: sevenDays ? "7 hari terakhir" : "Periode dipilih" },
+    previousCount: { color: "var(--muted-foreground)", label: sevenDays ? "7 hari sebelumnya" : "Periode sebelumnya" },
+  } satisfies ChartConfig;
 
-export function DashboardPeriodChart({ data }: { data: DashboardPeriodChartPoint[] }) {
   return (
-    <figure className="space-y-3">
-      <ChartContainer className="min-h-64 w-full" config={chartConfig}>
-        <BarChart accessibilityLayer data={data} margin={{ left: 0, right: 12, top: 12 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis axisLine={false} dataKey="label" minTickGap={24} tickLine={false} tickMargin={8} />
-          <YAxis allowDecimals={false} axisLine={false} tickLine={false} width={32} />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Bar dataKey="codCount" fill="var(--color-codCount)" radius={[3, 3, 0, 0]} stackId="input" />
-          <Bar dataKey="nonCodCount" fill="var(--color-nonCodCount)" radius={[3, 3, 0, 0]} stackId="input" stroke="var(--foreground)" strokeDasharray="3 2" strokeWidth={1} />
-        </BarChart>
-      </ChartContainer>
-      <figcaption className="text-xs leading-5 text-muted-foreground">Jumlah input per hari/bulan. Non-COD memakai outline putus-putus; seluruh angka tersedia pada tabel data.</figcaption>
+    <figure className="flex min-w-0 flex-col gap-3 lg:flex-1">
+      {/* The wrapper owns the size: fixed below lg, growing into the stretched card row from lg. The absolutely positioned plot never feeds its own rendered size back into that height, and aspect-auto + min-w-0 keep it shrinking with its card (clipped ticks at 390/768px). */}
+      <div className="relative h-60 min-w-0 sm:h-72 lg:h-auto lg:min-h-72 lg:flex-1">
+        <ChartContainer className="absolute inset-0 aspect-auto h-full w-full min-w-0" config={chartConfig}>
+          <LineChart accessibilityLayer data={data} margin={{ left: 0, right: 16, top: 12 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis axisLine={false} dataKey="label" interval="preserveStartEnd" minTickGap={8} padding={{ left: 12, right: 12 }} tickFormatter={(label: string) => compare && data.length <= 7 ? label.replace(/ \d{4}$/, "") : label} tickLine={false} tickMargin={8} />
+            <YAxis allowDecimals={false} axisLine={false} domain={[0, "auto"]} tickLine={false} width={32} />
+            <ChartTooltip content={<ChartTooltipContent labelFormatter={(label, payload) => compare ? `${label} · pembanding ${payload[0]?.payload.previousLabel ?? "—"}` : label} />} />
+            <ChartLegend align="left" verticalAlign="top" content={<ChartLegendContent className="justify-start" />} />
+            <Line dataKey="currentCount" dot={{ r: 3 }} isAnimationActive={false} stroke="var(--color-currentCount)" strokeWidth={2.5} type="linear" />
+            {compare ? <Line dataKey="previousCount" dot={{ r: 3 }} isAnimationActive={false} stroke="var(--color-previousCount)" strokeDasharray="5 4" strokeWidth={2} type="linear" /> : null}
+          </LineChart>
+        </ChartContainer>
+      </div>
+      <figcaption className="max-w-2xl text-xs leading-5 text-muted-foreground">{compare ? "Total kiriman dibuat (COD + non-COD), disejajarkan menurut urutan hari. Garis putus-putus menunjukkan periode sebelumnya." : "Total kiriman dibuat (COD + non-COD) per bulan. Pilih rentang maksimal 31 hari untuk membandingkan dua periode."}{sevenDays ? " Data hari ini masih berjalan." : null}</figcaption>
     </figure>
   );
 }

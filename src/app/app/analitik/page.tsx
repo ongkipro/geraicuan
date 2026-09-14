@@ -13,6 +13,8 @@ import {
   AnalyticsShipmentRegion,
   AnalyticsShipmentSkeleton,
   AnalyticsSummaryRegion,
+  AnalyticsFinancialRegion,
+  AnalyticsFinancialSkeleton,
   AnalyticsSummarySkeleton,
   AnalyticsTrendRegion,
   AnalyticsTrendSkeleton,
@@ -212,13 +214,13 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
 
   return (
     <PageContainer width="wide">
-      <PageHeader actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah." eyebrow="Wawasan" focusTargetId="analytics-page-heading" title="Analitik" />
+      <PageHeader eyebrow="Wawasan" description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah." actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} focusTargetId="analytics-page-heading" title="Analitik" />
 
       <AnalyticsFilters key={canonicalQueryString} activeCount={activeCount} options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} />
 
-      <section aria-labelledby="period-context-title" className="flex flex-col gap-2 border-y py-3 text-sm sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-medium text-foreground" id="period-context-title">{decisionContext.periodLabel}</h2><p className="text-muted-foreground">{decisionContext.timezoneLabel} / {decisionContext.presetLabel}. Created memakai waktu pembuatan; issued memakai waktu AWB provider.</p></div><p aria-live="polite" className="text-muted-foreground" id="hasil-analitik" role="status">Dibandingkan dengan <strong className="font-medium text-foreground">{decisionContext.previousPeriodLabel}</strong> / {decisionContext.timezoneLabel}.</p></section>
+      <section aria-labelledby="period-context-title" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm"><div><h2 className="font-medium text-foreground" id="period-context-title">{decisionContext.periodLabel}</h2><p className="max-w-2xl text-muted-foreground">{decisionContext.timezoneLabel} · {decisionContext.presetLabel}. Kiriman dibuat memakai waktu pembuatan; resi terbit memakai waktu AWB provider.</p></div><p aria-live="polite" className="text-muted-foreground" id="hasil-analitik" role="status">Dibanding <strong className="font-medium text-foreground">{decisionContext.previousPeriodLabel}</strong> / {decisionContext.timezoneLabel}.</p></section>
 
-      {chips.length > 0 ? <section aria-label="Filter aktif" className="flex flex-wrap items-center gap-2"><Badge variant="secondary">Filter aktif: {activeCount}</Badge>{chips.map((chip) => <Button asChild className="min-h-11 md:min-h-8" key={chip.label} size="sm" variant="outline"><Link href={chip.href}>{chip.label}<span aria-hidden="true">×</span></Link></Button>)}</section> : null}
+      {chips.length > 0 ? <section aria-label="Filter aktif" className="flex flex-wrap items-center gap-2"><Badge variant="secondary">Filter aktif: {activeCount}</Badge>{chips.map((chip) => <Button asChild className="min-h-11 border-dashed md:min-h-8" key={chip.label} size="sm" variant="outline"><Link href={chip.href}>{chip.label}<span aria-hidden="true">×</span></Link></Button>)}</section> : null}
 
       {parsed.issues.length > 0 ? <Alert variant={parsed.filterRejected ? "destructive" : "default"}><CircleAlert aria-hidden="true" /><AlertTitle>{parsed.filterRejected ? "Filter ditolak" : "Filter disesuaikan"}</AlertTitle><AlertDescription><ul className="list-disc pl-5">{parsed.issues.map((issue, index) => <li key={`${issue}-${index}`}>{tenantAnalyticsIssueMessage(issue)}</li>)}</ul>{parsed.filterRejected ? <div className="mt-3"><Button asChild variant="outline"><Link href="/app/analitik">Kembali ke filter aman</Link></Button></div> : null}</AlertDescription></Alert> : null}
 
@@ -228,9 +230,12 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
         <>
           <span aria-live="polite" className="sr-only">Analitik dimuat per bagian.</span>
           <Suspense fallback={<AnalyticsSummarySkeleton />}><AnalyticsSummaryRegion context={regionContext} promise={reads.summary} /></Suspense>
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-7">
+            <Suspense fallback={<AnalyticsTrendSkeleton />}><AnalyticsTrendRegion context={regionContext} promise={reads.trend} /></Suspense>
+            <Suspense fallback={<AnalyticsCourierSkeleton />}><AnalyticsCourierRegion context={regionContext} promise={reads.courier} /></Suspense>
+          </div>
+          <Suspense fallback={<AnalyticsFinancialSkeleton />}><AnalyticsFinancialRegion promise={reads.summary} /></Suspense>
           <Suspense fallback={<AnalyticsReconciliationSkeleton />}><AnalyticsReconciliationRegion promise={reads.reconciliationVariance} /></Suspense>
-          <Suspense fallback={<AnalyticsTrendSkeleton />}><AnalyticsTrendRegion context={regionContext} promise={reads.trend} /></Suspense>
-          <Suspense fallback={<AnalyticsCourierSkeleton />}><AnalyticsCourierRegion context={regionContext} promise={reads.courier} /></Suspense>
           <Suspense fallback={<AnalyticsShipmentSkeleton />}><AnalyticsShipmentRegion comparisonPromise={reads.comparison} context={regionContext} promise={reads.shipment} requestedPage={requestedPage} /></Suspense>
         </>
       ) : null}

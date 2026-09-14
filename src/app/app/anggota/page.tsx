@@ -6,13 +6,13 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { InviteMemberForm, InviteMemberHeaderAction, MemberControls } from "@/app/app/anggota/member-governance-forms";
-import { DefinitionGrid } from "@/components/cms/detail-section";
 import { EmptyState } from "@/components/cms/empty-state";
+import { administrationNavigation } from "@/app/app/pengaturan/settings-nav";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { ContentSection, SettingsLayout } from "@/components/cms/settings-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { listTenantMembers, type TenantMember } from "@/db/member-governance-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -29,6 +29,7 @@ const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
   timeStyle: "short",
   timeZone: "Asia/Jakarta",
 });
+
 const auditUpdatedAt = new Date("2026-09-01T00:00:00.000Z");
 
 function buildMemberAuditFixture(currentUserId: string, scenario: "members-inactive" | "members-populated" | "members-single-admin"): TenantMember[] {
@@ -110,89 +111,109 @@ export default async function TenantMembersPage() {
   });
 
   return (
-    <PageContainer>
-      <PageHeader
-        actions={<InviteMemberHeaderAction />}
-        description="Tinjau siapa yang memiliki akses, lalu kelola peran atau nonaktifkan keanggotaan bila diperlukan."
-        eyebrow="Pengaturan"
-        title="Anggota & akses"
-      />
+    <PageContainer width="wide">
+      <SettingsLayout
+        currentHref="/app/anggota"
+        header={
+          <PageHeader
+            actions={<InviteMemberHeaderAction />}
+            description="Undang anggota, ubah peran, dan nonaktifkan akses tenant."
+            eyebrow="Pengaturan"
+            title="Anggota & akses"
+          />
+        }
+        items={administrationNavigation}
+        navLabel="Administrasi"
+      >
+        <div className="grid min-w-0 gap-8">
+          {activeAdminCount === 1 ? (
+            <Alert className="lg:max-w-xl">
+              <CircleAlert aria-hidden="true" />
+              <AlertTitle>Hanya satu Tenant Admin aktif</AlertTitle>
+              <AlertDescription>Admin terakhir tidak dapat diturunkan perannya atau dinonaktifkan. Undang Tenant Admin lain terlebih dahulu untuk menjaga akses tenant.</AlertDescription>
+            </Alert>
+          ) : null}
 
-      {activeAdminCount === 1 ? (
-        <Alert>
-          <CircleAlert aria-hidden="true" />
-          <AlertTitle>Hanya satu Tenant Admin aktif</AlertTitle>
-          <AlertDescription>Admin terakhir tidak dapat diturunkan perannya atau dinonaktifkan. Undang Tenant Admin lain terlebih dahulu untuk menjaga akses tenant.</AlertDescription>
-        </Alert>
-      ) : null}
+          <section aria-label="Ringkasan anggota tenant">
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4">
+              {[
+                ["Total anggota", members.length],
+                ["Aktif", activeCount],
+                ["Tenant Admin aktif", activeAdminCount],
+                ["Nonaktif", members.length - activeCount],
+              ].map(([label, value]) => (
+                <div className="grid gap-1 bg-background px-4 py-3" key={label}>
+                  <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                  <dd className="text-2xl font-bold tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
 
-      <section aria-label="Ringkasan anggota tenant">
-        <DefinitionGrid items={[
-          { label: "Total anggota", value: members.length },
-          { label: "Aktif", value: activeCount },
-          { label: "Tenant Admin aktif", value: activeAdminCount },
-          { label: "Nonaktif", value: members.length - activeCount },
-        ]} />
-      </section>
+          {/* The member list is a table-style list, wider than the lg:max-w-xl form cap. */}
+          <ContentSection
+            contentClassName="lg:max-w-none"
+            headingLevel={2}
+            description="Anggota aktif ditampilkan lebih dulu. Buka kontrol hanya pada anggota yang ingin dikelola."
+            id="tenant-members-title"
+            title="Daftar anggota"
+          >
+            {members.length === 0 ? (
+              <EmptyState description="Data anggota tenant belum tersedia. Muat ulang halaman atau hubungi dukungan sebelum mengelola akses." icon={Users} title="Anggota tidak ditemukan" />
+            ) : (
+              <div className="min-w-0 overflow-hidden rounded-md border">
+                <div aria-hidden="true" className="hidden h-10 items-center justify-between gap-4 border-b bg-muted/50 px-4 text-xs font-medium text-muted-foreground sm:flex">
+                  <span>Anggota</span>
+                  <span>Peran &amp; status</span>
+                </div>
+                <ul aria-labelledby="tenant-members-title" className="divide-y">
+                  {orderedMembers.map((member) => {
+                    const isCurrentUser = member.userId === principal.userId;
+                    const isLastActiveAdmin = member.status === "ACTIVE" && member.role === "TENANT_ADMIN" && activeAdminCount === 1;
+                    const roleLabel = member.role === "TENANT_ADMIN" ? "Tenant Admin" : "Operator";
+                    const statusLabel = member.status === "ACTIVE" ? "Aktif" : "Nonaktif";
+                    return (
+                      <li className="grid min-w-0 gap-3 px-4 py-3" key={member.id}>
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <div className="grid min-w-0 gap-0.5">
+                            <p className="text-sm font-medium" id={`member-name-${member.id}`}>{member.name}{isCurrentUser ? " (Anda)" : ""}</p>
+                            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" title={member.email}>{member.email}</p>
+                            <p className="text-xs text-muted-foreground">Diperbarui {updatedAtFormatter.format(member.updatedAt)} WIB</p>
+                          </div>
+                          <div aria-label={`Peran ${roleLabel}; status ${statusLabel}`} className="flex shrink-0 flex-wrap gap-2 sm:justify-end" role="group">
+                            <Badge variant="outline">{roleLabel}</Badge>
+                            <Badge variant={member.status === "ACTIVE" ? "secondary" : "outline"}>{statusLabel}</Badge>
+                            {isLastActiveAdmin ? <Badge variant="destructive">Admin terakhir</Badge> : null}
+                          </div>
+                        </div>
+                        <MemberControls
+                          deactivateAttemptId={randomUUID()}
+                          isCurrentUser={isCurrentUser}
+                          isLastActiveAdmin={isLastActiveAdmin}
+                          membershipId={member.id}
+                          name={member.name}
+                          role={member.role}
+                          roleAttemptId={randomUUID()}
+                          status={member.status}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </ContentSection>
 
-      <section aria-labelledby="tenant-members-title" className="grid gap-4">
-        <div>
-          <h2 className="font-heading text-lg font-medium" id="tenant-members-title">Daftar anggota</h2>
-          <p className="max-w-2xl mt-1 text-sm leading-6 text-muted-foreground">Anggota aktif ditampilkan lebih dulu. Buka kontrol hanya pada anggota yang ingin dikelola.</p>
+          <ContentSection
+            description="Tambahkan akun GeraiCUAN yang sudah aktif."
+            headingLevel={2}
+            id="invite-member-title"
+            title="Undang anggota"
+          >
+            <InviteMemberForm attemptId={randomUUID()} />
+          </ContentSection>
         </div>
-        {members.length === 0 ? (
-          <EmptyState description="Data anggota tenant belum tersedia. Muat ulang halaman atau hubungi dukungan sebelum mengelola akses." icon={Users} title="Anggota tidak ditemukan" />
-        ) : (
-          <ul className="grid gap-3">
-            {orderedMembers.map((member) => {
-              const isCurrentUser = member.userId === principal.userId;
-              const isLastActiveAdmin = member.status === "ACTIVE" && member.role === "TENANT_ADMIN" && activeAdminCount === 1;
-              const roleLabel = member.role === "TENANT_ADMIN" ? "Tenant Admin" : "Operator";
-              const statusLabel = member.status === "ACTIVE" ? "Aktif" : "Nonaktif";
-              return (
-                <li key={member.id}>
-                  <Card className="shadow-none" size="sm">
-                    <CardHeader>
-                      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <CardTitle id={`member-name-${member.id}`}>{member.name}{isCurrentUser ? " (Anda)" : ""}</CardTitle>
-                          <CardDescription className="mt-0.5 [overflow-wrap:anywhere]" title={member.email}>{member.email}</CardDescription>
-                        </div>
-                        <div aria-label={`Peran ${roleLabel}; status ${statusLabel}`} className="flex flex-wrap gap-2">
-                          <Badge variant="outline">{roleLabel}</Badge>
-                          <Badge variant={member.status === "ACTIVE" ? "secondary" : "outline"}>{statusLabel}</Badge>
-                          {isLastActiveAdmin ? <Badge variant="destructive">Admin terakhir</Badge> : null}
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Diperbarui {updatedAtFormatter.format(member.updatedAt)} WIB</p>
-                    </CardHeader>
-                    <CardContent>
-                      <MemberControls
-                        deactivateAttemptId={randomUUID()}
-                        isCurrentUser={isCurrentUser}
-                        isLastActiveAdmin={isLastActiveAdmin}
-                        membershipId={member.id}
-                        name={member.name}
-                        role={member.role}
-                        roleAttemptId={randomUUID()}
-                        status={member.status}
-                      />
-                    </CardContent>
-                  </Card>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <details className="group overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 marker:content-none" id="invite-member-title">
-          <span><span className="block font-heading font-medium">Undang anggota</span><span className="mt-0.5 block text-sm text-muted-foreground">Tambahkan akun GeraiCUAN yang sudah aktif.</span></span>
-          <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
-        </summary>
-        <div className="border-t p-4"><InviteMemberForm attemptId={randomUUID()} /></div>
-      </details>
+      </SettingsLayout>
     </PageContainer>
   );
 }

@@ -127,6 +127,22 @@ Outlet configuration reads pickup options on demand from the resolved Mengantar 
 
 Origin, pickup, contact address, shipment draft, estimate, and provider-order payloads must preserve one validated ID-to-label binding. General destination-area integration remains a separate implementation slice using the accepted search contract; no canonical kecamatan dataset is introduced.
 
+## TD-17 — Admin presentation adaptation boundary
+
+Design clarification recorded 2026-09-13 for PR-17, PR-25, and PR-26. Adopt the Tokophi composition through existing GeraiCUAN modules; no new application layer, chart framework, schema, API, or deployment boundary is introduced by this design.
+
+| Boundary | Responsibility | Must not cross |
+|---|---|---|
+| Authenticated page and URL parser | Resolve server role, tenant/outlet scope, canonical filters, and permitted destinations | Browser-selected identifiers cannot grant scope |
+| Existing repository read models | Compute spec 19 metrics and supporting rows with the same applicable predicates and authoritative time basis | No presentation-owned financial formula or mixed snapshot/event basis |
+| Server-rendered regions | Compose header, summaries, tables, and independent loading/error recovery | One slow chart must not make all operational work unavailable |
+| Interactive leaves | Render authorised chart series, disclosures, and existing controls through semantic tokens | No raw database/credential access, fabricated sparklines, or client-only source of report scope |
+| Existing actions and CSV handler | Re-authorize mutations/export and apply their existing validation, audit, and output contracts | Tokophi presentation code cannot bypass issuance/recovery gates or alter the ledger |
+
+Traceability: URL and session → validated scope → repository read → metric/table data plus freshness → server region → interactive leaf where needed. A drill-down or export re-enters the server authorization boundary; it does not reuse trusted client totals.
+
+Spec 10 owns colours and composition, UX-12 owns adaptation behavior, spec 19 owns formulas and current drift, and the existing route map owns source locations. T-94/T-98/T-99/T-100/T-101 implement their declared surfaces; metric dependencies stay ahead of presentation. No route or route-owned runtime state is added by this documentation change, so route-map inventory counts remain unchanged. Future implementation must update that map when its maintenance trigger applies.
+
 ## UML Sequence — authenticated shipment issuance
 ```mermaid
 sequenceDiagram

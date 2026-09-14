@@ -19,12 +19,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 function MutationButton({ idle, pending }: { idle: string; pending: string }) {
   const status = useFormStatus();
-  return <Button className="min-h-11 max-sm:w-full" disabled={status.pending} type="submit">{status.pending ? pending : idle}</Button>;
+  return <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={status.pending} type="submit">{status.pending ? pending : idle}</Button>;
 }
 
 function MutationFeedback({ state, targetRef }: { state: ContactAddressState | ContactIdentityState; targetRef: React.RefObject<HTMLDivElement | null> }) {
@@ -50,24 +51,30 @@ export function ContactIdentityForm({ contact }: { contact: { id: string; isReci
   }, [router, state.message, state.success]);
 
   return (
-    <Card className="shadow-none">
-      <CardHeader className="border-b"><CardTitle>Data kontak</CardTitle><CardDescription>Perubahan hanya berlaku untuk draf baru; kiriman yang sudah dibuat tetap memakai snapshot lama.</CardDescription></CardHeader>
+    <Card>
+      <CardHeader><CardTitle>Data kontak</CardTitle><CardDescription>Perubahan berlaku untuk draf baru. Data pada kiriman sebelumnya tetap tersimpan.</CardDescription></CardHeader>
       <CardContent>
         <form action={action} aria-busy={pending} className="grid gap-6" id="form-kontak" noValidate>
           <input name="contactId" type="hidden" value={contact.id} />
           <MutationFeedback state={state} targetRef={feedbackRef} />
           {Object.keys(errors).length > 0 ? <Alert role="alert" variant="destructive"><AlertTitle>Periksa data kontak</AlertTitle><AlertDescription><ul className="list-disc pl-5">{Object.entries(errors).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul></AlertDescription></Alert> : null}
-          <FieldSet><FieldLegend className="sr-only">Data kontak</FieldLegend><FieldGroup>
+          <FieldSet><FieldLegend className="sr-only">Data kontak</FieldLegend><FieldGroup className="grid gap-5 sm:grid-cols-2">
             <Field data-invalid={Boolean(errors.contactName)}><FieldLabel htmlFor="contactName">Nama kontak</FieldLabel><Input aria-describedby={errors.contactName ? "contactName-error" : undefined} aria-invalid={Boolean(errors.contactName)} className="min-h-11" defaultValue={values?.contactName ?? contact.name} id="contactName" maxLength={120} name="contactName" required /><FieldError id="contactName-error">{errors.contactName}</FieldError></Field>
             <Field data-invalid={Boolean(errors.contactPhone)}><FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel><Input aria-describedby={errors.contactPhone ? "contactPhone-error" : undefined} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values?.contactPhone ?? contact.phone} id="contactPhone" name="contactPhone" required type="tel" /><FieldError id="contactPhone-error">{errors.contactPhone}</FieldError></Field>
           </FieldGroup>
           <fieldset aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} className="grid gap-3 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="roles" tabIndex={-1}>
             <legend className="text-sm font-medium">Peran kontak</legend>
-            <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm font-medium"><input className="size-4 accent-primary" defaultChecked={values ? values.roleSender === "on" : contact.isSender} name="roleSender" type="checkbox" />Bisa dipakai sebagai pengirim</label>
-            <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm font-medium"><input className="size-4 accent-primary" defaultChecked={values ? values.roleRecipient === "on" : contact.isRecipient} name="roleRecipient" type="checkbox" />Bisa dipakai sebagai penerima</label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Keyed on the submitted value: a form action resets the form, and
+                  the checkbox resets to the default it mounted with. */}
+              <FieldLabel className="min-h-11 w-full items-center rounded-lg border px-3 py-2" htmlFor="roleSender"><Checkbox defaultChecked={values ? values.roleSender === "on" : contact.isSender} id="roleSender" key={`sender-${values ? values.roleSender ?? "off" : "initial"}`} name="roleSender" />Bisa dipakai sebagai pengirim</FieldLabel>
+              <FieldLabel className="min-h-11 w-full items-center rounded-lg border px-3 py-2" htmlFor="roleRecipient"><Checkbox defaultChecked={values ? values.roleRecipient === "on" : contact.isRecipient} id="roleRecipient" key={`recipient-${values ? values.roleRecipient ?? "off" : "initial"}`} name="roleRecipient" />Bisa dipakai sebagai penerima</FieldLabel>
+            </div>
             <FieldError id="roles-error">{errors.roles}</FieldError>
           </fieldset></FieldSet>
-          <MutationButton idle="Simpan perubahan" pending="Menyimpan…" />
+          <div className="flex justify-end border-t pt-4">
+            <MutationButton idle="Simpan perubahan" pending="Menyimpan…" />
+          </div>
         </form>
       </CardContent>
     </Card>
@@ -118,7 +125,9 @@ export function ContactAddressForm({
           outlets={outlets}
         />
       </FieldGroup></FieldSet>
-      <MutationButton idle={address ? "Simpan perubahan alamat" : "Simpan alamat"} pending="Menyimpan…" />
+      <div className="flex justify-end border-t pt-4">
+        <MutationButton idle={address ? "Simpan perubahan alamat" : "Simpan alamat"} pending="Menyimpan…" />
+      </div>
     </form>
   );
 }

@@ -77,13 +77,14 @@ export class Session {
     }
     return false;
   }
+  // Full-document navigation only; same-document hash changes use evaluate or gotoUntil.
   async goto(url) {
+    const previousDocument = await this.evaluate("performance.timeOrigin");
     await this.send("Page.navigate", { url });
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 250));
-      const ready = await this.evaluate("document.readyState").catch(() => null);
-      const here = await this.evaluate("location.href").catch(() => null);
-      if (ready === "complete" && here && here !== "about:blank") return here;
+      const state = await this.evaluate("({ready:document.readyState,here:location.href,timeOrigin:performance.timeOrigin})").catch(() => null);
+      if (state?.ready === "complete" && state.here !== "about:blank" && state.timeOrigin !== previousDocument) return state.here;
     }
     throw new Error(`navigation to ${url} did not settle`);
   }

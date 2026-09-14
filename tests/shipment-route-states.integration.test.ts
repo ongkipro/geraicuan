@@ -13,6 +13,7 @@ import type { ShipmentStatus } from "@/lib/shipment-queue";
 
 const fixture = vi.hoisted(() => ({
   auditHeader: null as string | null,
+  awb: null as string | null,
   role: "TENANT_ADMIN" as "TENANT_ADMIN" | "OPERATOR",
   batchStatus: null as null | "SUBMISSION_QUEUED" | "SUBMITTING" | "SUBMISSION_UNKNOWN" | "COMPLETED" | "FAILED",
   recoveryStatus: null as null | "PAYMENT_QUEUED" | "PAYING" | "PAYMENT_UNKNOWN" | "COMPLETED",
@@ -73,7 +74,7 @@ vi.mock("@/db/shipment-queue-repository", () => ({
     pageSize: 5,
     rows: [
       {
-        awb: null,
+        awb: fixture.awb,
         createdAt: new Date("2026-09-01T01:00:00.000Z"),
         destinationAreaLabel: "Bandung",
         isCod: true,
@@ -163,6 +164,7 @@ async function renderDetail(id = shipmentId) {
 describe("T-39 shipment queue and lifecycle route states", () => {
   beforeEach(() => {
     fixture.auditHeader = null;
+    fixture.awb = null;
     fixture.role = "TENANT_ADMIN";
     fixture.batchStatus = null;
     fixture.recoveryStatus = null;
@@ -173,6 +175,18 @@ describe("T-39 shipment queue and lifecycle route states", () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
+  it("keeps a full provider-length AWB in a wrapping cell alongside bounded recipient and outlet facts", async () => {
+    fixture.awb = "AWB12345".repeat(5);
+    const html = await renderQueue();
+    const cells = [...html.matchAll(/<td\b[^>]*>[\s\S]*?<\/td>/g)].map(([cell]) => cell);
+    const awb = cells.find(cell => cell.includes(fixture.awb!));
+    expect(awb).toContain("max-w-40");
+    expect(awb).toContain("whitespace-normal");
+    expect(awb).toMatch(new RegExp(`<span[^>]*class="[^"]*break-all[^"]*"[^>]*>${fixture.awb}</span>`));
+    expect(cells.find(cell => cell.includes("Penerima audit"))).toMatch(/class="[^"]*max-w-44[^"]*whitespace-normal/);
+    expect(cells.find(cell => cell.includes("Gerai utama"))).toMatch(/class="[^"]*max-w-44[^"]*whitespace-normal/);
+  });
+
   it("renders a URL-addressable shadcn queue with grouped taxonomy, named local scroll, freshness, and pagination", async () => {
     const html = await renderQueue();
 
@@ -181,9 +195,24 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="Daftar kiriman; geser horizontal untuk melihat seluruh kolom"');
     expect(html).toContain('tabindex="0"');
-    expect(html).toContain("Dihasilkan");
+    expect(html).toContain("Diperbarui");
     expect(html).toContain("page=2");
     expect(html).toContain("Penerima audit");
+
+    // Secondary facts are stacked into six columns so the queue fits a desktop
+    // content width; every value the nine-column table printed is still in it.
+    const headers = [...html.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((match) => match[1]);
+    expect(headers).toEqual([
+      "Referensi", "Status / Pembayaran", "Penerima / Tujuan", "Paket / Outlet", "Layanan / AWB", "Aktivitas terakhir",
+    ]);
+    for (const value of ["Draf", "COD", "Bandung", "Paket audit", "1 kg", "Gerai utama", "—"]) {
+      expect(html, value).toContain(value);
+    }
+    // Below md the toolbar stacks and the status filter spans the row, so it
+    // cannot overlap the freshness control at 390px.
+    expect(html).toMatch(/class="[^"]*max-md:flex-col[^"]*"/);
+    const trigger = html.match(/<button[^>]*id="status-kiriman"[^>]*>/)?.[0] ?? "";
+    expect(trigger).toMatch(/class="(?:[^"]* )?w-full [^"]*md:w-\[13\.5rem\]/);
   });
 
   it("reports invalid filters without losing the safe queue", async () => {
@@ -252,10 +281,10 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     const html = await renderDetail();
 
     expect(html).toContain('id="shipment-detail-heading"');
-    expect(html).toContain("Jejak lifecycle");
+    expect(html).toContain("Riwayat status");
     expect(html).toContain("Status saat ini");
     expect(html).toContain(expected);
-    expect(html).toContain("Dihasilkan");
+    expect(html).toContain("Diperbarui");
   });
 
   it("keeps unpaid recovery absent for Operator", async () => {

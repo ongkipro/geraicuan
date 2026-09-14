@@ -25,6 +25,12 @@ const TENANT = [
 ];
 const PLATFORM = ["/platform", "/platform/tenant", CONCRETE["/platform/tenant/[tenantId]"], "/platform/audit"];
 const PUBLIC = ["/", "/login/tenant", "/login/super-admin"];
+const requestedRoutes = process.env.UI_AUDIT_ROUTES?.split(',');
+if (requestedRoutes?.some(path => ![...TENANT,...PLATFORM,...PUBLIC].includes(path))) throw new Error('Unknown UI_AUDIT_ROUTES path');
+const selected = paths => requestedRoutes ? paths.filter(path => requestedRoutes.includes(path)) : paths;
+const reportName = process.env.UI_AUDIT_REPORT || 'sweep-output';
+if (!/^[a-z0-9-]+$/.test(reportName)) throw new Error('Invalid UI_AUDIT_REPORT');
+
 
 const scenarios = JSON.parse(readFileSync(new URL("scenarios.json", import.meta.url), "utf8"));
 
@@ -62,13 +68,19 @@ async function login(email, path) {
   await s.send("Network.clearBrowserCookies");
   await vp(1280);
   await s.goto(`${ORIGIN}${path}`);
-  await new Promise(r => setTimeout(r, 1600));
+  let hydrated = false;
+  for (let i=0;i<80;i++) {
+    hydrated = await s.evaluate(`(() => {const form=document.querySelector('form');return Boolean(form && Object.keys(form).some(key => key.startsWith('__reactProps$') && typeof form[key]?.onSubmit === 'function'));})()`);
+    if (hydrated) break;
+    await new Promise(r=>setTimeout(r,250));
+  }
+  if (!hydrated) throw new Error('Local login form did not hydrate');
   await s.evaluate(`(() => { const set=(el,v)=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));};
     set(document.querySelector('#email'),'${email}'); set(document.querySelector('#password'),'admin123'); return true;})()`);
   await new Promise(r => setTimeout(r, 300));
   await s.evaluate(`document.querySelector('.auth-submit').click(), true`);
   for (let i = 0; i < 80; i++) { await new Promise(r => setTimeout(r, 250)); if (!(await s.evaluate("location.href")).includes("/login")) break; }
-  if ((await s.evaluate("location.href")).includes("/login")) throw new Error(`login failed: ${email}`);
+  if ((await s.evaluate("location.href")).includes("/login")) throw new Error(`login failed: ${email}: ${await s.evaluate("document.querySelector('#login-error')?.textContent || 'no rendered error'")}`);
 }
 
 // A skeleton on screen *and* the stylesheet applied. Stopping at the first
@@ -108,16 +120,32 @@ async function visit(scope, path, w, scenario = null, state = null) {
     landed = await s.evaluate("location.pathname");
   }
   const probe = JSON.parse(await s.evaluate(PROBE));
+  if (process.env.UI_AUDIT_SCREENSHOTS === "1" && !scenario && w !== 768) {
+    const directory = new URL(".output/pages/", import.meta.url);
+    mkdirSync(directory, { recursive: true });
+    const name = `${path === "/" ? "home" : path.slice(1).replaceAll("/", "-")}-${w}`;
+    await s.evaluate("window.scrollTo(0,0); document.querySelectorAll('*').forEach(el => { if (el.scrollLeft) el.scrollLeft = 0; })");
+    const layout = await s.send("Page.getLayoutMetrics");
+    const { data } = await s.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: w, height: Math.min(layout.cssContentSize.height, 4000), scale: 1 } });
+    writeFileSync(new URL(`${name}.png`, directory), Buffer.from(data, "base64"));
+    const text = await s.evaluate("document.querySelector('main')?.innerText ?? document.body.innerText");
+    writeFileSync(new URL(`${name}.txt`, directory), text);
+  }
   rows.push({ scope, path, w, scenario, state, landed, skeletonSeen, ...probe });
+  mkdirSync(new URL('.output/', import.meta.url), {recursive:true});
+  writeFileSync(new URL(`.output/${reportName}.json`, import.meta.url),JSON.stringify({partial:true,rows},null,2));
+  console.log(`Screened ${path} ${w}px`);
 }
 
 async function sweep(scope, paths) {
   for (const path of paths) for (const w of VIEWPORTS) await visit(scope, path, w);
 }
 
-await sweep("public", PUBLIC);
+await sweep("public", selected(PUBLIC));
+if (selected(TENANT).length) {
 await login("tenant@geraicuan.com", "/login/tenant");
-await sweep("tenant", TENANT);
+await sweep("tenant", selected(TENANT));
+}
 
 // Every declared UI-audit scenario: the empty, loading, error, invalid-query
 // and stale states the task's scope names and the route sweep cannot reach.
@@ -140,15 +168,17 @@ async function sweepStates(scope, routes) {
 }
 if (!process.env.T77_ROUTES_ONLY) await sweepStates("tenant", Object.keys(scenarios).filter(r => !PLATFORM_ROUTES.has(r)));
 
+if (selected(PLATFORM).length) {
 await login("super@geraicuan.com", "/login/super-admin");
-await sweep("platform", PLATFORM);
+await sweep("platform", selected(PLATFORM));
+}
 if (!process.env.T77_ROUTES_ONLY) await sweepStates("platform", Object.keys(scenarios).filter(r => PLATFORM_ROUTES.has(r)));
 await setScenario(null);
 
 mkdirSync(new URL(".output/", import.meta.url), { recursive: true });
-writeFileSync(new URL(".output/sweep-output.json", import.meta.url), JSON.stringify({ rows, stateRows }, null, 2));
+writeFileSync(new URL(`.output/${reportName}.json`, import.meta.url), JSON.stringify({ partial:false, rows, stateRows }, null, 2));
 
-const TIERS = [896, 1024, 1152, 1280]; // form, standard, data, wide
+const TIERS = [896, 1024, 1152, 1280, 1408]; // legacy widths plus T113 form/standard1024, data1280, wide1408
 const GUTTER = { 390: 16, 768: 24, 1280: 32 };
 
 function findings(r, { states = false } = {}) {

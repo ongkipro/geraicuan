@@ -11,6 +11,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Table,
   TableBody,
@@ -80,18 +82,20 @@ export function ShipmentIssuancePanel({
   }, [state]);
 
   return (
-    <section
+    <Card
       aria-busy={pending}
       aria-labelledby="estimasi-heading"
-      className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5"
       id="konfirmasi-penerbitan-awb"
+      role="region"
     >
-      <div>
-        <h2 className="font-medium" id="estimasi-heading">Pilih layanan dan terbitkan AWB</h2>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+      <CardHeader>
+        <CardTitle id="estimasi-heading">Pilih layanan dan terbitkan AWB</CardTitle>
+        <CardDescription className="max-w-2xl leading-6">
           Konfirmasi ini langsung memproses penerbitan satu kali. Periksa layanan dan nilai sebelum melanjutkan.
-        </p>
-      </div>
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="grid gap-5">
 
       {eligibleOptions.length === 0 ? (
         <Alert>
@@ -107,7 +111,7 @@ export function ShipmentIssuancePanel({
           <input name="estimateSnapshotId" type="hidden" value={snapshotId} />
           <fieldset className="grid gap-3" disabled={pending}>
             <legend className="text-sm font-medium">Layanan Mengantar yang tersimpan</legend>
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden rounded-md border">
               <Table
                 containerClassName="focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
                 containerProps={{ "aria-label": "Pilihan estimasi layanan Mengantar", role: "region", tabIndex: 0 }}
@@ -129,7 +133,7 @@ export function ShipmentIssuancePanel({
                     return (
                       <TableRow data-state={selectedId === option.estimateServiceId ? "selected" : undefined} key={option.estimateServiceId}>
                         <TableCell>
-                          <label className="flex min-h-11 min-w-11 items-center justify-center sm:min-h-9" title={`Pilih ${option.providerService}`}>
+                          <label className="flex min-h-11 min-w-11 items-center justify-center md:min-h-9" title={`Pilih ${option.providerService}`}>
                             <input
                               aria-label={`Pilih ${option.providerService}`}
                               className="size-4 accent-primary"
@@ -158,7 +162,7 @@ export function ShipmentIssuancePanel({
           </fieldset>
 
           {selected?.codBreakdown ? (
-            <div aria-label="Rincian nilai penagihan COD" className="overflow-hidden rounded-lg border" role="region">
+            <div aria-label="Rincian nilai penagihan COD" className="overflow-hidden rounded-md border" role="region">
               <Table>
                 <TableCaption className="px-3 text-left">Rincian penagihan ke pelanggan</TableCaption>
                 <TableBody>
@@ -185,13 +189,15 @@ export function ShipmentIssuancePanel({
             </Alert>
           ) : null}
 
-          <label className="flex max-w-2xl items-start gap-3 text-sm leading-6">
-            <input className="relative mt-1 size-4 shrink-0 accent-primary after:absolute after:-inset-3" disabled={!selected || !fixtureEnabled || pending} key={selectedId} name="confirmation" required type="checkbox" value="confirmed" />
-            <span>Saya sudah memeriksa layanan dan nilai di atas, lalu mengonfirmasi penerbitan AWB satu kali.</span>
-          </label>
-          <Button className="min-h-11 w-fit sm:min-h-9" disabled={!selected || !fixtureEnabled || pending} type="submit">
-            {pending ? "Menerbitkan AWB…" : "Konfirmasi dan terbitkan AWB"}
-          </Button>
+          <Field className="max-w-2xl items-start" data-disabled={!selected || !fixtureEnabled || pending} orientation="horizontal">
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selected || !fixtureEnabled || pending} id="issuance-confirmation" key={selectedId} name="confirmation" required value="confirmed" />
+            <FieldLabel className="font-normal leading-6" htmlFor="issuance-confirmation">Saya sudah memeriksa layanan dan nilai di atas, lalu mengonfirmasi penerbitan AWB satu kali.</FieldLabel>
+          </Field>
+          <div className="flex border-t pt-4">
+            <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={!selected || !fixtureEnabled || pending} type="submit">
+              {pending ? "Menerbitkan AWB…" : "Konfirmasi dan terbitkan AWB"}
+            </Button>
+          </div>
         </form>
       )}
 
@@ -207,12 +213,13 @@ export function ShipmentIssuancePanel({
           <ShieldCheck aria-hidden="true" />
           <AlertTitle>AWB {state.issued.awb} sudah tersimpan</AlertTitle>
           <AlertDescription>
-            <Button asChild className="mt-2" size="sm" variant="outline">
+            <Button asChild className="mt-2 min-h-11 max-md:w-full md:min-h-8" size="sm" variant="outline">
               <Link href={state.issued.labelHref}>Buka label 100 × 150 mm <ExternalLink aria-hidden="true" /></Link>
             </Button>
           </AlertDescription>
         </Alert>
       ) : null}
-    </section>
+      </CardContent>
+    </Card>
   );
 }

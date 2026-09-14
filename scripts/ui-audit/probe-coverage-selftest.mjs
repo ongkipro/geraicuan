@@ -26,6 +26,34 @@ await s.goto(`${ORIGIN}/app/pengiriman`);
 await new Promise(r => setTimeout(r, 1200));
 
 const base = JSON.parse(await s.evaluate(PROBE));
+// Independent navigation sets and scalar labels are valid, while duplicate
+// current items within one set and missing section headings must still fail.
+await s.evaluate(`(() => {
+  const main = document.querySelector('main');
+  for (const name of ['one', 'two']) {
+    const nav = document.createElement('nav');
+    nav.id = 'probe-nav-' + name;
+    nav.setAttribute('aria-label', 'Probe pagination ' + name);
+    nav.innerHTML = '<a href="#probe" aria-current="page">Page 1</a>';
+    main.appendChild(nav);
+  }
+  const metric = document.createElement('div');
+  metric.id = 'probe-stat'; metric.setAttribute('data-slot', 'card');
+  metric.innerHTML = '<div data-slot="card-title">Probe count</div><div data-slot="stat-value">12</div>';
+  main.appendChild(metric);
+})()`);
+const independent = JSON.parse(await s.evaluate(PROBE));
+if (independent.current !== 1 || independent.titlesNotHeadings.length !== base.titlesNotHeadings.length) {
+  throw new Error('Independent current sets or scalar KPI labels were incorrectly rejected');
+}
+await s.evaluate(`document.querySelector('nav[aria-label="Navigasi tenant"] [aria-current="page"]').removeAttribute('aria-current')`);
+const missing = JSON.parse(await s.evaluate(PROBE));
+if (missing.current !== 0) throw new Error('Pagination masked the missing current CMS destination');
+await s.evaluate(`document.querySelector('nav[aria-label="Navigasi tenant"] a[href="/app/pengiriman"]').setAttribute('aria-current', 'page')`);
+await s.evaluate(`document.querySelector('#probe-nav-one').insertAdjacentHTML('beforeend', '<a href="#other" aria-current="page">Page 2</a>')`);
+const duplicate = JSON.parse(await s.evaluate(PROBE));
+if (duplicate.current !== 2) throw new Error('Duplicate current pages within one navigation set were missed');
+await s.evaluate(`document.querySelectorAll('#probe-nav-one, #probe-nav-two, #probe-stat').forEach(el => el.remove())`);
 console.log("baseline:", JSON.stringify({
   headingSkips: base.headingSkips.length, titlesNotHeadings: base.titlesNotHeadings.length,
   imgNoAlt: base.imgNoAlt, tablistLinks: base.tablistLinks, nestedCards: base.nestedCards,

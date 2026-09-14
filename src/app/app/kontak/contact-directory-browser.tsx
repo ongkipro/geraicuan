@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Plus, Search, X } from "lucide-react";
+import { Check, CircleAlert, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
@@ -44,15 +44,22 @@ export function ContactDirectoryBrowser({
 
   return (
     <div className="grid min-w-0 gap-5">
-      <nav aria-label="Status kontak" className="flex flex-wrap gap-2">
-        <Button asChild className="min-h-11" variant={status === "active" ? "default" : "outline"}><Link href="/app/kontak?status=active">Aktif</Link></Button>
-        <Button asChild className="min-h-11" variant={status === "archived" ? "default" : "outline"}><Link href="/app/kontak?status=archived">Diarsipkan</Link></Button>
+      <nav aria-label="Status kontak" className="flex flex-wrap gap-1 border-b pb-2">
+        {/* The selected filter is announced with aria-current="true" (the shell owns "page") and shown with a check glyph, never by button variant alone. */}
+        {([["active", "Aktif"], ["archived", "Diarsipkan"]] as const).map(([value, label]) => (
+          <Button asChild className="min-h-11" key={value} variant={status === value ? "secondary" : "ghost"}>
+            <Link aria-current={status === value ? "true" : undefined} href={`/app/kontak?status=${value}`}>
+              {status === value ? <Check aria-hidden="true" /> : null}
+              {label}
+            </Link>
+          </Button>
+        ))}
       </nav>
 
-      <form action={action} aria-busy={pending} className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-end" noValidate ref={formRef}>
+      <form action={action} aria-busy={pending} className="flex flex-col gap-3 sm:flex-row sm:items-start" noValidate ref={formRef}>
         <input name="status" type="hidden" value={status} />
-        <label className="grid min-w-0 flex-1 gap-1.5 text-sm font-medium" htmlFor="contact-search">
-          Cari kontak
+        <label className="grid min-w-0 flex-1 gap-1.5 text-sm font-medium [&>input]:mt-0" htmlFor="contact-search">
+          <span className="sr-only">Cari kontak</span>
           <Input aria-describedby={state.error ? "contact-search-error" : "contact-search-help"} aria-invalid={Boolean(state.error)} className="min-h-11" id="contact-search" maxLength={80} name="q" onChange={(event) => setQuery(event.target.value)} placeholder="Nama atau nomor telepon" type="search" value={query} />
           <span className="text-xs font-normal text-muted-foreground" id="contact-search-help">Pencarian dikirim privat dan tidak disimpan di alamat halaman.</span>
         </label>

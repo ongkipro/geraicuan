@@ -15,14 +15,14 @@ const workflow = [
   ["01", "Catat kiriman", "Satuan atau impor massal dalam satu antrean."],
   ["02", "Bandingkan layanan", "Tarif mengikuti akun kurir outlet Anda."],
   ["03", "Terbitkan resi", "AWB berasal langsung dari otoritas penyedia."],
-  ["04", "Cetak dan rekonsiliasi", "Label 100 × 150 mm serta ledger operasional."],
+  ["04", "Cetak dan rekonsiliasi", "Cetak label 100 × 150 mm dan cocokkan catatan transaksi."],
 ] as const;
 
 const capabilities = [
   { icon: PackageCheck, label: "Kiriman satuan dan massal" },
   { icon: Printer, label: "Label dan riwayat cetak" },
   { icon: BookOpenCheck, label: "COD, ledger, dan rekonsiliasi" },
-  { icon: ShieldCheck, label: "Isolasi tenant dan kredensial server-side" },
+  { icon: ShieldCheck, label: "Akses data sesuai bisnis dan peran tim" },
 ] as const;
 
 export default function Home() {
@@ -78,7 +78,7 @@ export default function Home() {
 
         <section className="border-b bg-muted/30" id="cara-kerja">
           <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[.55fr_1fr] lg:px-8 lg:py-20">
-            <div><p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Cara kerja</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">Satu lifecycle yang bisa ditelusuri.</h2></div>
+            <div><p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Cara kerja</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">Dari input kiriman sampai cetak label.</h2></div>
             <ol className="border-t">
               {workflow.map(([number, title, description]) => (
                 <li className="grid grid-cols-[2.5rem_1fr] gap-4 border-b py-5" key={number}>
@@ -94,8 +94,8 @@ export default function Home() {
           <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_.7fr] lg:px-8 lg:py-20">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Yang dikelola</p>
-              <h2 className="mt-2 max-w-xl text-3xl font-semibold tracking-tight">Operasi, data, dan uang tetap berada pada konteks yang benar.</h2>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">Setiap tenant terpisah. Kredensial kurir hanya diselesaikan di server. Pokok COD dicatat sebagai titipan, bukan pendapatan GeraiCUAN.</p>
+              <h2 className="mt-2 max-w-xl text-3xl font-semibold tracking-tight">Kiriman dan pembukuan dalam satu tempat.</h2>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">Data setiap bisnis tersimpan terpisah. Pokok COD dicatat sebagai titipan, bukan pendapatan GeraiCUAN.</p>
             </div>
             <ul className="grid border-t">
               {capabilities.map(({ icon: Icon, label }) => <li className="flex items-center gap-3 border-b py-4 text-sm font-medium" key={label}><Icon aria-hidden="true" className="size-4 text-primary" />{label}</li>)}

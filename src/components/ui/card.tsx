@@ -1,6 +1,5 @@
 import * as React from "react"
-
-import { cn } from "@/lib/utils"
+import { cn } from "cn"
 
 function Card({
   className,
@@ -33,12 +32,6 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-// A section title has to be a heading, or the page has no outline below its
-// h1: browser screening found 33 card titles across the route sweep and 122
-// across the state sweep contributing nothing to the document structure, and
-// `EmptyState`'s h3 landing directly under the page h1 as a skipped level.
-// Tailwind's preflight resets heading margin and size, so the rendered box is
-// unchanged.
 function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
   return (
     <h2

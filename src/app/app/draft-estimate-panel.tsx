@@ -15,6 +15,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -66,7 +67,7 @@ function formatRetrievedAt(value: string) {
 function EstimateButton({ hasSnapshot }: { hasSnapshot: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button className="min-h-11" disabled={pending} type="submit">
+    <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={pending} type="submit">
       <RefreshCw aria-hidden="true" className={pending ? "animate-spin" : undefined} />
       {pending ? "Memuat estimasi…" : hasSnapshot ? "Muat ulang estimasi" : "Muat estimasi"}
     </Button>
@@ -96,18 +97,18 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
     : [];
 
   return (
-    <section aria-busy={false} className="grid gap-5 rounded-lg border bg-card p-4 sm:p-5" id="estimasi-draf">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="font-medium">Estimasi layanan</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+    <Card aria-busy={false} aria-labelledby="estimasi-draf-heading" id="estimasi-draf" role="region">
+      <CardHeader className="gap-4 md:flex md:items-start md:justify-between">
+        <div className="grid gap-1">
+          <CardTitle id="estimasi-draf-heading">Estimasi layanan</CardTitle>
+          <CardDescription className="max-w-2xl leading-6">
             Tarif berasal dari Mengantar untuk detail draf saat ini. Estimasi tidak menjamin penerbitan AWB.
-          </p>
+          </CardDescription>
         </div>
 
       {auditState === "error" ? (
         <Button
-          className="min-h-11"
+          className="min-h-11 max-md:w-full md:min-h-8"
           onClick={() => setAuditRetryComplete(true)}
           type="button"
         >
@@ -117,13 +118,14 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
       ) : state.unconfigured ? (
         null
       ) : (
-        <form action={action}>
+        <form action={action} className="shrink-0">
           <input name="shipmentId" type="hidden" value={draftId} />
           <EstimateButton hasSnapshot={snapshot !== null} />
         </form>
       )}
-      </div>
+      </CardHeader>
 
+      <CardContent className="grid gap-5">
       {state.unconfigured ? (
         <Alert>
           <CircleAlert aria-hidden="true" />
@@ -159,7 +161,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
               390px. `containerProps` puts them on the real one, the way the
               shipment and return queues already do. */}
           <Table
-            containerClassName="rounded-lg border"
+            containerClassName="rounded-md border"
             containerProps={{
               "aria-label": "Daftar estimasi layanan Mengantar",
               role: "region",
@@ -219,6 +221,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
           ) : null}
         </>
       ) : null}
-    </section>
+      </CardContent>
+    </Card>
   );
 }

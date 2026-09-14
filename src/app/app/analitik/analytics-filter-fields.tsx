@@ -1,6 +1,9 @@
+"use client";
+
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { AnalyticsFilterOptions } from "@/db/analytics-repository";
-import { shipmentStatuses } from "@/db/schema";
+import { shipmentStatuses } from "@/lib/domain-enums";
 import type { AnalyticsEventBasis, AnalyticsFilters } from "@/lib/analytics-filters";
 import {
   ANALYTICS_PRESETS,
@@ -19,6 +22,8 @@ export type AnalyticsFilterValues = AnalyticsFilters & {
 };
 
 type AnalyticsFilterFieldsProps = {
+  /** Id of the visible date/paging hint rendered beside the form. */
+  hintId: string;
   options: AnalyticsFilterOptions;
   todayLocalDate: string;
   values: AnalyticsFilterValues;
@@ -28,34 +33,35 @@ const selectClassName =
   "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function AnalyticsFilterFields({
+  hintId,
   options,
   todayLocalDate,
   values,
 }: AnalyticsFilterFieldsProps) {
-  const controlClassName = "h-11 xl:h-8";
-  const fieldClassName = "grid min-w-0 gap-1.5 text-sm font-medium";
+  const controlClassName = "h-11 md:h-9";
+  const fieldClassName = "grid min-w-0 gap-1.5 text-xs font-medium text-foreground";
   const period = (
-    <label className={cn(fieldClassName, "xl:col-span-3")} htmlFor="analytics-rentang">
+    <label className={fieldClassName} htmlFor="analytics-rentang">
       Periode
-      <select className={cn(selectClassName, controlClassName)} defaultValue={values.presetId} id="analytics-rentang" name="rentang">
+      <select className={cn(selectClassName, controlClassName)} defaultValue={values.presetId} id="analytics-rentang" name="rentang" onChange={(event) => { if (event.target.value === "kustom") { const advanced = event.target.form?.querySelector<HTMLDetailsElement>("details[data-advanced]"); if (advanced) advanced.open = true; } }}>
         {ANALYTICS_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
       </select>
     </label>
   );
   const startDate = (
-    <label className={cn(fieldClassName, "xl:col-span-3")} htmlFor="analytics-dari">
+    <label className={fieldClassName} htmlFor="analytics-dari">
       Dari tanggal
-      <Input className={controlClassName} defaultValue={values.startDate} id="analytics-dari" max={todayLocalDate} name="dari" type="date" />
+      <Input aria-describedby={hintId} className={controlClassName} defaultValue={values.startDate} id="analytics-dari" max={todayLocalDate} name="dari" type="date" />
     </label>
   );
   const endDate = (
-    <label className={cn(fieldClassName, "xl:col-span-3")} htmlFor="analytics-sampai">
+    <label className={fieldClassName} htmlFor="analytics-sampai">
       Sampai tanggal
-      <Input className={controlClassName} defaultValue={values.endDate} id="analytics-sampai" max={todayLocalDate} name="sampai" type="date" />
+      <Input aria-describedby={hintId} className={controlClassName} defaultValue={values.endDate} id="analytics-sampai" max={todayLocalDate} name="sampai" type="date" />
     </label>
   );
   const outlet = (
-    <label className={cn(fieldClassName, "xl:col-span-3")} htmlFor="analytics-outlet">
+    <label className={fieldClassName} htmlFor="analytics-outlet">
       Outlet
       <select className={cn(selectClassName, controlClassName)} defaultValue={values.outletId ?? ""} id="analytics-outlet" name="outlet">
         <option value="">Semua outlet</option>
@@ -64,7 +70,7 @@ export function AnalyticsFilterFields({
     </label>
   );
   const courier = (
-    <label className={cn(fieldClassName, "xl:col-span-2")} htmlFor="analytics-kurir">
+    <label className={fieldClassName} htmlFor="analytics-kurir">
       Kurir
       <select className={cn(selectClassName, controlClassName)} defaultValue={values.courier ?? ""} id="analytics-kurir" name="kurir">
         <option value="">Semua kurir</option>
@@ -73,16 +79,16 @@ export function AnalyticsFilterFields({
     </label>
   );
   const lifecycle = (
-    <label className={cn(fieldClassName, "xl:col-span-3")} htmlFor="analytics-status">
-      Lifecycle
+    <label className={fieldClassName} htmlFor="analytics-status">
+      Status kiriman
       <select className={cn(selectClassName, controlClassName)} defaultValue={values.lifecycleStatus ?? ""} id="analytics-status" name="status">
-        <option value="">Semua lifecycle</option>
+        <option value="">Semua status</option>
         {shipmentStatuses.map((status) => <option key={status} value={status}>{SHIPMENT_STATUS_PRESENTATION[status].label}</option>)}
       </select>
     </label>
   );
   const timezone = (
-    <label className={cn(fieldClassName, "xl:col-span-3")} htmlFor="analytics-tz">
+    <label className={fieldClassName} htmlFor="analytics-tz">
       Zona waktu
       <select className={cn(selectClassName, controlClassName)} defaultValue={values.timezone} id="analytics-tz" name="tz">
         {ANALYTICS_TIMEZONES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
@@ -90,7 +96,7 @@ export function AnalyticsFilterFields({
     </label>
   );
   const eventBasis = (
-    <label className={cn(fieldClassName, "xl:col-span-4")} htmlFor="analytics-basis">
+    <label className={fieldClassName} htmlFor="analytics-basis">
       Basis tabel & ekspor
       <select className={cn(selectClassName, controlClassName)} defaultValue={values.eventBasis} id="analytics-basis" name="basis">
         <option value="created">Waktu kiriman dibuat</option>
@@ -101,5 +107,11 @@ export function AnalyticsFilterFields({
     </label>
   );
 
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">{period}{startDate}{endDate}{outlet}{courier}{lifecycle}{timezone}{eventBasis}</div>;
+  return <div>
+    <div className="grid grid-cols-2 gap-3">{period}{outlet}</div>
+    <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={values.presetId === "kustom" || Boolean(values.courier || values.lifecycleStatus) || values.timezone !== "Asia/Jakarta" || values.eventBasis !== "created"}>
+      <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Filter lanjutan<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
+      <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-3">{startDate}{endDate}{timezone}{courier}{lifecycle}{eventBasis}</div>
+    </details>
+  </div>;
 }

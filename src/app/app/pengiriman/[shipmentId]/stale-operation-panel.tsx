@@ -7,6 +7,7 @@ import {
   type ShipmentStaleOperationActionState,
 } from "@/app/app/pengiriman/[shipmentId]/stale-operation-actions";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const initialState: ShipmentStaleOperationActionState = {};
 
@@ -14,17 +15,21 @@ export function ShipmentStaleOperationPanel({ shipmentId }: { shipmentId: string
   const [state, action, pending] = useActionState(checkStaleShipmentOperation, initialState);
 
   return (
-    <form action={action} className="grid gap-3 rounded-lg border bg-muted/30 p-4" id="periksa-upaya-tersendat">
-      <input name="shipmentId" type="hidden" value={shipmentId} />
-      <div>
-        <h2 className="font-medium">Periksa upaya tersendat</h2>
-        <p className="max-w-2xl mt-1 text-sm leading-6 text-muted-foreground">Pemeriksaan ini hanya mengamankan state lokal yang melewati batas waktu. Tidak ada permintaan baru yang dikirim ke penyedia.</p>
-      </div>
-      <Button className="min-h-11 justify-self-start sm:min-h-9" disabled={pending} type="submit" variant="outline">
-        {pending ? "Memeriksa…" : "Periksa status aman"}
-      </Button>
-      {state.message ? <p aria-live="polite" className="text-sm text-muted-foreground" role="status">{state.message}</p> : null}
-      {state.error ? <p aria-live="assertive" className="text-sm text-destructive" role="alert">{state.error}</p> : null}
-    </form>
+    <Card>
+      <form action={action} className="grid gap-4" id="periksa-upaya-tersendat">
+        <input name="shipmentId" type="hidden" value={shipmentId} />
+        <CardHeader>
+          <CardTitle>Periksa upaya tersendat</CardTitle>
+          <CardDescription className="max-w-2xl leading-6">Pemeriksaan ini hanya mengamankan state lokal yang melewati batas waktu. Tidak ada permintaan baru yang dikirim ke penyedia.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Button className="min-h-11 justify-self-start max-md:w-full md:min-h-8" disabled={pending} type="submit" variant="outline">
+            {pending ? "Memeriksa…" : "Periksa status aman"}
+          </Button>
+          {state.message ? <p aria-live="polite" className="text-sm text-muted-foreground" role="status">{state.message}</p> : null}
+          {state.error ? <p aria-live="assertive" className="text-sm text-destructive" role="alert">{state.error}</p> : null}
+        </CardContent>
+      </form>
+    </Card>
   );
 }

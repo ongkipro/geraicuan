@@ -62,6 +62,9 @@ vi.mock("react", async (importOriginal) => {
 });
 
 vi.mock("next/navigation", () => ({
+  // The data-table facet filter is a client component that pushes its option
+  // URL on keyboard selection; server markup only needs the hook to exist.
+  useRouter: vi.fn(() => ({ push: vi.fn() })),
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND");
   }),
@@ -270,6 +273,36 @@ function financeSummary() {
   };
 }
 
+/** Every opening `<a>` tag, so an assertion can require several attributes on one link. */
+function anchors(html: string) {
+  return html.match(/<a\b[^>]*>/g) ?? [];
+}
+
+/** The hidden `<input>` named `name` inside `form`, whatever its attribute order. */
+function hiddenInput(form: string, name: string) {
+  return (form.match(/<input\b[^>]*>/g) ?? [])
+    .find((tag) => tag.includes('type="hidden"') && tag.includes(`name="${name}"`));
+}
+
+/**
+ * Every `<table>` with the region wrapper directly around it. A table counts as
+ * wrapped only when that wrapper is a labelled, keyboard-focusable scroll region.
+ */
+function tableRegions(html: string) {
+  const tables = (html.match(/<table\b/g) ?? []).length;
+  const wrapped = (html.match(/<div\b[^>]*>(?=<table\b)/g) ?? []).filter((tag) =>
+    tag.includes('role="region"') && /aria-labelledby="[^"]+"/.test(tag) && tag.includes('tabindex="0"') && tag.includes("overflow-x-auto"),
+  ).length;
+  return { tables, wrapped };
+}
+
+/** The pagination control named `label`: a link when enabled, a disabled button otherwise. */
+function pageControl(html: string, label: string) {
+  const link = anchors(html).find((tag) => tag.includes(`aria-label="${label}"`));
+  const button = (html.match(/<button\b[^>]*>/g) ?? []).find((tag) => tag.includes(`aria-label="${label}"`));
+  return { button, link };
+}
+
 async function renderOverview(params: Record<string, string | string[] | undefined> = {}) {
   const { MonitoringView } = await import("@/app/platform/_components/monitoring-view");
   return renderToStaticMarkup(await MonitoringView({
@@ -381,6 +414,105 @@ describe("platform monitoring page states", () => {
     expect(lifecycleSource).not.toContain("AlertDialogAction");
     expect(monitoringSource).toContain("Parameter URL tidak dikenal; filter aman tetap digunakan.");
     expect(monitoringSource).not.toContain("Parameter audit tidak dikenal");
+    // The stale-data alert names the freshness threshold it was crossed against.
+    expect(monitoringSource).toContain("Snapshot terakhir melewati batas kesegaran.");
+    // Same phrase as the tenant dashboard disclosure, so both surfaces name the threshold identically.
+    expect(monitoringSource).toContain("Data dianggap perlu diperbarui setelah {DATA_STALE_AFTER_MS/60_000} menit.");
+    expect(monitoringSource).not.toContain("Data dianggap kedaluwarsa setelah");
+    expect(monitoringSource).toContain('import { DATA_STALE_AFTER_MS } from "@/lib/data-freshness";');
+  });
+
+  it("charts the overview trend with three dash-distinct series and keeps the full table collapsed below", async () => {
+    mocks.trend = [
+      { created: 4, failed: 1, issued: 3, key: "2026-08-30", label: "30 Agu 2026", unpaid: 2 },
+      { created: 7, failed: 0, issued: 6, key: "2026-08-31", label: "31 Agu 2026", unpaid: 5 },
+    ];
+
+    const html = await renderOverview();
+    const trendStart = html.indexOf('id="platform-trend-title"');
+    const trend = html.slice(trendStart, html.indexOf("</section>", trendStart));
+
+    expect(trend).toContain("<figure");
+    expect(trend).toContain('data-slot="chart"');
+    // Each series keeps its own stroke pattern, so the legend never relies on colour.
+    for (const [series, pattern] of [["Resi terbit", "6 4"], ["Batch gagal", "2 3"]] as const) {
+      expect(trend, series).toMatch(new RegExp(`stroke-dasharray="${pattern}"[^]*?${series}`));
+    }
+    expect(trend).toContain("Kiriman dibuat");
+    // Series colours come from three distinct chart tokens as well as dashes.
+    for (const token of ["--chart-1", "--chart-2", "--chart-5"]) {
+      expect(trend, token).toContain(`stroke="var(${token})"`);
+    }
+    expect(trend).toContain("Nilai terakhir (31 Agu 2026)");
+    // Chart first, then the complete semantic table inside a native disclosure.
+    expect(trend.indexOf("<figure")).toBeLessThan(trend.indexOf("<details"));
+    expect(trend).toMatch(/<details[^>]*>\s*<summary[^>]*>Lihat tabel data \(2 baris\)<\/summary>[^]*<table[^]*30 Agu 2026[^]*31 Agu 2026[^]*<\/table>[^]*<\/details>/);
+    expect(trend).not.toMatch(/<details[^>]*\bopen\b/);
+  });
+
+  it("gives each tenant-list and audit filter exactly one control and carries facet values through the period form", async () => {
+    mocks.usage = { rows: [tenantUsage()], total: 1 };
+    const tenantHtml = await renderTenantList({ kurir: "JNE", status: "FAILED", tenant: TENANT_ALPHA });
+    const tenantForm = tenantHtml.match(/<form[^>]*method="get"[^>]*>[^]*?<\/form>/)?.[0] ?? "";
+
+    expect(tenantForm).not.toMatch(/<select[^>]*name="(tenant|kurir|status)"/);
+    expect(hiddenInput(tenantForm, "tenant")).toContain('value="10000000-0000-4000-8000-000000000471"');
+    expect(hiddenInput(tenantForm, "kurir")).toContain('value="JNE"');
+    expect(hiddenInput(tenantForm, "status")).toContain('value="FAILED"');
+    expect(tenantForm).toMatch(/<select[^>]*name="rentang"/);
+    expect(tenantForm).toMatch(/<select[^>]*name="tz"/);
+    expect(tenantForm).toMatch(/<input[^>]*name="q"/);
+    expect(tenantHtml).toContain('aria-label="Tenant: Alpha Outlet"');
+    expect(tenantHtml).toContain('aria-label="Kurir: JNE"');
+    expect(tenantHtml).toMatch(/aria-label="Status: [^"]+"/);
+
+    const auditHtml = await renderAudit({ hasil: "SUCCESS", tenant: TENANT_BETA });
+    const auditForm = auditHtml.match(/<form[^>]*method="get"[^>]*>[^]*?<\/form>/)?.[0] ?? "";
+
+    expect(auditForm).not.toMatch(/<select[^>]*name="(tenant|hasil)"/);
+    expect(hiddenInput(auditForm, "tenant")).toContain('value="10000000-0000-4000-8000-000000000472"');
+    expect(hiddenInput(auditForm, "hasil")).toContain('value="SUCCESS"');
+    // Audit has no kurir or status facet, so the form still owns those.
+    expect(auditForm).toMatch(/<select[^>]*name="kurir"/);
+    expect(auditForm).toMatch(/<select[^>]*name="status"/);
+    expect(auditHtml).toContain('aria-label="Hasil: Berhasil"');
+    expect(auditHtml).toContain('aria-label="Tenant: Beta Outlet"');
+
+    // Overview has no facets: the form keeps the tenant select and no hidden copies.
+    const overviewForm = (await renderOverview({ tenant: TENANT_ALPHA })).match(/<form[^>]*method="get"[^>]*>[^]*?<\/form>/)?.[0] ?? "";
+    expect(overviewForm).toMatch(/<select[^>]*name="tenant"/);
+    expect(overviewForm).not.toContain('type="hidden"');
+  });
+
+  it("keeps primary platform filters visible and advanced values in one GET form", async () => {
+    for (const html of await Promise.all([renderOverview(), renderTenantList(), renderTenantDetail(), renderAudit()])) {
+      const form = html.match(/<form[^>]*method="get"[^>]*>[^]*?<\/form>/)?.[0] ?? "";
+      expect(form).toContain('class="cms-filter-bar"');
+      const primary = form.slice(0, form.indexOf("<details"));
+      expect(primary).toMatch(/<select[^>]*name="rentang"/);
+      expect(primary).toMatch(/<select[^>]*name="outlet"/);
+      expect(form).toMatch(/<details[^>]*class="cms-filter-advanced"[^>]*>/);
+      expect(form).not.toMatch(/<details[^>]*\bopen=""/);
+      expect(form.match(/name="rentang"/g)).toHaveLength(1);
+      expect(form.match(/name="outlet"/g)).toHaveLength(1);
+      expect(form).toMatch(/<details[^>]*>[^]*name="dari"[^]*name="sampai"[^]*name="tz"[^]*<\/details>/);
+      expect(form.match(/type="submit"/g)).toHaveLength(1);
+    }
+    const custom = await renderOverview({ rentang: "kustom", dari: "2026-08-01", sampai: "2026-08-30", tz: "Asia/Jayapura" });
+    expect(custom).toMatch(/<details[^>]*class="cms-filter-advanced"[^>]*open=""/);
+  });
+
+  it("opens custom dates from the small platform preset leaf", async () => {
+    const { PlatformPeriodSelect } = await import("@/app/platform/_components/platform-period-select");
+    const advanced = { open: false };
+    const form = { querySelector: vi.fn(() => advanced) };
+    const select = PlatformPeriodSelect({ className: "", presetId: "30-hari" });
+    const change = (value: string) => select.props.onChange({ target: { value, form } });
+    change("7-hari");
+    expect(advanced.open).toBe(false);
+    expect(form.querySelector).not.toHaveBeenCalled();
+    change("kustom");
+    expect(advanced.open).toBe(true);
   });
 
   it("renders the empty overview with filters, local tables, and a global audit receipt", async () => {
@@ -392,8 +524,14 @@ describe("platform monitoring page states", () => {
     expect(html).toContain("Belum ada tenant");
     expect(html).toContain("Provision tenant pertama");
     expect(html).toContain("Belum ada aktivitas audit");
-    expect(html).toContain('role="region"');
-    expect(html).toContain("overflow-x-auto");
+    // An empty period states it once; no chart and no empty table disclosure.
+    expect(html).toContain("Belum ada data tren pada periode ini.");
+    expect(html).not.toContain("Lihat tabel data");
+    expect(html).not.toContain('data-slot="chart"');
+    // Empty sections state their emptiness instead of drawing empty tables;
+    // any table that does render still sits in a labelled scroll region.
+    const emptyOverviewTables = tableRegions(html);
+    expect(emptyOverviewTables.wrapped).toBe(emptyOverviewTables.tables);
     expect(mocks.recordCalls).toEqual([{
       route: "/platform",
       scope: "global",
@@ -453,8 +591,16 @@ describe("platform monitoring page states", () => {
     expect(html).toContain("Tenant Gamma berhasil diprovisikan.");
     expect(html).toContain(`href="/platform/tenant/${TENANT_BETA}"`);
     expect(html).toContain("Halaman 2 dari 3");
-    expect(html).toContain("Sebelumnya");
-    expect(html).toContain("Berikutnya");
+    // Page 2 of 3: both neighbours are live links that keep the search and
+    // change only the page.
+    expect(pageControl(html, "Halaman sebelumnya").link)
+      .toContain('href="/platform/tenant?rentang=30-hari&amp;tz=Asia%2FJakarta&amp;q=Alpha"');
+    expect(pageControl(html, "Halaman berikutnya").link)
+      .toContain('href="/platform/tenant?rentang=30-hari&amp;tz=Asia%2FJakarta&amp;q=Alpha&amp;halaman=3"');
+    expect(anchors(html).find((tag) => tag.includes('aria-current="page"')))
+      .toContain("halaman=2");
+    // The toolbar Reset clears the search but keeps the period.
+    expect(html).toMatch(/<a\b[^>]*href="\/platform\/tenant\?rentang=30-hari&amp;tz=Asia%2FJakarta"[^>]*>Reset/);
     expect(html).toContain(`href="/platform/tenant/${TENANT_ALPHA}?rentang=30-hari&amp;tz=Asia%2FJakarta"`);
     expect(mocks.usageFilters[0]).toMatchObject({
       page: 2,
@@ -484,6 +630,8 @@ describe("platform monitoring page states", () => {
     const html = await renderTenantDetail(TENANT_ALPHA, { kurir: "jne" });
 
     expect(html).toContain("Alpha Outlet");
+    expect(html).toContain("Kondisi operasional dan konfigurasi aman tenant.");
+    expect(html).toContain("Hanya konfigurasi aman yang ditampilkan; nilai kredensial tidak pernah ditampilkan.");
     expect(html.indexOf("Siklus tenant")).toBeLessThan(html.indexOf("Filter &amp; periode"));
     expect(html).toContain("Tangguhkan tenant");
     expect(html).toContain("Ketik persis: Alpha Outlet");
@@ -493,10 +641,29 @@ describe("platform monitoring page states", () => {
     expect(html).toContain("Default platform");
     expect(html).toContain("Batch provider terbaru; identitas akun dianonimkan");
     expect(html).toContain("Akun provider #7");
+    // The batch table fit at 1440 only once raw enums/codes may break and the two
+    // timestamps share one two-line cell; TableCell is nowrap by default.
+    const batchStart = html.indexOf('id="batch-caption"');
+    const batchTable = html.slice(batchStart, html.indexOf("</table>", batchStart));
+    for (const value of ["FAILED", "AUTH_REDACTED"]) {
+      const cell = batchTable.match(new RegExp(`<td[^>]*>${value}</td>`))?.[0];
+      expect(cell, `${value} cell`).toBeDefined();
+      expect(cell).toMatch(/\bwhitespace-normal\b/);
+      expect(cell).toMatch(/\bwrap-anywhere\b/);
+    }
+    // Seven column headers plus the one row header of the single fixture batch.
+    expect(batchTable.match(/<th[\s>]/g) ?? []).toHaveLength(7 + 1);
+    const timeCell = batchTable.match(/<td[^>]*>(?:(?!<\/td>).)*Dicoba(?:(?!<\/td>).)*<\/td>/)?.[0];
+    expect(timeCell, "merged timestamp cell").toBeDefined();
+    expect(timeCell).toContain("Selesai —");
     expect(html).toContain("Ledger dan rekonsiliasi");
     expect(html).toContain("Pokok COD — liabilitas");
-    expect((html.match(/role="region"/g) ?? []).length).toBeGreaterThanOrEqual(5);
-    expect((html.match(/overflow-x-auto/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    // Outlets, provider batches, reconciliation and audit each render a table
+    // (the empty trend states its emptiness instead), and every table sits in
+    // a labelled, focusable scroll region.
+    const detailTables = tableRegions(html);
+    expect(detailTables.tables).toBeGreaterThanOrEqual(4);
+    expect(detailTables.wrapped).toBe(detailTables.tables);
     expect(html).not.toContain(SECRET_SENTINEL);
     expect(html).not.toContain("providerAccountKey");
     expect(html).not.toContain("secretReference");
@@ -535,8 +702,12 @@ describe("platform monitoring page states", () => {
     expect(html).toContain("Ditolak");
     expect(html).toContain("ACTIVE → SUSPENDED");
     expect(html).toContain("Halaman 3 dari 3");
-    expect(html).toContain("Sebelumnya");
-    expect(html).not.toContain("Berikutnya</a>");
+    expect(pageControl(html, "Halaman sebelumnya").link).toContain("halaman=2");
+    // The last page cannot link past itself.
+    expect(pageControl(html, "Halaman berikutnya").link).toBeUndefined();
+    expect(pageControl(html, "Halaman berikutnya").button).toContain("disabled");
+    // The outcome facet reflects the URL filter it was built from.
+    expect(html).toContain('aria-label="Hasil: Ditolak"');
     expect(html).not.toContain(SECRET_SENTINEL);
     expect(html).not.toContain("providerToken");
     expect(mocks.auditFilters[0]).toMatchObject({

@@ -130,7 +130,25 @@ describe("return queue presentation", () => {
   let html = "";
   beforeEach(async () => {
     fixture.auditHeader = null;
+    fixture.page.rows[0].awb = "SANITIZED-CNOTE-0003";
     html = await render();
+  });
+
+  it("wraps full provider-length AWBs, recipients and outlets while keeping Status & Waktu merged", async () => {
+    fixture.page.rows[0].awb = "AWB12345".repeat(5);
+    const markup = await render();
+    const cells = [...markup.matchAll(/<td\b[^>]*>[\s\S]*?<\/td>/g)].map(([cell]) => cell);
+    const awb = cells.find(cell => cell.includes(fixture.page.rows[0].awb!));
+    expect(awb).toContain("max-w-40");
+    expect(awb).toContain("whitespace-normal");
+    expect(awb).toContain("sticky left-0");
+    expect(awb).toContain("bg-card");
+    expect(awb).toMatch(new RegExp(`<a[^>]*class="[^"]*break-all[^"]*"[^>]*>${fixture.page.rows[0].awb}</a>`));
+    for (const value of ["Joko Santoso", "Local Development Outlet"]) {
+      expect(cells.find(cell => cell.includes(value))).toMatch(/class="[^"]*max-w-48[^"]*whitespace-normal/);
+    }
+    expect(markup).toContain("Status &amp; Waktu");
+    expect(markup).not.toContain("Waktu Update</th>");
   });
 
   it("states each filter count once, inside the control that acts on it", async () => {
@@ -171,9 +189,16 @@ describe("return queue presentation", () => {
     expect(html).toMatch(/<nav[^>]*aria-label="Filter status retur"/);
 
     // The shell owns the one truthful current page; a filter on that page is
-    // `aria-current="true"`, and exactly one chip is active.
-    expect(occurrences(html, 'aria-current="page"')).toBe(0);
-    expect(occurrences(html, 'aria-current="true"')).toBe(1);
+    // `aria-current="true"`, and exactly one chip is active. Scoped to the
+    // filter landmark: pagination legitimately marks its current page (and
+    // page size) elsewhere in the document.
+    const filterNav = html.match(/<nav[^>]*aria-label="Filter status retur"[^>]*>[\s\S]*?<\/nav>/)?.[0];
+    expect(filterNav, "filter nav").toBeDefined();
+    expect(occurrences(filterNav!, 'aria-current="page"')).toBe(0);
+    expect(occurrences(filterNav!, 'aria-current="true"')).toBe(1);
+    // Bound to the chip the unfiltered fixture selects, not to any chip.
+    const activeChip = filterNav!.match(/<a[^>]*aria-current="true"[^>]*>/)?.[0];
+    expect(activeChip).toContain('href="/app/pengiriman/rts"');
   });
 
   it("scrolls the wide table inside a labelled, keyboard-reachable region", () => {
@@ -249,14 +274,25 @@ describe("return queue presentation", () => {
     // `href`s, and a check that cannot tell an address from a printed field
     // would fail for the wrong reason and pass for the wrong reason too.
     const printed = [...html.matchAll(/>([^<>]+)</g)].map((match) => match[1].trim());
-    expect(printed.filter((value) => value === "72000009")).toHaveLength(1);
-    expect(printed.filter((value) => /^7200000[0-9]$/.test(value))).toHaveLength(1);
-    expect(html).toMatch(/>72000009<\/a>/);
+    // The AWB-less row prints the shared reference (the id tail); the AWB row
+    // prints no reference at all.
+    expect(printed.filter((value) => value === "00000009")).toHaveLength(1);
+    expect(printed.filter((value) => /^0000000[0-9]$/.test(value))).toHaveLength(1);
+    expect(html).toMatch(/>00000009<\/a>/);
   });
 
   it("keeps the wide table scrollable rather than clipped", () => {
     // `min-w-*` on the table is what makes the container scroll; without it the
     // columns compress instead and the region is decorative.
-    expect(html).toMatch(/<table[^>]*min-w-\[70rem\]/);
+    expect(html).toMatch(/<table[^>]*min-w-\[60rem\]/);
+    // TableCell is nowrap; the clamped note cell must opt back into wrapping
+    // with a ceiling, or its sentence sets the column width and the table
+    // overflows even at 1440.
+    const noteCell = html.match(/<td[^>]*>(?:(?!<\/td>).)*Penerima tidak dapat dihubungi\.(?:(?!<\/td>).)*<\/td>/)?.[0];
+    expect(noteCell, "note cell").toBeDefined();
+    const noteOpening = noteCell!.match(/^<td[^>]*>/)![0];
+    expect(noteOpening).toMatch(/\bwhitespace-normal\b/);
+    expect(noteOpening).toMatch(/\bmax-w-/);
+    expect(noteCell).toMatch(/\bline-clamp-2\b/);
   });
 });

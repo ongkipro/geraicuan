@@ -251,6 +251,15 @@ describe("Finance Server Actions", () => {
     expect(mocks.adjustmentCalls).toEqual([]);
   });
 
+  it("rejects an omitted reversal confirmation before tenant data access", async () => {
+    const form = adjustmentForm();
+    form.delete("confirmation");
+    const { reverseLedgerEntry } = await import("@/app/app/keuangan/actions");
+    expect(await reverseLedgerEntry({}, form)).toMatchObject({ status: "error" });
+    expect(mocks.contextCalls).toBe(0);
+    expect(mocks.adjustmentCalls).toEqual([]);
+  });
+
   it.each([
     ["DAILY", dailyForm, "2026-07-31T17:00:00.000Z", "2026-08-01T17:00:00.000Z"],
     ["MONTHLY", monthlyForm, "2026-07-31T17:00:00.000Z", "2026-08-31T17:00:00.000Z"],

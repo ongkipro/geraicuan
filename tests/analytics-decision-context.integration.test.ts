@@ -60,7 +60,9 @@ vi.mock("@/db/analytics-repository", () => ({
       name: "Outlet keputusan T28",
     }],
   })),
+  // The repository order puts a 5/5 low-volume courier above an 8/10 courier by rate.
   loadCourierPerformance: vi.fn(async () => [
+    { courier: "SAP", issuedCount: 5, resolvedSubmissionCount: 5 },
     { courier: "JNE", issuedCount: 8, resolvedSubmissionCount: 10 },
   ]),
   loadShipmentKpiComparison: vi.fn(async () => ({
@@ -121,6 +123,24 @@ vi.mock("@/db/ledger-repository", () => ({
   }),
 }));
 
+function openingTagWithLabel(html: string, label: string, prefix = false) {
+  const marker = prefix ? `aria-label="${label}` : `aria-label="${label}"`;
+  const index = html.indexOf(marker);
+  expect(index, `missing ${marker}`).toBeGreaterThan(-1);
+  return html.slice(html.lastIndexOf("<", index), html.indexOf(">", index) + 1);
+}
+
+/**
+ * A target is at least 44px below md when a mobile-scoped 44px size applies, or an
+ * unscoped min-h-11 is not undone by a breakpoint narrower than md (sm = 640px).
+ */
+function hasMobileTouchTarget(tag: string) {
+  const classes = (tag.match(/class="([^"]*)"/)?.[1] ?? "").split(/\s+/);
+  if (classes.some((name) => /^max-md:(?:size|min-h|h)-11$/.test(name))) return true;
+  return classes.includes("min-h-11")
+    && !classes.some((name) => /^(?:sm:)(?:min-h|h|size)-/.test(name));
+}
+
 async function renderAnalytics(
   searchParams: Record<string, string | string[] | undefined>,
 ) {
@@ -160,24 +180,55 @@ describe("tenant analytics decision context", () => {
       spanDays: 7,
     });
     expect(html.match(/WIT \(UTC\+09:00\)/g)?.length).toBeGreaterThanOrEqual(4);
-    expect(html).toContain("Dibandingkan dengan <strong");
-    expect(html).toContain("Wawasan");
+    expect(html).toContain("Dibanding <strong");
     expect(html).toContain('id="analytics-page-heading"');
+    // Page/loading/error parity: the "Wawasan" eyebrow sits directly above the page title.
+    const eyebrowIndex = html.indexOf(">Wawasan</p>");
+    expect(eyebrowIndex).toBeGreaterThan(-1);
+    expect(eyebrowIndex).toBeLessThan(html.indexOf('id="analytics-page-heading"'));
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain("↑");
     expect(html).toContain("50% lebih tinggi dari periode sebelumnya.");
-    expect(html).toContain("Net selisih bertanda");
-    expect(html.match(/aria-label="Net selisih bertanda:[^"]+Lihat record pendukung"/g)).toHaveLength(1);
+    expect(html).toContain("Total selisih (+/−)");
+    expect(html.match(/aria-label="Total selisih \(\+\/−\):[^"]+Lihat record pendukung"/g)).toHaveLength(1);
     expect(html.match(/aria-label="Kiriman dibuat:[^"]+Lihat record pendukung"/g)).toHaveLength(1);
-    expect(html).not.toContain(">Net selisih bertanda</a>");
+    expect(html).not.toContain(">Total selisih (+/−)</a>");
     expect(html).not.toContain(">Kiriman dibuat</a>");
-    expect(html).toContain("Data event periode");
+    // Spec 19: snapshot values ignore the period and say so.
+    expect(html).toContain("Tidak mengikuti periode laporan");
+    // The period freshness timestamp states which regions it covers.
+    expect(html).toContain("Waktu pembaruan di atas berlaku untuk ringkasan periode, bukan tren");
     expect(html).toContain("Data tren");
     expect(html).toContain('dateTime="2026-07-07T12:00:00.000Z"');
-    expect(html).toContain("Timestamp ini tidak mewakili tren");
-    expect(html).toContain("Lihat data tren dalam tabel");
-    expect(html).toContain('aria-label="Tabel tren kiriman"');
-    expect(html).not.toContain("<details open=");
+    // Spec 10 Pattern 6 / M-3: on Analitik each chart is followed by its
+    // uncollapsed data table, so no disclosure sits between chart and table.
+    const trendRegion = html.slice(
+      html.indexOf('id="analytics-trend-heading"'),
+      html.indexOf('aria-label="Tabel tren kiriman"'),
+    );
+    expect(trendRegion).toContain("<figure");
+    expect(trendRegion).not.toContain("<details");
+    // The uncollapsed trend table is tall, so the trend card spans the full
+    // lg grid row instead of leaving a blank column beside it.
+    const trendCardSlot = html.lastIndexOf('data-slot="card"', html.indexOf('id="analytics-trend-heading"'));
+    const trendCardTag = html.slice(html.lastIndexOf("<", trendCardSlot), html.indexOf(">", trendCardSlot) + 1);
+    expect(trendCardTag.match(/class="([^"]*)"/)?.[1].split(/\s+/)).toContain("lg:col-span-full");
+    const courierRegion = html.slice(
+      html.indexOf('id="analytics-courier-heading"'),
+      html.indexOf('aria-label="Tabel performa kurir"'),
+    );
+    expect(courierRegion).toContain("<figure");
+    expect(courierRegion).not.toContain("<details");
+    // Spec 19 M-3: a denominator below 10 is marked and never ranks above a
+    // higher-volume courier by rate alone, even when the repository lists it first.
+    const courierTable = html.slice(
+      html.indexOf('aria-label="Tabel performa kurir"'),
+      html.indexOf('id="kiriman-analitik"'),
+    );
+    expect(courierTable).toContain("Volume rendah (n = 5)");
+    expect(courierTable.indexOf(">JNE<")).toBeGreaterThan(-1);
+    expect(courierTable.indexOf(">JNE<")).toBeLessThan(courierTable.indexOf(">SAP<"));
+    expect(courierTable.match(/Volume rendah/g)).toHaveLength(1);
     expect(html).toContain(
       "href=\"/app/keuangan?status=VARIANCE#reconciliation-history-title\"",
     );
@@ -186,7 +237,27 @@ describe("tenant analytics decision context", () => {
       `href="/app/pengiriman/${fixture.shipmentId}"`,
     );
     expect(html).toContain("inline-flex min-h-11 items-center text-primary");
-    expect(html.match(/min-h-11 sm:min-h-8/g)?.length).toBeGreaterThanOrEqual(2);
+    // Server pagination: page 1 of 2 disables backward links and links forward.
+    const pager = html.slice(html.indexOf('aria-label="Navigasi halaman kiriman"'));
+    expect(pager).toMatch(/<button[^>]*aria-label="Halaman sebelumnya"[^>]*disabled/);
+    expect(pager).toMatch(/<a[^>]*aria-current="page"[^>]*aria-label="Halaman 1"/);
+    expect(pager).toMatch(/<a[^>]*aria-label="Halaman berikutnya"[^>]*halaman=2/);
+    // 44px targets below md (768px): every pager control that stays visible on a
+    // phone, enabled or disabled, and the row detail link must reach min 44px there.
+    for (const label of [
+      "Halaman pertama",
+      "Halaman sebelumnya",
+      "Halaman berikutnya",
+      "Halaman terakhir",
+    ]) {
+      expect(hasMobileTouchTarget(openingTagWithLabel(pager, label)), label).toBe(true);
+    }
+    expect(
+      hasMobileTouchTarget(openingTagWithLabel(html, "Buka detail kiriman", true)),
+    ).toBe(true);
+    // Page-number links are exempt only because they are hidden below md.
+    const numberList = pager.match(/<ul class="([^"]*)">\s*<li[^>]*>\s*<a[^>]*aria-label="Halaman 1"/);
+    expect(numberList?.[1].split(/\s+/)).toEqual(expect.arrayContaining(["hidden", "md:flex"]));
     expect(html.indexOf(">Kiriman</th>")).toBeLessThan(
       html.indexOf(">Dibuat</th>"),
     );

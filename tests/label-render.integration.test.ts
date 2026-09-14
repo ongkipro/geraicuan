@@ -173,6 +173,19 @@ describe("label route render contracts", () => {
     expect(notFound).toContain('href="/app/pengiriman"');
   });
 
+  it("keeps both status views reachable as plain links when the facet popover cannot run", async () => {
+    for (const [query, currentHref] of [[{}, "/app/label?q=123ABC"], [{ status: "unpaid" }, "/app/label?status=unpaid&amp;q=123ABC"]] as const) {
+      const html = await renderIndex({ ...query, q: "123ABC" });
+      const fallback = html.match(/<noscript>([\s\S]*?)<\/noscript>/)?.[1] ?? "";
+      expect(fallback).toMatch(/<nav[^>]*aria-label="Status kiriman"/);
+      expect(fallback).toContain('href="/app/label?q=123ABC"');
+      expect(fallback).toContain('href="/app/label?status=unpaid&amp;q=123ABC"');
+      const current = fallback.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? [];
+      expect(current).toHaveLength(1);
+      expect(current[0]).toContain(`href="${currentHref}"`);
+    }
+  });
+
   it("links an invalid AWB suffix to a focused error without querying rows", async () => {
     const html = await renderIndex({ q: "x!" });
 

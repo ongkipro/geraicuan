@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -251,13 +251,13 @@ it("imports no stylesheet this guard cannot see", () => {
 
 type Rgb = { r: number; g: number; b: number };
 
-function resolve(value: string, depth = 0): string {
+function resolve(value: string, depth = 0, scope: ReadonlyMap<string, string> = tokens): string {
   if (depth > 8) throw new Error(`token cycle at ${value}`);
   const reference = value.match(/^var\((--[a-z0-9-]+)\)$/);
   if (!reference) return value;
-  const target = tokens.get(reference[1]);
+  const target = scope.get(reference[1]);
   if (!target) throw new Error(`undefined token ${reference[1]}`);
-  return resolve(target, depth + 1);
+  return resolve(target, depth + 1, scope);
 }
 
 /** oklab -> linear sRGB, per the CSS Color 4 conversion matrices. */
@@ -289,8 +289,8 @@ const NAMED: Record<string, Rgb> = {
   silver: { r: 192, g: 192, b: 192 },
 };
 
-function parse(raw: string): Rgb {
-  const value = resolve(raw).trim();
+function parse(raw: string, scope: ReadonlyMap<string, string> = tokens): Rgb {
+  const value = resolve(raw, 0, scope).trim();
 
   const named = NAMED[value.toLowerCase()];
   if (named) return named;
@@ -320,8 +320,8 @@ function parse(raw: string): Rgb {
   // first). Anything more exotic falls through to the throw below.
   const mix = value.match(/^color-mix\(\s*in\s+\w+\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*(.+?)\s*\)$/i);
   if (mix) {
-    const a = parse(mix[1]);
-    const b = parse(mix[3]);
+    const a = parse(mix[1], scope);
+    const b = parse(mix[3], scope);
     const p = Number(mix[2]) / 100;
     return {
       r: a.r * p + b.r * (1 - p),
@@ -339,6 +339,22 @@ const tint = (color: Rgb, on: Rgb, alpha: number): Rgb => ({
   g: color.g * alpha + on.g * (1 - alpha),
   b: color.b * alpha + on.b * (1 - alpha),
 });
+
+/** HSL hue in degrees; achromatic colours report NaN so a grey ramp cannot pass a spread check. */
+function hueOf({ r, g, b }: Rgb) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta < 8) return Number.NaN;
+  let hue = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  hue *= 60;
+  return hue < 0 ? hue + 360 : hue;
+}
+
+const hueDistance = (a: number, b: number) => {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+};
 
 function luminance({ r, g, b }: Rgb) {
   const channel = (v: number) => {
@@ -402,10 +418,34 @@ describe("design token contrast", () => {
     }
   });
 
+  it("keeps the essential analytics line strokes visible on the chart surface", () => {
+    for (const stroke of ["--chart-4", "--chart-2"]) {
+      expect(contrast(token(stroke), token("--card")), stroke).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("keeps the chart ramp categorical: series differ by hue, not only by lightness", () => {
+    // Spec 10/19 promise a colour-blind-safe (Okabe-Ito) ramp. Phase 13 briefly
+    // shipped the preset single-hue blue ramp, whose five series sat within
+    // ~14 degrees of each other and differed only in lightness — still green on
+    // the 3:1 check above. Hue is measured, so a lightness-only ramp fails.
+    const hues = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5"].map((name) => hueOf(token(name)));
+    // No 90-degree sector may hold every series.
+    const sorted = [...hues].sort((a, b) => a - b);
+    const largestGap = Math.max(...sorted.map((hue, i) => (i === 0 ? hue + 360 - sorted.at(-1)! : hue - sorted[i - 1])));
+    expect(360 - largestGap, "hue spread of --chart-1..5").toBeGreaterThanOrEqual(90);
+    // The two essential trend strokes (created vs issued) are far apart in hue.
+    expect(hueDistance(hueOf(token("--chart-4")), hueOf(token("--chart-2"))), "--chart-4 vs --chart-2 hue")
+      .toBeGreaterThanOrEqual(60);
+  });
+
   it("meets AA for the one interactive accent, filled and as a link", () => {
     expect(contrast(token("--primary-foreground"), token("--primary"))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token("--accent"), token("--canvas"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token("--primary"), token("--canvas"))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(token("--accent-hover"), token("--canvas"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token("--accent-foreground"), token("--accent"))).toBeGreaterThanOrEqual(4.5);
+    // `hover:bg-primary-hover` on the default button keeps its label.
+    expect(contrast(token("--primary-foreground"), token("--primary-hover"))).toBeGreaterThanOrEqual(4.5);
   });
 
   it("paints a focus ring that meets the 3:1 WCAG 1.4.11 asks of it", () => {
@@ -527,28 +567,114 @@ describe("design token contrast", () => {
       .not.toMatch(/@apply[^;]*\boutline-ring\/\d+/);
   });
 
-  it("ships no dark theme, which the design system puts out of MVP scope", () => {
-    // `docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md`: "Dark mode is out of scope
-    // for MVP" and "Do not use ... speculative dark mode". Nothing adds the
-    // `.dark` class and no `.dark` token block exists, so the `dark:`
-    // utilities the vendored shadcn primitives carry never match. Asserted so
-    // a half-finished dark palette cannot appear without a decision: adding
-    // one means screening every pairing above a second time.
-    // Two shapes, both of which independent review shipped past earlier
-    // versions of this check: a selector carrying `.dark` anywhere, and a
-    // `prefers-color-scheme: dark` at-rule redefining the palette. The second
-    // is the more common spelling and bypasses every assertion above it.
-    // A theme switch is a selector that names a theme, or any colour-scheme
-    // query at all. Matching only `.dark` and only `prefers-color-scheme: dark`
-    // left `[data-theme="dark"]` and the negated
-    // `@media not all and (prefers-color-scheme: light)` free to ship a live
-    // dark palette — both confirmed past an earlier version of this check.
-    const themed = cssRules
-      .filter((rule) => [...rule.declarations.keys()].some((name) => name.startsWith("--")))
-      .filter((rule) => [...rule.path, rule.selector].some((part) =>
-        (!part.startsWith("@") && (/\.dark\b/.test(part) || /\[data-theme/.test(part)))
-        || /@media[^{]*prefers-color-scheme/.test(part)))
-      .map((rule) => [...rule.path, rule.selector].filter(Boolean).join(" > "));
-    expect(themed).toEqual([]);
+  it("includes the neutral dark palette without automatic activation", () => {
+    const dark = cssRules.find((rule) => rule.selector === ".dark");
+    expect(dark).toBeDefined();
+    expect(dark?.declarations.get("--background")).toBe("oklch(0.145 0 0)");
+    // T-118: shadcn neutral, near-white primary on the dark ground.
+    expect(dark?.declarations.get("--primary")).toBe("oklch(0.922 0 0)");
+    expect(dark?.declarations.get("--input")).toBe("oklch(1 0 0 / 15%)");
+  });
+
+  it("wires no mechanism that activates the dormant dark palette", () => {
+    // Spec 10 keeps dark mode out of product scope: the `.dark` token block may
+    // exist, but nothing may switch it on. An earlier guard forbade the block
+    // outright (and caught `[data-theme]` and negated media queries); when the
+    // block was accepted, the guard shrank to one `prefers-color-scheme` rule
+    // check and stopped seeing class- or attribute-based activation. Every
+    // activation route is checked here instead, in CSS and in source.
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+    // 1. Media activation, in any spelling — `(prefers-color-scheme: dark)`,
+    //    `not all and (prefers-color-scheme: light)`, or inside a custom variant.
+    expect(bare, "prefers-color-scheme in globals.css").not.toMatch(/prefers-color-scheme/);
+    // 2. The `dark:` variant stays bound to the `.dark` class and nothing else.
+    expect([...bare.matchAll(/@custom-variant\s+dark\b[^;{]*[;{]/g)].map((m) => m[0].replace(/\s+/g, " ")))
+      .toEqual(["@custom-variant dark (&:is(.dark *));"]);
+    // 3. Attribute activation and UA-level scheme switches.
+    expect(bare, "data-theme selector").not.toMatch(/data-theme/);
+    expect(bare, "light-dark()").not.toMatch(/light-dark\(/);
+    expect(bare, "color-scheme: dark").not.toMatch(/color-scheme\s*:[^;}]*\bdark\b/);
+    // 4. Only the dormant class carries `.dark`: `.dark` alone, or beside
+    //    `:root` in the shared alias rule. `:not(.dark)`-style inversions and
+    //    compounds that would apply without the class are refused.
+    const darkSelectors = cssRules
+      .filter((rule) => /\.dark\b/.test(rule.selector))
+      .flatMap((rule) => splitTopLevel(rule.selector).map((part) => part.trim()))
+      .filter((part) => part !== ":root" && part !== ".dark");
+    expect(darkSelectors).toEqual([]);
+
+    // 5. Source: nothing applies the class, sets a theme attribute, reads the
+    //    system preference, or installs a theme provider.
+    const sourceFiles: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.(?:[cm]?[jt]sx?)$/.test(entry.name)) sourceFiles.push(path);
+      }
+    };
+    walk(join(process.cwd(), "src"));
+    expect(sourceFiles.length, "source files scanned").toBeGreaterThan(20);
+    const activators = [
+      /data-theme/,
+      /prefers-color-scheme/,
+      /next-themes/,
+      /colorScheme/,
+      /classList\s*\.\s*(?:add|toggle|replace)\([^)]*["'`]dark["'`]/,
+      // A literal class token `dark` in any string: `className="dark"`,
+      // `cn("dark", …)`, `<html className="h-full dark">`. Tailwind `dark:`
+      // variants and names like `text-dark` are not the class.
+      /["'`](?:[^"'`\n]*\s)?dark(?:\s[^"'`\n]*)?["'`]/,
+    ];
+    const hits = sourceFiles.flatMap((file) => {
+      const text = readFileSync(file, "utf8");
+      return activators.filter((pattern) => pattern.test(text)).map((pattern) => `${file.slice(process.cwd().length + 1)}: ${pattern}`);
+    });
+    expect(hits).toEqual([]);
+    const manifest = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as Record<string, Record<string, string> | undefined>;
+    expect(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })).not.toContain("next-themes");
+  });
+
+  it("meets AA for text, destructive, accent, and focus ring in the dark palette", () => {
+    // `.dark` layers over the root tokens: the semantic aliases (`--ink`,
+    // `--canvas`, …) are `var()` references, so they resolve against the dark
+    // values the moment the class applies. Measured, not assumed to mirror light.
+    const dark = cssRules.filter((rule) => rule.selector === ".dark" && appliesOnScreen(rule));
+    expect(dark.length, "a .dark rule").toBeGreaterThan(0);
+    const scope = new Map(tokens);
+    for (const rule of dark) {
+      for (const [property, value] of rule.declarations) {
+        if (property.startsWith("--")) scope.set(property, value);
+      }
+    }
+    const darkToken = (name: string) => parse(scope.get(name) ?? `missing ${name}`, scope);
+    const grounds = ["--canvas", "--surface", "--surface-sunken"] as const;
+
+    for (const ink of ["--ink", "--ink-muted"] as const) {
+      for (const ground of grounds) {
+        expect(contrast(darkToken(ink), darkToken(ground)), `dark ${ink} on ${ground}`)
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // `dark:bg-destructive/20` in badge.tsx and button.tsx, and the /30 hover.
+    const destructive = darkToken("--destructive");
+    for (const alpha of [0.2, 0.3]) {
+      expect(contrast(destructive, tint(destructive, darkToken("--card"), alpha)), `dark destructive /${alpha}`)
+        .toBeGreaterThanOrEqual(4.5);
+    }
+    for (const fill of ["--primary", "--primary-hover"] as const) {
+      expect(contrast(darkToken("--primary-foreground"), darkToken(fill)), `dark label on ${fill}`)
+        .toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(darkToken("--primary"), darkToken("--canvas"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkToken("--accent-foreground"), darkToken("--accent"))).toBeGreaterThanOrEqual(4.5);
+    for (const ground of grounds) {
+      expect(contrast(darkToken("--ring"), darkToken(ground)), `dark --ring on ${ground}`)
+        .toBeGreaterThanOrEqual(3);
+    }
+    for (const stroke of ["--chart-4", "--chart-2"]) {
+      expect(contrast(darkToken(stroke), darkToken("--card")), `dark ${stroke}`).toBeGreaterThanOrEqual(3);
+    }
   });
 });

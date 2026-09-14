@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 function SubmitButton({ disabled = false }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button className="min-h-11 max-sm:w-full" disabled={disabled || pending} type="submit">
+    <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={disabled || pending} type="submit">
       {pending ? "Menyimpan…" : "Simpan kontak"}
     </Button>
   );
@@ -49,9 +49,9 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         <AlertTitle>Kontak tersimpan</AlertTitle>
         <AlertDescription className="grid gap-4">
           <p>{state.message}</p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button asChild className="min-h-11"><Link href={`/app/kontak/${state.successId}`}>Buka detail kontak</Link></Button>
-            <Button asChild className="min-h-11" variant="outline"><Link href="/app/kontak">Kembali ke direktori</Link></Button>
+          <div className="flex flex-col gap-2 md:flex-row">
+            <Button asChild className="min-h-11 md:min-h-8"><Link href={`/app/kontak/${state.successId}`}>Buka detail kontak</Link></Button>
+            <Button asChild className="min-h-11 md:min-h-8" variant="outline"><Link href="/app/kontak">Kembali ke direktori</Link></Button>
           </div>
         </AlertDescription>
       </Alert>
@@ -74,12 +74,12 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         </Alert>
       ) : null}
 
-      <Card className="shadow-none">
+      <Card aria-labelledby="contact-data-heading" role="region">
         <CardHeader className="border-b">
-          <CardTitle>Data kontak</CardTitle>
-          <CardDescription>Identitas dan peran yang tersedia saat membuat kiriman.</CardDescription>
+          <CardTitle id="contact-data-heading">Data kontak</CardTitle>
+          <CardDescription className="leading-6">Identitas dan peran yang tersedia saat membuat kiriman.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           <FieldGroup>
             <Field data-invalid={Boolean(errors.contactName)}>
               <FieldLabel htmlFor="contactName">Nama</FieldLabel>
@@ -103,12 +103,12 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         </CardContent>
       </Card>
 
-      <Card className="shadow-none">
+      <Card aria-labelledby="contact-address-heading" role="region">
         <CardHeader className="border-b">
-          <CardTitle>Alamat pertama</CardTitle>
-          <CardDescription>Alamat ini dapat dipakai kembali pada draf berikutnya.</CardDescription>
+          <CardTitle id="contact-address-heading">Alamat pertama</CardTitle>
+          <CardDescription className="leading-6">Alamat ini dapat dipakai kembali pada draf berikutnya.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           <FieldGroup>
             <Field data-invalid={Boolean(errors.addressLabel)}>
               <FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel>
@@ -132,7 +132,7 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 border-t pt-4 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-muted-foreground">Perubahan kontak tidak mengubah kiriman yang sudah dibuat.</p>
         <SubmitButton />
       </div>

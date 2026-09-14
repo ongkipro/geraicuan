@@ -381,7 +381,7 @@ describe("tenant shipment lifecycle queue", () => {
     ]);
   });
 
-  it("filters the combined action-required lifecycle statuses", async () => {
+  it("filters the action-required lifecycle statuses without awaiting payment", async () => {
     await seedShipment({ sequence: 11, status: "AWAITING_UPSTREAM_PAYMENT" });
     await seedShipment({ sequence: 12, status: "SUBMISSION_UNKNOWN" });
     await seedShipment({ sequence: 13, status: "FAILED" });
@@ -399,9 +399,8 @@ describe("tenant shipment lifecycle queue", () => {
         }),
     );
 
-    expect(filtered.totalCount).toBe(3);
+    expect(filtered.totalCount).toBe(2);
     expect(filtered.rows.map((row) => row.status).sort()).toEqual([
-      "AWAITING_UPSTREAM_PAYMENT",
       "FAILED",
       "SUBMISSION_UNKNOWN",
     ]);

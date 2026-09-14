@@ -13,6 +13,7 @@ import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -102,9 +103,9 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
       <PageContainer className="label-page print:block print:max-w-none print:gap-0">
         <div className="label-hide">
           <PageHeader
-            actions={<Button asChild className="min-h-11 max-sm:w-full" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
+            actions={<Button asChild className="min-h-11 max-md:w-full md:min-h-8" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
             description="Pratinjau cetak tersedia setelah nomor resi diterbitkan."
-            eyebrow="Label kiriman"
+            eyebrow="Label 100 × 150 mm"
             focusTargetId="label-detail-heading"
             title={heading}
           />
@@ -117,7 +118,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
               ? "Kiriman non-COD ini belum berstatus lunas di Mengantar, sehingga belum memiliki nomor resi. Tenant Admin perlu memulihkannya lebih dulu."
               : "Label hanya dapat dicetak setelah Mengantar mengembalikan nomor resi."}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button asChild className="min-h-11"><Link href={`/app/pengiriman/${shipmentId}`}>Buka detail kiriman</Link></Button>
+              <Button asChild className="min-h-11 max-md:w-full md:min-h-8"><Link href={`/app/pengiriman/${shipmentId}`}>Buka detail kiriman</Link></Button>
               <Button asChild className="min-h-11" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>
             </div>
           </AlertDescription>
@@ -137,7 +138,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
     <PageContainer className="label-page print:block print:max-w-none print:gap-0">
       <div className="label-hide">
         <PageHeader
-          actions={<Button asChild className="min-h-11 max-sm:w-full" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
+          actions={<Button asChild className="min-h-11 max-md:w-full md:min-h-8" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
           description="Periksa data kiriman, lalu gunakan dialog cetak browser dengan ukuran kertas 100 × 150 mm."
           eyebrow="Label 100 × 150 mm"
           focusTargetId="label-detail-heading"
@@ -184,8 +185,12 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
         <LabelSheet label={detail.label} />
       </div>
 
-      <section aria-labelledby="riwayat-cetak-heading" className="label-history label-hide">
-        <h2 className="font-heading text-lg font-medium" id="riwayat-cetak-heading">Riwayat permintaan cetak</h2>
+      <Card aria-labelledby="riwayat-cetak-heading" className="label-hide" role="region">
+        <CardHeader>
+          <CardTitle id="riwayat-cetak-heading">Riwayat permintaan cetak</CardTitle>
+          <CardDescription>Setiap permintaan cetak tercatat dengan waktu dan aktor.</CardDescription>
+        </CardHeader>
+        <CardContent>
         {detail.events.length === 0 ? (
           <EmptyState
             description="Permintaan cetak pertama akan tercatat setelah tombol cetak digunakan."
@@ -195,15 +200,15 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
         ) : (
             <Table
               className="min-w-[38rem]"
-              containerClassName="rounded-lg border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+              containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
               containerProps={{ "aria-label": "Riwayat permintaan cetak label; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
             >
               <TableCaption className="sr-only">Riwayat permintaan cetak label</TableCaption>
-              <TableHeader><TableRow><TableHead className="sticky left-0 z-20 bg-background">Permintaan ke-</TableHead><TableHead>Waktu (WIB)</TableHead><TableHead>Aktor</TableHead><TableHead>Hasil</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead className="sticky left-0 z-20 bg-card">Permintaan ke-</TableHead><TableHead>Waktu (WIB)</TableHead><TableHead>Aktor</TableHead><TableHead>Hasil</TableHead></TableRow></TableHeader>
               <TableBody>
                 {detail.events.map((event, index) => (
                   <TableRow key={`${event.printedAt.toISOString()}-${index}`}>
-                    <TableCell className="sticky left-0 z-10 bg-background tabular-nums">{event.sequence ?? "—"}</TableCell>
+                    <TableCell className="sticky left-0 z-10 bg-card tabular-nums">{event.sequence ?? "—"}</TableCell>
                     <TableCell>{formatWibDateTime(event.printedAt)}</TableCell>
                     <TableCell className="whitespace-normal">{event.actorRole === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"} · {event.actorNameMasked}</TableCell>
                     <TableCell className="whitespace-normal">{event.outcome === "PRINTED" ? "Tercatat" : event.reasonCode === "AWAITING_UPSTREAM_PAYMENT" ? "Diblokir: menunggu pelunasan" : "Diblokir: resi belum terbit"}</TableCell>
@@ -212,7 +217,8 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
               </TableBody>
             </Table>
         )}
-      </section>
+        </CardContent>
+      </Card>
     </PageContainer>
   );
 }

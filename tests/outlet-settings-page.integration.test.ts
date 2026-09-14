@@ -141,7 +141,7 @@ describe("Outlet settings page acceptance", () => {
     mocks.authorizationDenied = true;
     const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/page");
 
-    await expect(OutletSettingsPage()).rejects.toThrow("REDIRECT:/login/tenant");
+    await expect(OutletSettingsPage({})).rejects.toThrow("REDIRECT:/login/tenant");
     expect(mocks.contextCalls).toBe(0);
     expect(mocks.listCalls).toBe(0);
   });
@@ -156,7 +156,7 @@ describe("Outlet settings page acceptance", () => {
       mocks.principal.scope = scope;
       const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/page");
 
-      await expect(OutletSettingsPage()).rejects.toThrow(`REDIRECT:${destination}`);
+      await expect(OutletSettingsPage({})).rejects.toThrow(`REDIRECT:${destination}`);
       expect(mocks.contextCalls).toBe(0);
       expect(mocks.listCalls).toBe(0);
     },
@@ -234,8 +234,14 @@ describe("Outlet settings page acceptance", () => {
     // `"page"`. The shell navigation already owns the one truthful current
     // page, and browser screening found two visible `aria-current="page"` in
     // this document at 1280px — this selector and the shell's own nav item.
+    // The Administrasi menu (SettingsLayout) marks its own item the same way.
     expect(occurrences(html, 'aria-current="page"')).toBe(0);
-    expect(occurrences(html, 'aria-current="true"')).toBe(1);
+    const outletNav = html.match(/<nav[^>]*aria-label="Pilih outlet"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(occurrences(outletNav, 'aria-current="true"')).toBe(1);
+    const settingsNav = html.match(/<nav[^>]*aria-label="Administrasi"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(settingsNav.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? []).toHaveLength(1);
+    expect(settingsNav).toMatch(/<a[^>]*aria-current="true"[^>]*href="\/app\/pengaturan"/);
+    expect(occurrences(html, 'aria-current="true"')).toBe(2);
     expect(html).toContain('aria-label="Pilih outlet"');
     expect(html).toContain(`href="/app/pengaturan?outlet=${OUTLET_TWO}#outlet-detail-title"`);
     expect(html.indexOf("A — Belum siap")).toBeLessThan(

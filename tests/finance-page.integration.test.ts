@@ -213,6 +213,17 @@ describe("Finance page acceptance", () => {
     expect(html).toContain("Pemulihan non-COD");
     expect(html).toContain("Belum ada rekonsiliasi pada periode ini");
     expect(html).toContain("Tidak ada entri pada");
+    // Enter in a filter field clicks the form's first submit button; it must be the plain
+    // apply, not the khusus=1 custom-range button, or every Enter forces a custom range.
+    const filterForm = html.slice(html.indexOf('id="finance-filter-fields"'), html.indexOf("</form>"));
+    const firstSubmit = filterForm.match(/<button[^>]*type="submit"[^>]*>/)?.[0] ?? "";
+    expect(firstSubmit).not.toBe("");
+    expect(firstSubmit).not.toContain('name="khusus"');
+    expect(filterForm).toContain('name="khusus"');
+    // Submit and reset return focus to this heading, so it must be visible, not sr-only.
+    const filterHeading = html.match(/<h2[^>]*id="finance-filter-title"[^>]*>/)?.[0] ?? "";
+    expect(filterHeading).toContain('tabindex="-1"');
+    expect(filterHeading).not.toContain("sr-only");
     expect(mocks.entryCalls).toEqual([{
       pagination: { limit: 50, offset: 0 },
       range: {

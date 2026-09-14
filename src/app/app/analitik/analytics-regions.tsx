@@ -1,10 +1,28 @@
-import { ChevronLeft, ChevronRight, CircleAlert, PackageOpen } from "lucide-react";
+import {
+  BadgePercent,
+  Boxes,
+  CircleAlert,
+  HandCoins,
+  Landmark,
+  Package,
+  PackageOpen,
+  Receipt,
+  ReceiptText,
+  Scale,
+  TrendingUp,
+  TriangleAlert,
+  Truck,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { DataFreshnessControl } from "@/components/cms/data-freshness-control";
+import { DataTablePagination } from "@/components/cms/data-table-pagination";
 import { EmptyState } from "@/components/cms/empty-state";
 import { RetryRegionButton } from "@/components/cms/retry-region-button";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
+import { StatCard } from "@/components/cms/stat-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,8 +62,12 @@ import {
 import { isDataStale } from "@/lib/data-freshness";
 import { reconciliationVarianceHref } from "@/lib/finance-exception-filter";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
+import { cn } from "@/lib/utils";
 import { AnalyticsComparisonCue } from "./comparison-cue";
+import { CourierIssueRateChart } from "./courier-issue-rate-chart";
+import { courierIssueRate, isLowVolumeCourier, lowVolumeLabel, orderCouriersForRanking } from "./courier-volume";
 import { ShipmentTrendChart } from "./shipment-trend-chart";
+import { shipmentReference } from "@/lib/shipment-reference";
 
 const DEFAULT_PAGE_SIZE = 50;
 const countFormatter = new Intl.NumberFormat("id-ID");
@@ -54,6 +76,10 @@ const idrFormatter = new Intl.NumberFormat("id-ID", {
   maximumFractionDigits: 0,
   style: "currency",
 });
+// `focus:` not `focus-visible:`: these targets only take focus from script (hash, retry), and a
+// mouse-triggered retry would otherwise move focus with no visible ring.
+const focusRing = "rounded-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
+const tableRegion = "rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export type AnalyticsResolvedRegionProps = {
   activeDimensionCount: number;
@@ -70,6 +96,7 @@ type Metric = {
   context?: string;
   current: number;
   href?: string;
+  icon: LucideIcon;
   label: string;
   previous?: number;
   value: string;
@@ -110,6 +137,7 @@ function AnalyticsRegionError({
   );
 }
 
+/** Card title for chart and table regions; the id is the region's retry focus target. */
 function RegionHeading({
   description,
   id,
@@ -120,12 +148,8 @@ function RegionHeading({
   title: string;
 }) {
   return (
-    <CardHeader className="border-b">
-      <CardTitle
-        className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        id={id}
-        tabIndex={-1}
-      >
+    <CardHeader>
+      <CardTitle className={focusRing} id={id} tabIndex={-1}>
         {title}
       </CardTitle>
       <CardDescription>{description}</CardDescription>
@@ -133,40 +157,46 @@ function RegionHeading({
   );
 }
 
-function MetricsGrid({ metrics }: { metrics: Metric[] }) {
-  const responsiveColumns = metrics.length === 1
-    ? ""
-    : metrics.length === 6
-      ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
-      : metrics.length > 4
-        ? "sm:grid-cols-2 xl:grid-cols-5"
-        : "sm:grid-cols-2 xl:grid-cols-4";
+/** Heading above a stat-card group. */
+function SectionHeading({
+  description,
+  id,
+  title,
+}: {
+  description?: ReactNode;
+  id: string;
+  title: string;
+}) {
   return (
-    <dl className={`grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border ${responsiveColumns}`}>
+    <div className="space-y-1">
+      <h2 className={cn("text-lg font-semibold tracking-tight", focusRing)} id={id} tabIndex={-1}>{title}</h2>
+      {description ? <p className="max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
+    </div>
+  );
+}
+
+function MetricCards({ className, metrics }: { className: string; metrics: Metric[] }) {
+  return (
+    <div className={cn("grid gap-4", className)}>
       {metrics.map((metric) => (
-        <div className={`min-w-0 bg-card p-4 ${metric.href ? "relative transition-colors hover:bg-muted/40" : ""}`} key={metric.label}>
-          {metric.href ? (
-            <Link
-              aria-label={`${metric.label}: ${metric.value}. Lihat record pendukung`}
-              className="absolute inset-0 z-10 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              href={metric.href}
-            />
-          ) : null}
-          <dt className="text-sm font-medium text-muted-foreground">
-            {metric.label}
-          </dt>
-          <dd className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
-            {metric.value}
-          </dd>
-          {metric.context ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{metric.context}</p> : null}
-          {metric.previous === undefined ? null : (
-            <p className="mt-1 text-xs leading-5 text-muted-foreground [&_small]:text-xs">
-              <AnalyticsComparisonCue current={metric.current} previous={metric.previous} />
-            </p>
-          )}
-        </div>
+        <StatCard
+          description={metric.context || metric.previous !== undefined ? (
+            <>
+              {metric.context ? <p>{metric.context}</p> : null}
+              {metric.previous === undefined ? null : (
+                <p><AnalyticsComparisonCue current={metric.current} previous={metric.previous} /></p>
+              )}
+            </>
+          ) : undefined}
+          href={metric.href}
+          icon={metric.icon}
+          key={metric.label}
+          title={metric.label}
+          value={metric.value}
+          valueLabel={metric.href ? `${metric.value}. Lihat record pendukung` : undefined}
+        />
       ))}
-    </dl>
+    </div>
   );
 }
 
@@ -193,7 +223,7 @@ export async function AnalyticsSummaryRegion({
 }) {
   const result = await settle(promise);
   if (!result.ok) {
-    return <AnalyticsRegionError description="Timestamp data belum tersedia. Tren dan tabel kiriman tetap tersedia bila berhasil dimuat." focusTargetId="analytics-summary-heading" title="Ringkasan tidak dapat dimuat" />;
+    return <AnalyticsRegionError description="Coba muat ulang ringkasan. Bagian lain yang berhasil dimuat tetap tersedia." focusTargetId="analytics-summary-heading" title="Ringkasan tidak dapat dimuat" />;
   }
 
   const { backlogSnapshot: backlog, current: kpis, eventGeneratedAt, previous } = result.value;
@@ -204,36 +234,42 @@ export async function AnalyticsSummaryRegion({
     ? (previous.issuedCount / previous.resolvedSubmissionCount) * 100
     : 0;
   const operationalMetrics: Metric[] = [
-    { current: kpis.createdCount, href: supportingRowsHref(context.canonicalQuery, "created"), label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(kpis.createdCount) },
-    { context: "Berdasarkan waktu AWB diterbitkan provider.", current: kpis.issuedCount, href: supportingRowsHref(context.canonicalQuery, "issued"), label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(kpis.issuedCount) },
-    { context: `${countFormatter.format(kpis.issuedCount)} issued / ${countFormatter.format(kpis.resolvedSubmissionCount)} outcome terselesaikan.`, current: currentSuccessRate, href: supportingRowsHref(context.canonicalQuery, "outcome"), label: "Tingkat penerbitan resi", previous: previousSuccessRate, value: kpis.resolvedSubmissionCount > 0 ? `${countFormatter.format(currentSuccessRate)}%` : "—" },
-    { context: `${countFormatter.format(backlog.awaitingPaymentCount)} menunggu pembayaran + ${countFormatter.format(backlog.needsActionCount)} gagal/perlu rekonsiliasi · snapshot ${formatInZone(backlog.asOf, context.range.timezone)}`, current: backlog.awaitingPaymentCount + backlog.needsActionCount, href: supportingRowsHref(context.canonicalQuery, "exceptions"), label: "Pengecualian belum selesai", value: countFormatter.format(backlog.awaitingPaymentCount + backlog.needsActionCount) },
-  ];
-  const financialMetrics: Metric[] = [
-    { current: kpis.providerShippingIdr, label: "Ongkir provider", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
-    { current: kpis.codServiceFeeIdr, label: "Biaya layanan COD", previous: previous.codServiceFeeIdr, value: idrFormatter.format(kpis.codServiceFeeIdr) },
-    { current: kpis.codVatIdr, label: "PPN biaya layanan", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
-    { context: "Titipan penerima, bukan pendapatan GeraiCUAN.", current: kpis.codPrincipalIdr, label: "Pokok COD (liabilitas)", previous: previous.codPrincipalIdr, value: idrFormatter.format(kpis.codPrincipalIdr) },
-    { current: kpis.cogsIdr, label: "COGS / Modal HPP", previous: previous.cogsIdr, value: idrFormatter.format(kpis.cogsIdr) },
-    { context: "Pokok COD dikurangi COGS, Ongkir, Layanan, & PPN.", current: kpis.netMarginIdr, label: "Net Margin (Estimasi)", previous: previous.netMarginIdr, value: idrFormatter.format(kpis.netMarginIdr) },
+    { current: kpis.createdCount, href: supportingRowsHref(context.canonicalQuery, "created"), context: "Mengikuti tanggal kiriman dibuat.", icon: Package, label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(kpis.createdCount) },
+    { context: "Mengikuti tanggal resi diterbitkan Mengantar.", current: kpis.issuedCount, href: supportingRowsHref(context.canonicalQuery, "issued"), icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(kpis.issuedCount) },
+    { context: `${countFormatter.format(kpis.issuedCount)} resi terbit dari ${countFormatter.format(kpis.resolvedSubmissionCount)} pengajuan selesai.`, current: currentSuccessRate, href: supportingRowsHref(context.canonicalQuery, "outcome"), icon: BadgePercent, label: "Tingkat penerbitan resi", previous: previousSuccessRate, value: kpis.resolvedSubmissionCount > 0 ? `${countFormatter.format(currentSuccessRate)}%` : "—" },
+    { context: `${countFormatter.format(backlog.awaitingPaymentCount)} menunggu pembayaran + ${countFormatter.format(backlog.needsActionCount)} gagal/perlu rekonsiliasi · saat ini, ${formatInZone(backlog.asOf, context.range.timezone)}. Tidak mengikuti periode laporan.`, current: backlog.awaitingPaymentCount + backlog.needsActionCount, href: supportingRowsHref(context.canonicalQuery, "exceptions"), icon: TriangleAlert, label: "Pengecualian belum selesai", value: countFormatter.format(backlog.awaitingPaymentCount + backlog.needsActionCount) },
   ];
 
   return (
-    <div className="space-y-6">
-      <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Data event periode</p><DataFreshnessControl formattedGeneratedAt={formatInZone(eventGeneratedAt, context.range.timezone)} generatedAtIso={eventGeneratedAt.toISOString()} initiallyStale={isDataStale(eventGeneratedAt, new Date())} /></div>
-      <p className="max-w-2xl text-xs leading-5 text-muted-foreground">Snapshot pengecualian saat ini diambil pada <time dateTime={backlog.asOf.toISOString()}>{formatInZone(backlog.asOf, context.range.timezone)}</time>. Timestamp ini tidak mewakili tren, tabel kiriman, atau rekonsiliasi tenant-wide.</p>
-      <Card>
-        <RegionHeading description={`Event ${context.periodLabel} dibanding ${context.previousPeriodLabel}; antrean tindakan adalah snapshot saat halaman dimuat.`} id="analytics-summary-heading" title="Ringkasan operasional" />
-        <CardContent><MetricsGrid metrics={operationalMetrics} /></CardContent>
-      </Card>
-      <Card>
-        <RegionHeading description="Nilai ledger berdasarkan waktu efektif pada rentang terpilih." id="analytics-financial-heading" title="Nilai kiriman" />
-        <CardContent className="space-y-4">
-          <MetricsGrid metrics={financialMetrics} />
-          <Alert><CircleAlert aria-hidden="true" /><AlertTitle>Pokok COD bukan pendapatan</AlertTitle><AlertDescription>Nilai di atas bukan kas yang sudah diterima. Rekonsiliasi dan sumber ledger tersedia di buku besar.</AlertDescription></Alert>
-        </CardContent>
-      </Card>
-    </div>
+    <section aria-labelledby="analytics-summary-heading" className="space-y-4">
+      <SectionHeading description={`Event ${context.periodLabel} dibanding ${context.previousPeriodLabel}; antrean tindakan adalah snapshot saat halaman dimuat.`} id="analytics-summary-heading" title="Ringkasan operasional" />
+      <MetricCards className="grid-cols-2 lg:grid-cols-4 [&_[data-slot=card-title]]:min-h-15 md:[&_[data-slot=card-title]]:min-h-10" metrics={operationalMetrics} />
+      <div className="space-y-1">
+        <DataFreshnessControl formattedGeneratedAt={formatInZone(eventGeneratedAt, context.range.timezone)} generatedAtIso={eventGeneratedAt.toISOString()} initiallyStale={isDataStale(eventGeneratedAt, new Date())} />
+        <p className="max-w-2xl text-xs leading-5 text-muted-foreground">Waktu pembaruan di atas berlaku untuk ringkasan periode, bukan tren, daftar kiriman, atau rekonsiliasi.</p>
+      </div>
+    </section>
+  );
+}
+
+export async function AnalyticsFinancialRegion({ promise }: { promise: Promise<ShipmentKpiComparison> }) {
+  const result = await settle(promise);
+  if (!result.ok) return <AnalyticsRegionError description="Ringkasan operasional dan tren tetap tersedia bila berhasil dimuat." focusTargetId="analytics-financial-heading" title="Nilai kiriman tidak dapat dimuat" />;
+  const { current: kpis, previous } = result.value;
+  const financialMetrics: Metric[] = [
+    { current: kpis.providerShippingIdr, icon: Truck, label: "Ongkir provider", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
+    { current: kpis.codServiceFeeIdr, icon: HandCoins, label: "Biaya layanan COD", previous: previous.codServiceFeeIdr, value: idrFormatter.format(kpis.codServiceFeeIdr) },
+    { current: kpis.codVatIdr, icon: Receipt, label: "PPN biaya layanan", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
+    { context: "Titipan penerima, bukan pendapatan GeraiCUAN.", current: kpis.codPrincipalIdr, icon: Landmark, label: "Pokok COD (liabilitas)", previous: previous.codPrincipalIdr, value: idrFormatter.format(kpis.codPrincipalIdr) },
+    { current: kpis.cogsIdr, icon: Boxes, label: "COGS / Modal HPP", previous: previous.cogsIdr, value: idrFormatter.format(kpis.cogsIdr) },
+    { context: "Pokok COD dikurangi COGS, Ongkir, Layanan, & PPN.", current: kpis.netMarginIdr, icon: TrendingUp, label: "Net Margin (Estimasi)", previous: previous.netMarginIdr, value: idrFormatter.format(kpis.netMarginIdr) },
+  ];
+  return (
+    <section aria-labelledby="analytics-financial-heading" className="space-y-4">
+      <SectionHeading description="Mengikuti tanggal efektif catatan keuangan pada periode terpilih." id="analytics-financial-heading" title="Nilai kiriman" />
+      <MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={financialMetrics} />
+      <Alert><CircleAlert aria-hidden="true" /><AlertTitle>Pokok COD bukan pendapatan</AlertTitle><AlertDescription>Nilai di atas bukan kas yang sudah diterima. Rekonsiliasi dan sumber ledger tersedia di buku besar.</AlertDescription></Alert>
+    </section>
   );
 }
 
@@ -249,18 +285,17 @@ export async function AnalyticsReconciliationRegion({
 
   const variance = result.value;
   return (
-    <Card>
-      <RegionHeading description="Snapshot tenant-wide terbaru; tidak mengikuti filter periode, outlet, kurir, atau lifecycle dan bukan pendapatan." id="analytics-reconciliation-heading" title="Exception rekonsiliasi saat ini" />
-      <CardContent>
-        <MetricsGrid metrics={[{
-          context: `${countFormatter.format(variance.varianceCount)} hasil rekonsiliasi latest aktif masih memiliki selisih.`,
-          current: variance.totalSignedVarianceIdr,
-          href: reconciliationVarianceHref(),
-          label: "Net selisih bertanda",
-          value: idrFormatter.format(variance.totalSignedVarianceIdr),
-        }]} />
-      </CardContent>
-    </Card>
+    <section aria-labelledby="analytics-reconciliation-heading" className="space-y-4">
+      <SectionHeading description="Selisih rekonsiliasi terbaru untuk semua outlet tenant ini. Tidak mengikuti filter periode, outlet, kurir, atau status; bukan pendapatan." id="analytics-reconciliation-heading" title="Selisih rekonsiliasi saat ini" />
+      <MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={[{
+        context: `${countFormatter.format(variance.varianceCount)} hasil rekonsiliasi terbaru masih memiliki selisih.`,
+        current: variance.totalSignedVarianceIdr,
+        href: reconciliationVarianceHref(),
+        icon: Scale,
+        label: "Total selisih (+/−)",
+        value: idrFormatter.format(variance.totalSignedVarianceIdr),
+      }]} />
+    </section>
   );
 }
 
@@ -273,7 +308,7 @@ export async function AnalyticsTrendRegion({
 }) {
   const result = await settle(promise);
   if (!result.ok) {
-    return <AnalyticsRegionError description="Ringkasan dan tabel kiriman tetap tersedia." focusTargetId="analytics-trend-heading" title="Tren tidak dapat dimuat" />;
+    return <div className="lg:col-span-full"><AnalyticsRegionError description="Ringkasan dan tabel kiriman tetap tersedia." focusTargetId="analytics-trend-heading" title="Tren tidak dapat dimuat" /></div>;
   }
   const trendByKey = new Map(result.value.points.map((point) => [point.key, point] as const));
   const rows = buildTrendBuckets(context.range).map((bucket) => ({
@@ -283,27 +318,23 @@ export async function AnalyticsTrendRegion({
   }));
 
   if (rows.every((row) => row.createdCount + row.issuedCount === 0)) {
-    return <Card><RegionHeading description={`${context.periodLabel} / ${context.timezoneLabel}.`} id="analytics-trend-heading" title="Tren aktivitas" /><CardContent><EmptyState action={context.activeDimensionCount > 0 ? <Button asChild variant="outline"><Link href="/app/analitik">Reset filter</Link></Button> : undefined} description={context.activeDimensionCount > 0 ? "Kombinasi filter ini tidak memiliki event kiriman dibuat atau resi terbit." : "Tidak ada event kiriman dibuat atau resi terbit pada periode ini. Ini bukan kegagalan pemuatan data."} icon={PackageOpen} title="Tidak ada aktivitas untuk diplot" /></CardContent></Card>;
+    return <Card className="lg:col-span-full"><RegionHeading description={`${context.periodLabel} / ${context.timezoneLabel}.`} id="analytics-trend-heading" title="Tren aktivitas" /><CardContent><EmptyState action={context.activeDimensionCount > 0 ? <Button asChild variant="outline"><Link href="/app/analitik">Reset filter</Link></Button> : undefined} description={context.activeDimensionCount > 0 ? "Kombinasi filter ini tidak memiliki event kiriman dibuat atau resi terbit." : "Tidak ada event kiriman dibuat atau resi terbit pada periode ini. Ini bukan kegagalan pemuatan data."} icon={PackageOpen} title="Tidak ada aktivitas untuk diplot" /></CardContent></Card>;
   }
 
   return (
-    <Card>
+    <Card className="lg:col-span-full">
       <RegionHeading description={`${context.periodLabel} / ${context.timezoneLabel}. Sumbu vertikal menunjukkan jumlah kiriman.`} id="analytics-trend-heading" title={`Tren ${context.range.granularity === "harian" ? "harian" : "bulanan"}`} />
       <CardContent className="space-y-5">
-        <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Data tren</p><DataFreshnessControl formattedGeneratedAt={formatInZone(result.value.generatedAt, context.range.timezone)} generatedAtIso={result.value.generatedAt.toISOString()} initiallyStale={isDataStale(result.value.generatedAt, new Date())} /></div>
+        <div><p className="text-xs font-medium text-muted-foreground">Data tren</p><DataFreshnessControl formattedGeneratedAt={formatInZone(result.value.generatedAt, context.range.timezone)} generatedAtIso={result.value.generatedAt.toISOString()} initiallyStale={isDataStale(result.value.generatedAt, new Date())} /></div>
         <ShipmentTrendChart data={rows} granularity={context.range.granularity} />
-        <details className="group rounded-lg border">
-          <summary className="cursor-pointer rounded-lg px-4 py-3 text-sm font-medium outline-none marker:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
-            Lihat data tren dalam tabel
-          </summary>
-          <div aria-label="Tabel tren kiriman" className="overflow-x-auto border-t focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_[data-slot=table-container]]:overflow-visible" role="region" tabIndex={0}>
-            <Table className="min-w-[34rem]">
-              <TableCaption className="px-3 pb-3 text-left">Detail jumlah kiriman dibuat dan resi terbit / {context.periodLabel} / {context.timezoneLabel}</TableCaption>
-              <TableHeader><TableRow><TableHead>{context.range.granularity === "harian" ? "Tanggal" : "Bulan"}</TableHead><TableHead className="text-right">Kiriman dibuat</TableHead><TableHead className="text-right">Resi terbit</TableHead></TableRow></TableHeader>
-              <TableBody>{rows.map((row) => <TableRow key={row.key}><TableCell className="font-medium" scope="row">{row.label}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.createdCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.issuedCount)}</TableCell></TableRow>)}</TableBody>
-            </Table>
-          </div>
-        </details>
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Data tren dalam tabel</h3>
+          <Table className="min-w-[20rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel tren kiriman", role: "region", tabIndex: 0 }}>
+            <TableCaption className="px-3 pb-3 text-left">Detail jumlah kiriman dibuat dan resi terbit / {context.periodLabel} / {context.timezoneLabel}</TableCaption>
+            <TableHeader><TableRow><TableHead>{context.range.granularity === "harian" ? "Tanggal" : "Bulan"}</TableHead><TableHead className="text-right">Kiriman dibuat</TableHead><TableHead className="text-right">Resi terbit</TableHead></TableRow></TableHeader>
+            <TableBody>{rows.map((row) => <TableRow key={row.key}><TableCell className="font-medium" scope="row">{row.label}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.createdCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.issuedCount)}</TableCell></TableRow>)}</TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -318,24 +349,42 @@ export async function AnalyticsCourierRegion({
 }) {
   const result = await settle(promise);
   if (!result.ok) {
-    return <AnalyticsRegionError description="Ringkasan, tren, dan tabel kiriman tetap tersedia." focusTargetId="analytics-courier-heading" title="Breakdown kurir tidak dapat dimuat" />;
+    return <div className="lg:col-span-full"><AnalyticsRegionError description="Ringkasan, tren, dan tabel kiriman tetap tersedia." focusTargetId="analytics-courier-heading" title="Breakdown kurir tidak dapat dimuat" /></div>;
   }
 
+  // Spec 19 M-3: presentation-only ranking; low-volume rows never outrank higher-volume rows by rate alone.
+  const couriers = orderCouriersForRanking(result.value).map((row) => ({
+    ...row,
+    lowVolume: row.resolvedSubmissionCount > 0 && isLowVolumeCourier(row),
+    rate: courierIssueRate(row),
+  }));
+  const chartData = couriers
+    .filter((row) => row.resolvedSubmissionCount > 0)
+    .map((row) => ({
+      courier: row.courier.toUpperCase(),
+      label: row.lowVolume
+        ? `${countFormatter.format(row.rate)}% · ${lowVolumeLabel(row)}`
+        : `${countFormatter.format(row.rate)}% · ${countFormatter.format(row.issuedCount)}/${countFormatter.format(row.resolvedSubmissionCount)}`,
+      lowVolume: row.lowVolume,
+      rate: row.rate,
+    }));
+
   return (
-    <Card>
-      <RegionHeading description={`Tingkat penerbitan dihitung dari outcome provider yang sudah terselesaikan pada ${context.periodLabel}. Volume denominator selalu ditampilkan.`} id="analytics-courier-heading" title="Performa kurir" />
-      <CardContent>
-        {result.value.length > 0 ? (
-          <div aria-label="Tabel performa kurir" className="overflow-x-auto rounded-lg border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_[data-slot=table-container]]:overflow-visible" role="region" tabIndex={0}>
-            <Table className="min-w-[32rem]">
-              <TableCaption className="px-3 pb-3 text-left">Perbandingan kurir berdasarkan waktu outcome provider / {context.periodLabel} / {context.timezoneLabel}.</TableCaption>
-              <TableHeader><TableRow><TableHead>Kurir</TableHead><TableHead className="text-right">Resi terbit</TableHead><TableHead className="text-right">Outcome terselesaikan</TableHead><TableHead className="text-right">Tingkat penerbitan</TableHead></TableRow></TableHeader>
-              <TableBody>{result.value.map((row) => {
-                const rate = row.resolvedSubmissionCount > 0 ? (row.issuedCount / row.resolvedSubmissionCount) * 100 : 0;
-                return <TableRow key={row.courier}><TableCell className="font-medium uppercase" scope="row">{row.courier}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.issuedCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.resolvedSubmissionCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(rate)}%</TableCell></TableRow>;
-              })}</TableBody>
-            </Table>
-          </div>
+    <Card className="lg:col-span-full">
+      <RegionHeading description={`Resi terbit dibanding pengajuan yang selesai pada ${context.periodLabel}. Jumlah pengajuan ditampilkan bersama persentasenya.`} id="analytics-courier-heading" title="Performa kurir" />
+      <CardContent className="space-y-5">
+        {couriers.length > 0 ? (
+          <>
+            {chartData.length > 0 ? <CourierIssueRateChart data={chartData} /> : null}
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Data performa kurir dalam tabel</h3>
+              <Table className="min-w-[24rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel performa kurir", role: "region", tabIndex: 0 }}>
+                <TableCaption className="px-3 pb-3 text-left">Perbandingan kurir berdasarkan waktu outcome provider / {context.periodLabel} / {context.timezoneLabel}.</TableCaption>
+                <TableHeader><TableRow><TableHead>Kurir</TableHead><TableHead className="text-right">Resi terbit</TableHead><TableHead className="text-right">Outcome terselesaikan</TableHead><TableHead className="text-right">Tingkat penerbitan</TableHead></TableRow></TableHeader>
+                <TableBody>{couriers.map((row) => <TableRow key={row.courier}><TableCell className="font-medium uppercase" scope="row">{row.courier}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.issuedCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.resolvedSubmissionCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.rate)}%{row.lowVolume ? <span className="block text-xs text-muted-foreground">{lowVolumeLabel(row)}</span> : null}</TableCell></TableRow>)}</TableBody>
+              </Table>
+            </div>
+          </>
         ) : <p className="py-4 text-sm text-muted-foreground">Belum ada outcome provider yang terselesaikan pada filter ini.</p>}
       </CardContent>
     </Card>
@@ -363,11 +412,11 @@ export async function AnalyticsShipmentRegion({
   const shipmentPage = result.value;
   if (shipmentPage.totalCount === 0) {
     if (context.activeDimensionCount > 0) {
-      return <div className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" id="analytics-shipments-heading" tabIndex={-1}><EmptyState action={<Button asChild className="min-h-11" variant="outline"><Link href="/app/analitik">Reset filter</Link></Button>} description="Tenant memiliki kiriman, tetapi kombinasi outlet, kurir, lifecycle, dan periode ini tidak menghasilkan record." icon={PackageOpen} title="Tidak ada kiriman untuk filter ini" /></div>;
+      return <div className={focusRing} id="analytics-shipments-heading" tabIndex={-1}><EmptyState action={<Button asChild className="min-h-11" variant="outline"><Link href="/app/analitik">Reset filter</Link></Button>} description="Tenant memiliki kiriman, tetapi kombinasi outlet, kurir, lifecycle, dan periode ini tidak menghasilkan record." icon={PackageOpen} title="Tidak ada kiriman untuk filter ini" /></div>;
     }
     const comparison = comparisonPromise ? await settle(comparisonPromise) : null;
     const previousCreatedCount = comparison?.ok ? comparison.value.previous.createdCount : 0;
-    return <div className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" id="analytics-shipments-heading" tabIndex={-1}><EmptyState action={<Button asChild className="min-h-11" variant="outline"><Link href={`/app/analitik?rentang=30-hari&tz=${encodeURIComponent(context.range.timezone)}`}>Lihat 30 hari terakhir</Link></Button>} description={<>Kiriman tercatat pada periode lain. Periode sebelumnya ({context.previousPeriodLabel}) mencatat {countFormatter.format(previousCreatedCount)} kiriman.</>} icon={PackageOpen} title={`Tidak ada aktivitas pada ${context.periodLabel}`} /></div>;
+    return <div className={focusRing} id="analytics-shipments-heading" tabIndex={-1}><EmptyState action={<Button asChild className="min-h-11" variant="outline"><Link href={`/app/analitik?rentang=30-hari&tz=${encodeURIComponent(context.range.timezone)}`}>Lihat 30 hari terakhir</Link></Button>} description={<>Kiriman tercatat pada periode lain. Periode sebelumnya ({context.previousPeriodLabel}) mencatat {countFormatter.format(previousCreatedCount)} kiriman.</>} icon={PackageOpen} title={`Tidak ada aktivitas pada ${context.periodLabel}`} /></div>;
   }
 
   const totalPages = Math.max(1, Math.ceil(shipmentPage.totalCount / pageSize));
@@ -381,63 +430,66 @@ export async function AnalyticsShipmentRegion({
         : "Pengecualian yang masih aktif saat ini";
 
   return (
-    <Card id="kiriman-analitik">
-      <RegionHeading description={`${description} (${context.timezoneLabel}) dengan filter dimensi yang sama.`} id="analytics-shipments-heading" title="Kiriman" />
-      <CardContent className="space-y-4">
-        <div aria-label="Tabel kiriman" className="overflow-x-auto rounded-lg border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_[data-slot=table-container]]:overflow-visible" role="region" tabIndex={0}>
-          <Table className="min-w-[72rem]">
-            <TableCaption className="px-3 pb-3 text-left">Tabel kiriman tenant pada rentang, basis waktu, dan filter terpilih.</TableCaption>
-            <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card">Kiriman</TableHead><TableHead>Dibuat</TableHead><TableHead>{context.eventBasis === "outcome" ? "Outcome provider" : "Resi terbit"}</TableHead><TableHead>Outlet</TableHead><TableHead>Kurir</TableHead><TableHead>Layanan</TableHead><TableHead>Status</TableHead><TableHead>AWB</TableHead><TableHead className="text-right">Total tagihan COD provider</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {shipmentPage.rows.map((row) => {
-                const status = SHIPMENT_STATUS_PRESENTATION[row.status];
-                const detailHref = analyticsShipmentDetailHref(context.role, row.shipmentId);
-                const reference = row.shipmentId.slice(0, 8).toUpperCase();
-                return (
-                  <TableRow key={row.shipmentId}>
-                    <TableCell className="sticky left-0 z-10 bg-card font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline sm:min-h-0" href={detailHref}>{reference}</Link> : reference}</TableCell>
-                    <TableCell>{formatInZone(row.createdAt, context.range.timezone)}</TableCell>
-                    <TableCell>{row.issuedAt ? formatInZone(row.issuedAt, context.range.timezone) : "—"}</TableCell>
-                    <TableCell>{row.outletName}</TableCell>
-                    <TableCell className="uppercase">{row.courier ?? "—"}</TableCell>
-                    <TableCell>{row.providerService ?? "—"}</TableCell>
-                    <TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell>
-                    <TableCell className="font-mono text-xs">{row.cnoteNo ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.isCod && row.providerCodAmountIdr !== null ? idrFormatter.format(row.providerCodAmountIdr) : "—"}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-        <nav aria-label="Navigasi halaman kiriman" className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <span className="text-sm text-muted-foreground">Halaman {page} dari {totalPages} / {countFormatter.format(shipmentPage.totalCount)} kiriman</span>
-          <div className="flex gap-2">
-            {page > 1 ? <Button asChild className="min-h-11 sm:min-h-8" variant="outline"><Link href={paginationHref(context.canonicalQuery, page - 1)}><ChevronLeft aria-hidden="true" />Sebelumnya</Link></Button> : <Button className="min-h-11 sm:min-h-8" disabled variant="outline"><ChevronLeft aria-hidden="true" />Sebelumnya</Button>}
-            {page < totalPages ? <Button asChild className="min-h-11 sm:min-h-8" variant="outline"><Link href={paginationHref(context.canonicalQuery, page + 1)}>Berikutnya<ChevronRight aria-hidden="true" /></Link></Button> : <Button className="min-h-11 sm:min-h-8" disabled variant="outline">Berikutnya<ChevronRight aria-hidden="true" /></Button>}
-          </div>
-        </nav>
-      </CardContent>
-    </Card>
+    <section aria-labelledby="analytics-shipments-heading" className="scroll-mt-6 space-y-4" id="kiriman-analitik">
+      <SectionHeading description={`${description} (${context.timezoneLabel}) sesuai filter terpilih.`} id="analytics-shipments-heading" title="Kiriman" />
+      <Table className="min-w-[72rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel kiriman", role: "region", tabIndex: 0 }}>
+        <TableCaption className="px-3 pb-3 text-left">Tabel kiriman tenant pada rentang, basis waktu, dan filter terpilih.</TableCaption>
+        <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-[color-mix(in_oklch,var(--muted)_40%,var(--background))]">Kiriman</TableHead><TableHead>Dibuat</TableHead><TableHead>{context.eventBasis === "outcome" ? "Outcome provider" : "Resi terbit"}</TableHead><TableHead>Outlet</TableHead><TableHead>Kurir</TableHead><TableHead>Layanan</TableHead><TableHead>Status</TableHead><TableHead>AWB</TableHead><TableHead className="text-right">Total tagihan COD provider</TableHead></TableRow></TableHeader>
+        <TableBody>
+          {shipmentPage.rows.map((row) => {
+            const status = SHIPMENT_STATUS_PRESENTATION[row.status];
+            const detailHref = analyticsShipmentDetailHref(context.role, row.shipmentId);
+            const reference = shipmentReference(row.shipmentId);
+            return (
+              <TableRow key={row.shipmentId}>
+                <TableCell className="sticky left-0 z-10 bg-background font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline md:min-h-0" href={detailHref}>{reference}</Link> : reference}</TableCell>
+                <TableCell>{formatInZone(row.createdAt, context.range.timezone)}</TableCell>
+                <TableCell>{row.issuedAt ? formatInZone(row.issuedAt, context.range.timezone) : "—"}</TableCell>
+                <TableCell>{row.outletName}</TableCell>
+                <TableCell className="uppercase">{row.courier ?? "—"}</TableCell>
+                <TableCell>{row.providerService ?? "—"}</TableCell>
+                <TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell>
+                <TableCell className="font-mono text-xs">{row.cnoteNo ?? "—"}</TableCell>
+                <TableCell className="text-right tabular-nums">{row.isCod && row.providerCodAmountIdr !== null ? idrFormatter.format(row.providerCodAmountIdr) : "—"}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      <DataTablePagination
+        hrefForPage={(target) => paginationHref(context.canonicalQuery, target)}
+        label="Navigasi halaman kiriman"
+        page={page}
+        summary={`${countFormatter.format(shipmentPage.totalCount)} kiriman`}
+        totalCount={shipmentPage.totalCount}
+        totalPages={totalPages}
+      />
+    </section>
   );
 }
 
+const statCardSkeleton = (key: number) => <div className="space-y-3 rounded-xl p-4 ring-1 ring-foreground/10" key={key}><div className="flex items-center justify-between"><Skeleton className="h-4 w-24" /><Skeleton className="size-4" /></div><Skeleton className="h-8 w-28" /><Skeleton className="h-3 w-full" /></div>;
+
 export function AnalyticsSummarySkeleton() {
-  return <div aria-busy="true" aria-label="Memuat ringkasan analitik" className="space-y-6"><Skeleton className="h-12 w-full" />{Array.from({ length: 2 }, (_, card) => <div className="space-y-4 rounded-lg border p-5" key={card}><Skeleton className="h-5 w-48" /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (__, metric) => <div className="space-y-3" key={metric}><Skeleton className="h-4 w-28" /><Skeleton className="h-8 w-20" /><Skeleton className="h-3 w-36" /></div>)}</div></div>)}</div>;
+  return <div aria-busy="true" aria-label="Memuat ringkasan analitik" className="space-y-4"><div className="space-y-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-80 max-w-full" /></div><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => statCardSkeleton(index))}</div><Skeleton className="h-8 w-full" /></div>;
+}
+
+export function AnalyticsFinancialSkeleton() {
+  return <div aria-busy="true" aria-label="Memuat nilai kiriman" className="space-y-4"><Skeleton className="h-6 w-40" /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => statCardSkeleton(index))}</div></div>;
 }
 
 export function AnalyticsReconciliationSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat exception rekonsiliasi" className="space-y-4 rounded-lg border p-5"><Skeleton className="h-5 w-48" /><Skeleton className="h-4 w-72 max-w-full" /><Skeleton className="h-8 w-36" /></div>;
+  return <div aria-busy="true" aria-label="Memuat exception rekonsiliasi" className="space-y-4"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-72 max-w-full" /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{statCardSkeleton(0)}</div></div>;
 }
 
 export function AnalyticsTrendSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat tren analitik" className="space-y-4 rounded-lg border p-5"><Skeleton className="h-5 w-44" /><Skeleton className="h-72 w-full" /><Skeleton className="h-24 w-full" /></div>;
+  return <div aria-busy="true" aria-label="Memuat tren analitik" className="space-y-4 rounded-xl p-4 ring-1 ring-foreground/10 lg:col-span-full"><Skeleton className="h-5 w-44" /><Skeleton className="h-72 w-full" /><Skeleton className="h-24 w-full" /></div>;
 }
 
 export function AnalyticsCourierSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat performa kurir" className="space-y-4 rounded-lg border p-5"><Skeleton className="h-5 w-40" />{Array.from({ length: 4 }, (_, index) => <Skeleton className="h-10 w-full" key={index} />)}</div>;
+  return <div aria-busy="true" aria-label="Memuat performa kurir" className="space-y-4 rounded-xl p-4 ring-1 ring-foreground/10 lg:col-span-full"><Skeleton className="h-5 w-40" /><Skeleton className="h-40 w-full" />{Array.from({ length: 3 }, (_, index) => <Skeleton className="h-10 w-full" key={index} />)}</div>;
 }
 
 export function AnalyticsShipmentSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat tabel kiriman" className="space-y-4 rounded-lg border p-5"><Skeleton className="h-5 w-32" />{Array.from({ length: 6 }, (_, index) => <Skeleton className="h-10 w-full" key={index} />)}<div className="flex flex-col gap-3 sm:flex-row sm:justify-between"><Skeleton className="h-9 w-full sm:w-40" /><Skeleton className="h-9 w-full sm:w-56" /></div></div>;
+  return <div aria-busy="true" aria-label="Memuat tabel kiriman" className="space-y-4"><Skeleton className="h-6 w-32" /><div className="space-y-2 rounded-md border p-3">{Array.from({ length: 6 }, (_, index) => <Skeleton className="h-10 w-full" key={index} />)}</div><div className="flex flex-col gap-3 sm:flex-row sm:justify-between"><Skeleton className="h-8 w-full sm:w-40" /><Skeleton className="h-8 w-full sm:w-72" /></div></div>;
 }

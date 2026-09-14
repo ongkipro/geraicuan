@@ -22,6 +22,7 @@ import { withTenantContext } from "@/db/tenant-context";
 import { outlets, shipmentDrafts, shipments } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
+import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = { robots: { index: false } };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -147,7 +148,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
   return (
     <PageContainer width="form">
       <PageHeader
-        description="Simpan detail penerima dan paket, lalu bandingkan layanan Mengantar sebelum menerbitkan AWB."
+        description="Isi penerima dan paket, lalu pilih layanan Mengantar."
         eyebrow="Pengiriman"
         title="Buat draf kiriman"
       />
@@ -158,7 +159,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
           draft states. */}
       <nav
         aria-label="Tahapan pembuatan kiriman"
-        className="overflow-x-auto border-y bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+        className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         tabIndex={0}
       >
         <ol className="grid min-w-[32rem] grid-cols-4 divide-x text-sm">
@@ -170,7 +171,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
           ].map(([step, label, state]) => (
             <li className="grid gap-1 px-4 py-3" key={step}>
               <span className="text-xs font-medium text-muted-foreground">Langkah {step}</span>
-              <strong>{label}</strong>
+              <strong className="font-medium">{label}</strong>
               <span className="text-xs text-muted-foreground">{state}</span>
             </li>
           ))}
@@ -178,22 +179,22 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
       </nav>
 
     {data.savedDraft ? (
-      <FocusRegion className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950" role="status">
+      <FocusRegion className="rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10 outline-none focus-visible:ring-3 focus-visible:ring-ring/50" role="status">
         <div className="flex gap-3">
-          <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-emerald-700" />
-          <div className="grid gap-1">
+          <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
+          <div className="grid min-w-0 gap-1">
             <h2 className="font-medium">Draf kiriman tersimpan</h2>
-            <p>Nomor draf: <span className="font-mono">{data.savedDraft.id.slice(0, 8).toUpperCase()}</span> · <strong>{data.savedDraft.status}</strong></p>
-            <p className="text-emerald-800">{data.savedDraft.outletName} → {data.savedDraft.destinationAreaLabel}</p>
-            <p className="text-emerald-800">Muat estimasi di bawah untuk membandingkan layanan. Belum ada pesanan yang dikirim ke penyedia.</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button asChild className="min-h-11" size="sm">
+            <p>Nomor draf: <span className="font-mono">{shipmentReference(data.savedDraft.id)}</span> · <strong className="font-medium">{data.savedDraft.status}</strong></p>
+            <p className="wrap-anywhere text-muted-foreground">{data.savedDraft.outletName} → {data.savedDraft.destinationAreaLabel}</p>
+            <p className="text-muted-foreground">Muat estimasi di bawah untuk membandingkan layanan. Belum ada pesanan yang dikirim ke penyedia.</p>
+            <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:flex-wrap">
+              <Button asChild className="min-h-11 md:min-h-8" size="sm">
                 <Link href={`/app/pengiriman/${data.savedDraft.id}`}>Buka detail kiriman</Link>
               </Button>
-              <Button asChild className="min-h-11" size="sm" variant="outline">
+              <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="outline">
                 <Link href="/app/pengiriman">Lihat antrean</Link>
               </Button>
-              <Button asChild className="min-h-11" size="sm" variant="ghost">
+              <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="ghost">
                 <Link href="/app/pengiriman/baru">Buat draf berikutnya</Link>
               </Button>
             </div>
@@ -241,7 +242,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
             : "Hubungi Tenant Admin untuk mengatur alamat pickup outlet."}
           </p>
         {principal.role === "TENANT_ADMIN" ? (
-          <Button asChild className="w-fit" size="sm">
+          <Button asChild className="min-h-11 max-md:w-full md:min-h-8 md:w-fit" size="sm">
             <Link href="/app/pengaturan">Atur outlet &amp; koneksi</Link>
           </Button>
         ) : null}

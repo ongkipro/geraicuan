@@ -5,15 +5,13 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import {
-  ActionSkeleton,
-  DashboardActionRegion,
   DashboardHeaderActions,
   DashboardMetricsRegion,
   DashboardPeriodSummaryRegion,
   DashboardPeriodSupportRegion,
   DashboardPeriodTrendRegion,
-  DashboardQuickAccess,
   DashboardRecentRegion,
+  dashboardOverviewGridClassName,
   MetricsSkeleton,
   OutletReadinessRegion,
   PeriodSummarySkeleton,
@@ -27,9 +25,7 @@ import { DashboardPeriodFilter } from "@/app/app/dashboard-period-filter";
 import { PageHeader } from "@/components/cms/page-header";
 import { PageContainer } from "@/components/cms/page-container";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db/client";
 import { listOutletReadinessSummary } from "@/db/outlet-readiness-repository";
@@ -150,10 +146,11 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
   const supportKind = (
     ["created", "cod", "non-cod", "issued"] as const
   ).find((kind) => kind === requestedSupport);
+  const demoChart = process.env.NODE_ENV === "development" && firstValue(rawParams.demo) === "grafik";
   const now = new Date();
   const range = parseAnalyticsRange({
     ...rawParams,
-    rentang: rawParams.rentang ?? "hari-ini",
+    rentang: rawParams.rentang ?? "7-hari",
   }, now);
   const decisionContext = buildAnalyticsDecisionContext(range);
   const periodContext: DashboardPeriodContext = {
@@ -180,7 +177,19 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
         generatedAt: new Date(value.generatedAt.getTime() - DATA_STALE_AFTER_MS - 60_000),
       } : value;
     });
-    let trend = range.spanDays <= 1 ? Promise.resolve([]) : withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardPeriodTrend(tx, context, decisionContext.currentRange, periodFilters)).then((rows) => auditScenario === "dashboard-period-demo" ? buildTrendBuckets(decisionContext.currentRange).map((bucket, index) => ({ codCount: index % 3 + 1, key: bucket.key, nonCodCount: index % 2 + 1 })) : auditScenario === "dashboard-period-empty" ? [] : rows);
+    const readTrend = (trendRange: typeof range, previous = false) => {
+      if (range.spanDays <= 1 || (previous && range.granularity !== "harian")) return Promise.resolve([]);
+      if (demoChart) return Promise.resolve(buildTrendBuckets(trendRange).map((bucket, index) => ({
+        key: bucket.key,
+        codCount: (previous ? [8, 12, 9, 16, 11, 15, 13] : [12, 18, 15, 24, 20, 29, 25])[index % 7],
+        nonCodCount: (previous ? [4, 5, 4, 6, 5, 7, 5] : [6, 7, 6, 9, 8, 11, 10])[index % 7],
+      })));
+      return withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardPeriodTrend(tx, context, trendRange, periodFilters)).then((rows) =>
+        auditScenario === "dashboard-period-demo" ? buildTrendBuckets(trendRange).map((bucket, index) => ({ codCount: index % 3 + 1, key: bucket.key, nonCodCount: index % 2 + (previous ? 0 : 1) }))
+          : auditScenario === "dashboard-period-empty" || auditScenario === "dashboard-first-run" ? [] : rows);
+    };
+    let trend = readTrend(decisionContext.currentRange);
+    const previousTrend = readTrend(decisionContext.previousRange, true);
     if (auditScenario === "dashboard-stream") {
       summary = delayResult(summary, 1_200);
       trend = delayResult(trend, 2_000);
@@ -188,13 +197,13 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
     const support = supportKind
       ? withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardPeriodSupport(tx, context, decisionContext.currentRange, supportKind, periodFilters))
       : null;
-    return { summary, support, trend };
+    return { summary, support, trend, previousTrend };
   })();
   const todayLocalDate = parseAnalyticsRange({ rentang: "hari-ini", tz: range.timezone }, now).startDate;
-  const activeFilterCount = Number(range.presetId !== "hari-ini") + Number(range.timezone !== "Asia/Jakarta") + Number(Boolean(selectedOutlet));
+  const activeFilterCount = Number(range.presetId !== "7-hari") + Number(range.timezone !== "Asia/Jakarta") + Number(Boolean(selectedOutlet));
   const analyticsQuery = serializeAnalyticsRange(range);
   if (selectedOutlet) analyticsQuery.set("outlet", selectedOutlet.id);
-  const analyticsHref = `/app/analitik?${analyticsQuery.toString()}`;
+  const analyticsHref = principal.role === "TENANT_ADMIN" ? `/app/analitik?${analyticsQuery.toString()}` : undefined;
   const supportingLinks = Object.fromEntries(
     (["created", "cod", "non-cod", "issued"] as const).map((kind) => {
       const params = new URLSearchParams(analyticsQuery);
@@ -206,39 +215,29 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
 
   return (
     <PageContainer width="wide">
-      <PageHeader actions={<Suspense fallback={<Skeleton className="h-10 w-40 max-sm:h-11 max-sm:w-full" />}><DashboardHeaderActions promise={resolvedOutletsPromise} role={principal.role} /></Suspense>} description="Pantau input kiriman, komposisi COD/non-COD, dan pekerjaan yang perlu ditindaklanjuti." eyebrow="Operasional tenant" focusTargetId="dashboard-page-heading" title="Ringkasan" />
+      <PageHeader eyebrow="Operasional tenant" actions={<Suspense fallback={<Skeleton className="h-8 w-40 max-md:h-11 max-sm:w-full" />}><DashboardHeaderActions promise={resolvedOutletsPromise} role={principal.role} /></Suspense>} focusTargetId="dashboard-page-heading" title="Ringkasan" />
 
       <Suspense fallback={<ReadinessSkeleton />}><OutletReadinessRegion promise={resolvedOutletsPromise} role={principal.role} /></Suspense>
 
-      <Card className="overflow-hidden rounded-lg shadow-none">
-        <CardHeader className="border-b">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div><CardTitle className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" id="dashboard-period-heading" tabIndex={-1}>Ringkasan periode</CardTitle><CardDescription>{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</CardDescription></div>
-            {principal.role === "TENANT_ADMIN" ? <Button asChild className="min-h-11 sm:min-h-8" size="sm" variant="outline"><Link href={analyticsHref}>Analitik lengkap</Link></Button> : null}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 border-b py-4">
+      {/* The filter bar is the header's toolbar row and the line under it names the applied dates, zone, and outlet at every width; the period heading stays for the document outline only. */}
+      <section aria-labelledby="dashboard-period-heading" className="grid gap-4">
+        <h2 className="sr-only" id="dashboard-period-heading">Ringkasan periode</h2>
+        <div className="space-y-3">
           <DashboardPeriodFilter activeCount={activeFilterCount} key={analyticsQuery.toString()} outlets={outletRows} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate, timezone: range.timezone }} />
-          <div className="flex flex-wrap gap-2"><Badge variant="secondary">{decisionContext.presetLabel}</Badge><Badge variant="outline">{decisionContext.timezoneLabel}</Badge>{selectedOutlet ? <Badge variant="outline">{selectedOutlet.name}</Badge> : null}</div>
+          <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
           {range.issues.length > 0 ? <Alert><AlertTitle>Filter disesuaikan</AlertTitle><AlertDescription><ul className="list-disc pl-5">{range.issues.map((issue, index) => <li key={`${issue}-${index}`}>{analyticsIssueMessage(issue)}</li>)}</ul></AlertDescription></Alert> : null}
           {invalidOutlet ? <Alert variant="destructive"><AlertTitle>Filter outlet ditolak</AlertTitle><AlertDescription>Outlet pada alamat halaman tidak tersedia untuk tenant ini.<div className="mt-3"><Button asChild variant="outline"><Link href="/app">Reset ke filter aman</Link></Button></div></AlertDescription></Alert> : null}
-        </CardContent>
-        {periodReads ? <Suspense fallback={<PeriodSummarySkeleton />}><DashboardPeriodSummaryRegion context={periodContext} lifetimeMetricsPromise={metricsPromise} outletReady={outletRows.some((outlet) => outlet.ready)} promise={periodReads.summary} supportingLinks={supportingLinks} /></Suspense> : null}
-        {periodReads ? <Suspense fallback={<PeriodTrendSkeleton />}><DashboardPeriodTrendRegion context={periodContext} promise={periodReads.trend} /></Suspense> : null}
+        </div>
+        {periodReads ? <Suspense fallback={<PeriodSummarySkeleton />}><DashboardPeriodSummaryRegion analyticsHref={analyticsHref} context={periodContext} lifetimeMetricsPromise={metricsPromise} outletReady={outletRows.some((outlet) => outlet.ready)} promise={periodReads.summary} supportingLinks={supportingLinks} /></Suspense> : null}
         {periodReads?.support && supportKind ? <Suspense fallback={<PeriodSupportSkeleton />}><DashboardPeriodSupportRegion context={periodContext} kind={supportKind} promise={periodReads.support} /></Suspense> : null}
-      </Card>
+      </section>
 
-      <Suspense fallback={<MetricsSkeleton />}><DashboardMetricsRegion metricsPromise={metricsPromise} /></Suspense>
-
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(17rem,1fr)]">
-        <Suspense fallback={<ActionSkeleton />}><DashboardActionRegion promise={actionPromise} role={principal.role} /></Suspense>
-        <Card className="h-fit rounded-lg shadow-none">
-          <CardHeader className="border-b"><CardTitle>Akses lanjutan</CardTitle><CardDescription>Buka pencarian dan laporan lengkap.</CardDescription></CardHeader>
-          <CardContent><DashboardQuickAccess role={principal.role} /></CardContent>
-        </Card>
+      <div className={dashboardOverviewGridClassName}>
+        {periodReads ? <Suspense fallback={<PeriodTrendSkeleton />}><DashboardPeriodTrendRegion context={periodContext} demo={demoChart} previousPromise={periodReads.previousTrend} promise={periodReads.trend} /></Suspense> : null}
+        <Suspense fallback={<RecentSkeleton />}><DashboardRecentRegion actionPromise={actionPromise} multipleOutlets={outletRows.length > 1} recentPromise={recentPromise} role={principal.role} /></Suspense>
       </div>
 
-      <Suspense fallback={<RecentSkeleton />}><DashboardRecentRegion promise={recentPromise} /></Suspense>
+      <Suspense fallback={<MetricsSkeleton />}><DashboardMetricsRegion metricsPromise={metricsPromise} /></Suspense>
     </PageContainer>
   );
 }

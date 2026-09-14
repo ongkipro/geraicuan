@@ -62,7 +62,12 @@ export default async function ContactDirectoryPage({ searchParams }: ContactDire
 
   return (
     <PageContainer>
-      <PageHeader actions={<Button asChild className="min-h-11"><Link href="/app/kontak/baru"><Plus aria-hidden="true" />Kontak baru</Link></Button>} description="Simpan data pengirim dan penerima sekali, lalu gunakan kembali pada draf berikutnya." eyebrow="Data" title="Kontak" />
+      <PageHeader
+        actions={<Button asChild className="min-h-11"><Link href="/app/kontak/baru"><Plus aria-hidden="true" />Kontak baru</Link></Button>}
+        description="Simpan data pengirim dan penerima sekali, lalu gunakan kembali pada draf berikutnya."
+        eyebrow="Data"
+        title="Kontak"
+      />
       {invalidStatus ? <Alert role="status"><AlertTitle>Filter status disesuaikan</AlertTitle><AlertDescription>Status tidak dikenali; kontak aktif ditampilkan.</AlertDescription></Alert> : null}
       <ContactDirectoryBrowser initialRows={safeRows} status={status} />
     </PageContainer>

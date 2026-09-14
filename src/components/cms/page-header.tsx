@@ -8,29 +8,30 @@ type PageHeaderProps = {
   title: ReactNode;
 };
 
+/** shadcn-admin page heading: eyebrow, bold title, muted description, actions on the right. */
 export function PageHeader({ actions, description, eyebrow, focusTargetId, title }: PageHeaderProps) {
   return (
-    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
+    <header className="flex flex-wrap items-end justify-between gap-2">
+      <div className="min-w-0 space-y-0.5">
         {eyebrow ? (
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-medium text-muted-foreground">
             {eyebrow}
           </p>
         ) : null}
         <h1
-          className="rounded-sm text-2xl font-semibold tracking-tight text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-3xl"
+          className="rounded-sm text-2xl font-bold tracking-tight text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           id={focusTargetId}
           tabIndex={focusTargetId ? -1 : undefined}
         >
           {title}
         </h1>
         {description ? (
-          <div className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <div className="max-w-2xl text-sm text-muted-foreground">
             {description}
           </div>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 max-sm:w-full [&>*]:min-h-11">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 max-sm:w-full [&>*]:min-h-11 md:[&>*]:min-h-8">{actions}</div> : null}
     </header>
   );
 }

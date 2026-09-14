@@ -6,6 +6,7 @@ import {
   formatWibDateTime,
   recipientDensity,
 } from "@/lib/label-format";
+import { shipmentReference } from "@/lib/shipment-reference";
 
 export function LabelSheet({ label }: { label: PrintableLabel }) {
   const recipientLayout = recipientDensity({
@@ -144,7 +145,7 @@ export function LabelSheet({ label }: { label: PrintableLabel }) {
 
       <div className="label-footer">
         <p>
-          Kiriman {label.shipmentId.slice(0, 8).toUpperCase()} · Terbit{" "}
+          Kiriman {shipmentReference(label.shipmentId)} · Terbit{" "}
           {formatWibDateTime(label.issuedAt)}
           <br />
           Nilai ongkir/asuransi berasal dari Mengantar

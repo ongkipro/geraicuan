@@ -56,7 +56,17 @@ export const PROBE = `JSON.stringify((() => {
     .filter(e => e.scrollWidth > de.clientWidth + 1 && getComputedStyle(e).overflowX === 'visible')
     .slice(0, 3).map(e => e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ')[0] : ''));
   const mains = document.querySelectorAll('main').length;
-  const current = [...document.querySelectorAll('[aria-current="page"]')].filter(visible).length;
+  // aria-current is unique within a navigation set, not across the document:
+  // the sidebar and a table's pagination may each name their current page.
+  const navigationCurrent = [...document.querySelectorAll('nav')].map(nav => ({
+    cms: ['Navigasi tenant', 'Navigasi platform'].includes(nav.getAttribute('aria-label')),
+    count: [...nav.querySelectorAll('[aria-current="page"]')]
+      .filter(el => el.closest('nav') === nav && visible(el)).length,
+  }));
+  const current = Math.max(
+    navigationCurrent.filter(nav => nav.cms).reduce((sum, nav) => sum + nav.count, 0),
+    ...navigationCurrent.filter(nav => nav.count > 1).map(nav => nav.count),
+  );
   // A horizontally scrolling container has to be announced and reachable. It
   // is announced by a label, and reachable either by its own tab stop or by
   // tabbing through focusable content inside it — a strip of links scrolls
@@ -99,6 +109,8 @@ export const PROBE = `JSON.stringify((() => {
   // title but contributes nothing to the outline.
   const titlesNotHeadings = [...document.querySelectorAll('[data-slot="card-title"]')]
     .filter(visible)
+    // StatCard labels name a scalar value; their enclosing section owns the heading.
+    .filter(el => !el.closest('[data-slot="card"]')?.querySelector('[data-slot="stat-value"]'))
     .filter(el => !/^H[1-6]$/.test(el.tagName) && !el.getAttribute('role'))
     .map(el => el.textContent.trim().slice(0, 28));
 
@@ -482,4 +494,3 @@ try {
 } catch (error) {
   throw new Error(`PROBE does not compile: ${error.message}`);
 }
-

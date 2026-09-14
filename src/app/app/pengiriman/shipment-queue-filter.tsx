@@ -1,11 +1,9 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
-import Link from "next/link";
+import { ListFilter } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -36,16 +34,20 @@ export function ShipmentQueueFilter({ status }: { status: ShipmentQueueStatusFil
   const lifecycle = SHIPMENT_STATUS_OPTIONS.filter((option) => !OPERATIONAL_VALUES.has(option.value));
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-      <label className="grid gap-1.5 text-sm font-medium" htmlFor="status-kiriman">
-        Tampilan antrean
+    // Single-choice view with grouped options, so it stays a Select (combobox)
+    // rather than a multi-select facet; styled as a toolbar facet trigger.
+    // Reset lives in the page's DataTableToolbar.
+    <div className="flex w-full items-center md:w-auto">
+      <label className="flex w-full items-center md:w-auto" htmlFor="status-kiriman">
+        <span className="sr-only">Tampilan antrean</span>
         <Select
           disabled={pending}
           onValueChange={(value) => startTransition(() => router.push(shipmentQueueHref(value as ShipmentQueueStatusFilter)))}
           value={status}
         >
-          <SelectTrigger className="w-full min-w-64 data-[size=default]:h-11 sm:w-72 sm:data-[size=default]:h-9" id="status-kiriman">
-            <SelectValue />
+          <SelectTrigger className="w-full justify-start border-dashed max-md:min-h-11 md:w-[13.5rem]" id="status-kiriman">
+            <ListFilter aria-hidden="true" className="text-muted-foreground" />
+            <SelectValue className="flex-1 text-left" />
           </SelectTrigger>
           <SelectContent align="start">
             <SelectGroup>
@@ -60,11 +62,6 @@ export function ShipmentQueueFilter({ status }: { status: ShipmentQueueStatusFil
           </SelectContent>
         </Select>
       </label>
-      {status !== "ALL" ? (
-        <Button asChild className="min-h-11 sm:min-h-9" variant="ghost">
-          <Link href="/app/pengiriman"><RotateCcw aria-hidden="true" />Reset</Link>
-        </Button>
-      ) : null}
       <span aria-live="polite" className="sr-only" role="status">{pending ? "Memuat tampilan antrean…" : ""}</span>
     </div>
   );

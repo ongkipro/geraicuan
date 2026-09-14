@@ -13,6 +13,7 @@ import {
   type MengantarPickupOptionsActionState,
   type OutletSettingsActionState,
 } from "@/app/app/pengaturan/actions";
+import { ContentSection } from "@/components/cms/settings-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -282,7 +283,7 @@ function PickupSelector({
 function ConnectionStatus({ outlet }: { outlet: SafeOutletReadiness }) {
   if (outlet.connectionStatus === "private_ready") {
     return (
-      <div className="space-y-2 border-y py-3">
+      <div className="space-y-2 rounded-md border px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <strong className="text-sm">API key tersimpan</strong>
           <Badge variant="secondary">Tersimpan, belum diverifikasi</Badge>
@@ -332,7 +333,7 @@ function ConnectionStatus({ outlet }: { outlet: SafeOutletReadiness }) {
   }
 
   return (
-    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-y py-2">
+    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md border px-4 py-2">
       <p className="text-sm leading-6 text-muted-foreground">
         Kredensial dikelola oleh GeraiCUAN untuk outlet ini.
       </p>
@@ -414,13 +415,13 @@ export function OutletSettingsForm({
   const isBusy = locationPending || credentialPending || fallbackPending;
 
   return (
-    <section aria-labelledby="outlet-detail-title" className="min-w-0">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-5">
+    <section aria-labelledby="outlet-detail-title" className="grid min-w-0 gap-8">
+      <header className="flex flex-wrap items-start justify-between gap-3 rounded-md border px-4 py-3 lg:max-w-xl">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="text-xs font-medium text-muted-foreground">
             Outlet aktif
           </p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight" id="outlet-detail-title" tabIndex={-1}>
+          <h2 className="mt-0.5 rounded-sm text-base font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="outlet-detail-title" tabIndex={-1}>
             {outlet.name}
           </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -437,11 +438,20 @@ export function OutletSettingsForm({
         </Badge>
       </header>
 
-      <div className="space-y-8 pt-6">
+      <ContentSection
+        description={
+          <>
+            Pilih pickup dari akun Mengantar aktif. Area asal ditentukan otomatis oleh
+            Mengantar dan disimpan sebagai satu pasangan.
+          </>
+        }
+        id="outlet-location-title"
+        title="Lokasi pengiriman"
+      >
           <form
             action={locationAction}
             aria-busy={locationPending}
-            className="max-w-2xl space-y-5 border-b pb-8"
+            className="space-y-5"
             noValidate
           >
             <input name="outletId" type="hidden" value={outlet.id} />
@@ -449,11 +459,7 @@ export function OutletSettingsForm({
             <FieldError>{locationState.errors?.outletId}</FieldError>
 
             <FieldSet>
-              <FieldLegend>Lokasi pengiriman</FieldLegend>
-              <FieldDescription>
-                Pilih pickup dari akun Mengantar aktif. Area asal ditentukan otomatis oleh
-                Mengantar dan disimpan sebagai satu pasangan.
-              </FieldDescription>
+              <FieldLegend className="sr-only">Lokasi pengiriman</FieldLegend>
               {hasLegacyLocation ? (
                 <Alert>
                   <CircleAlert aria-hidden="true" />
@@ -479,7 +485,7 @@ export function OutletSettingsForm({
                   <FieldLabel>Area asal</FieldLabel>
                   <div
                     aria-live="polite"
-                    className="flex min-h-11 items-center border-y bg-muted/30 px-1 py-2 text-sm leading-5"
+                    className="flex min-h-11 items-center rounded-md border bg-muted/40 px-3 py-2 text-sm leading-5"
                   >
                     {selectedPickup?.originLabel ?? (
                       <span className="text-muted-foreground">
@@ -515,23 +521,29 @@ export function OutletSettingsForm({
             ) : null}
 
             <Button
-              className="min-h-11 max-sm:w-full"
+              className="min-h-11 max-sm:w-full sm:ml-auto sm:flex"
               disabled={isBusy || !selectedPickup}
               type="submit"
             >
               {locationPending ? "Menyimpan lokasi…" : "Simpan lokasi"}
             </Button>
           </form>
+      </ContentSection>
 
+      <ContentSection
+        description="Pilih sumber kredensial Mengantar untuk outlet ini."
+        id="outlet-connection-title"
+        title="Koneksi Mengantar"
+      >
           <FieldSet>
-            <FieldLegend>Koneksi Mengantar</FieldLegend>
+            <FieldLegend className="sr-only">Koneksi Mengantar</FieldLegend>
             <ConnectionStatus outlet={outlet} />
 
             <Field>
               <FieldTitle>Sumber koneksi</FieldTitle>
               <RadioGroup
                 aria-label={`Sumber koneksi Mengantar untuk ${outlet.name}`}
-                className="divide-y border-y"
+                className="gap-3"
                 disabled={isBusy}
                 onValueChange={(value) => {
                   if (value === "platform_default" || value === "private") {
@@ -541,7 +553,7 @@ export function OutletSettingsForm({
                 value={connectionMode}
               >
                 <FieldLabel
-                  className="min-h-11 cursor-pointer py-2"
+                  className="min-h-11 cursor-pointer"
                   htmlFor={`connection-platform-${outlet.id}`}
                 >
                   <Field orientation="horizontal">
@@ -556,7 +568,7 @@ export function OutletSettingsForm({
                   </Field>
                 </FieldLabel>
                 <FieldLabel
-                  className="min-h-11 cursor-pointer py-2"
+                  className="min-h-11 cursor-pointer"
                   htmlFor={`connection-private-${outlet.id}`}
                 >
                   <Field orientation="horizontal">
@@ -632,7 +644,7 @@ export function OutletSettingsForm({
                   </Alert>
                 ) : null}
 
-                <Button className="min-h-11 max-sm:w-full" disabled={isBusy} type="submit">
+                <Button className="min-h-11 max-sm:w-full sm:ml-auto sm:flex" disabled={isBusy} type="submit">
                   {credentialPending
                     ? "Menyimpan API key…"
                     : outlet.connectionSource === "private"
@@ -652,7 +664,7 @@ export function OutletSettingsForm({
 
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button className="min-h-11 max-sm:w-full" disabled={isBusy} variant="outline">
+                    <Button className="min-h-11 max-sm:w-full sm:ml-auto sm:flex" disabled={isBusy} variant="outline">
                       Gunakan Default GeraiCUAN
                     </Button>
                   </AlertDialogTrigger>
@@ -715,7 +727,7 @@ export function OutletSettingsForm({
             <FieldError>{fallbackState.errors?.confirmation}</FieldError>
             <FieldError>{fallbackState.errors?.outletId}</FieldError>
           </FieldSet>
-      </div>
+      </ContentSection>
     </section>
   );
 }

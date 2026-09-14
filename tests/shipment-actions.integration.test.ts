@@ -123,6 +123,23 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["issuance", confirmShipmentIssuance, issuanceForm],
+    ["reconciliation", reconcileShipmentUnknownSubmission, confirmationForm],
+    ["unpaid recovery", recoverShipmentUnpaidPayment, confirmationForm],
+  ] as const)("rejects missing %s confirmation with otherwise valid identifiers", async (_name, action, buildForm) => {
+    fixture.issuanceEnabled = true;
+    fixture.reconciliationEnabled = true;
+    fixture.recoveryEnabled = true;
+    const form = buildForm();
+    form.delete("confirmation");
+    expect(await action({}, form)).toMatchObject({ error: expect.stringMatching(/centang/i) });
+    expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
+    expect(reconcileFixtureBackedShipment).not.toHaveBeenCalled();
+    expect(recoverFixtureBackedShipmentPayment).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("keeps issuance production-gated, then permits an Operator only through the sanctioned fixture", async () => {
     fixture.role = "OPERATOR";
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({

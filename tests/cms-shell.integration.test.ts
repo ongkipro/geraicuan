@@ -169,34 +169,36 @@ describe("responsive CMS navigation presentation", () => {
     "utf8",
   );
 
-  it("uses a labelled mobile Sheet trigger, tablet rail, and full desktop sidebar", () => {
-    expect(shellSource).toContain('className="h-11 gap-2 px-3 md:hidden"');
-    expect(shellSource).toContain("<span>Menu</span>");
-    expect(shellSource).toContain(
-      'className="hidden md:flex lg:hidden">{navigation("rail")}',
-    );
-    expect(shellSource).toContain(
-      'className="hidden lg:flex">{navigation("sidebar")}',
-    );
+  const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
+
+  it("uses one shadcn Sidebar for every width: icon rail on tablet, Sheet on mobile", () => {
+    // shadcn-admin AppSidebar pattern: a single Sidebar, not separate
+    // sidebar/rail/sheet mounts that can drift apart.
+    expect(navigationSource.match(/<Sidebar\b/g)).toHaveLength(1);
+    expect(navigationSource).toContain('collapsible="icon"');
+    expect(shellSource).toContain('"(min-width: 768px) and (max-width: 1023px)"');
+    expect(shellSource).toContain("setSidebarOpen(!tablet.matches)");
+    // The Sidebar renders its own Sheet on mobile and returns focus to the trigger.
+    expect(sidebarSource).toMatch(/if \(isMobile\) \{\s*return \(\s*<Sheet/);
+    expect(sidebarSource).toContain("mobileTriggerRef.current?.focus()");
+    expect(shellSource).toContain('aria-label="Buka atau tutup navigasi"');
   });
 
-  it("keeps rail destinations named, current, tooltip-assisted, and at least 44px", () => {
-    expect(navigationSource).toContain('props.presentation === "rail"');
-    expect(navigationSource).toContain(
-      'className="flex min-h-11 w-full items-center justify-center',
-    );
-    expect(navigationSource).toContain("data-active={item.current}");
-    expect(navigationSource).toContain(
-      'aria-current={item.current ? "page" : undefined}',
-    );
-    expect(navigationSource).toContain(
-      '<span className="sr-only">{item.label}</span>',
-    );
-    expect(navigationSource).toContain("<TooltipContent side=\"right\">");
+  it("keeps destinations named and current, with rail-only tooltips and 44px mobile targets", () => {
+    expect(navigationSource).toContain('aria-current={item.current ? "page" : undefined}');
+    expect(navigationSource).toContain("isActive={item.current}");
+    expect(navigationSource).toContain("<span>{item.label}</span>");
+    // A mounted tooltip is a separate Escape layer, so tooltips exist only on
+    // the collapsed desktop rail; otherwise the mobile Sheet needs two Escapes.
+    expect(navigationSource).toContain("tooltip={railTooltip(item.label)}");
+    expect(navigationSource).toContain('state === "collapsed" && !isMobile ? label : undefined');
+    expect(navigationSource).toContain('className="max-md:min-h-11"');
   });
 
   it("keeps account and sign-out controls at least 44px tall", () => {
-    expect(shellSource).toContain('className="min-h-11 gap-2 px-2"');
+    // The footer account trigger uses the large menu button (48px).
+    expect(shellSource).toMatch(/<SidebarMenuButton[\s\S]*?size="lg"[\s\S]*?>\s*<Avatar/);
+    expect(sidebarSource).toContain('lg: "h-12');
     expect(signOutSource).toContain(
       'className="cms-signout-button min-h-11"',
     );

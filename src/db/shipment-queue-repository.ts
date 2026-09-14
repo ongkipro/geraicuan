@@ -111,8 +111,9 @@ function shipmentFilter(
       statusPredicate = undefined;
       break;
     case "ACTION_REQUIRED":
+      // Spec 19 ACT-NEEDED. Awaiting payment is the Tenant Admin-only
+      // ACT-UNPAID and is reached through its own status filter.
       statusPredicate = inArray(shipments.status, [
-        "AWAITING_UPSTREAM_PAYMENT",
         "SUBMISSION_UNKNOWN",
         "FAILED",
       ]);

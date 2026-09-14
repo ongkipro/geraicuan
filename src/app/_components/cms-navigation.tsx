@@ -10,18 +10,24 @@ import {
   LayoutDashboard,
   PackagePlus,
   Printer,
+  RotateCcw,
   Settings2,
   Truck,
   Upload,
   UsersRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
+import { SheetClose } from "@/components/ui/sheet";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -29,12 +35,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   platformCmsNavigation,
   tenantCmsNavigation,
@@ -48,6 +51,7 @@ const navigationIcons: Record<string, LucideIcon> = {
   finance: BookOpenText,
   labels: Printer,
   members: UsersRound,
+  rts: RotateCcw,
   settings: Settings2,
   shipments: Truck,
   "shipment-import": Upload,
@@ -58,147 +62,100 @@ const navigationIcons: Record<string, LucideIcon> = {
 };
 
 type CmsNavigationProps = {
-  onNavigate?: () => void;
-  presentation?: "rail" | "sheet" | "sidebar";
+  account: ReactNode;
+  roleLabel: string;
+  scopeTitle: string;
 } & (
   | { role: TenantCmsRole; scope: "tenant" }
   | { scope: "platform" }
 );
 
+// One shadcn Sidebar serves every width (shadcn-admin AppSidebar pattern):
+// full sidebar on desktop, icon rail when collapsed, and its own Sheet on
+// mobile. Destinations keep their accessible name when collapsed and gain a
+// tooltip there.
 export function CmsNavigation(props: CmsNavigationProps) {
   const pathname = usePathname();
+  const { isMobile, setOpenMobile, state } = useSidebar();
+  // A mounted tooltip is its own Escape layer even while hidden, so the mobile
+  // Sheet would need two Escapes. Tooltips exist only on the collapsed rail.
+  const railTooltip = (label: string) =>
+    state === "collapsed" && !isMobile ? label : undefined;
   const isPlatform = props.scope === "platform";
   const groups = isPlatform
     ? platformCmsNavigation(pathname)
     : tenantCmsNavigation(props.role, pathname);
   const brandHref = isPlatform ? "/platform" : "/app";
   const navigationLabel = isPlatform ? "Navigasi platform" : "Navigasi tenant";
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
-  if (props.presentation === "rail") {
-    return (
-      <Sidebar className="w-16 border-r" collapsible="none">
-        <nav
-          aria-label={navigationLabel}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <SidebarHeader className="h-14 items-center justify-center border-b border-sidebar-border p-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  aria-label="GeraiCUAN"
-                  className="flex size-11 items-center justify-center rounded-md outline-none ring-sidebar-ring hover:bg-sidebar-accent focus-visible:ring-2"
-                  href={brandHref}
-                >
-                  <span className="flex size-8 items-center justify-center rounded-md bg-primary text-xs font-bold tracking-wide text-primary-foreground">
+  return (
+    <Sidebar collapsible="icon" variant="inset">
+      <nav aria-label={navigationLabel} className="flex min-h-0 flex-1 flex-col">
+        <SidebarHeader className="flex-row items-center gap-1">
+          {isMobile ? (
+            // First in focus order when the Sheet opens; drawn at the right.
+            <SheetClose asChild>
+              <Button aria-label="Tutup navigasi" className="order-last size-11 shrink-0" size="icon" variant="ghost">
+                <X aria-hidden="true" />
+              </Button>
+            </SheetClose>
+          ) : null}
+          <SidebarMenu className="min-w-0 flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild size="lg" tooltip={railTooltip("GeraiCUAN")}>
+                <Link href={brandHref} onClick={closeOnMobile}>
+                  <span aria-hidden="true" className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
                     GC
                   </span>
+                  <span className="grid flex-1 text-start text-sm leading-tight">
+                    <span className="truncate font-semibold">GeraiCUAN</span>
+                    <span className="truncate text-xs">{props.roleLabel}</span>
+                  </span>
                 </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">GeraiCUAN</TooltipContent>
-            </Tooltip>
-          </SidebarHeader>
-          <SidebarContent className="gap-0 py-2">
-            {groups.map((group) => (
-              <div
-                className="border-t border-sidebar-border px-2 py-2 first:border-t-0 first:pt-0"
-                key={group.label}
-              >
-                <p className="sr-only">{group.label}</p>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent>
+          {groups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
                 <SidebarMenu>
                   {group.items.map((item) => {
                     const Icon = navigationIcons[item.key] ?? FileText;
                     return (
                       <SidebarMenuItem key={item.key}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link
-                              aria-current={item.current ? "page" : undefined}
-                              className="flex min-h-11 w-full items-center justify-center rounded-md outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground"
-                              data-active={item.current}
-                              href={item.href}
-                            >
-                              <Icon aria-hidden="true" className="size-4" />
-                              <span className="sr-only">{item.label}</span>
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            {item.label}
-                          </TooltipContent>
-                        </Tooltip>
+                        <SidebarMenuButton
+                          asChild
+                          className="max-md:min-h-11"
+                          isActive={item.current}
+                          tooltip={railTooltip(item.label)}
+                        >
+                          <Link
+                            aria-current={item.current ? "page" : undefined}
+                            href={item.href}
+                            onClick={closeOnMobile}
+                          >
+                            <Icon aria-hidden="true" />
+                            <span>{item.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
                   })}
                 </SidebarMenu>
-              </div>
-            ))}
-          </SidebarContent>
-        </nav>
-      </Sidebar>
-    );
-  }
-
-  const content = (
-    <nav aria-label={navigationLabel} className="flex min-h-0 flex-1 flex-col">
-      <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="min-h-11"
-              size="lg"
-              tooltip="GeraiCUAN"
-            >
-              <Link href={brandHref} onClick={props.onNavigate}>
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-bold tracking-wide text-primary-foreground">
-                  GC
-                </span>
-                <span className="font-semibold tracking-tight">GeraiCUAN</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        {groups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const Icon = navigationIcons[item.key] ?? FileText;
-                  return (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton
-                        asChild
-                        className="min-h-11"
-                        isActive={item.current}
-                        tooltip={item.label}
-                      >
-                        <Link
-                          aria-current={item.current ? "page" : undefined}
-                          href={item.href}
-                          onClick={props.onNavigate}
-                        >
-                          <Icon aria-hidden="true" />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
-    </nav>
-  );
-
-  if (props.presentation === "sheet") return content;
-
-  return (
-    <Sidebar collapsible="offcanvas" variant="sidebar">
-      {content}
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </SidebarContent>
+      </nav>
+      <SidebarFooter>{props.account}</SidebarFooter>
+      {/* Pointer affordance only; the header trigger is the accessible control. */}
+      <SidebarRail aria-hidden="true" title="Buka atau tutup navigasi" />
     </Sidebar>
   );
 }

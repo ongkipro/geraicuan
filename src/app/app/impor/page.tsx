@@ -74,7 +74,7 @@ export default async function BulkImportPage() {
             </a>
           </Button>
         )}
-        description="Validasi CSV dan pilih baris yang layak sebelum membuat draf tenant."
+        description="Unggah CSV, periksa kesalahan, lalu buat draf kiriman."
         eyebrow="Pengiriman"
         title="Impor massal"
       />

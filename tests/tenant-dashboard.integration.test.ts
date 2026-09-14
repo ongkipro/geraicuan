@@ -457,6 +457,11 @@ describe("tenant dashboard read model", () => {
           pageSize: 20,
           status: "ACTION_REQUIRED",
         }),
+        awaitingQueue: await loadShipmentQueuePage(tx, context, {
+          page: 1,
+          pageSize: 20,
+          status: "AWAITING_UPSTREAM_PAYMENT",
+        }),
       }));
 
     const [adminResult, operatorResult] = await Promise.all([
@@ -468,7 +473,7 @@ describe("tenant dashboard read model", () => {
       total: 7,
       readyToProgress: 2,
       issuedToday: 1,
-      actionRequired: 3,
+      actionRequired: 2,
     });
     expect(adminResult.dashboard.actionRequiredBreakdown).toEqual({
       awaitingUpstreamPayment: 1,
@@ -506,8 +511,21 @@ describe("tenant dashboard read model", () => {
     expect(adminResult.issuedTodayQueue.totalCount).toBe(
       adminResult.dashboard.summary.issuedToday,
     );
+    // Spec 19 ACT-NEEDED equals its linked queue for both roles and excludes
+    // awaiting payment; ACT-UNPAID equals the queue its tile links to.
     expect(adminResult.actionQueue.totalCount).toBe(
       adminResult.dashboard.summary.actionRequired,
+    );
+    expect(operatorResult.actionQueue.totalCount).toBe(
+      operatorResult.dashboard.summary.actionRequired,
+    );
+    expect(
+      adminResult.actionQueue.rows.some(
+        (row) => row.status === "AWAITING_UPSTREAM_PAYMENT",
+      ),
+    ).toBe(false);
+    expect(adminResult.awaitingQueue.totalCount).toBe(
+      adminResult.dashboard.actionRequiredBreakdown.awaitingUpstreamPayment,
     );
     expect(shipmentQueueHref("READY_TO_PROGRESS")).toContain(
       "status=READY_TO_PROGRESS",

@@ -22,9 +22,8 @@ export default function AnalyticsError({ reset }: AnalyticsErrorProps) {
 
   return (
     <PageContainer width="wide">
-      <PageHeader
-        description="Ringkasan operasional dan nilai kiriman tenant."
-        eyebrow="Wawasan"
+      <PageHeader eyebrow="Wawasan"
+        description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah."
         focusTargetId={HEADING_ID}
         title="Analitik"
       />

@@ -414,8 +414,8 @@ export async function loadTenantDashboardMetrics(
       total: counts.total,
       readyToProgress: counts.readyToProgress,
       issuedToday: issuedTodayRow.issuedToday,
+      // Spec 19 ACT-NEEDED; equals the ACTION_REQUIRED queue total.
       actionRequired:
-        actionRequiredBreakdown.awaitingUpstreamPayment +
         actionRequiredBreakdown.submissionUnknown +
         actionRequiredBreakdown.failed,
     },

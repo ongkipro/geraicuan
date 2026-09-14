@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, Printer } from "lucide-react";
+import { CheckCircle2, CircleAlert, History, Printer } from "lucide-react";
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -18,7 +18,7 @@ function PrintButton({ reprint }: { reprint: boolean }) {
   const { pending } = useFormStatus();
   return (
     <Button
-      className="min-h-11 max-sm:w-full"
+      className="min-h-11 max-md:w-full md:min-h-8"
       disabled={pending}
       type="submit"
     >
@@ -62,8 +62,8 @@ export function LabelPrintPanel({
 
   return (
     <div className="label-hide grid gap-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <form action={action} className="max-sm:w-full">
+      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+        <form action={action} className="max-md:w-full">
           <input name="shipmentId" type="hidden" value={shipmentId} />
           <input
             name="attemptId"
@@ -72,7 +72,8 @@ export function LabelPrintPanel({
           />
           <PrintButton reprint={printCount > 0} />
         </form>
-        <p className="text-sm text-muted-foreground">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <History aria-hidden="true" className="size-4 shrink-0" />
           {printCount === 0
             ? "Belum ada permintaan cetak yang tercatat."
             : `${printCount} permintaan cetak tercatat · terakhir ${lastPrintedAt ? formatWibDateTime(lastPrintedAt) : "waktu tidak tersedia"}.`}

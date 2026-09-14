@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, PackageSearch, Plus, Upload } from "lucide-react";
+import { PackageSearch, Plus, Upload } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -6,13 +6,14 @@ import { redirect } from "next/navigation";
 
 import { ShipmentQueueFilter } from "@/app/app/pengiriman/shipment-queue-filter";
 import { DataFreshnessControl } from "@/components/cms/data-freshness-control";
+import { DataTablePagination } from "@/components/cms/data-table-pagination";
+import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -35,6 +36,7 @@ import {
   shipmentQueueHref,
 } from "@/lib/shipment-queue";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
+import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -54,9 +56,6 @@ async function requireTenantPrincipal() {
   }
 }
 
-function shipmentReference(shipmentId: string) {
-  return shipmentId.slice(0, 8).toUpperCase();
-}
 
 function delayResult<T>(promise: Promise<T>, delayMs: number) {
   return promise.then((value) => new Promise<T>((resolve) => {
@@ -106,7 +105,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
 
   return (
     <PageContainer width="data">
-      <PageHeader
+      <PageHeader eyebrow="Operasional kiriman"
         actions={
           <>
             <Button asChild variant="outline">
@@ -123,23 +122,10 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             </Button>
           </>
         }
-        description="Pantau setiap kiriman dari draf sampai AWB terbit dan buka tindakan yang sesuai dengan statusnya."
-        eyebrow="Operasional kiriman"
         focusTargetId="shipment-queue-heading"
+        description="Kelola draf, penerbitan resi, dan tindak lanjut kiriman."
         title="Pengiriman"
       />
-
-      <Card className="rounded-lg shadow-none">
-        <CardHeader className="border-b">
-          <CardTitle>Temukan kiriman</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <ShipmentQueueFilter status={query.status} />
-          <p className="text-sm tabular-nums text-muted-foreground">
-            {data.totalCount} kiriman · halaman {data.page} dari {data.totalPages}
-          </p>
-        </CardContent>
-      </Card>
 
       {issues.length > 0 ? (
         <Alert variant="destructive">
@@ -153,19 +139,30 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
         </Alert>
       ) : null}
 
-      <DataFreshnessControl
-        formattedGeneratedAt={formatWibDateTime(data.generatedAt)}
-        generatedAtIso={data.generatedAt.toISOString()}
-        initiallyStale={isDataStale(data.generatedAt, new Date())}
-      />
-
-      <section aria-labelledby="hasil-antrean-heading" className="space-y-3" id="shipment-queue-results" tabIndex={-1}>
-        <div>
-          <h2 className="text-base font-semibold" id="hasil-antrean-heading">
+      <section aria-labelledby="hasil-antrean-heading" className="grid gap-4 outline-none" id="shipment-queue-results" tabIndex={-1}>
+        <div className="sr-only">
+          <h2 id="hasil-antrean-heading">
             {selectedStatus ? selectedStatus.label : "Semua kiriman"}
           </h2>
-          <p className="text-sm text-muted-foreground">Urutan aktivitas terbaru.</p>
+          <p>Urutan aktivitas terbaru.</p>
         </div>
+
+        {/* Below md the toolbar stacks: the status filter takes the full width
+            and the freshness control gets its own row, so neither overlaps. */}
+        <DataTableToolbar
+          className="max-md:flex-col max-md:items-stretch max-md:[&>*:last-child]:ms-0 max-md:[&>*:last-child>*]:flex-1"
+          actions={
+            <DataFreshnessControl
+              formattedGeneratedAt={formatWibDateTime(data.generatedAt)}
+              generatedAtIso={data.generatedAt.toISOString()}
+              initiallyStale={isDataStale(data.generatedAt, new Date())}
+            />
+          }
+          isFiltered={query.status !== "ALL"}
+          resetHref="/app/pengiriman"
+        >
+          <ShipmentQueueFilter status={query.status} />
+        </DataTableToolbar>
 
         {data.rows.length === 0 ? (
           <EmptyState
@@ -189,106 +186,92 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <Table
-              className="min-w-[70rem]"
-              containerClassName="focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
-              containerProps={{
-                "aria-label": "Daftar kiriman; geser horizontal untuk melihat seluruh kolom",
-                role: "region",
-                tabIndex: 0,
-              }}
-            >
-              <TableCaption className="sr-only">
-                Daftar lifecycle kiriman tenant, diurutkan dari aktivitas terbaru.
-              </TableCaption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 z-10 bg-card">Referensi</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Penerima</TableHead>
-                  <TableHead>Tujuan</TableHead>
-                  <TableHead>Outlet</TableHead>
-                  <TableHead>Paket</TableHead>
-                  <TableHead>Pembayaran</TableHead>
-                  <TableHead>Layanan / AWB</TableHead>
-                  <TableHead>Aktivitas terakhir</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.rows.map((row) => {
-                  const status = SHIPMENT_STATUS_PRESENTATION[row.status];
-                  return (
-                    <TableRow className="group" key={row.shipmentId}>
-                      <TableCell className="sticky left-0 z-10 bg-card font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
-                        <Link
-                          className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline sm:min-h-8"
-                          href={`/app/pengiriman/${encodeURIComponent(row.shipmentId)}`}
-                        >
-                          {shipmentReference(row.shipmentId)}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <ShipmentStatusBadge label={status.label} tone={status.tone} />
-                      </TableCell>
-                      <TableCell>{row.recipientName}</TableCell>
-                      <TableCell>{row.destinationAreaLabel}</TableCell>
-                      <TableCell>{row.outletName}</TableCell>
-                      <TableCell>
-                        <span className="block max-w-52 truncate">{row.packageContent}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatWeight(row.packageWeightGrams)}
-                        </span>
-                      </TableCell>
-                      <TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell>
-                      <TableCell>
-                        <span className="block">{row.providerService ?? "—"}</span>
-                        {row.awb ? (
-                          <span className="font-mono text-xs text-muted-foreground">{row.awb}</span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{formatWibDateTime(row.updatedAt)}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          // Six columns, secondary facts stacked under their primary value, so
+          // the queue fits the data container at desktop widths without a
+          // horizontal scroll; narrower viewports still scroll inside the
+          // labelled region.
+          <Table
+            className="min-w-[56rem]"
+            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+            containerProps={{
+              "aria-label": "Daftar kiriman; geser horizontal untuk melihat seluruh kolom",
+              role: "region",
+              tabIndex: 0,
+            }}
+          >
+            <TableCaption className="sr-only">
+              Kiriman diurutkan dari aktivitas terbaru.
+            </TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="sticky left-0 z-10 bg-card px-3">Referensi</TableHead>
+                <TableHead className="px-3">Status / Pembayaran</TableHead>
+                <TableHead className="px-3">Penerima / Tujuan</TableHead>
+                <TableHead className="px-3">Paket / Outlet</TableHead>
+                <TableHead className="px-3">Layanan / AWB</TableHead>
+                <TableHead className="px-3">Aktivitas terakhir</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.rows.map((row) => {
+                const status = SHIPMENT_STATUS_PRESENTATION[row.status];
+                return (
+                  <TableRow className="group" key={row.shipmentId}>
+                    <TableCell className="sticky left-0 z-10 bg-card px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                      <Link
+                        className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline md:min-h-8"
+                        href={`/app/pengiriman/${encodeURIComponent(row.shipmentId)}`}
+                      >
+                        {shipmentReference(row.shipmentId)}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="px-3">
+                      <ShipmentStatusBadge label={status.label} tone={status.tone} />
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {row.isCod ? "COD" : "Non-COD"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-44 whitespace-normal px-3">
+                      <span className="block wrap-anywhere">{row.recipientName}</span>
+                      <span className="block text-xs wrap-anywhere text-muted-foreground">
+                        {row.destinationAreaLabel}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-44 whitespace-normal px-3">
+                      {/* Wraps rather than truncates: an overflow-hidden nowrap
+                          block still contributes its full text to the table's
+                          min-content width, so one long item widened the queue
+                          past the container at 1440px. */}
+                      <span className="block wrap-anywhere">{row.packageContent}</span>
+                      <span className="block text-xs wrap-anywhere text-muted-foreground">
+                        {formatWeight(row.packageWeightGrams)} · {row.outletName}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-40 whitespace-normal px-3">
+                      <span className="block wrap-anywhere">{row.providerService ?? "—"}</span>
+                      {row.awb ? (
+                        <span className="block break-all font-mono text-xs text-muted-foreground">{row.awb}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="max-w-32 whitespace-normal px-3 text-xs text-muted-foreground">
+                      {formatWibDateTime(row.updatedAt)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
 
         {data.totalCount > 0 ? (
-          <nav aria-label="Paginasi antrean kiriman" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-            <span className="text-sm text-muted-foreground">
-              Halaman {data.page} dari {data.totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button asChild={data.page > 1} className="min-h-11 sm:min-h-9" disabled={data.page <= 1} variant="outline">
-                {data.page > 1 ? (
-                  <Link href={shipmentQueueHref(query.status, data.page - 1)}>
-                    <ChevronLeft aria-hidden="true" />
-                    Sebelumnya
-                  </Link>
-                ) : (
-                  <span><ChevronLeft aria-hidden="true" />Sebelumnya</span>
-                )}
-              </Button>
-              <Button
-                asChild={data.page < data.totalPages}
-                className="min-h-11 sm:min-h-9"
-                disabled={data.page >= data.totalPages}
-                variant="outline"
-              >
-                {data.page < data.totalPages ? (
-                  <Link href={shipmentQueueHref(query.status, data.page + 1)}>
-                    Berikutnya
-                    <ChevronRight aria-hidden="true" />
-                  </Link>
-                ) : (
-                  <span>Berikutnya<ChevronRight aria-hidden="true" /></span>
-                )}
-              </Button>
-            </div>
-          </nav>
+          <DataTablePagination
+            hrefForPage={(page) => shipmentQueueHref(query.status, page)}
+            label="Paginasi antrean kiriman"
+            page={data.page}
+            summary={<span className="tabular-nums">{data.totalCount} kiriman</span>}
+            totalCount={data.totalCount}
+            totalPages={data.totalPages}
+          />
         ) : null}
       </section>
     </PageContainer>

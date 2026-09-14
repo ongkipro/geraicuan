@@ -1,7 +1,7 @@
 import {
   ArrowRight,
-  ChevronLeft,
-  ChevronRight,
+  Check,
+  CirclePlus,
   PackageSearch,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -9,6 +9,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { DataTablePagination } from "@/components/cms/data-table-pagination";
+import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
@@ -16,7 +18,7 @@ import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -40,9 +42,10 @@ import {
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
 import { cn } from "@/lib/utils";
+import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = {
-  title: "Manajemen Retur (RTS) | GeraiCUAN",
+  title: "Retur (RTS) | GeraiCUAN",
   robots: { index: false },
 };
 
@@ -208,7 +211,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
         description="Pantau kiriman Return to Sender (RTS), tindak lanjuti kendala kurir, dan verifikasi barang yang sudah diterima kembali di outlet asal."
         eyebrow="Operasional kiriman"
         focusTargetId="rts-dashboard-heading"
-        title="Manajemen Retur (RTS)"
+        title="Retur (RTS)"
       />
 
       {issues.length > 0 ? (
@@ -222,50 +225,38 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
         </Alert>
       ) : null}
 
-      <Card className="rounded-lg shadow-none">
-        <CardHeader className="border-b">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Temukan kiriman retur</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Kelola paket gagal serah dan verifikasi barang sampai kembali ke outlet asal.
-              </p>
-            </div>
-            <p className="text-sm tabular-nums text-muted-foreground">
-              {data.totalCount} kiriman · halaman {data.page} dari {data.totalPages}
-            </p>
-          </div>
+      <section aria-labelledby="rts-queue-heading" className="grid min-w-0 gap-4">
+        <div className="sr-only">
+          <h2 id="rts-queue-heading">Antrean retur</h2>
+          <p>Pilih status untuk menindaklanjuti paket.</p>
+        </div>
 
+        {/* No Reset link: "Semua retur" is the clear, and a second control for
+            it would be a duplicate action. */}
+        <DataTableToolbar>
           {/* Each chip navigates, so this is a filter navigation rather than a
               tablist: there are no tab panels and no roving focus. The selected
               chip is `aria-current="true"`, not `"page"` — the shell already
-              owns the one truthful current page, and this is a filter on it. */}
-          <nav aria-label="Filter status retur" className="mt-4 flex flex-wrap gap-1.5 pt-2">
+              owns the one truthful current page, and this is a filter on it.
+              Each count is printed once, inside the chip that acts on it. */}
+          <nav aria-label="Filter status retur" className="flex flex-wrap items-center gap-2">
             {filterTabs.map((tab) => {
               const active = statusFilter === tab.key;
               return (
                 <Button
                   key={tab.key}
                   asChild
-                  className={cn(
-                    "min-h-9 text-xs sm:text-sm",
-                    active
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-                  )}
+                  className={cn("h-8 max-md:min-h-11", active ? "border border-transparent" : "border-dashed")}
                   size="sm"
-                  variant={active ? "default" : "ghost"}
+                  variant={active ? "secondary" : "outline"}
                 >
                   <Link aria-current={active ? "true" : undefined} href={rtsHref(tab.key, 1)}>
+                    {active ? <Check aria-hidden="true" /> : <CirclePlus aria-hidden="true" />}
                     {tab.label}
+                    <Separator className="mx-0.5 h-4" orientation="vertical" />
                     <Badge
-                      className={cn(
-                        "ml-1.5 text-[10px] px-1.5 py-0 tabular-nums",
-                        active
-                          ? "bg-primary-foreground text-primary"
-                          : "bg-background text-foreground",
-                      )}
-                      variant="secondary"
+                      className="rounded-sm px-1 font-mono font-normal tabular-nums"
+                      variant={active ? "outline" : "secondary"}
                     >
                       {tab.count}
                     </Badge>
@@ -274,181 +265,147 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
               );
             })}
           </nav>
-        </CardHeader>
+        </DataTableToolbar>
 
-        <CardContent className="p-0">
-          {data.rows.length === 0 ? (
-            <div className="py-12">
-              <EmptyState
-                description={
-                  statusFilter === "ALL"
-                    ? "Belum ada riwayat kiriman retur atau gagal serah yang tercatat."
-                    : `Tidak ada kiriman pada status ${filterTabs.find((t) => t.key === statusFilter)?.label}.`
-                }
-                icon={PackageSearch}
-                title="Tidak ada kiriman retur"
-              />
-            </div>
-          ) : (
-            <div className="overflow-hidden">
-              <Table
-                className="min-w-[70rem]"
-                containerClassName="focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
-                containerProps={{
-                  "aria-label": "Daftar kiriman retur; geser horizontal untuk melihat seluruh kolom",
-                  role: "region",
-                  tabIndex: 0,
-                }}
-              >
-                <TableCaption className="sr-only">
-                  Daftar kiriman retur to sender (RTS) dan detail statusnya.
-                </TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    {/* The identifying column stays put while the other
-                        seven scroll under it, and is opaque so the scrolled
-                        content does not read through — the same treatment the
-                        shipment queue gives its reference column. */}
-                    <TableHead className="sticky left-0 z-10 min-w-[140px] bg-card">Resi</TableHead>
-                    <TableHead className="min-w-[150px]">Penerima & Tujuan</TableHead>
-                    <TableHead className="min-w-[120px]">Outlet & Kurir</TableHead>
-                    <TableHead className="min-w-[120px]">Nilai & Berat</TableHead>
-                    <TableHead className="min-w-[120px]">Status Retur</TableHead>
-                    <TableHead className="min-w-[180px]">Catatan / Kejadian</TableHead>
-                    <TableHead className="min-w-[110px]">Waktu Update</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
+        {data.rows.length === 0 ? (
+          <EmptyState
+            description={
+              statusFilter === "ALL"
+                ? "Belum ada riwayat kiriman retur atau gagal serah yang tercatat."
+                : `Tidak ada kiriman pada status ${filterTabs.find((t) => t.key === statusFilter)?.label}.`
+            }
+            icon={PackageSearch}
+            title="Tidak ada kiriman retur"
+          />
+        ) : (
+          <Table
+            className="min-w-[60rem]"
+            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+            containerProps={{
+              "aria-label": "Daftar kiriman retur; geser horizontal untuk melihat seluruh kolom",
+              role: "region",
+              tabIndex: 0,
+            }}
+          >
+            <TableCaption className="sr-only">
+              Daftar kiriman retur to sender (RTS) dan detail statusnya.
+            </TableCaption>
+            <TableHeader>
+              <TableRow>
+                {/* The identifying column stays put while the other
+                    six scroll under it, and is opaque so the scrolled
+                    content does not read through — the same treatment the
+                    shipment queue gives its reference column. */}
+                <TableHead className="sticky left-0 z-10 min-w-[140px] bg-card">Resi</TableHead>
+                <TableHead className="min-w-[150px]">Penerima & Tujuan</TableHead>
+                <TableHead className="min-w-[120px]">Outlet & Kurir</TableHead>
+                <TableHead className="min-w-[120px]">Nilai & Berat</TableHead>
+                {/* Status and its update time share a column so the table fits 1440 without scrolling. */}
+                <TableHead className="min-w-[130px]">Status & Waktu</TableHead>
+                <TableHead className="min-w-40">Catatan / Kejadian</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.rows.map((row) => {
+                const statusMeta =
+                  SHIPMENT_STATUS_PRESENTATION[row.status as keyof typeof SHIPMENT_STATUS_PRESENTATION] ?? {
+                    label: row.status,
+                    tone: "neutral" as const,
+                    guidance: "",
+                  };
+
+                return (
+                  <TableRow key={row.shipmentId} className="group">
+                    <TableCell className="sticky left-0 z-10 max-w-40 whitespace-normal bg-card font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                      <Link
+                        className="flex min-h-11 max-w-40 items-center break-all font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
+                        href={`/app/pengiriman/${row.shipmentId}`}
+                      >
+                        {row.awb ? row.awb : shipmentReference(row.shipmentId)}
+                      </Link>
+
+                    </TableCell>
+                    {/* Names and outlets wrap within a ceiling so the table fits 1440 without scrolling. */}
+                    <TableCell className="max-w-48 whitespace-normal">
+                      <div className="font-medium text-xs sm:text-sm">
+                        {row.recipientName}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.recipientPhoneMasked}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground" title={row.destinationAreaLabel}>
+                        {row.destinationAreaLabel}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-48 whitespace-normal">
+                      <div className="text-xs">{row.outletName}</div>
+                      {row.providerService ? (
+                        <div className="text-xs text-muted-foreground">
+                          {row.providerService}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-xs font-semibold tabular-nums">
+                        {formatIdr(row.declaredValueIdr)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.isCod ? "COD" : "Non-COD"} · {formatWeight(row.packageWeightGrams)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <ShipmentStatusBadge
+                        label={statusMeta.label}
+                        tone={statusMeta.tone}
+                      />
+                      <div className="mt-1 text-xs tabular-nums text-muted-foreground">
+                        {formatWibDateTime(row.updatedAt)}
+                      </div>
+                    </TableCell>
+                    {/* TableCell is nowrap; a clamped note must wrap or it
+                        stretches the column and the table scrolls at 1440. */}
+                    <TableCell className="min-w-40 max-w-64 whitespace-normal wrap-break-word">
+                      {row.latestEventNotes ? (
+                        <p className="text-xs text-foreground line-clamp-2">
+                          {row.latestEventNotes}
+                        </p>
+                      ) : (
+                        <span className="line-clamp-2 text-xs text-muted-foreground italic">
+                          {statusMeta.guidance || "Belum ada catatan."}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs max-md:min-h-11">
+                        <Link href={`/app/pengiriman/${row.shipmentId}`}>
+                          Detail
+                          <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.rows.map((row) => {
-                    const statusMeta =
-                      SHIPMENT_STATUS_PRESENTATION[row.status as keyof typeof SHIPMENT_STATUS_PRESENTATION] ?? {
-                        label: row.status,
-                        tone: "neutral" as const,
-                        guidance: "",
-                      };
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
 
-                    return (
-                      <TableRow key={row.shipmentId} className="group">
-                        <TableCell className="sticky left-0 z-10 bg-card font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
-                          <Link
-                            className="font-semibold text-primary underline-offset-4 hover:underline"
-                            href={`/app/pengiriman/${row.shipmentId}`}
-                          >
-                            {row.awb ? row.awb : row.shipmentId.slice(0, 8).toUpperCase()}
-                          </Link>
-
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-xs sm:text-sm">
-                            {row.recipientName}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.recipientPhoneMasked}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground" title={row.destinationAreaLabel}>
-                            {row.destinationAreaLabel}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-xs sm:text-sm">{row.outletName}</div>
-                          {row.providerService ? (
-                            <div className="text-xs text-muted-foreground">
-                              {row.providerService}
-                            </div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-xs font-semibold tabular-nums">
-                            {formatIdr(row.declaredValueIdr)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.isCod ? "COD" : "Non-COD"} · {formatWeight(row.packageWeightGrams)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <ShipmentStatusBadge
-                            label={statusMeta.label}
-                            tone={statusMeta.tone}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {row.latestEventNotes ? (
-                            <p className="text-xs text-foreground line-clamp-2">
-                              {row.latestEventNotes}
-                            </p>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">
-                              {statusMeta.guidance || "Belum ada catatan."}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {formatWibDateTime(row.updatedAt)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
-                            <Link href={`/app/pengiriman/${row.shipmentId}`}>
-                              Detail
-                              <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {data.totalPages > 1 ? (
-            <div className="flex items-center justify-between border-t px-4 py-3 sm:px-6">
-              <p className="text-xs text-muted-foreground sm:text-sm">
-                Menampilkan halaman <span className="font-medium">{data.page}</span> dari{" "}
-                <span className="font-medium">{data.totalPages}</span>
-              </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  asChild={data.page > 1}
-                  disabled={data.page <= 1}
-                  size="sm"
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                >
-                  {data.page > 1 ? (
-                    <Link href={rtsHref(statusFilter, data.page - 1)} aria-label="Halaman sebelumnya">
-                      <ChevronLeft className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <span>
-                      <ChevronLeft className="h-4 w-4" />
-                    </span>
-                  )}
-                </Button>
-                <Button
-                  asChild={data.page < data.totalPages}
-                  disabled={data.page >= data.totalPages}
-                  size="sm"
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                >
-                  {data.page < data.totalPages ? (
-                    <Link href={rtsHref(statusFilter, data.page + 1)} aria-label="Halaman berikutnya">
-                      <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <span>
-                      <ChevronRight className="h-4 w-4" />
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+        {data.totalPages > 1 ? (
+          <DataTablePagination
+            hrefForPage={(page) => rtsHref(statusFilter, page)}
+            label="Paginasi daftar retur"
+            page={data.page}
+            summary={<span className="tabular-nums">{data.totalCount} kiriman</span>}
+            totalCount={data.totalCount}
+            totalPages={data.totalPages}
+          />
+        ) : (
+          <p className="text-sm tabular-nums text-muted-foreground">
+            {data.totalCount} kiriman · halaman {data.page} dari {data.totalPages}
+          </p>
+        )}
+      </section>
     </PageContainer>
   );
 }

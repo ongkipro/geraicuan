@@ -12,17 +12,25 @@ export default function PlatformLoading() {
           replaced the moment the route's own header streams in. */}
       <PageHeader
         description="Navigasi dan lingkup platform tetap tersedia saat data pemantauan dimuat."
-        eyebrow="Platform"
+        eyebrow="Operasi platform"
         title="Pemantauan platform"
       />
-      <Skeleton className="h-24 w-full rounded-xl" />
-      <Skeleton className="h-12 w-full rounded-xl" />
-      <section aria-label="Memuat ringkasan keputusan" className="grid gap-3 border-t pt-6 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => <Skeleton className="h-40 rounded-xl" key={index} />)}
-      </section>
-      <section aria-label="Memuat tabel operasional" className="grid gap-3 border-t pt-6">
+      {/* Mirrors the page: scope line, visible primary filter controls, the four
+          StatCard tiles, then a bordered table. */}
+      <Skeleton className="h-5 w-full max-w-lg" />
+      <div className="grid grid-cols-2 gap-3 border-y py-3 md:max-w-xl">
+        <Skeleton className="h-16 md:h-13"/><Skeleton className="h-16 md:h-13"/>
+        <Skeleton className="h-11 md:h-8"/><Skeleton className="h-11 md:h-8"/>
+      </div>
+      <section aria-label="Memuat ringkasan keputusan" className="grid gap-4">
         <Skeleton className="h-7 w-56 max-w-full" />
-        <Skeleton className="h-72 w-full rounded-xl" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => <Skeleton className="h-56 rounded-xl md:h-44" key={index} />)}
+        </div>
+      </section>
+      <section aria-label="Memuat tabel operasional" className="grid gap-4">
+        <Skeleton className="h-7 w-56 max-w-full" />
+        <Skeleton className="h-72 w-full rounded-md" />
       </section>
     </PageContainer>
   );

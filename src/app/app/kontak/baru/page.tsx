@@ -35,5 +35,5 @@ export default async function NewContactPage() {
     listReadyShipmentOutlets,
   );
 
-  return <PageContainer width="form"><PageHeader description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya." eyebrow="Data" title="Buat kontak" /><ContactForm outlets={outlets} /></PageContainer>;
+  return <PageContainer width="form"><PageHeader eyebrow="Data" description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya." title="Buat kontak" /><ContactForm outlets={outlets} /></PageContainer>;
 }

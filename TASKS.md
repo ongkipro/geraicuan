@@ -2165,3 +2165,430 @@ RLS policy rather than a bypass.
 - **T-82 — CLOSED.** `pnpm db:generate` now reports "No schema changes,
   nothing to migrate": migration `0037_perfect_psynapse.sql` normalized the
   stale snapshot by applying the generated no-op drop-and-recreate once.
+
+## Phase 12: Admin panel pattern adoption, metric integrity, and analytics views
+
+Accepted 2026-09-13. Provenance: Paduka Ongki approved the presented direction and instructed the work to follow its recommendations; tasks were not selected one by one. Source contracts:
+`docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md` § CMS page patterns and
+`docs/spec/19-METRICS-ANALYTICS-CONTRACT.md` (M-0 through M-6). The concept
+mockup "GeraiCUAN Administrasi Concept" v2 is a non-authoritative illustration;
+the two specifications win where they differ.
+
+Reference refinement (2026-09-13): spec 10 "Tokophi reference and blue palette",
+UX-12, and TD-17 guide T-94, T-98, T-99, T-100, T-101, and T-108. Preserve the
+accepted tenant summary-first order and existing metric dependencies. The historical blue proposal was superseded by the accepted Phase13 neutral identity. Reference mapping and presentation delivery do not complete residual metric tasks or resolve spec19 M-5 D-3.
+
+Rules for this phase:
+
+- Metric integrity lands before any chart or dashboard that displays the metric.
+  A view task never introduces its own formula; it consumes a metric ID from
+  spec 19 whose status is `Aligned`.
+- Presentation tasks change presentation only. Server Actions, authorization,
+  validation, lifecycle, ledger, and provider behaviour stay unchanged unless the
+  task's scope names them.
+- Every browser-visible task records real-browser evidence at 390px, 768px, and
+  1280px for its declared states, updates `docs/spec/18-AI-ROUTE-MAP.md` when a
+  route-owned state boundary changes, and keeps spec 19 drift statuses truthful.
+- Remaining execution order after T-131: metric alignment `T-88 → T-89/T-90 → T-92/T-93`; then residual foundation `T-94 → T-95`; then residual Settings `T-96/T-97`, Command center `T-98/T-99`, Analysis `T-100/T-101`, Queue `T-102 → T-103` and platform `T-104 → T-105`, Detail `T-106` and Flow `T-107`; finally `T-108`. Each task's explicit dependencies still apply. T-91 remains blocked on D-3 and T-90; independent work must not invent its decision.
+- Reconciliation scope: all T-88–T-108 remain open for the residual requirements below. Already-delivered entries are preservation evidence, never instructions to rebuild those parts. T-126 proves bounded Phase13 implementation; T-134 owns remaining visual parity. Neither closes missing Phase12 features. T-133 owns integration/run-history closure, not an automatic PASS for T-88.
+
+### Metric integrity
+
+- [x] **T-87 — Record product decisions D-1 through D-4**
+  - Primary requirement: PR-26
+  - Constraints: spec 19 M-5, PR-15, PR-20
+  - Dependencies: none
+  - Scope: obtain Paduka Ongki's decision for D-1 (issuance-rate denominator),
+    D-2 (platform outcome time basis), D-3 (net-margin meaning), and D-4
+    (provider cost on analytics); record each in spec 19 M-5 and update the
+    affected M-1 rows. Documentation only.
+  - Done when: M-5 lists no decision as Pending, or each remaining Pending
+    decision names the tasks it still blocks.
+  - Resolution: D-1, D-2, and D-4 are recorded in spec 19 M-5 with their
+    provenance — the product owner directed the work to follow the presented
+    recommendations rather than choosing options individually, and each of
+    those three only aligns surfaces with an already-accepted definition. D-3
+    stays Pending: its recommendation would withdraw the PR-33 net-margin
+    deliverable, which a blanket instruction cannot amend, so T-91 remains
+    blocked on an explicit decision. Independent review (first verdict FAIL)
+    also found the pattern section left four routes unmapped, reordered `/app`
+    against PR-25/UX-8, coloured an interactive nav item violet, and cited two
+    nonexistent constraint IDs; all were corrected in the same change.
+
+- [ ] **T-88 — Unify outcome and action-needed definitions across scopes**
+  - Primary requirement: PR-11
+  - Constraints: spec 19 SHP-ISSUED, SHP-UNPAID-OUTCOME, ACT-NEEDED,
+    ACT-UNPAID; D-2; PR-25; UX-8; TEN-1
+  - Dependencies: T-87 (D-2)
+  - Already delivered (T-131 audit, 2026-09-14): Platform outcome counts/trend/tenant usage already use resolved_at; dashboard/queue action-needed exclude unpaid; the Tenant Admin unpaid tile links to its status queue (three repository changes and dashboard links retained in completion).
+  - Remaining scope: Extract/reuse shared outcome predicates, add the missing cross-period unknown fixture and complete role/count parity assertions; reconcile spec19 drift labels with executed evidence. Preserve the delivered resolved_at and queue/link corrections.
+  - Done when: Issued, unpaid and unknown fixtures with different creation/resolution periods agree across app, analytics and platform; both roles' action-needed equals its queue, Operator receives no unpaid metric, and Tenant Admin unpaid equals its linked queue. The shared predicate and matching spec19 evidence exist.
+
+- [ ] **T-89 — Correct rate precision and period comparison semantics**
+  - Primary requirement: PR-15
+  - Constraints: spec 19 M-0 counts/rates/comparisons, SHP-ISSUE-RATE,
+    OPS-FAILURE-SHARE; D-1
+  - Dependencies: T-87 (D-1)
+  - Already delivered (T-131 audit, 2026-09-14): Analytics regions and courier-volume presentation already expose denominator/low-volume context; analytics-decision-context owns comparisons and still needs the arithmetic corrections below.
+  - Remaining scope: Finish one-decimal rates, percentage-point deltas, neutral previous-zero wording, zero-denominator suppression, and equal to-date comparisons for current calendar periods. Retain existing denominator context.
+  - Done when: Comparison/range tests cover equal, previous-zero, negative current, denominator-zero, .05 rounding and partial-period boundaries; browser evidence verifies rate precision, percentage points and low-volume wording.
+
+- [ ] **T-90 — Align money metrics, adjustments, and the COD split**
+  - Primary requirement: PR-20
+  - Constraints: spec 19 FIN-*, SHP-COD, COD-TEST, REC-VARIANCE,
+    REC-VARIANCE-NET; D-4; PR-16, DATA-3, DATA-4
+  - Dependencies: T-87 (D-4)
+  - Already delivered (T-131 audit, 2026-09-14): Platform adjustment aggregation resolves original entry types; analytics has a signed variance title. Analytics still reads shipping-only provider cost and snapshot COD classification, and lacks COGS coverage (`analytics-repository.ts`).
+  - Remaining scope: Include insurance in analytics cost, derive table/export COD from drafts, prove cross-scope adjusted financial parity, complete signed variance evidence, add half-up COD rounding boundaries and recorded/null COGS coverage. No ledger write changes.
+  - Done when: Insurance, reversal and COD-without-order fixtures agree across analytics, finance and platform; half-up mutation fails the rounding test, signed variance is verified, and COGS coverage distinguishes null from recorded zero.
+
+- [ ] **T-91 — Resolve the net-margin KPI per D-3**
+  - Primary requirement: PR-33
+  - Constraints: spec 19 FIN-NET-MARGIN, D-3; DATA-4; the recorded
+    T-81 note that COGS is write-once without audit
+  - Dependencies: T-87 (D-3), T-90
+  - Already delivered (T-131 audit, 2026-09-14): COGS persistence and current net-margin display exist; neither chooses the pending D-3 product definition. D-3 remains Pending in spec19.
+  - Remaining scope: After explicit D-3 acceptance, implement the chosen retain/redefine/withdraw policy; withdrawal still requires the PR-33 amendment in the same change. Do not infer a decision from visual acceptance.
+  - Done when: The accepted D-3 decision is recorded, and mixed COD/non-COD/null-COGS fixtures prove its result or complete removal from surfaces, types and export.
+
+- [ ] **T-92 — Make timezone, generated-at, staleness, and durations consistent**
+  - Primary requirement: PR-15
+  - Constraints: spec 19 M-0 period/freshness, OPS-BATCH-DURATION
+  - Dependencies: T-88
+  - Already delivered (T-131 audit, 2026-09-14): Shared freshness presentation and selected-zone period labels exist. Dashboard pulse/estimate labels still use WIB, platform/finance stale states are audit-only, and formatDuration floors minutes.
+  - Remaining scope: Make timestamps follow their documented zone, propagate actual DB generated-at/staleness to platform and finance, and display sub-minute durations in seconds. Preserve existing shared freshness presentation.
+  - Done when: Real timestamp/staleness tests pass, a 45-second duration renders seconds, and Asia/Jayapura browser evidence has no incorrect WIB labels in period-bound regions.
+
+- [ ] **T-93 — Complete and test platform severity rules**
+  - Primary requirement: PR-11
+  - Constraints: spec 19 M-2 platform table
+  - Dependencies: T-88
+  - Already delivered (T-131 audit, 2026-09-14): Platform queue/unknown/failure severity and badges exist. Unpaid severity remains age-only, so recent nonzero unpaid may read Normal (`platform-monitoring-repository.ts`).
+  - Remaining scope: Make any nonzero unpaid at least Perhatian; document rolling-failure/filter applicability and test all severity boundaries. Reuse existing health presentation.
+  - Done when: Queue, unpaid, unknown, failure-share, rolling-code and credential-code boundary tests fail when their owning threshold changes; captions match applicable filters.
+
+### Shell foundation
+
+- [ ] **T-94 — Build the shared status, scope, breadcrumb, and navigation-count foundation**
+  - Primary requirement: PR-17
+  - Constraints: spec 10 § CMS page patterns Foundation; UX-3; UX-7
+  - Dependencies: T-88
+  - Already delivered (T-131 audit, 2026-09-14): Shared shell, neutral tokens, lifecycle labels, PageHeader/StatCard/table/settings primitives and scope labels are delivered by Phase13. The proposed violet scope marker is superseded by the accepted neutral system; no separate platform theme is required.
+  - Remaining scope: Add contextual breadcrumbs, shared platform severity presentation where still missing, and server-derived navigation counts: ACT-NEEDED for Kiriman, ACT-UNPAID for Tenant Admin only, REC-VARIANCE-COUNT for Keuangan, outlet readiness for Outlet & koneksi, and platform Kritis count. Preserve shared neutral scope/role labels and existing status primitives.
+  - Done when: Breadcrumbs render for descendants; source/queue count parity and role-exclusion tests pass; both scopes retain the same token/font/focus treatment at390/768/1440. No metric count is inferred in the browser.
+
+- [ ] **T-95 — Add the scope-bounded command palette**
+  - Primary requirement: PR-17
+  - Constraints: spec 10 Foundation command palette; TEN-1, TEN-2, IAM-2,
+    SEC-2; PR-12, PR-18 visibility rules
+  - Dependencies: T-94
+  - Already delivered (T-131 audit, 2026-09-14): The installed cmdk Command primitive supports existing pickers; no global scope-bounded palette, shortcut handler or search backend has been delivered.
+  - Remaining scope: Implement the scoped keyboard palette and bounded server search for allowed destinations, primary actions and records; mask phone numbers and preserve visible navigation access.
+  - Done when: Cross-tenant/role exclusion and result limits pass tests; Tenant Admin, Operator and Super Admin complete keyboard open/search/record/focus-return journeys.
+
+### Pattern adoption
+
+- [ ] **T-96 — Adopt the Settings pattern on Outlet & koneksi**
+  - Primary requirement: PR-19
+  - Constraints: spec 10 Pattern 4; UX-10; PR-27, PR-28
+  - Dependencies: T-94
+  - Already delivered (T-131 audit, 2026-09-14): SettingsLayout, section saves, readiness badges/checklists and outlet workspace composition exist (`pengaturan` page/workspace/forms).
+  - Remaining scope: Add the unsaved-change guard and provider-label preview; verify readiness agreement and all remaining UX-5 states. Preserve delivered layout, per-section saves and credential/location authority.
+  - Done when: Ready/not-ready fixtures agree between badge and checklist, unsaved changes receive the specified guard, provider-label preview is correct, and three-width UX-5 state evidence plus outlet regression tests pass.
+
+- [ ] **T-97 — Adopt the Settings pattern on Anggota & akses**
+  - Primary requirement: PR-23
+  - Constraints: spec 10 Pattern 4; UX-5 Members; IAM-2
+  - Dependencies: T-94
+  - Already delivered (T-131 audit, 2026-09-14): Settings composition, reachable invite focus, last-admin explanation and confirmation dialogs exist. Members still use a list/collapsibles with a bottom invitation area and count strip.
+  - Remaining scope: Complete status tabs, table row menus, single header invite Dialog and last-admin lock/tooltip; replace the redundant count/bottom-invite presentation. Preserve existing action boundaries and deactivation consequences.
+  - Done when: Empty/invited/active/deactivated/validation/pending/success/last-admin browser states pass at three widths, and existing governance tests remain green.
+
+- [ ] **T-98 — Adopt the Command center pattern on Ringkasan**
+  - Primary requirement: PR-25
+  - Constraints: spec 10 Pattern 1; spec 19 M-2 tenant thresholds and ranking,
+    M-3 `/app` charts; UX-8
+  - Dependencies: T-89, T-92, T-94
+  - Already delivered (T-131 audit, 2026-09-14): Period KPI cards, current-versus-previous created-shipment trend, current-work groups and recent shipment table are delivered. The current DOM order is summary → trend/recent group → current work; urgent work below the recent table remains a priority-order gap. The later accepted current-versus-previous trend replaces the older created-versus-issued/COD chart proposal on Ringkasan.
+  - Remaining scope: Complete TENANT_ATTENTION_THRESHOLDS and ranked actionable exceptions with role filtering, placing urgent work ahead of the long recent table on mobile. Preserve the delivered filter, KPI and current-versus-previous trend regions.
+  - Done when: Threshold and mixed-fixture ranking tests pass; Operator never receives Tenant Admin-only attention items; first-run/healthy/actionable/partial-stale/loading/error browser evidence passes.
+
+- [ ] **T-99 — Adopt the Command center pattern on platform Ringkasan**
+  - Primary requirement: PR-11
+  - Constraints: spec 10 Pattern 1; spec 19 M-2 platform thresholds and ranking,
+    M-3 `/platform` charts
+  - Dependencies: T-89, T-92, T-93, T-94
+  - Already delivered (T-131 audit, 2026-09-14): Platform has a three-series trend with a complete semantic table inside a collapsed native disclosure, shared cards and health groups. It still has no ranked attention list or p95 daily line.
+  - Remaining scope: Complete ranked exceptions, p95 duration view and compact applied-scope presentation after metric prerequisites; preserve the existing chart/table disclosure. T-134 owns visual parity of existing surfaces, not these additional features.
+  - Done when: Ranking, chart/table parity and duration source tests pass; healthy/warning/critical/degraded/empty states are verified for global and tenant scopes.
+
+- [ ] **T-100 — Build the analytics dashboard views**
+  - Primary requirement: PR-26
+  - Constraints: spec 19 M-3 `/app/analitik` rows; UX-9; DATA-4
+  - Dependencies: T-89, T-90
+  - Already delivered (T-131 audit, 2026-09-14): Analytics already has ordered summary/trend/financial/reconciliation/detail regions, created-versus-issued line and courier issuance-rate/low-volume view.
+  - Remaining scope: Add previous-period ghost series, lifecycle distribution and financial-class composition views with summary/table parity after metric alignment. Do not rebuild delivered analytics composition or courier view.
+  - Done when: Every existing and new analytics chart agrees with its table and aligned spec19 metric; principal never enters revenue; no-data/filtered-empty/partial-error/stale browser states pass at three widths.
+
+- [ ] **T-101 — Add the reconciliation variance view to Keuangan**
+  - Primary requirement: PR-20
+  - Constraints: spec 19 REC-VARIANCE, M-3 `/app/keuangan`; PR-16
+  - Dependencies: T-90, T-92
+  - Already delivered (T-131 audit, 2026-09-14): Finance already has shared analysis-workspace composition, summary, variance queue, authoritative ledger/history and action dialogs.
+  - Remaining scope: Add the signed reconciliation variance history chart and its caption/link between the existing queue and ledger, preserving both authoritative tables.
+  - Done when: Chart values equal filtered history rows; matched/variance/reversal/loading/error browser evidence passes.
+
+- [ ] **T-102 — Adopt the Queue pattern on Kiriman**
+  - Primary requirement: PR-18
+  - Constraints: spec 10 Pattern 2 bulk rule; UX-4 row actions; TD-14
+  - Dependencies: T-94
+  - Already delivered (T-131 audit, 2026-09-14): Kiriman has URL status filtering, toolbar/pager, linked detail, badges and empty/stale handling. T-120/T-127 retain a semantic mobile scroll table, opaque identity and full provider AWBs; the former mobile row-list proposal is superseded.
+  - Remaining scope: Add counted lifecycle tabs, search, state/role row menus and selection-only safe print/export bulk actions. Preserve the accepted responsive table and existing URL filters/pager.
+  - Done when: Reload/back preserve URL state; tests exclude provider issuance/recovery from bulk actions; system-empty/filtered-empty/loading/error/partial-stale browser evidence and long-AWB containment remain passing.
+
+- [ ] **T-103 — Adopt the Queue pattern on Retur, Kontak, and Label**
+  - Primary requirement: PR-18
+  - Constraints: spec 10 Pattern 2; PR-12, PR-29, PR-7
+  - Dependencies: T-102
+  - Already delivered (T-131 audit, 2026-09-14): Retur, Kontak and Label already use shared queue anatomy; label detail has grouped header/toolbar while the print sheet remains custom.
+  - Remaining scope: Apply applicable remaining T-102 interaction controls to these routes and close their missing state/print-preservation evidence. Do not duplicate queue foundations or redesign the label sheet.
+  - Done when: Each route has empty/filtered-empty/populated/error evidence at three widths, applicable controls retain scope/state, and label sheet size/output is preserved.
+
+- [ ] **T-104 — Adopt the Queue pattern on platform Tenant and Audit with readable events**
+  - Primary requirement: PR-21
+  - Constraints: spec 10 Patterns 2 and 3 timeline wording; PR-11 redaction
+  - Dependencies: T-94
+  - Already delivered (T-131 audit, 2026-09-14): Platform tenant/audit routes already have shared tables, URL filters/search/pagination and provisioning controls. Creation still uses details; audit event actions still render raw values.
+  - Remaining scope: Add remaining status tabs and a single header Tenant baru provisioning Dialog; map all audit actions to readable Indonesian sentences. Preserve redaction and existing filter/pager ownership.
+  - Done when: An exhaustive event mapping test rejects missing sentences; both routes pass empty/filtered/error states and provisioning entry/focus evidence.
+
+- [ ] **T-105 — Adopt the Detail pattern on platform tenant detail**
+  - Primary requirement: PR-21
+  - Constraints: spec 10 Pattern 3; confirmation ladder typed-name rule
+  - Dependencies: T-90, T-104
+  - Already delivered (T-131 audit, 2026-09-14): Platform detail already has scoped context, health/volume/finance groups and server-validated typed-name suspension/reactivation. Existing lifecycle actions do not provide archival.
+  - Remaining scope: Add breadcrumb, applicable local navigation, readable event timeline and the still-unimplemented archival policy/action only within its accepted authorization/audit contract. Preserve existing typed-name suspension/reactivation rather than reimplementing it.
+  - Done when: Existing typed-name and audit tests remain passing; archival is implemented with a supported lifecycle policy, exact-name guard and audit evidence, or explicitly deferred by the owner with the requirement/task updated; active/suspended/loading/error browser states pass.
+
+- [ ] **T-106 — Adopt the Detail pattern on shipment and contact detail**
+  - Primary requirement: PR-18
+  - Constraints: spec 10 Pattern 3; UX-4; TD-14 release gate
+  - Dependencies: T-102
+  - Already delivered (T-131 audit, 2026-09-14): Shipment/contact detail already has grouped headers/key facts, status, timeline and next-action guidance; TD-14 copy remains. T-130 restores native required confirmations without enabling provider operations.
+  - Remaining scope: Complete contextual breadcrumbs and missing full-lifecycle browser evidence; preserve existing grouped detail/next actions and release-gated controls.
+  - Done when: Every UX-4 lifecycle and production-gate state is browser-verified, contact/detail regressions pass, and required confirmations retain named invalid focus.
+
+- [ ] **T-107 — Adopt the Flow pattern on shipment creation, bulk import, new contact, and provisioning**
+  - Primary requirement: PR-3
+  - Constraints: spec 10 Pattern 5; PR-4, PR-5, PR-9, PR-21; TD-14
+  - Dependencies: T-106
+  - Already delivered (T-131 audit, 2026-09-14): Shipment/import/contact forms, persisted draft feedback, COD breakdown and provisioning exist. Named navigable steps/completed summaries, sticky money summary and provisioning Dialog remain absent.
+  - Remaining scope: Add only the remaining multistep/completed-summary/persistent-money presentation and provisioning Dialog; retain single-step new-contact flow and existing validation/persistence. Coordinate the Dialog with T-104 instead of building it twice.
+  - Done when: COD display equals calculateCodAmounts; back/forward steps preserve input; validation/pending/partial-failure/success states pass for each flow, without provider issuance beyond TD-14.
+
+- [ ] **T-108 — Screen the whole admin panel against Phase 12 contracts**
+  - Primary requirement: PR-22
+  - Constraints: UX-11; spec 10 § CMS page patterns; spec 19 M-6
+  - Dependencies: T-87 through T-107 (T-91 once D-3 is decided)
+  - Already delivered (T-131 audit, 2026-09-14): Phase13 has fresh T-126 full integration/build and baseline route screening; T-127–T-130 close bounded follow-ups. This is not Phase12 metric/feature acceptance; spec19 still has Drift and D-3 remains pending.
+  - Remaining scope: Run final route-pattern and metric-ID screening after the remaining Phase12 work; reuse valid evidence only where source/state coverage still matches. Route each new finding to its single owner.
+  - Done when: Every route has evidence for its remaining pattern contract, spec19 has no unresolved Drift (FIN-NET-MARGIN may remain Pending D-3), and all findings have an owning task.
+
+### Reference design documentation
+
+- [x] **T-109 — Record Tokophi admin mapping and proposed blue direction**
+  - Primary requirement: PR-17; supporting PR-22, PR-25, PR-26.
+  - Authorization: Paduka Ongki requested supporting PRD/design architecture and a blue direction inspired by Mengantar on 2026-09-13.
+  - Risk and surface: R0 documentation only; existing PRD, technical design, design system, UX contract, this queue, and BUILD-LOG. Preserve the active T-88 ledger and all application changes.
+  - Result: extended existing canonical documents; mapped the reference to Phase 12 owners; retained summary-first tenant order, role/data boundaries, and the pending margin decision. Concrete colours remain proposed; runtime work is still queued.
+  - Verification: documentation boundary/link/contract checks and independent designer review are recorded in BUILD-LOG; no runtime or browser acceptance is claimed.
+
+
+- [x] **T-110 — Apply the accepted blue visual foundation and refine existing dashboard hierarchy**
+  - Primary requirement: PR-22; supporting PR-17, PR-25, PR-26.
+  - Authorization: Paduka Ongki requested implementation and UI/UX refinement after T-109.
+  - Dependencies: T-109. This bounded presentation pass changes no metric, severity, query, provider, or ledger contract; T-88 through T-108 retain their existing dependencies and completion gates.
+  - Scope: shared semantic blue palette, compact shell/navigation/page rhythm, persistent mobile role, actual primary hover, tenant trend placement after current work, and flatter existing analytics metric groups. Work in `feat/tokophi-blue-ui`; preserve inherited Phase 12 edits and the original worktree's active T-88 run.
+  - Done when: real browser checks at 390/768/1280 prove scope/navigation, computed selected/focus colours and the compiled hover rule, tenant order, filter continuity, and affected empty/error states; type/lint and existing token checks pass; separate-agent review and final delivery boundary pass.
+  - Resolution: blue shared tokens/shell, persistent 12px mobile role, compact page rhythm, tenant trend after current work, and flatter readable analytics grids are implemented. A generated Next route-type failure was also repaired by requiring the existing OutletSettingsPage props object; its two test callers now pass `{}`. This narrow scope expansion preserves runtime behavior.
+  - Executed evidence: TypeScript and targeted ESLint pass; 23 existing token/settings tests pass; route sweep 66/66 with zero findings; targeted browser script 24 role/route/state/viewport checks with filter reload/drill-down and mobile focus return. Native CDP Escape did not reach the DOM, so the app's Escape handler was exercised through a DOM-dispatched event; native-key delivery is unverified. Hover is compiled-rule/token evidence, not an asserted headless hover render. Independent review and final boundary are recorded in BUILD-LOG and the T-110 ledger.
+
+
+- [x] **T-111 — Audit every page, simplify product copy, and default Ringkasan to seven days**
+  - Primary requirement: PR-22; supporting PR-25 and PR-26.
+  - Authorization: Paduka Ongki requested page-by-page browser/screenshot inspection, removal of generic AI-style copy, UI/UX refinement, a seven-day default shipment overview, and subsequently a line comparison with the previous seven days plus an explicit demo on 2026-09-14 (Asia/Jakarta).
+  - Scope: existing worktree presentation, user-selected shadcn preset `b1Ymqvgky`, dashboard page-owned default, adjacent focused regression tests, browser harness evidence, and canonical documents. Preserve inherited Phase 12 backend changes, metric formulas, tenant scope, provider restrictions, and the original worktree.
+  - Contract: `/app` without a range uses `7-hari` in WIB; explicit day/custom ranges remain authoritative. Summary, shipment trend, and supporting links use the same period. Order is summary → line comparison → current work → recent shipments. Daily previous reads share scope; monthly totals omit the misleading comparison. Successfully loaded all-zero multi-day trends remain visible; loading failures never appear as measured zero. Current-work queues remain clearly unfiltered by period.
+  - Done when: all 22 pages are browser-screened at 390/768/1280 with desktop/mobile screenshots, dashboard default and explicit overrides are verified, type/lint and focused tests pass, and separate review plus final boundary pass. This is a copy/presentation audit, not completion of all Phase 12 workflows.
+
+  - Preset integration provenance: `shadcn@4.21.0 apply --preset b1Ymqvgky --yes` succeeded after installing isolated worktree dependencies. Original run `RUN-20260913T171918Z-1c3cf576` retains its failed boundary: the later instruction expanded pre-existing dirty token/button overlap that the ledger cannot amend mid-run. Integration continues under `RUN-20260913T173605Z-ff8d8e78` with explicit accepted overlap and composite independent review; prior implementation/evidence is retained, not relabelled as newly authored.
+
+  - Resolution: applied the requested preset with accessibility adaptations; seven-day default and development-only comparison demo; simplified existing page copy and section hierarchy. All 22 routes screened at three widths; the sole comparison-table accessibility finding was fixed and rechecked. Final targeted browser run passed 24 scenarios, and 62 focused tests passed. See BUILD-LOG for independent review, boundary provenance, and evidence limits.
+
+
+- [x] **T-112 — Apply the exact user-provided light and dark palette**
+  - Requirement: PR-22. Authorization: user supplied complete `:root` and `.dark` CSS on 2026-09-14, superseding T-111 token adjustments.
+  - Scope: globals.css, palette regression checks, canonical design/status/evidence documents. No theme switch or route changes.
+  - Done when: supplied token values match in CSS and the browser, existing custom semantic aliases follow the selected class, desktop/mobile captures are reviewed, and remaining contrast limitations are explicitly recorded rather than silently changing the supplied palette.
+
+  - Result: exact requested palette and alias propagation implemented. Token diagnostic: 6 passed, 3 contrast failures retained. Delivery quality gate remains FAIL; completion here records the requested implementation, not accessibility acceptance.
+
+
+- [x] **T-113 — Recompose all internal admin page families with shadcn UI**
+  - Requirement: PR-22; supporting PR-25/PR-26. User explicitly requested a substantial modern, professional admin redesign across all internal pages on 2026-09-14.
+  - Preserve exact T-112 palette, domain semantics, roles, routes, server reads/actions, default seven-day line comparison and demo scope. Presentation and bounded filter disclosure only; no backend/provider mutations, mock operational metrics, theme switch, dependency installation, or live deployment.
+  - Direction: consistent shell and page headers; compact filter toolbars with advanced controls disclosed in the same form; clear KPI hierarchy; charts directly below the summary; single table work surfaces; grouped form/detail/settings sections. Existing 22-route inventory remains unchanged.
+  - Done when: every internal page family is visibly recomposed, mobile/desktop screenshots reviewed, filters/navigation and critical existing states exercised in the browser, focused regressions/type/lint checked, and independent review/boundary recorded. Existing exact-palette contrast deficits remain explicitly reported until addressed without altering supplied tokens.
+
+  - Resolution: requested presentation implemented across all 19 internal routes; shared inset workspace, restrained headings, consistent tables, grouped forms/details, persistent primary filters, advanced disclosure, and summary → trend → financial analytics order. Default seven-day comparison, scoped drill-down, metrics, roles, and exact supplied tokens remain intact.
+  - Executed evidence: 57 route/viewport pairs screened at 390/768/1280 without document overflow; desktop/mobile screenshots reviewed by designer; localhost role/state phases each passed 12 checks and filter phase passed six disclosure checks plus default/demo/zero trend, reload, and scoped drill-down. Type/lint and 57 focused tests passed. Independent product review PASS; source evidence and boundary provenance are in BUILD-LOG and the T-113 ledger.
+  - Quality limitation: marking implementation complete does not waive the three inherited contrast failures (6 token tests pass, 3 fail). Overall quality gate remains FAIL; native keyboard delivery remains unverified when the report records DOM-dispatched Escape. No live Mengantar call, production deployment, commit, push, or complete Phase 12 claim.
+
+
+- [x] **T-114 — Polish Ringkasan hierarchy and give every shipment a distinguishable reference**
+  - Requirement: PR-22; supporting PR-25. Authorization: Paduka Ongki asked on 2026-09-14 (Asia/Jakarta) to screenshot `http://100.127.67.86:3125/app` and continue refining it into a tidy, professional shadcn UI, using the shadcn CLI where needed.
+  - Findings from the 1440px and 390px captures before editing: every shipment row reads `72000000` because ten call sites each print `shipmentId.slice(0, 8)` and the ids share that prefix; the chart's first day has no axis label and its "Analitik lengkap" action floats between title and plot; period-summary freshness and comparison captions stack as three separate rows; KPI comparison lines sit at different heights because context text precedes them; current-work tiles place their values at uneven heights; the recent-shipments table scrolls sideways at 390px instead of reading as a row list (spec 10 Pattern 2).
+  - Scope: one shared shipment reference helper used by every tenant call site; Ringkasan chart card header/action/axis, period-summary footer, KPI and current-work alignment, recent shipments mobile row list. Presentation only — no metric, query, role, route, action, or token change. Preserve the exact T-112 palette and all inherited uncommitted work.
+  - Done when: no two seeded shipments share a displayed reference on Ringkasan, Kiriman, detail, RTS, label, analytics, or Keuangan (test); the chart labels every day of a seven-day range; 1440/768/390 captures show the listed defects resolved with no document overflow; type, lint, and focused tests pass; independent review and boundary recorded.
+  - Resolution: `src/lib/shipment-reference.ts` replaces ten `slice(0, 8)` copies (Ringkasan, Kiriman, detail, label, analytics, RTS, Keuangan, draft number); references now use the id tail, so fixture rows read `00000010`, `00000015`, and so on. `tests/shipment-reference.integration.test.ts` asserts distinct references for shared-prefix ids and forbids any id-prefix slice in `src/app`; both guards were mutation-tested. Ringkasan: chart card action moved into the header, legend left-aligned, every day of a ≤7-day range labelled; KPI comparison sits directly under its value; comparison caption and freshness share one row; current-work values align at the tile bottom; recent shipments render as a row list below 640px. The RTS identifier test now expects the shared reference.
+  - Executed evidence: tsc and targeted eslint pass; reference test passes and fails under both mutations; real Chromium on port 3125 at 1440/768/390 with no document overflow, seven axis labels, and distinct references (Kiriman 20/20, Analitik 25/25). Focused render run: 38 passed, 6 failed — all six assert inherited T-113 container class, copy, and Card count outside this diff, and remain open rather than waived.
+  - Delivery gate: ledger `RUN-20260914T021327Z-adae5a88` finished FAIL, not PASS, because the focused render check still records the six inherited T-113 failures; implementation and review are complete, the quality gate is not.
+  - Review: independent reviewer PASS with five minor findings; four fixed and re-verified (monthly axis keeps the year, mobile rows show the outlet, the guard scans all of `src` for 8-character id slices, helper comment corrected). Follow-up, not in scope: `formatShortId` in `src/lib/platform-monitoring-format.ts` still prints the prefix of provider batch ids on `/platform`.
+
+
+- [x] **T-115 — Restore queue composition parity and rebind inherited render guards**
+  - Requirement: PR-22. Authorization: Paduka Ongki replied "ya lanjutkan" on 2026-09-14 to the proposal to repair the six inherited focused render failures before further page refinement.
+  - Findings: (1) `/app/pengiriman/rts` still wraps its queue in `Card` while T-113 removed cards from `/app/pengiriman`; `tests/rts-presentation` correctly fails on this composition drift. (2) `tests/dashboard-error-loading` asserts a literal `max-w-7xl`, but its intent is that loading and error states use the same page container width as their page; page, loading, and error now all declare `width="wide"`. (3) `tests/analytics-decision-context` expects the pre-T-111 copy "Dibandingkan dengan"; the accepted simplified copy reads "Dibanding".
+  - Scope: RTS presentation only (replace Card wrappers with the queue's section composition, same content, headings, and filter navigation); rebind the loading/error guard to width parity with the owning page; update the copy assertion. No behaviour, query, role, or token change.
+  - Done when: the eight focused render suites pass; the width guard fails when a loading or error state's width differs from its page (mutation); RTS renders without Card at 1440/390 with no document overflow; independent review and boundary recorded.
+  - Scope expanded under review (recorded in the ledger): T-113 had also dropped the spec 10 shared page eyebrow from `/app`, Analitik, Kiriman, Kontak, Kontak baru, and `/platform`; those eyebrows are restored from HEAD (platform values in sentence case). Loading and error headers now repeat their page's eyebrow, title, and width (RTS "Retur (RTS)", Kiriman error title and eyebrow, pengaturan error width, label detail loading eyebrow, shared platform loading eyebrow). Spec 19 REC-VARIANCE-NET label follows the accepted copy "Total selisih (+/−)".
+  - Resolution: `/app/pengiriman/rts` uses the queue's section composition (no Card). `tests/dashboard-error-loading` parses JSX with the TypeScript compiler to require a page eyebrow and eyebrow/title/width parity for every static-header route (title-exempt routes still checked for eyebrow and width; PageHeader required whenever a state file exists), derives skeleton order from each page's Suspense fallbacks, and requires the platform view to pass its eyebrow. `tests/analytics-decision-context` follows the accepted copy and additionally asserts the snapshot "Tidak mengikuti periode laporan" disclosure. Nine focused suites pass (70 tests); each rebound guard was mutation-tested.
+  - Review: three independent review rounds — FAIL (eyebrow contract, dropped snapshot guard), FAIL (platform eyebrow), PASS with four minors; two fixed and mutation-checked. Follow-ups, not in scope: `pengiriman/[shipmentId]/not-found.tsx` eyebrow reads "Pengiriman" against the page's "Detail pengiriman"; `pengiriman/baru/error.tsx` renders no PageHeader eyebrow.
+
+
+- [x] **T-116 — Recompose the CMS shell on the shadcn-admin layout pattern**
+  - Requirement: PR-17; supporting PR-22. Authorization: Paduka Ongki asked on 2026-09-14 to rework the UI/UX using the `satnaing/shadcn-admin` pattern (MIT), accepting a black-and-white look until the visual layer is changed later.
+  - Reference pattern (read from the repository source): `AuthenticatedLayout` = `SidebarProvider` + one `AppSidebar` (`SidebarHeader` identity button, `NavGroup` per group with icon menu buttons and collapsed tooltips, `SidebarFooter` `NavUser` account dropdown, `SidebarRail`) + `SidebarInset`; `Header` = outline `SidebarTrigger`, vertical `Separator`, then page context; `Main` = `px-4 py-6`.
+  - Scope: `src/app/_components/cms-shell.tsx` and `cms-navigation.tsx` use one shadcn `Sidebar` (`variant="inset"`, `collapsible="icon"`) instead of separate sidebar/rail/sheet mounts; the account menu and sign-out move to the sidebar footer; the header carries the trigger, separator, scope title, and role. Tablet (768–1023px) starts as the icon rail and mobile uses the Sidebar's own Sheet, preserving UX-3. Navigation data, roles, routes, sign-out history replacement, and bfcache revalidation are unchanged. Colour tokens are T-117.
+  - Done when: `tests/cms-shell.integration.test.ts` binds to the new structure's behaviour (single Sidebar with icon collapse, tablet rail default, named/current/tooltip destinations, 44px mobile targets, account and sign-out controls, history replacement) and passes; tenant and platform shells render at 1440/768/390 with no document overflow, keyboard-reachable navigation, working mobile Sheet with focus return, and sign-out; type, lint, focused tests; independent review and boundary recorded.
+  - Resolution: one inset `Sidebar` with `collapsible="icon"` replaces the sidebar/rail/sheet mounts; identity header, grouped icon navigation, footer account menu with sign-out, and a labelled rail follow the reference; the header carries an outline trigger, separator, scope, and role. Tablet starts collapsed; mobile uses the Sidebar Sheet. Browser verification found the mobile Sheet needed two Escapes because `SidebarMenuButton` keeps hidden tooltips mounted as Escape layers; tooltips now render only on the collapsed desktop rail. `tests/cms-shell` binds to the single Sidebar, tablet default, Sheet focus return, rail-only tooltips, 44px targets, and unchanged sign-out/history behaviour; both new guards were mutation-tested. `scripts/ui-audit/blue-ui-check.mjs` uses the new trigger label.
+  - Review round 1 (FAIL) fixes: the mobile account menu opened past the Sheet edge so sign-out could not be tapped — it now opens per `isMobile` and was verified hittable at 390px; the Sidebar Sheet's 28px English-labelled close and "Sidebar" name are replaced by a first-in-focus 44px "Tutup navigasi" and "Navigasi GeraiCUAN"; the brand anchor reads "GeraiCUAN"; the rail is hidden from assistive technology; the account menu is a top-level component (lint caught a render-time component that would reset state). `tests/cms-shell-render.integration.test.ts` renders the shell and asserts the landmark, brand, current destination, one touch-sized toggle, no mounted nav tooltips, and the footer account trigger; its tooltip guard initially asserted a marker that never renders and was rebound after mutation testing exposed it. Remaining minors, accepted: tablet rail targets are 32px (spec mandates 44px on mobile only), the tablet sidebar animates from expanded to collapsed on first load, and `shortLabel` navigation data is now unused.
+  - Review round 2: PASS. The rail's hover title is localized. Follow-up: the mobile-only guarantees (menu placement, close control, Sheet name) are browser-verified and source-pinned, but no automated browser check runs them yet; add a 390px sign-out-inside-viewport assertion to `scripts/ui-audit/blue-ui-check.mjs`.
+  - Inherited finding (not T-116): `client-bundle-boundary` fails because T-113 made `analytics-filter-fields.tsx` a client component that imports `@/db/schema`; routed to T-117.
+
+
+- [x] **T-117 — Remove the Drizzle schema from the analytics filter client bundle**
+  - Requirement: ARCH-1; constraint SEC-3, PR-18 (T-84 invariant). Found by `tests/client-bundle-boundary` during T-116.
+  - Finding: `src/app/app/analitik/analytics-filter-fields.tsx` is now `"use client"` (T-113) and imports `shipmentStatuses` from `@/db/schema`, putting the table graph back into a browser chunk.
+  - Scope: import the enum from the dependency-free `@/lib/domain-enums` instead. No presentation change.
+  - Done when: `tests/client-bundle-boundary.integration.test.ts` passes, type and lint pass, and the analytics filter still renders its status options in the browser.
+  - Resolution: the import now reads `@/lib/domain-enums`. The boundary test passes and fails again when the schema import is restored; the analytics status filter renders all 13 statuses plus "Semua status" in Chromium.
+
+
+### Phase 13 — Full recomposition on the shadcn-admin pattern (parallel)
+
+Authorization: Paduka Ongki asked on 2026-09-14 to continue the whole redesign in parallel ("lanjut jalankan keseluruhan paralel"), accepting black-and-white visuals for now. One umbrella ledger run covers T-118 through T-125; each family agent owns disjoint files. Presentation only: metrics (spec 19), queries, roles, routes, Server Actions, provider rules (TD-14), the shipment reference helper, the eyebrow/title/width parity guard, and the client-bundle boundary stay intact.
+
+- [x] **T-118 — Black-and-white tokens and shared shadcn-admin primitives.** Neutral shadcn palette in `globals.css` (semantic success/warning/danger kept, contrast tests updated to the new values), plus `src/components/cms/stat-card.tsx`, `data-table-toolbar.tsx`, `data-table-pagination.tsx` (URL/server-driven), and `settings-layout.tsx`.
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round.
+  - Implementation state (fix round 1): implemented in the worktree, not screened or reviewed. Facet options are now `role="option"` entries with `aria-checked` that navigate via `router.push`, so a listbox option holds no nested link. The freshness refresh button is 44px below `md`. `SettingsLayout` marks its item `aria-current="true"` so the shell keeps the only `aria-current="page"`. Unused `.cms-form-section` rules were removed. Contrast and primitive render tests pass. Browser axe and 44px checks are pending in T-125.
+- [x] **T-119 — Dashboard pattern on Ringkasan (`/app`).** KPI stat cards, 7-column chart + recent grid, current-work cards.
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round.
+  - Implementation state (fix round 1): implemented in the worktree, not screened. The order is summary KPIs → chart plus *Tindak lanjut* card (4:3 from `lg`) → current work. The separate eight-row recent table and its read were retired, and `loading.tsx` matches that order. Spec 17 UX-5/UX-8 and spec 18 were updated. Render tests pass. Chart clipping, equal card heights, and 390px overflow are pending in T-125. The product owner must confirm retiring the non-actionable recent outcomes.
+- [x] **T-120 — Data-table pattern on Kiriman, Retur, Kontak, Label queues.**
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round.
+  - Implementation state (fix round 1): implemented in the worktree, not screened. The toolbar stacks at 390px. The Layanan/AWB and Status columns stay on one line, and a very long AWB can still widen them. Label facet options follow the new option markup with unchanged URLs. Non-database render tests pass. Browser checks at 390 and 1440 are pending in T-125.
+- [x] **T-121 — Settings pattern on Outlet & koneksi and Anggota & akses.**
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round. Round 3: the header *Undang anggota* button is 44px below `md` and now moves focus to the invite email field after scrolling.
+  - Implementation state (fix round 1): implemented in the worktree, not screened. Page, loading, and error pass their real `currentHref`. The outlet-settings render test now expects one `aria-current="true"` in each of the outlet selector and the Administrasi menu, and zero `aria-current="page"`. It passes. Browser focus and overflow checks are pending in T-125.
+- [x] **T-122 — Detail and form recomposition** on shipment/contact/label detail, Buat kiriman, Impor, Kontak baru.
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round.
+  - Implementation state (fix round 1): implemented in the worktree, not screened. Detail action and TD-14 confirmation buttons are 44px below `md`, and TD-14 disabled states and copy are unchanged. The timeline card title is *Riwayat status*. Non-database render tests pass. The 44px, focus, and 390px checks are pending in T-125, as is the existing Radix `required` checkbox validation question.
+- [x] **T-123 — Analitik and Keuangan recomposition** (stat cards, chart cards, data tables; spec 10 Pattern 6 order kept).
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round. Round 3: the *Jalankan rekonsiliasi* card restores *Server menghitung nilai; browser hanya mengirim konteks keputusan.*, and `tests/analytics-decision-context` again guards 44px pager and detail-link targets below `md` (mutation-checked).
+  - Implementation state (fix round 1): implemented in the worktree, not screened. Chart series use the Okabe-Ito palette with dash cues, and the Keuangan filter heading takes focus after submit and reset. Analytics decision-context and finance render tests pass. Browser colour, focus-ring, and Enter-submit checks are pending in T-125.
+- [x] **T-124 — Platform recomposition** (overview stat cards and tables, tenant list/detail, audit) with shadcn `Table`.
+  - Status (fix round 3): implemented in the worktree, uncommitted. Browser-screened in the T-125 screening rounds; T-125 remains open, so screening and review findings are not closed. Database-backed tests and `next build` have not been run for this task. The implementation-state note below was written in fix round 1, and its "not screened" and "pending" wording describes that round.
+  - Implementation state (fix round 1): implemented in the worktree, not screened. Platform source was not edited in this round. Two platform render assertions were rebound. They had counted `role="region"`, which empty sections no longer render because those sections now state their emptiness instead of drawing empty tables. They now require every rendered `<table>` to sit directly in a labelled, focusable `overflow-x-auto` region. Removing `role` from `TableRegion` makes the test fail, and the test passes otherwise. Browser checks are pending in T-125.
+- [x] **T-125 — Integration, screening, and review** at 1440/768/390 for every CMS route, with independent family reviews.
+  - Fix round 4 (integration, uncommitted, not browser-screened): the Ringkasan *Tindak lanjut* card now shows compact rows, capped at 8 (spec 17 records the cap), and the chart grows to fill the stretched card. `app/error.tsx` again says *Lingkup akun dan detail internal tetap terlindungi.* The RTS table and the platform batch table were tightened against horizontal overflow at 1440. The platform stale-data wording was aligned. `SelectItem` rows are 44px below `md`. Impor blocks a submit with no *Outlet asal*, focuses that trigger, and announces *Pilih outlet asal.* Analitik trend and courier cards now stack full width. Checks run at the end of the round: `pnpm exec tsc --noEmit` exited 0 (before and after). `eslint` on the 13 changed source/test files exited 0. `vitest --config vitest.integration.config.mts` on the 51 test files that do not reference `DATABASE_URL`: 51 files and 473 tests passed. No regressions needed fixing. Not run: the 31 database-backed test files, `next build`, and the browser screening. The 1440/768/390 checks listed in the round-4 open issues are still pending, and no test covers the Impor client gate or the `SelectItem` touch height.
+  - Fix round 5 (direct, uncommitted): closes the round-4 review FAIL. *Kiriman terbaru* rows use a `minmax(0,1fr)` track, the time moves to the detail line so the badge stays beside the reference at every width, the AWB wraps in full instead of forcing a shrink-proof span wider than the row, and the action sits in a right-hand column from `sm` (full width below on phones). *Pekerjaan yang perlu diperhatikan*: titles reserve two lines from `xl` with the icon top-aligned, so values and descriptions start on one line across the row; descriptions are not clamped; `MetricsSkeleton` mirrors that geometry. RTS: *Waktu Update* merged into *Status & Waktu*, recipient/outlet cells wrap under a ceiling, guidance notes clamp to two lines, table `min-w-[60rem]`. Spec 17 no longer claims every actionable shipment stays visible (the card reads at most five). New tests: SUBMISSION_UNKNOWN row is actionable with *Lihat detail*; long AWB stays inside its row. Checks: `tsc --noEmit` exit 0; eslint on the 5 changed files exit 0; 50 non-DB test files, 464 tests passed. Browser (Chromium via CDP, tenant admin, local seed): /app at 390 document scrollWidth 390, AWB `SANITIZED-CNOTE-0001` fully visible; /app at 768 scrollWidth 768, all 8 rows 65–82px with badge inline, rail collapsed; /app at 1440 all five current-work descriptions start at the same y; RTS at 1440 container clientWidth = scrollWidth = 1110, uniform 89px rows (outlet name `text-xs`). Independent review (separate agent, read-only, browser + scratch mutations): PASS with four low findings. Addressed after review: `MetricsSkeleton` now mirrors the loaded section (measured with the `dashboard-stream` audit header at 1440: skeleton 246px / header 66px / card 164px vs loaded 246.5 / 66.5 / 164; the earlier "mirrors" claim was not true until this change); new test pins the pulse alignment classes on all five cards and fails when `xl:min-h-10` is removed (mutation run, file restored byte-identical); the AWB guard no longer asserts the incidental `shrink-0` class. Known ceiling, not fixed: the RTS table has ~14px headroom at 1440, so a provider AWB longer than ~20 characters makes the region scroll (the table stays a keyboard-scrollable region, never document overflow); no test pins the recipient/outlet wrapping. Not run: 31 DB-backed files, `next build`.
+
+### Phase 13 follow-up — close the gate, then the known ceilings
+
+Recorded 2026-09-14 at Paduka Ongki's request ("lanjut buat tasks lanjutan dulu") after the T-125 fix round 5 review PASS. Each item comes from a recorded finding, known ceiling, or open question in T-114 through T-125; execution was authorized by Paduka Ongki on 2026-09-14 ("eksekusi tasks.md yang belum mulai t-126 sampai finish"). Order: T-126 first (it closes T-118–T-125); T-127–T-131 are independent; T-132 waits on an explicit replacement palette. The owner's subsequent execution goal authorizes T-133 integration into the isolated completion branch, without commit/push.
+
+- [x] **T-126 — Close the Phase 13 delivery gate**
+  - Primary requirement: PR-22 (Phase 13 recomposition)
+  - Constraints: TD-14; spec 17/18/19 contracts; task-change boundary; test environment in memory note (suite env differs from dev env and truncates the demo seed)
+  - Dependencies: T-125 fix round 5
+  - Execution authorization: the owner requested T-126 onward. Use the existing task-owned local audit database on port55450 with generated local-only credentials; do not read private environment files or truncate the preview database. The seed step targets the isolated audit DB after tests.
+  - Scope: run the 31 database-backed integration files and `next build` (memory permitting, with the dev server stopped); re-seed with `pnpm db:seed-local` afterwards; record `ui-validation` from the round 5 browser evidence plus a fresh 1440/768/390 sweep of every CMS route; preserve and close the historical umbrella run `RUN-20260914T043942Z-5e1552c2` as FAIL because spec17/18 lacked accepted scope/dirty overlap, then record fresh checks and independent boundary review in successor `RUN-20260914T105602Z-2d584dc6`; mark T-118–T-125 done only with that evidence; update `BUILD-LOG.md` and `STATUS.md` for Phase 13.
+  - Done when: every integration file passes under the test env, `next build` exits 0, the successor verification run finishes PASS with no stale check, the original failed boundary remains explicit, and BUILD-LOG/STATUS name the evidence.
+  - Completion evidence (2026-09-14): fresh 82-file/655-test suite and production build pass. Corrected browser probe passes live regression injections; final sweep covers all 19 CMS routes plus three public routes at 390/768/1440, with no overflow, contrast/focus failure or console error. Six auth text-count diagnostics and three Analytics caption widths are explicitly classified; real presentation follow-ups stay in T-127/T-129/T-131/T-134. Independent designer reviewed all 38 CMS desktop/mobile captures. Successor ledger owns final review and boundary; historical Phase13 FAIL remains preserved. T-118–T-125 implementation is closed through this gate; final Admin/Super Admin parity and Phase12 feature completion are not claimed.
+
+- [x] **T-127 — Keep the RTS and Kiriman queue tables inside 1440 for provider-length AWBs**
+  - Primary requirement: UX-3 (no horizontal scroll for the primary queue at desktop widths)
+  - Constraints: provider `cnote_no` is the only AWB authority and is never truncated out of reach; sticky identifying column stays opaque; 44px targets below `md`
+  - Dependencies: none
+  - Finding: RTS has ~14px headroom at 1440 (a 25-character AWB overflows the region by 22px, 30 characters by 58px); the Kiriman Layanan/AWB column can still widen on a long AWB (T-120 note).
+  - Scope: let the Resi/AWB cells wrap (`break-all` under a width ceiling) in `src/app/app/pengiriman/rts/page.tsx` and `src/app/app/pengiriman/page.tsx`; add render tests that pin the wrapping recipient, outlet, and AWB cells and the merged *Status & Waktu* column.
+  - Done when: with a 40-character AWB fixture both tables fit 1440 (container clientWidth = scrollWidth) and remain scroll regions at 390, and the new tests fail when the wrapping classes are removed.
+  - Evidence (2026-09-14): both desktop regions measure 1095/1095px with all full 40-character AWBs inside their cells; eight route/width observations cover 390/768/1280/1440. Native ArrowRight scrolls both mobile regions 40px. Two render guards cover AWB and recipient/outlet wrapping, opaque sticky identity and merged status/time; all four removal mutations fail the owning test and restore source byte-identical. Designer/reviewer PASS is recorded in BUILD-LOG and the bounded ledger.
+
+- [x] **T-128 — Test the round-4 behaviours that shipped without guards**
+  - Primary requirement: UX-7 (form recovery and touch targets)
+  - Dependencies: none
+  - Scope: a render or client test for the Impor gate (submit with no *Outlet asal* is blocked, focus moves to the trigger, *Pilih outlet asal.* is announced) and a guard that `SelectItem` rows are 44px below `md` (`src/components/ui/select.tsx`).
+  - Done when: both tests pass and each fails under a mutation that removes the behaviour.
+  - Evidence (2026-09-14): `scripts/ui-audit/form-validation.mjs` drives the real import form via Kiriman, asserts repeated missing-outlet blocking/focus/alert with zero POST attempts, and measures actual SelectItems at 390/767. Both source-removal mutations fail for the intended reason, then restore application bytes. Only a temporary random-ID outlet in the isolated 55450 database is inserted and deleted, including failure cleanup. Final browser/static/security review is recorded in BUILD-LOG and the delivery ledger.
+
+- [x] **T-129 — Give platform batch ids the collision-safe short reference**
+  - Primary requirement: PR-17 (distinguishable records)
+  - Dependencies: none
+  - Finding: `src/lib/platform-monitoring-format.ts` `formatShortId` still slices the id prefix and is the only allowlisted exception in `tests/shipment-reference.integration.test.ts`; batch ids sharing a prefix read identically on platform tenant detail.
+  - Scope: shorten batch ids from the tail like `shipmentReference`, or reuse it, and remove the allowlist entry.
+  - Done when: the reference guard passes with an empty allowlist and platform detail shows distinct batch references for prefix-sharing fixture ids.
+  - Evidence (2026-09-14): shared suffix formatter replaces the final prefix slice; the guard has no allowlist. Two new assertions fail against the old code; all18 reference/platform tests pass after the fix. Real seeded platform detail displays18 distinct references at390/768/1440 with no document overflow or Runtime exception; independent source/design review and boundary evidence are recorded in BUILD-LOG.
+
+- [x] **T-130 — Resolve the required-checkbox validation question on detail and form pages**
+  - Primary requirement: UX-7
+  - Dependencies: none
+  - Finding: T-122 left open whether Radix `Checkbox` with `required` blocks submission and announces an error the way the former native checkbox did (TD-14 confirmation included).
+  - Scope: verify in Chromium with keyboard and screen-reader names; if it does not block, restore native validation or add an explicit server-validated error without changing TD-14 copy or disabled states.
+  - Done when: a browser check and a render test prove an unchecked required confirmation cannot submit and names the reason.
+  - Evidence (2026-09-14): Chromium reproduced Radix focusing an unnamed hidden invalid input. Restored native checkboxes at four required confirmation callers, preserving labels, TD-14 copy, disabled conditions and issuance consent reset. Browser Enter/Space proves named invalid focus and blocked/checked submission without POST at390/1440. Actual-panel and missing-confirmation action tests pass35/35; four required-removal mutations and restoring Radix fail the intended guards. Independent source/visual review and final boundary are recorded in BUILD-LOG.
+
+- [x] **T-131 — Reconcile the Phase 12 queue with what Phase 13 delivered**
+  - Primary requirement: repository contract (TASKS is the canonical queue)
+  - Dependencies: T-126
+  - Scope: documentation only. For each open Phase 12 task (T-88–T-108), record which parts Phase 13 already delivered (for example Settings, Queue, Detail, Flow layouts) and which remain (for example the command palette T-95, breadcrumbs and navigation counts T-94, analytics views T-100, the variance view T-101, platform severity T-93, D-3 net margin T-91); rewrite the Phase 12 execution order to the remaining work; keep spec 10 § CMS page patterns consistent.
+  - Done when: no open Phase 12 task describes work that is already in the tree, and every remaining task names its still-valid Done-when.
+  - Evidence (2026-09-14): all21 tasks T-88–T-108 now separate delivered parts from residual scope and gates; no feature task was falsely closed. Spec10 resolves historical colour/mobile/filter contradictions against Phase13 while retaining D-3, metric drift, required interactions and the T-98 priority-order gap. Independent source/design review corrected stale trend-disclosure, count-inventory and attribution claims.
+
+- [ ] **T-132 — Replace the black-and-white visual identity** *(blocked on owner decision)*
+  - Primary requirement: PR-22 visual identity
+  - Constraints: contrast tests (`tests/design-token-contrast`), semantic success/warning/danger kept separate from brand, Okabe-Ito chart ramp or an equally colour-blind-safe replacement
+  - Dependencies: owner-supplied palette and brand direction (Paduka Ongki accepted black-and-white "for now" on 2026-09-14)
+  - Scope: token values in `src/app/globals.css` for light and dark, then a browser screenshot sweep; no component or layout change.
+  - Done when: contrast tests pass for the new tokens and the 1440/768/390 sweep shows no regression.
+
+- [x] **T-133 — Integrate the redesign worktree with the Phase 12 branch** *(commits only on explicit request)*
+  - Primary requirement: repository contract (one source of truth)
+  - Dependencies: T-126
+  - Finding: `feat/tokophi-blue-ui` (this worktree) and `feat/phase-12-admin-patterns` (main checkout) both carry uncommitted changes to `src/app/app/dashboard-regions.tsx`, the tenant/platform/queue repositories, specs 10/17/19, TASKS, BUILD-LOG, and STATUS; the main checkout also holds the open T-88 ledger run `RUN-20260913T123004Z-737a5ac1`.
+  - Scope: decide the integration order with the owner, reconcile the overlapping files so neither branch's verified change is lost, and re-run the affected tests on the integrated tree.
+  - Done when: one branch holds both changes, the T-88 run and the Phase 13 run are each finished, and the integrated tree passes tsc, lint, and the full integration suite.
+  - Resolution (2026-09-14): `feat/phase14-completion` holds both sources. Three DB repositories and three Phase12 tests are byte-identical across all three worktrees; spec19 preserves formulas/D3 and accepted T111 chart refinements. Dashboard domain semantics remain, with accepted Phase13 presentation. Original T88 run closes FAIL because it had no verification; the residual task stays open. Fifteen missing ledger histories, including both historical FAIL closures, are imported byte-for-byte without replacing the completion pointer.
+  - Verification: all434 executable/config fingerprints and inventory match the T134 full83-file integration/build snapshot; no source integration edit was needed. Fresh TypeScript/lint, preservation/history checks and independent final review are recorded in BUILD-LOG and the T133 run. Neither source worktree's code was changed; no commit/push/deploy.
+
+
+
+- [x] **T-134 — Match Super Admin to the accepted Admin visual system**
+  - Primary requirement: PR-22. Authorized with T-126 onward on 2026-09-14.
+  - Scope: reuse shared shell, font, semantic tokens, PageHeader, StatCard, table anatomy, filter and card spacing across platform overview, tenant list/detail and audit. Preserve platform-specific health priorities, scope, filters, authorization and ledger semantics. No tenant operational metrics on platform merely to copy its layout.
+  - Design review: existing shared shell/tokens are already aligned; designer identified local platform FilterPanel, HeaderRow/RowHead, section spacing and pre-content context stack as remaining gaps. Use existing tenant components/patterns rather than a second theme.
+  - Fresh T-126 designer findings: restore two-column compact count summaries and matching skeletons at phone width on Admin and Super Admin; keep detailed current-work and full-IDR cards stacked. Align platform health value baselines, remove stretched empty space from grouped count cards, and use three desktop columns for the three tenant-detail volume groups. T-131 must consolidate older conflicting mobile/filter/scope-marker prose against this accepted direction. The active neutral identity remains until T-132 receives an explicit replacement decision. The final T-126 sweep also measured three Analytics caption lines at 768–794px (87–90ch) on 1440; restore the existing prose-width cap during the same T-134 presentation pass.
+  - Done when: Admin/Super Admin computed tokens and typography match; all four platform routes are independently visually reviewed at1440/768/390; filters, roles and navigation still work; focused regression and final full integration/build checks pass on the integrated tree.
+
+  - Completion evidence (2026-09-14): shared neutral tokens/font and platform filter/card/table anatomy pass independent visual review; final18route/viewport observations include487actual focus probes and no structural/contrast/long-line findings. Nine role observations and custom/preset/facet GET flows pass with explicitly recorded DOM keyboard/button fallbacks. Full83-file integration suite, production build, TypeScript and lint pass. BUILD-LOG records generic loading/control-size limits and failed harness attempts; T-132 remains a separate owner decision.

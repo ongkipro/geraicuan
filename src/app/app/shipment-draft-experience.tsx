@@ -31,24 +31,24 @@ export function SelectedContactProvenance({
   return (
     <div
       aria-label={`Kontak ${partyLabel} terpilih`}
-      className="mt-1 grid gap-3 rounded-lg border bg-background p-4"
+      className="grid gap-3 rounded-lg border bg-card p-4"
       role="status"
     >
-      <p className="font-medium">Kontak tersimpan dipilih</p>
-      <dl className="grid gap-3 text-sm">
+      <p className="text-sm font-medium">Kontak tersimpan dipilih</p>
+      <dl className="grid gap-3 text-sm md:grid-cols-3">
         <div className="min-w-0">
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kontak dipilih</dt>
+          <dt className="text-xs font-medium text-muted-foreground">Kontak dipilih</dt>
           <dd className="mt-1 wrap-anywhere">{selection.name}</dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Alamat dipilih</dt>
+          <dt className="text-xs font-medium text-muted-foreground">Alamat dipilih</dt>
           <dd className="mt-1 grid wrap-anywhere">
             <strong className="font-medium">{addressLabel ?? "Alamat tersimpan"}</strong>
             <span className="text-muted-foreground">{selection.address}</span>
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Area alamat</dt>
+          <dt className="text-xs font-medium text-muted-foreground">Area alamat</dt>
           <dd className="mt-1 wrap-anywhere">{selection.destinationAreaLabel ?? "Area tidak disimpan untuk alamat ini"}</dd>
         </div>
       </dl>
@@ -85,7 +85,7 @@ export function DraftCodBreakdown({
   providerService,
 }: DraftCodBreakdownProps) {
   return (
-    <article className="min-w-0 rounded-lg border bg-background p-4">
+    <article className="min-w-0 rounded-lg border bg-card p-4">
       <h4 className="mb-3 wrap-anywhere text-sm font-medium">{providerService}</h4>
       <dl className="text-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 first:border-t-0">
