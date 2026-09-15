@@ -1,6 +1,8 @@
 import * as React from "react"
 
 import { cn } from "cn"
+import { TableScrollRegion } from "@/components/ui/table-scroll-region"
+import styles from "./table.module.css"
 
 function Table({
   className,
@@ -11,18 +13,19 @@ function Table({
   containerClassName?: string
   containerProps?: Omit<React.ComponentProps<"div">, "className">
 }) {
+  const Container = containerProps?.role === "region" ? TableScrollRegion : "div"
   return (
-    <div
+    <Container
       data-slot="table-container"
       className={cn("relative w-full overflow-x-auto", containerClassName)}
       {...containerProps}
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom text-sm", styles.table, className)}
         {...props}
       />
-    </div>
+    </Container>
   )
 }
 

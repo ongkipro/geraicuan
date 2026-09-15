@@ -62,7 +62,7 @@ export function ContactIdentityForm({ contact }: { contact: { id: string; isReci
             <Field data-invalid={Boolean(errors.contactName)}><FieldLabel htmlFor="contactName">Nama kontak</FieldLabel><Input aria-describedby={errors.contactName ? "contactName-error" : undefined} aria-invalid={Boolean(errors.contactName)} className="min-h-11" defaultValue={values?.contactName ?? contact.name} id="contactName" maxLength={120} name="contactName" required /><FieldError id="contactName-error">{errors.contactName}</FieldError></Field>
             <Field data-invalid={Boolean(errors.contactPhone)}><FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel><Input aria-describedby={errors.contactPhone ? "contactPhone-error" : undefined} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values?.contactPhone ?? contact.phone} id="contactPhone" name="contactPhone" required type="tel" /><FieldError id="contactPhone-error">{errors.contactPhone}</FieldError></Field>
           </FieldGroup>
-          <fieldset aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} className="grid gap-3 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="roles" tabIndex={-1}>
+          <fieldset aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} className="grid gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" id="roles" tabIndex={-1}>
             <legend className="text-sm font-medium">Peran kontak</legend>
             <div className="grid gap-3 sm:grid-cols-2">
               {/* Keyed on the submitted value: a form action resets the form, and

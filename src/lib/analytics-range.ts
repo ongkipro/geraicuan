@@ -50,17 +50,6 @@ export const ANALYTICS_TIMEZONES = [
     label: "WIB (UTC+07:00)",
     utcOffsetMinutes: 420,
   },
-  {
-    id: "Asia/Makassar",
-    label: "WITA (UTC+08:00)",
-    utcOffsetMinutes: 480,
-  },
-  {
-    id: "Asia/Jayapura",
-    label: "WIT (UTC+09:00)",
-    utcOffsetMinutes: 540,
-  },
-  { id: "UTC", label: "UTC (UTC+00:00)", utcOffsetMinutes: 0 },
 ] as const satisfies readonly {
   id: string;
   label: string;
@@ -93,7 +82,7 @@ const issueMessages: Record<AnalyticsIssue, string> = {
   rentang_tidak_dikenal:
     "Preset periode tidak dikenal, memakai 30 hari terakhir.",
   tz_tidak_dikenal:
-    "Zona waktu tidak dikenal, memakai WIB (UTC+07:00).",
+    "Semua tanggal menggunakan WIB (GMT+7).",
   tanggal_tidak_valid:
     "Tanggal rentang khusus tidak lengkap atau tidak valid, memakai 30 hari terakhir.",
   urutan_tanggal_terbalik:
@@ -163,8 +152,7 @@ function boundaryInstant(
   date: CalendarDate,
   timezone: AnalyticsTimezone,
 ): Date {
-  // These allowlisted zones have fixed offsets and no DST. Admitting a DST zone
-  // requires resolving local calendar boundaries with Intl.formatToParts.
+  // The Indonesian workspace uses WIB year-round; persisted instants stay UTC.
   return new Date(
     calendarSerial(date) -
       timezone.utcOffsetMinutes * MILLISECONDS_PER_MINUTE,
@@ -265,7 +253,11 @@ function resolveTimezone(
   value: string | undefined,
   issues: AnalyticsIssue[],
 ): AnalyticsTimezone {
-  if (!value) return timezoneById[DEFAULT_TIMEZONE];
+  // Older bookmarked URLs may carry a former timezone option. Normalize them
+  // without changing the calendar dates the operator requested.
+  if (!value || ["Asia/Makassar", "Asia/Jayapura", "UTC"].includes(value)) {
+    return timezoneById[DEFAULT_TIMEZONE];
+  }
 
   if (isTimezoneId(value)) return timezoneById[value];
 
@@ -368,7 +360,7 @@ export function serializeAnalyticsRange(
 ): URLSearchParams {
   const params = new URLSearchParams({
     rentang: range.presetId,
-    tz: range.timezone,
+    tz: DEFAULT_TIMEZONE,
   });
 
   if (range.presetId === "kustom") {

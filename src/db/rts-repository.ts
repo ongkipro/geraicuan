@@ -11,7 +11,6 @@ import {
   shipments,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
-import { maskPhone } from "@/lib/pii-redaction";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
 export const RTS_STATUSES = [
@@ -34,6 +33,7 @@ type LatestRtsEvent = { notes: string | null; createdAt: string | null };
 
 export type RtsShipmentRow = {
   shipmentId: string;
+  publicReference: string;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -44,7 +44,7 @@ export type RtsShipmentRow = {
   isCod: boolean;
   declaredValueIdr: number;
   recipientName: string;
-  recipientPhoneMasked: string;
+  recipientPhone: string;
   providerService: string | null;
   awb: string | null;
   latestEventNotes: string | null;
@@ -150,6 +150,7 @@ export async function loadRtsShipmentsPage(
   const selectedRows = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       status: shipments.status,
       createdAt: shipments.createdAt,
       updatedAt: shipments.updatedAt,
@@ -215,9 +216,7 @@ export async function loadRtsShipmentsPage(
 
   const rows = selectedRows.map(({ latestEvent, recipientPhone, ...row }) => ({
     ...row,
-    // Masked here, not in the page: a client-side mask would still ship the
-    // whole number in the server-rendered payload.
-    recipientPhoneMasked: maskPhone(recipientPhone),
+    recipientPhone,
     latestEventNotes: latestEvent?.notes ?? null,
     // The subquery returns JSON, so the timestamp arrives as a raw string
     // rather than through the column type mapper.

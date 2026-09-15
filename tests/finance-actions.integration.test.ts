@@ -287,6 +287,19 @@ describe("Finance Server Actions", () => {
     },
   );
 
+  it.each(["Asia/Makassar", "Asia/Jayapura", "UTC"])("locks daily and monthly reconciliation boundaries to WIB for legacy %s context", async (tz) => {
+    const { runLedgerReconciliation } = await import("@/app/app/keuangan/actions");
+    for (const [buildForm, end] of [
+      [dailyForm, "2026-08-01T17:00:00.000Z"],
+      [monthlyForm, "2026-08-31T17:00:00.000Z"],
+    ] as const) {
+      const form = buildForm();
+      form.set("tz", tz);
+      expect(await runLedgerReconciliation({}, form)).toMatchObject({ status: "success" });
+      expect(mocks.reconciliationCalls.at(-1)).toMatchObject({ periodStart: new Date("2026-07-31T17:00:00.000Z"), periodEnd: new Date(end) });
+    }
+  });
+
   it("forwards an adjustment attempt exactly and returns action-state success", async () => {
     const { reverseLedgerEntry } = await import("@/app/app/keuangan/actions");
 

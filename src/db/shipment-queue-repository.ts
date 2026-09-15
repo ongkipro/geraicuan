@@ -34,6 +34,7 @@ export type ShipmentQueueRow = {
   providerService: string | null;
   recipientName: string;
   shipmentId: string;
+  publicReference: string;
   status: ShipmentStatus;
   updatedAt: Date;
 };
@@ -97,6 +98,7 @@ export type ShipmentDetail = {
   recipient: ShipmentPartySnapshot | null;
   sender: ShipmentPartySnapshot | null;
   shipmentId: string;
+  publicReference: string;
   status: ShipmentStatus;
   updatedAt: Date;
 };
@@ -209,6 +211,7 @@ export async function loadShipmentQueuePage(
   const rows = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       status: shipments.status,
       createdAt: shipments.createdAt,
       updatedAt: shipments.updatedAt,
@@ -275,6 +278,7 @@ export async function loadShipmentDetail(
   const [row] = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       status: shipments.status,
       createdAt: shipments.createdAt,
       generatedAt: sql<Date>`statement_timestamp()`.mapWith(
@@ -439,6 +443,7 @@ export async function loadShipmentDetail(
     recipient,
     sender,
     shipmentId: row.shipmentId,
+    publicReference: row.publicReference,
     status: row.status,
     updatedAt: row.updatedAt,
   };

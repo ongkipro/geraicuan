@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ContactDirectoryBrowser } from "@/app/app/kontak/contact-directory-browser";
-import type { SafeContactSearchRow } from "@/app/app/kontak/actions";
+import type { ContactSearchRow } from "@/app/app/kontak/actions";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,7 +15,6 @@ import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
-import { maskPhone } from "@/lib/pii-redaction";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -51,13 +50,13 @@ export default async function ContactDirectoryPage({ searchParams }: ContactDire
     rowsPromise = rowsPromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
   }
   const rows = await rowsPromise;
-  const safeRows: SafeContactSearchRow[] = rows.map((contact) => ({
+  const contactRows: ContactSearchRow[] = rows.map((contact) => ({
     archived: Boolean(contact.archivedAt),
     id: contact.id,
     isRecipient: contact.isRecipient,
     isSender: contact.isSender,
     name: contact.name,
-    phoneMasked: maskPhone(contact.phone),
+    phone: contact.phone,
   }));
 
   return (
@@ -69,7 +68,7 @@ export default async function ContactDirectoryPage({ searchParams }: ContactDire
         title="Kontak"
       />
       {invalidStatus ? <Alert role="status"><AlertTitle>Filter status disesuaikan</AlertTitle><AlertDescription>Status tidak dikenali; kontak aktif ditampilkan.</AlertDescription></Alert> : null}
-      <ContactDirectoryBrowser initialRows={safeRows} status={status} />
+      <ContactDirectoryBrowser initialRows={contactRows} status={status} />
     </PageContainer>
   );
 }

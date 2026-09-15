@@ -25,8 +25,6 @@ const presetExpectations: Record<
     spanDays: number;
     jakartaStart: string;
     jakartaEnd: string;
-    jayapuraStart: string;
-    jayapuraEnd: string;
   }
 > = {
   "hari-ini": {
@@ -35,8 +33,6 @@ const presetExpectations: Record<
     spanDays: 1,
     jakartaStart: "2026-08-30T17:00:00.000Z",
     jakartaEnd: "2026-08-31T17:00:00.000Z",
-    jayapuraStart: "2026-08-30T15:00:00.000Z",
-    jayapuraEnd: "2026-08-31T15:00:00.000Z",
   },
   kemarin: {
     startDate: "2026-08-30",
@@ -44,8 +40,6 @@ const presetExpectations: Record<
     spanDays: 1,
     jakartaStart: "2026-08-29T17:00:00.000Z",
     jakartaEnd: "2026-08-30T17:00:00.000Z",
-    jayapuraStart: "2026-08-29T15:00:00.000Z",
-    jayapuraEnd: "2026-08-30T15:00:00.000Z",
   },
   "minggu-ini": {
     startDate: "2026-08-31",
@@ -53,8 +47,6 @@ const presetExpectations: Record<
     spanDays: 1,
     jakartaStart: "2026-08-30T17:00:00.000Z",
     jakartaEnd: "2026-08-31T17:00:00.000Z",
-    jayapuraStart: "2026-08-30T15:00:00.000Z",
-    jayapuraEnd: "2026-08-31T15:00:00.000Z",
   },
   "bulan-ini": {
     startDate: "2026-08-01",
@@ -62,8 +54,6 @@ const presetExpectations: Record<
     spanDays: 31,
     jakartaStart: "2026-07-31T17:00:00.000Z",
     jakartaEnd: "2026-08-31T17:00:00.000Z",
-    jayapuraStart: "2026-07-31T15:00:00.000Z",
-    jayapuraEnd: "2026-08-31T15:00:00.000Z",
   },
   "7-hari": {
     startDate: "2026-08-25",
@@ -71,8 +61,6 @@ const presetExpectations: Record<
     spanDays: 7,
     jakartaStart: "2026-08-24T17:00:00.000Z",
     jakartaEnd: "2026-08-31T17:00:00.000Z",
-    jayapuraStart: "2026-08-24T15:00:00.000Z",
-    jayapuraEnd: "2026-08-31T15:00:00.000Z",
   },
   "30-hari": {
     startDate: "2026-08-02",
@@ -80,8 +68,6 @@ const presetExpectations: Record<
     spanDays: 30,
     jakartaStart: "2026-08-01T17:00:00.000Z",
     jakartaEnd: "2026-08-31T17:00:00.000Z",
-    jayapuraStart: "2026-08-01T15:00:00.000Z",
-    jayapuraEnd: "2026-08-31T15:00:00.000Z",
   },
 };
 
@@ -106,17 +92,6 @@ describe("analytics URL range contract", () => {
         label: "WIB (UTC+07:00)",
         utcOffsetMinutes: 420,
       },
-      {
-        id: "Asia/Makassar",
-        label: "WITA (UTC+08:00)",
-        utcOffsetMinutes: 480,
-      },
-      {
-        id: "Asia/Jayapura",
-        label: "WIT (UTC+09:00)",
-        utcOffsetMinutes: 540,
-      },
-      { id: "UTC", label: "UTC (UTC+00:00)", utcOffsetMinutes: 0 },
     ]);
   });
 
@@ -147,15 +122,39 @@ describe("analytics URL range contract", () => {
     expect(jakarta.endExclusive.toISOString()).toBe(expected.jakartaEnd);
     expect(jayapura).toMatchObject({
       presetId,
-      timezone: "Asia/Jayapura",
+      timezone: "Asia/Jakarta",
       startDate: expected.startDate,
       lastIncludedDate: expected.lastIncludedDate,
       spanDays: expected.spanDays,
       issues: [],
     });
-    expect(jayapura.startInclusive.toISOString()).toBe(expected.jayapuraStart);
-    expect(jayapura.endExclusive.toISOString()).toBe(expected.jayapuraEnd);
+    expect(jayapura.startInclusive.toISOString()).toBe(expected.jakartaStart);
+    expect(jayapura.endExclusive.toISOString()).toBe(expected.jakartaEnd);
   });
+
+  it.each(["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura", "UTC"])(
+    "locks %s links to WIB across midnight, month and year boundaries",
+    (tz) => {
+      for (const [instant, localDate] of [
+        ["2026-08-31T16:59:59.999Z", "2026-08-31"],
+        ["2026-08-31T17:00:00.000Z", "2026-09-01"],
+        ["2026-12-31T16:59:59.999Z", "2026-12-31"],
+        ["2026-12-31T17:00:00.000Z", "2027-01-01"],
+      ]) {
+        const range = parseAnalyticsRange({ rentang: "hari-ini", tz }, new Date(instant));
+        expect(range).toMatchObject({ timezone: "Asia/Jakarta", startDate: localDate, lastIncludedDate: localDate, issues: [] });
+        expect(range.startInclusive.toISOString()).toBe(new Date(`${localDate}T00:00:00+07:00`).toISOString());
+        expect(range.endExclusive.getTime() - range.startInclusive.getTime()).toBe(86_400_000);
+        expect(serializeAnalyticsRange(range).get("tz")).toBe("Asia/Jakarta");
+      }
+      const newYear = parseAnalyticsRange({ rentang: "bulan-ini", tz }, new Date("2026-12-31T17:00:00Z"));
+      expect(newYear).toMatchObject({ startDate: "2027-01-01", lastIncludedDate: "2027-01-01", spanDays: 1 });
+      const year = parseAnalyticsRange({ rentang: "kustom", dari: "2026-01-01", sampai: "2026-12-31", tz }, new Date("2026-12-31T17:00:00Z"));
+      expect(year.startInclusive.toISOString()).toBe("2025-12-31T17:00:00.000Z");
+      expect(year.endExclusive.toISOString()).toBe("2026-12-31T17:00:00.000Z");
+      expect(year.spanDays).toBe(365);
+    },
+  );
 
   it("starts the current week on Monday and the current month on day one", () => {
     const sunday = new Date("2026-08-30T04:00:00.000Z");
@@ -192,7 +191,7 @@ describe("analytics URL range contract", () => {
       ),
     ).toMatchObject({
       presetId: "7-hari",
-      timezone: "Asia/Makassar",
+      timezone: "Asia/Jakarta",
       issues: [],
     });
 
@@ -344,7 +343,7 @@ describe("analytics URL range contract", () => {
     const serializedCustom = serializeAnalyticsRange(custom);
     expect(Object.fromEntries(serializedCustom)).toEqual({
       rentang: "kustom",
-      tz: "Asia/Jayapura",
+      tz: "Asia/Jakarta",
       dari: "2026-08-10",
       sampai: "2026-08-15",
     });
@@ -388,18 +387,18 @@ describe("analytics URL range contract", () => {
     ]);
   });
 
-  it("formats the resolved labels in the selected allowlisted zone", () => {
+  it("formats every timestamp in WIB even for former timezone options", () => {
     const range = parseAnalyticsRange(
       { rentang: "hari-ini", tz: "Asia/Jayapura" },
       NOW,
     );
     expect(formatRangeLabel(range)).toMatchObject({
-      timezoneLabel: "WIT (UTC+09:00)",
+      timezoneLabel: "WIB (UTC+07:00)",
       presetLabel: "Hari ini",
     });
 
     const instant = new Date("2026-08-30T16:30:00.000Z");
-    expect(formatInZone(instant, "Asia/Jakarta")).toBe(
+    expect(formatInZone(instant, "Asia/Jayapura")).toBe(
       new Intl.DateTimeFormat("id-ID", {
         dateStyle: "medium",
         timeStyle: "short",

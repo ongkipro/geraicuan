@@ -9,7 +9,6 @@ import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { validateContactDirectory } from "@/lib/contact-directory";
-import { maskPhone } from "@/lib/pii-redaction";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -42,18 +41,18 @@ export type CreateContactState = {
   values?: ContactValues;
 };
 
-export type SafeContactSearchRow = {
+export type ContactSearchRow = {
   archived: boolean;
   id: string;
   isRecipient: boolean;
   isSender: boolean;
   name: string;
-  phoneMasked: string;
+  phone: string;
 };
 
 export type ContactSearchState = {
   error?: string;
-  rows: SafeContactSearchRow[];
+  rows: ContactSearchRow[];
   searched: boolean;
 };
 
@@ -77,14 +76,14 @@ async function requireTenantPrincipal() {
   }
 }
 
-function safeSearchRows(rows: Awaited<ReturnType<typeof listContacts>>): SafeContactSearchRow[] {
+function contactSearchRows(rows: Awaited<ReturnType<typeof listContacts>>): ContactSearchRow[] {
   return rows.map((contact) => ({
     archived: Boolean(contact.archivedAt),
     id: contact.id,
     isRecipient: contact.isRecipient,
     isSender: contact.isSender,
     name: contact.name,
-    phoneMasked: maskPhone(contact.phone),
+    phone: contact.phone,
   }));
 }
 
@@ -109,7 +108,7 @@ export async function searchContacts(
   const rows = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
     listContacts(tx, context, query, status),
   );
-  return { rows: safeSearchRows(rows), searched: Boolean(query) };
+  return { rows: contactSearchRows(rows), searched: Boolean(query) };
 }
 
 export async function saveContact(

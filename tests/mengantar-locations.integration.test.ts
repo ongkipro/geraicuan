@@ -74,6 +74,34 @@ const areaPayload = {
 };
 
 describe("Mengantar pickup location contract", () => {
+  it("keeps multiline address text and does not let another pickup block the configured one", async () => {
+    const multiline = structuredClone(payload);
+    multiline.data[0].PICKUP_ADDRESS = "Jalan Contoh 1\r\nLantai 2\nBlok A\rPintu B";
+    const options = normalizeMengantarPickupOptions(multiline);
+    expect(options[0].pickupLabel).toContain("Jalan Contoh 1 Lantai 2 Blok A Pintu B");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(multiline)));
+    await expect(fetchMengantarPickupOptions({
+      apiKey: "test-key",
+      baseUrl: "https://api-public.mengantar.com",
+      pickupAddressId: "pickup-1",
+    }, "platform_default")).resolves.toEqual([expect.objectContaining({ pickupAddressId: "pickup-1" })]);
+  });
+
+  it.each([
+    ["PICKUP_ADDRESS", "Jalan\u0000Contoh"],
+    ["PICKUP_ADDRESS", "Jalan\u202eContoh"],
+    ["PICKUP_ADDRESS", "Jalan\tContoh"],
+    ["PICKUP_ADDRESS", "\r\n"],
+    ["_id", "pickup\n1"],
+    ["PICKUP_AUTOFILL", "area\r1"],
+    ["PICKUP_NAME", "Gudang\nBarat"],
+  ])("retains control validation for %s", (field, value) => {
+    expect(() => normalizeMengantarPickupOptions({
+      success: true,
+      data: [{ ...payload.data[0], [field]: value }],
+    })).toThrow(MengantarLocationError);
+  });
+
   it("maps GET /address into deterministic safe pickup and derived-area options", () => {
     const options = normalizeMengantarPickupOptions(payload);
 

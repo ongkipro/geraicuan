@@ -2256,8 +2256,8 @@ Rules for this phase:
   - Constraints: spec 19 M-0 period/freshness, OPS-BATCH-DURATION
   - Dependencies: T-88
   - Already delivered (T-131 audit, 2026-09-14): Shared freshness presentation and selected-zone period labels exist. Dashboard pulse/estimate labels still use WIB, platform/finance stale states are audit-only, and formatDuration floors minutes.
-  - Remaining scope: Make timestamps follow their documented zone, propagate actual DB generated-at/staleness to platform and finance, and display sub-minute durations in seconds. Preserve existing shared freshness presentation.
-  - Done when: Real timestamp/staleness tests pass, a 45-second duration renders seconds, and Asia/Jayapura browser evidence has no incorrect WIB labels in period-bound regions.
+  - Delivered by T-140: fixed WIB across date filters, period labels and legacy timezone URLs. Remaining scope: propagate actual DB generated-at/staleness to platform and finance, and display sub-minute durations in seconds. Preserve existing shared freshness presentation.
+  - Done when: Real timestamp/staleness tests pass, a 45-second duration renders seconds, and legacy Asia/Jayapura URLs consistently resolve to WIB under PR-35.
 
 - [ ] **T-93 — Complete and test platform severity rules**
   - Primary requirement: PR-11
@@ -2274,7 +2274,7 @@ Rules for this phase:
   - Constraints: spec 10 § CMS page patterns Foundation; UX-3; UX-7
   - Dependencies: T-88
   - Already delivered (T-131 audit, 2026-09-14): Shared shell, neutral tokens, lifecycle labels, PageHeader/StatCard/table/settings primitives and scope labels are delivered by Phase13. The proposed violet scope marker is superseded by the accepted neutral system; no separate platform theme is required.
-  - Remaining scope: Add contextual breadcrumbs, shared platform severity presentation where still missing, and server-derived navigation counts: ACT-NEEDED for Kiriman, ACT-UNPAID for Tenant Admin only, REC-VARIANCE-COUNT for Keuangan, outlet readiness for Outlet & koneksi, and platform Kritis count. Preserve shared neutral scope/role labels and existing status primitives.
+  - Remaining scope: Add contextual breadcrumbs, shared platform severity presentation where still missing, and server-derived navigation counts: ACT-NEEDED for Kiriman, ACT-UNPAID for Tenant Admin only, REC-VARIANCE-COUNT for Keuangan, outlet readiness for Pengaturan, and platform Kritis count. Preserve shared neutral scope/role labels and existing status primitives.
   - Done when: Breadcrumbs render for descendants; source/queue count parity and role-exclusion tests pass; both scopes retain the same token/font/focus treatment at390/768/1440. No metric count is inferred in the browser.
 
 - [ ] **T-95 — Add the scope-bounded command palette**
@@ -2282,8 +2282,8 @@ Rules for this phase:
   - Constraints: spec 10 Foundation command palette; TEN-1, TEN-2, IAM-2,
     SEC-2; PR-12, PR-18 visibility rules
   - Dependencies: T-94
-  - Already delivered (T-131 audit, 2026-09-14): The installed cmdk Command primitive supports existing pickers; no global scope-bounded palette, shortcut handler or search backend has been delivered.
-  - Remaining scope: Implement the scoped keyboard palette and bounded server search for allowed destinations, primary actions and records; mask phone numbers and preserve visible navigation access.
+  - Delivered by T-139 (2026-09-15): role-permitted shadcn page search, Ctrl/Cmd+K, empty recovery, current-page indication, close/focus restoration and responsive header. No server record-search backend is part of T-139.
+  - Remaining scope: extend the existing palette with bounded server search for permitted primary actions and records; preserve role/tenant restrictions and complete tenant operational phones under PR-36. Do not rebuild delivered navigation search.
   - Done when: Cross-tenant/role exclusion and result limits pass tests; Tenant Admin, Operator and Super Admin complete keyboard open/search/record/focus-return journeys.
 
 ### Pattern adoption
@@ -2516,7 +2516,7 @@ Authorization: Paduka Ongki asked on 2026-09-14 to continue the whole redesign i
 
 ### Phase 13 follow-up — close the gate, then the known ceilings
 
-Recorded 2026-09-14 at Paduka Ongki's request ("lanjut buat tasks lanjutan dulu") after the T-125 fix round 5 review PASS. Each item comes from a recorded finding, known ceiling, or open question in T-114 through T-125; execution was authorized by Paduka Ongki on 2026-09-14 ("eksekusi tasks.md yang belum mulai t-126 sampai finish"). Order: T-126 first (it closes T-118–T-125); T-127–T-131 are independent; T-132 waits on an explicit replacement palette. The owner's subsequent execution goal authorizes T-133 integration into the isolated completion branch, without commit/push.
+Recorded 2026-09-14 at Paduka Ongki's request ("lanjut buat tasks lanjutan dulu") after the T-125 fix round 5 review PASS. Each item comes from a recorded finding, known ceiling, or open question in T-114 through T-125; execution was authorized by Paduka Ongki on 2026-09-14 ("eksekusi tasks.md yang belum mulai t-126 sampai finish"). Order: T-126 first (it closes T-118–T-125); T-127–T-131 are independent; T-132 initially waited on an explicit replacement palette; the later visual-refinement instruction accepts the recommended blue direction. The owner's subsequent execution goal authorizes T-133 integration into the isolated completion branch, without commit/push.
 
 - [x] **T-126 — Close the Phase 13 delivery gate**
   - Primary requirement: PR-22 (Phase 13 recomposition)
@@ -2566,12 +2566,14 @@ Recorded 2026-09-14 at Paduka Ongki's request ("lanjut buat tasks lanjutan dulu"
   - Done when: no open Phase 12 task describes work that is already in the tree, and every remaining task names its still-valid Done-when.
   - Evidence (2026-09-14): all21 tasks T-88–T-108 now separate delivered parts from residual scope and gates; no feature task was falsely closed. Spec10 resolves historical colour/mobile/filter contradictions against Phase13 while retaining D-3, metric drift, required interactions and the T-98 priority-order gap. Independent source/design review corrected stale trend-disclosure, count-inventory and attribution claims.
 
-- [ ] **T-132 — Replace the black-and-white visual identity** *(blocked on owner decision)*
+- [x] **T-132 — Replace the black-and-white visual identity**
   - Primary requirement: PR-22 visual identity
   - Constraints: contrast tests (`tests/design-token-contrast`), semantic success/warning/danger kept separate from brand, Okabe-Ito chart ramp or an equally colour-blind-safe replacement
-  - Dependencies: owner-supplied palette and brand direction (Paduka Ongki accepted black-and-white "for now" on 2026-09-14)
+  - Authorization: Paduka Ongki accepted the recommended restrained blue direction with "lanjut sempurnakan warna visual" on 2026-09-14. The temporary black-and-white dependency is resolved; use shared blue interactions on existing neutral surfaces and a dormant dark companion.
   - Scope: token values in `src/app/globals.css` for light and dark, then a browser screenshot sweep; no component or layout change.
   - Done when: contrast tests pass for the new tokens and the 1440/768/390 sweep shows no regression.
+  - Completion evidence: shared light blue and dormant dark companion implemented only through existing tokens. All66route/viewport observations pass structural/contrast/focus checks;9174contrast measurements,1556focus probes. Twelve additional scope/theme/width observations verify filled buttons,3pxfocus rings, selected navigation and settled mobile drawers. Designer accepts40screenshots. Existing token/shell/primitives regression, TypeScript, lint and independent boundary review pass. Hover is compiled-rule/token evidence; native hover rendering is unverified in the headless environment. No dark activation, layout, status or metric change.
+
 
 - [x] **T-133 — Integrate the redesign worktree with the Phase 12 branch** *(commits only on explicit request)*
   - Primary requirement: repository contract (one source of truth)
@@ -2592,3 +2594,97 @@ Recorded 2026-09-14 at Paduka Ongki's request ("lanjut buat tasks lanjutan dulu"
   - Done when: Admin/Super Admin computed tokens and typography match; all four platform routes are independently visually reviewed at1440/768/390; filters, roles and navigation still work; focused regression and final full integration/build checks pass on the integrated tree.
 
   - Completion evidence (2026-09-14): shared neutral tokens/font and platform filter/card/table anatomy pass independent visual review; final18route/viewport observations include487actual focus probes and no structural/contrast/long-line findings. Nine role observations and custom/preset/facet GET flows pass with explicitly recorded DOM keyboard/button fallbacks. Full83-file integration suite, production build, TypeScript and lint pass. BUILD-LOG records generic loading/control-size limits and failed harness attempts; T-132 remains a separate owner decision.
+
+### Table usability refinement
+
+- [x] **T-135 — Refine shared tenant and platform table UX after analysis.**
+  - Authorization: owner requested "lanjut ui ux table. analisa dulu -> dan sempurnakan" on 2026-09-14.
+  - Requirement: PR-22; spec 10 Pattern 2; native semantic tables, URL-owned filters and pagination, complete identifiers, server-owned data and permissions.
+  - Analysis and accepted designer direction: wide tables lack a visible scroll explanation; sticky headers have inconsistent backgrounds and sticky identity cells interrupt row tracking; mobile pagination wraps unpredictably; platform tenant names have no width ceiling. Preserve existing row density and domain columns/actions.
+  - Scope: one reusable measured scroll-region leaf, shared Table and DataTableShell, scoped header/sticky/focus styling, mobile pagination grouping, and wrapping platform tenant names. No new dependencies, sorting, selection, data fetching, auth, metrics, provider operations, or route-state changes. Preserve the completed uncommitted T-132 palette.
+  - Done when: actual overflow alone shows the hint, disclosure tables retain one scroll owner, keyboard scroll/focus and sticky identity work at 390/768/1440, long names remain complete, pagination/filter URLs still navigate correctly, focused regression and real-browser checks pass, and independent visual/correctness review accepts the final diff.
+  - Completion evidence (2026-09-14): ledger `RUN-20260914T163359Z-3c55b10f` records84focused tests, TypeScript/lint, production build,30route/viewport observations and a final interaction replay. Designer accepts the refined headers, hint placement, mobile pager, and pinned identity/focus. Reviewer accepts source and strengthened selected-state guard. Native ArrowRight delivery remains unverified; programmatic scroll/focus, URL navigation and resize/disclosure behavior pass. No commit/push/deploy.
+
+### Local Mengantar runtime
+
+- [x] **T-136 — Connect the existing Mengantar account to local development.**
+  - Authorization: owner asked "masih ada data api mengantar? sambungkan untuk local aja dlu" on2026-09-15.
+  - Scope: use the existing canonical secrets via secrets-env, inject only Mengantar values into the local3127 dev runtime, validate account pickup/area reads, derive local origin from the configured provider pickup, and save the selected authoritative pickup through the existing local outlet settings flow if needed. Keep real credentials outside the repository and output. No provider orders, payments, remote writes or production deployment.
+  - Done when: local dev responds, the existing application resolves the account and official pickup, read-only provider checks pass, independent review verifies credential boundaries, and repository-owned runtime evidence records limitations and restart instructions.
+  - Required repair: normalize legitimate CR/LF in provider street addresses only, retain strict validation elsewhere, and disable development Server Function argument logging to keep pickup data out of terminal output.
+  - Completion evidence: read-only pickup/area/estimate requests succeed; local settings load the configured official pickup, save it and retain it after reload. Browser checks find no provider credential in HTML or direct browser provider requests. Focused regression, TypeScript/lint, launcher syntax and independent review pass; BUILD-LOG records the final boundary and limitations.
+
+
+### Settings usability refinement
+
+- [x] **T-137 — Refine outlet settings and member administration with existing shadcn primitives.**
+  - Authorization: owner requested outlet settings UX refinement with shadcn, then explicitly added member administration on2026-09-15. Requirement: PR-22.
+  - Scope: selected-outlet summary, pickup/origin hierarchy, connection choices, member list hierarchy, last-admin explanation and invite form guidance. Preserve existing actions, authorization, readiness/metric definitions, account rules, URL selection and confirmation contracts. No dependency or global theme change; preserve T-132/T-135/T-136 work.
+  - Done when: pre-edit designer direction is applied, desktop/mobile and critical UI states/controls pass actual browser checks, nearest render/action regressions and static checks pass, and independent review binds the final task surface. No live provider or membership mutation is needed for presentation verification.
+  - Completion evidence: 94 focused tests, TypeScript/lint, 18 browser observations and interaction replay. Designer and separate reviewer accept the bounded refinement; BUILD-LOG and the matching boundary record exact evidence, preserved earlier work and the native-key limitation.
+
+
+- [x] **T-138 — Refine the Mengantar pickup selector and its location/connection context.**
+  - Authorization: owner specifically requested location/select and Mengantar connection UX refinement on2026-09-15. PR-22; preserve accepted T-137 composition and source overlap.
+  - Verified defect: actual saved pickup label is80px high at390px viewport inside a44px trigger; text exceeds its bounds. Current3127 already serves the T-137 concise copy (old pasted copy absent).
+  - Scope: auto-height full-address trigger, clear checked-versus-active option styling, searchable viewport-bounded dropdown and long-label wrapping. Existing shadcn primitives and provider data/action contracts remain.
+  - Done when: actual long saved address fits, synthetic long/no-result/selection states work at desktop/mobile, derived area and persisted connection source remain correct, focused regression and independent visual/boundary review pass. No provider or settings writes.
+  - Completion: actual saved label fits at1440/768/390; four synthetic viewport/height cases pass long labels, search/recovery/selection, checked/active styling and minimum120px result height. 44 focused tests, static checks and final independent visual review pass.
+
+
+- [x] **T-139 — Add role-aware shadcn header search and a live WIB clock.**
+  - Authorization: owner requested header/search modal and date/time including seconds GMT+7, and reiterated shadcn hover/selection quality on2026-09-15. Primary requirement: PR-34; constraints: PR-22, PR-37.
+  - Scope: reuse existing navigation definitions for search, accurate role visibility, modal keyboard/focus behavior, stable hydration-safe Asia/Jakarta clock, responsive header hierarchy and anchor clearance. No global data search, dependency or business query changes.
+  - Done when: source-derived role-permitted menus, the combined Pengaturan entry and Histori kiriman, search/noresults/navigation/cancel, clock ticking and timezone boundary, header reflow and focus clearances pass focused tests and actual browser review.
+
+- [x] **T-140 — Make Indonesian date filters consistently use WIB.**
+  - Authorization: owner requested all date/year filters locked to GMT+7 or a WIB/WITA/WIT setting. After an optional preference question remained unanswered while header work proceeded, use the explicit initial WIB-lock direction, as stated to the owner; a later answer may supersede this choice.
+  - Primary requirement: PR-35; constraints: PR-22, PR-25, PR-26.
+  - Scope to verify: shared date-range resolver, duplicate timezone controls, formatted date/time callers and associated contracts/tests. Keep stored instants UTC and preserve metric definitions.
+  - Done when: every affected range/display uses Asia/Jakarta, obsolete timezone choices are removed, midnight/month/year boundary regression and affected browser filters pass independent review.
+
+
+- [x] **T-141 — Display complete operational numbers in authorized tenant workflows.**
+  - Primary requirement: PR-36; constraints: existing IAM/tenant isolation, log and secret protection.
+  - Authorization: owner asked that numbers in tables, recipient/destination and related operational fields not be censored.
+  - Scope: remove phone masking at authenticated tenant read-model boundaries and their UI consumers; keep meaningful field names, full AWBs/references and wrapping. No platform recipient exposure, telemetry change, secret output or DB data rewrite.
+  - Done when: synthetic contact/search/RTS/label regressions prove complete phones, existing authorization guards remain, affected browser tables are readable, and separate correctness review passes.
+
+Parallel delivery requested by the owner on2026-09-15: T-139 is the parent integration run; T-140 and T-141 use isolated worktrees and requirement-linked child boundaries. Main exclusively owns PRD, TASKS, STATUS, BUILD-LOG and AI Route Map; workers return bounded patches/check evidence. The final parent gate covers all three tasks together.
+
+T-139–T-141 completion evidence (2026-09-15): PR-34–PR-37 implemented through two isolated child workers and parent integration. 203 focused tests,34 isolated repository tests, TypeScript/lint/build,12 header observations and18 operation observations pass; DOM keyboard replay and independent source/visual review cover the final corrections. Native keyboard delivery remains unverified. BUILD-LOG records the original administrative ledger failure and successor R3 verification; no commit/push/deploy/provider mutation.
+
+- [x] **T-142 — Remove stacked focus borders and simplify the operator sidebar.**
+  - Primary requirement: PR-38; constraint PR-22, PR-34, PR-36 and PR-37. Owner explicitly rejects Produk and requests precise shadcn controls.
+  - Verified cause: an unlayered3px global outline overrides outline-none and stacks with component ring3; the search input additionally paints a square edge inside its rounded group.
+  - Design accepted: neutral1px idle border, a single contrasting2px focus owner, wrapper-owned search focus, retained invalid/disabled semantics; Dasbor + Pengiriman + Pengelolaan navigation over existing permitted features.
+  - Scope: shared focus primitives/fallback and their existing explicit consumers, browser focus measurement, sidebar/search grouping, and canonical docs. No data/provider operations.
+  - Done when: focused regression, real rendered single-ring/error/disabled/native/keyboard checks and independent visual/source review pass.
+
+Market research continuation: validate the owner's proposed shipping tools and header Cek Tarif against official Indonesian provider evidence and repository capability, record the screen/API/security contract in the existing specs, then implement the accepted quick-rate workflow as its own task. No Produk or duplicate beta tariff menu.
+
+- [x] **T-143 — Deliver the market-validated tenant quick-rate workflow.**
+  - Primary requirement: PR-40; constraints PR-39, PR-35, PR-38, TD-18, QUOTE-SHIPPING-IDR and existing tenant/provider boundaries.
+  - Owner authorization: research Indonesian market, update PRD/other canonical MD first, then complete development; header quick-rate entry explicitly suggested.
+  - Scope: tenant header/search Cek Tarif; authenticated `/app/cek-tarif`; ready-outlet/destination/weight form and ephemeral quote action; loading/error/empty/results/stale states; route-map/audit inventory and verification. No Produk, beta duplicate or unsupported provider tools.
+  - Done when: scoped/authority/rate-limit/validation tests pass, no shipment/estimate/ledger writes occur, source/visual review and actual browser flow pass, and docs inventory/ownership accurately reflect implementation.
+
+
+- [x] **T-144 — Replace displayed shipment UUIDs with persisted creator/date/serial references.**
+  - Primary requirement PR-41; supersedes the internal-reference portion of PR-36, preserves complete phones/AWBs and tenant isolation.
+  - Owner explicitly authorizes restructuring existing local IDs and database on 2026-09-15, then specifies user number + date + daily order number.
+  - Scope: additive database migration, stable numeric public user reference, creator ownership for new drafts, concurrency-safe daily numbering and deterministic legacy backfill; all tenant shipment reference read models, UI, exports and canonical contracts. UUID PK/FK/route links and provider cnote_no remain authoritative for their existing roles.
+  - Done when: fresh/upgrade/concurrent DB checks and runtime permission/replay cases pass; local existing rows are backfilled without record loss; visible shipment references and export values use the new number; independent source and real-browser evidence pass.
+
+T-142 completion evidence (2026-09-15): 58 focused tests, TypeScript/lint/build, 43 synthetic focus cases, 18 settings observations and 34 final control observations pass. Final controls cover 1440/390 input, textarea, Radix and native select, search, invalid/disabled focus, and programmatically forced hover retaining the error border. Native keyboard/hover delivery is not asserted; independent source/visual review covers the result. PR-39/40 and TD-18 record official market research before quick-rate code; PR-41 captures the latest shipment-number correction before database edits.
+
+
+- [x] **T-145 — Simplify the analytics hierarchy and long supporting detail.**
+  - PR-42; owner requests simpler `/app/analitik` with Lihat selengkapnya/load-more where long, and cleaner section order.
+  - Designer diagnosis: always-expanded daily trend table and duplicate courier detail account for most page length. Keep charts visible; collapse already-loaded supporting tables with truthful disclosure labels. Move reconciliation immediately after summary. Keep COD principal and estimated margin visible, group four secondary cost cards behind detail disclosure. Existing shipment pagination remains visible and addressable from KPI links.
+  - Scope: analytics page composition and regions/skeletons only, focused render/browser regression and canonical docs. No metric formula, provider/data query, role, export or pagination changes.
+  - Done when: default/expanded detail, long period, exception/error/empty, mobile/desktop, keyboard focus, support-link/pagination and independent review pass.
+
+T-145 completion evidence (2026-09-15): `/app/analitik` renders summary → reconciliation → trend → courier → financial → shipments; trend table, courier table and four secondary cost cards sit in closed native disclosures, while charts, COD principal (liability), estimated net margin, reconciliation and shipment pagination stay visible. Reconciliation is a `section`/`h2` with a polite `role="status"` alert. Shared `src/components/ui/chart.tsx` now shows a 2px `:focus-visible` outline on the Recharts SVG; the duplicate platform wrapper ring was removed (ledger scope expansions). Independent review first FAILED on a dropped `Wawasan` eyebrow (spec 10 shell contract, third occurrence after T-66/T-113), assertive reconciliation announcement and incidental test assertions; all fixed and re-review PASSED. Checks: TypeScript, scoped ESLint, 5 files / 69 focused tests; seven source mutations each fail exactly one guard; `analytics-disclosure.mjs` 9 real-browser observations at 1440/390/320 incl. empty/error states; chart focus measured on 4 chart surfaces across `/app/analitik`, `/app`, `/platform` (programmatic focus; native Tab delivery not asserted). No formula, query, role, export or pagination change; no commit, push or deploy.
+
+T-143/T-144 completion evidence: isolated parallel backend patches, independent source/security/visual review,14allocator/posture tests,44affected repository tests,95reference render tests and79independent integration tests pass. Local27rows backfilled uniquely with unchanged business-data fingerprints and tested backup restore. Browser live read-only estimate passes; final13fixture observations additionally prove stale invalidation through bubbled input/change events, mobile scroll/error states, and12reference route observations show no visible UUIDs. Header replay and final ledger digest bind the integrated surface. See BUILD-LOG for runner fallback and earlier rejected patch/check details.

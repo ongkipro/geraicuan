@@ -30,14 +30,14 @@ This document is the single definition of every number the CMS computes or displ
 ### Period and timezone
 
 - Periods are half-open `[start, end)` on `timestamptz`, computed by `src/lib/analytics-range.ts`.
-- Timezones are the closed list in `analytics-range.ts` (WIB default). Every period-bound value on a page is rendered in the selected zone; no region hard-codes WIB when a zone is selected.
+- All operational periods, date/month/year inputs, buckets and rendered timestamps use WIB (`Asia/Jakarta`, GMT+7). Database instants remain UTC. `analytics-range.ts` normalizes former WITA/WIT/UTC URL options to WIB and serializes canonical `tz=Asia/Jakarta`; timezone is no longer a user-selectable filter. Calendar date text in an old link is retained and resolved at WIB midnight. This PR35 lock changes no metric formula or event basis.
 - Buckets are computed in SQL with `date_trunc(…, col AT TIME ZONE tz)`; ranges of 31 days or fewer bucket daily, longer ranges monthly.
 - Previous period: the equal-length span immediately before `start`. For presets that end in the future (`hari-ini`, `minggu-ini`, `bulan-ini`) the comparison uses the **same elapsed span** of the previous period (to-date comparison), so a partial day is not compared with a full day. The comparison caption names the compared span.
 - Snapshot values ("Saat ini") ignore the period and say so.
 
 ### Freshness
 
-- Each region carries exactly one generated-at value read from the database by the read that produced it and rendered in the selected zone. Tenant repositories currently read `statement_timestamp()`, platform `transaction_timestamp()`, and Keuangan uses JavaScript `new Date()`; T-92 settles one database source per region and removes the JavaScript clock.
+- Each region carries exactly one generated-at value read from the database by the read that produced it and rendered in WIB. Tenant repositories currently read `statement_timestamp()`, platform `transaction_timestamp()`, and Keuangan uses JavaScript `new Date()`; T-92 settles one database source per region and removes the JavaScript clock.
 - A region is stale when `now − generatedAt ≥ 5 minutes` (`src/lib/data-freshness.ts`); stale regions show the notice and a refresh action on every surface, including `/platform` and `/app/keuangan`.
 
 ## M-1 — Canonical metric dictionary
@@ -147,7 +147,7 @@ These reuse the platform ages so one incident reads the same in both scopes.
 
 - `recharts` 3.8.0 through `src/components/ui/chart.tsx`; no second chart library.
 - Series colours come only from `--chart-1` … `--chart-5` (Okabe-Ito). A series is distinguishable without colour through dash pattern or marker shape. Violet scope and semantic status colours are never series colours.
-- Every chart has: a title naming the question it answers, the period and zone, named axes with units, a direct label on the latest point or largest bar, keyboard-reachable text summary, and the complete semantic data table. The table may start collapsed only on command-center routes (`/app`, `/platform`); on `/app/analitik` and `/app/keuangan` it sits immediately below the chart, uncollapsed (UX-9).
+- Every chart has: a title naming the question it answers, the period and zone, named axes with units, a direct label on the latest point or largest bar, keyboard-reachable text summary, and the complete semantic data table. The table may start collapsed on command-center routes (`/app`, `/platform`) and under PR-42 on `/app/analitik`. It remains complete, semantic and keyboard-reachable from a labelled disclosure below the chart. `/app/keuangan` retains its existing visible tables.
 - Bars start at zero. No pie, donut, gauge, 3D, dual-axis, or area-stacked money charts. At most three series per chart.
 
 ### Chart catalogue
@@ -277,3 +277,9 @@ Recorded 2026-09-13 under T-87. Provenance: Paduka Ongki instructed the work to 
 Ringkasan route default is `7-hari` (seven calendar days including today, WIB) following the 2026-09-14 user instruction. Summary and chart retain the same selected range/outlet and original created/issued event bases. Reset returns to that route default. Explicit single-day selection still omits the multi-day trend. A successful empty trend read produces zero-filled date buckets, not a missing section. No metric formula changed.
 
 Daily comparison supports ranges up to 31 days, aligned by day ordinal with both dates disclosed. Longer custom ranges retain current monthly totals only; they do not zip unequal calendar-month buckets or drop prior-month records. Failed comparison reads render an error, never zero. Sample chart values under development `demo=grafik` are explicitly non-authoritative and do not replace period KPIs, money, or source records.
+
+### QUOTE-SHIPPING-IDR — Informational quick-rate amount (PR-40)
+
+Owner: the existing Mengantar estimate normalizer's `SupportedEstimateService.shippingAmountIdr`, directly validated from the provider `price` field with currency IDR. Display is per returned provider service and the submitted authorized origin/destination/gram weight. No local discount, COD fee, VAT, insurance or margin is added; it is not a final receivable/payment total. The quote timestamp is retrieval time formatted in WIB. This surface adds no aggregate metric or ledger event. Verification belongs to the quick-rate action and presentation tests, plus existing estimate-normalization tests.
+
+PR-42 presentation revision (2026-09-15): complete analytics trend/courier tables remain in semantic HTML but start inside native disclosures. Charts, contextual summaries, low-volume cues and error states remain available. COD principal and estimated margin stay visible; four unchanged cost components expand on request. The reconciliation count and signed IDR total move into a compact alert with an explicit finance drill-down link; a nonzero count remains highlighted even when the signed amounts cancel. No metric formula, cohort, denominator, data query or export meaning changes. Earlier uncollapsed-table layout guidance is superseded for this screen.

@@ -95,7 +95,7 @@ export function DataTablePagination({
   const last = current >= pages;
 
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-x-6 gap-y-3", className)}>
+    <div className={cn("flex flex-col items-start justify-between gap-x-6 gap-y-3 md:flex-row md:flex-wrap md:items-center", className)}>
       <div className="text-sm text-muted-foreground">
         {summary ?? `${numberFormatter.format(totalCount)} data`}
       </div>
@@ -127,43 +127,45 @@ export function DataTablePagination({
             </DropdownMenu>
           </div>
         ) : null}
-        <nav aria-label={label} className="flex flex-wrap items-center gap-2">
-          <span className="me-2 text-sm font-medium">
+        <nav aria-label={label} className="flex flex-col items-start gap-2 md:flex-row md:flex-wrap md:items-center">
+          <span className="text-sm font-medium tabular-nums md:me-2">
             Halaman {numberFormatter.format(current)} dari {numberFormatter.format(pages)}
           </span>
-          <PageLink disabled={first} href={() => hrefForPage(1)} label="Halaman pertama">
-            <ChevronsLeft aria-hidden="true" />
-          </PageLink>
-          <PageLink disabled={first} href={() => hrefForPage(current - 1)} label="Halaman sebelumnya">
-            <ChevronLeft aria-hidden="true" />
-          </PageLink>
-          {/* Numbers are desktop-only: eleven 44px targets overflow a 390px screen. */}
-          <ul className="hidden items-center gap-2 md:flex">
-            {getPageNumbers(current, pages).map((item, index) => (
-              <li key={item === "ellipsis" ? `ellipsis-${index}` : item}>
-                {item === "ellipsis" ? (
-                  <span aria-hidden="true" className="px-1 text-sm text-muted-foreground">…</span>
-                ) : (
-                  <Button asChild className="h-8 w-auto min-w-8 px-2" size="icon" variant={item === current ? "default" : "outline"}>
-                    <Link
-                      aria-current={item === current ? "page" : undefined}
-                      aria-label={`Halaman ${item}`}
-                      href={hrefForPage(item)}
-                      prefetch={false}
-                    >
-                      {numberFormatter.format(item)}
-                    </Link>
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-          <PageLink disabled={last} href={() => hrefForPage(current + 1)} label="Halaman berikutnya">
-            <ChevronRight aria-hidden="true" />
-          </PageLink>
-          <PageLink disabled={last} href={() => hrefForPage(pages)} label="Halaman terakhir">
-            <ChevronsRight aria-hidden="true" />
-          </PageLink>
+          <div className="flex items-center gap-2">
+            <PageLink disabled={first} href={() => hrefForPage(1)} label="Halaman pertama">
+              <ChevronsLeft aria-hidden="true" />
+            </PageLink>
+            <PageLink disabled={first} href={() => hrefForPage(current - 1)} label="Halaman sebelumnya">
+              <ChevronLeft aria-hidden="true" />
+            </PageLink>
+            {/* Numbers are desktop-only: eleven 44px targets overflow a 390px screen. */}
+            <ul className="hidden items-center gap-2 md:flex">
+              {getPageNumbers(current, pages).map((item, index) => (
+                <li key={item === "ellipsis" ? `ellipsis-${index}` : item}>
+                  {item === "ellipsis" ? (
+                    <span aria-hidden="true" className="px-1 text-sm text-muted-foreground">…</span>
+                  ) : (
+                    <Button asChild className="h-8 w-auto min-w-8 px-2" size="icon" variant={item === current ? "default" : "outline"}>
+                      <Link
+                        aria-current={item === current ? "page" : undefined}
+                        aria-label={`Halaman ${item}`}
+                        href={hrefForPage(item)}
+                        prefetch={false}
+                      >
+                        {numberFormatter.format(item)}
+                      </Link>
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <PageLink disabled={last} href={() => hrefForPage(current + 1)} label="Halaman berikutnya">
+              <ChevronRight aria-hidden="true" />
+            </PageLink>
+            <PageLink disabled={last} href={() => hrefForPage(pages)} label="Halaman terakhir">
+              <ChevronsRight aria-hidden="true" />
+            </PageLink>
+          </div>
         </nav>
       </div>
     </div>

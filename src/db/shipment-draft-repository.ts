@@ -145,7 +145,7 @@ export async function createShipmentDraft(
   const outletId = await requireConfiguredShipmentOutlet(tx, context, input.outletId);
   const created = await tx
     .insert(shipments)
-    .values({ id: submissionId, outletId, tenantId: context.tenantId, cogsAmountIdr: input.cogsAmountIdr ?? null })
+    .values({ createdByUserId: context.userId, id: submissionId, outletId, tenantId: context.tenantId, cogsAmountIdr: input.cogsAmountIdr ?? null })
     .onConflictDoNothing({ target: shipments.id })
     .returning({ id: shipments.id });
 

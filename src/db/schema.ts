@@ -3,6 +3,7 @@ import {
   boolean,
   bigint,
   check,
+  date,
   foreignKey,
   index,
   jsonb,
@@ -115,6 +116,7 @@ export const reconciliationCadences = ["DAILY", "MONTHLY"] as const;
 export const reconciliationStatuses = ["MATCHED", "VARIANCE"] as const;
 
 export const users = pgTable("users", {
+  publicNumber: integer("public_number").generatedAlwaysAsIdentity({ name: "users_public_number_seq", startWith: 10000, minValue: 10000, cycle: false }).unique(),
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
@@ -127,7 +129,7 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, () => [check("users_public_number_minimum", sql`public_number >= 10000`)]);
 
 export const sessions = pgTable(
   "sessions",
@@ -462,10 +464,28 @@ export const mengantarCredentialRateLimits = pgTable(
     check("mengantar_credential_rate_limits_count_positive", sql`count > 0`),
   ],
 );
+// Global identity allocation metadata; application roles have no direct access.
+export const shipmentReferenceCounters = pgTable("shipment_reference_counters", {
+  referenceUserNumber: integer("reference_user_number").notNull(),
+  referenceDate: date("reference_date").notNull(),
+  lastSequence: integer("last_sequence").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.referenceUserNumber, table.referenceDate] }),
+  check("shipment_reference_counters_owner_valid", sql`reference_user_number = 0 OR reference_user_number >= 10000`),
+  check("shipment_reference_counters_sequence_positive", sql`last_sequence > 0`),
+]);
+
 export const shipments = pgTable(
   "shipments",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "restrict" }),
+    // Before-insert trigger fills these; NULL defaults make ORM inserts optional
+    // while NOT NULL fails closed if the allocator trigger is absent.
+    publicReference: text("public_reference").notNull().default(sql`NULL`),
+    referenceUserNumber: integer("reference_user_number").notNull().default(sql`NULL`),
+    referenceDate: date("reference_date").notNull().default(sql`NULL`),
+    dailySequence: integer("daily_sequence").notNull().default(sql`NULL`),
     tenantId: uuid("tenant_id").notNull(),
     outletId: uuid("outlet_id").notNull(),
     status: text("status", { enum: shipmentStatuses }).notNull().default("DRAFT"),
@@ -478,6 +498,10 @@ export const shipments = pgTable(
       .defaultNow(),
   },
   (table) => [
+    unique("shipments_public_reference_key").on(table.publicReference),
+    unique("shipments_reference_owner_date_sequence_key").on(table.referenceUserNumber, table.referenceDate, table.dailySequence),
+    check("shipments_reference_owner_valid", sql`(created_by_user_id IS NULL AND reference_user_number = 0) OR (created_by_user_id IS NOT NULL AND reference_user_number >= 10000)`),
+    check("shipments_daily_sequence_positive", sql`daily_sequence > 0`),
     foreignKey({
       name: "shipments_outlet_tenant_fkey",
       columns: [table.outletId, table.tenantId],

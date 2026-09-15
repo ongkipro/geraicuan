@@ -36,7 +36,6 @@ import {
   shipmentQueueHref,
 } from "@/lib/shipment-queue";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
-import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -192,7 +191,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
           // labelled region.
           <Table
             className="min-w-[56rem]"
-            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Daftar kiriman; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -204,11 +203,11 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-card px-3">Referensi</TableHead>
+                <TableHead className="sticky left-0 z-10 bg-card px-3">Nomor kiriman</TableHead>
                 <TableHead className="px-3">Status / Pembayaran</TableHead>
                 <TableHead className="px-3">Penerima / Tujuan</TableHead>
                 <TableHead className="px-3">Paket / Outlet</TableHead>
-                <TableHead className="px-3">Layanan / AWB</TableHead>
+                <TableHead className="px-3">Layanan / Resi</TableHead>
                 <TableHead className="px-3">Aktivitas terakhir</TableHead>
               </TableRow>
             </TableHeader>
@@ -219,10 +218,10 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                   <TableRow className="group" key={row.shipmentId}>
                     <TableCell className="sticky left-0 z-10 bg-card px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                       <Link
-                        className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline md:min-h-8"
+                        className="inline-flex min-h-11 max-w-40 items-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:underline md:min-h-8"
                         href={`/app/pengiriman/${encodeURIComponent(row.shipmentId)}`}
                       >
-                        {shipmentReference(row.shipmentId)}
+                        {row.publicReference}
                       </Link>
                     </TableCell>
                     <TableCell className="px-3">

@@ -80,6 +80,8 @@ vi.mock("@/db/analytics-repository", () => ({
       codServiceFeeIdr: 15_000,
       codVatIdr: 1_650,
       codPrincipalIdr: 900_000,
+      cogsIdr: 500_000,
+      netMarginIdr: 143_350,
     },
     previous: {
       createdCount: 8,
@@ -89,6 +91,8 @@ vi.mock("@/db/analytics-repository", () => ({
       codServiceFeeIdr: 10_000,
       codVatIdr: 1_100,
       codPrincipalIdr: 600_000,
+      cogsIdr: 350_000,
+      netMarginIdr: 78_900,
     },
   })),
   loadShipmentTrend: vi.fn(async () => ({
@@ -102,6 +106,7 @@ vi.mock("@/db/analytics-repository", () => ({
     rows: [
       {
         shipmentId: fixture.shipmentId,
+        publicReference: "95758-260901-281",
         createdAt: new Date("2026-07-01T00:30:00.000Z"),
         issuedAt: new Date("2026-07-01T01:00:00.000Z"),
         outletName: "Outlet keputusan T28",
@@ -158,7 +163,7 @@ describe("tenant analytics decision context", () => {
     fixture.role = "TENANT_ADMIN";
   });
 
-  it("keeps the URL-selected range and timezone across decision surfaces", async () => {
+  it("keeps calendar dates and normalizes an obsolete timezone across decision surfaces", async () => {
     const params = {
       rentang: "kustom",
       khusus: "1",
@@ -171,18 +176,20 @@ describe("tenant analytics decision context", () => {
     const html = await renderAnalytics(params);
 
     expect(context.persistedQuery).toBe(
-      "rentang=kustom&tz=Asia%2FJayapura&dari=2026-07-01&sampai=2026-07-07",
+      "rentang=kustom&tz=Asia%2FJakarta&dari=2026-07-01&sampai=2026-07-07",
     );
     expect(context.previousRange).toMatchObject({
-      timezone: "Asia/Jayapura",
+      timezone: "Asia/Jakarta",
       startDate: "2026-06-24",
       lastIncludedDate: "2026-06-30",
       spanDays: 7,
     });
-    expect(html.match(/WIT \(UTC\+09:00\)/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html.match(/WIB \(UTC\+07:00\)/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html).not.toMatch(/name="tz"/);
+    expect(html).not.toContain("Zona:");
     expect(html).toContain("Dibanding <strong");
     expect(html).toContain('id="analytics-page-heading"');
-    // Page/loading/error parity: the "Wawasan" eyebrow sits directly above the page title.
+    // Spec 10 shared-shell contract: the "Wawasan" eyebrow sits directly above the page title.
     const eyebrowIndex = html.indexOf(">Wawasan</p>");
     expect(eyebrowIndex).toBeGreaterThan(-1);
     expect(eyebrowIndex).toBeLessThan(html.indexOf('id="analytics-page-heading"'));
@@ -190,7 +197,7 @@ describe("tenant analytics decision context", () => {
     expect(html).toContain("↑");
     expect(html).toContain("50% lebih tinggi dari periode sebelumnya.");
     expect(html).toContain("Total selisih (+/−)");
-    expect(html.match(/aria-label="Total selisih \(\+\/−\):[^"]+Lihat record pendukung"/g)).toHaveLength(1);
+    expect(html).toContain("Lihat rekonsiliasi");
     expect(html.match(/aria-label="Kiriman dibuat:[^"]+Lihat record pendukung"/g)).toHaveLength(1);
     expect(html).not.toContain(">Total selisih (+/−)</a>");
     expect(html).not.toContain(">Kiriman dibuat</a>");
@@ -200,16 +207,14 @@ describe("tenant analytics decision context", () => {
     expect(html).toContain("Waktu pembaruan di atas berlaku untuk ringkasan periode, bukan tren");
     expect(html).toContain("Data tren");
     expect(html).toContain('dateTime="2026-07-07T12:00:00.000Z"');
-    // Spec 10 Pattern 6 / M-3: on Analitik each chart is followed by its
-    // uncollapsed data table, so no disclosure sits between chart and table.
+    // PR42: visible charts precede labelled disclosure of complete supporting tables.
     const trendRegion = html.slice(
       html.indexOf('id="analytics-trend-heading"'),
       html.indexOf('aria-label="Tabel tren kiriman"'),
     );
     expect(trendRegion).toContain("<figure");
-    expect(trendRegion).not.toContain("<details");
-    // The uncollapsed trend table is tall, so the trend card spans the full
-    // lg grid row instead of leaving a blank column beside it.
+    expect(trendRegion).toContain("<details");
+    // Chart and expandable table keep the full available width.
     const trendCardSlot = html.lastIndexOf('data-slot="card"', html.indexOf('id="analytics-trend-heading"'));
     const trendCardTag = html.slice(html.lastIndexOf("<", trendCardSlot), html.indexOf(">", trendCardSlot) + 1);
     expect(trendCardTag.match(/class="([^"]*)"/)?.[1].split(/\s+/)).toContain("lg:col-span-full");
@@ -218,7 +223,7 @@ describe("tenant analytics decision context", () => {
       html.indexOf('aria-label="Tabel performa kurir"'),
     );
     expect(courierRegion).toContain("<figure");
-    expect(courierRegion).not.toContain("<details");
+    expect(courierRegion).toContain("<details");
     // Spec 19 M-3: a denominator below 10 is marked and never ranks above a
     // higher-volume courier by rate alone, even when the repository lists it first.
     const courierTable = html.slice(
@@ -236,7 +241,9 @@ describe("tenant analytics decision context", () => {
     expect(html).toContain(
       `href="/app/pengiriman/${fixture.shipmentId}"`,
     );
-    expect(html).toContain("inline-flex min-h-11 items-center text-primary");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260901-281");
+    expect(html.replace(/<[^>]+>/g, " ")).not.toContain(fixture.shipmentId);
+    expect(html).toMatch(/class="[^"]*inline-flex min-h-11[^"]*items-center[^"]*text-primary/);
     // Server pagination: page 1 of 2 disables backward links and links forward.
     const pager = html.slice(html.indexOf('aria-label="Navigasi halaman kiriman"'));
     expect(pager).toMatch(/<button[^>]*aria-label="Halaman sebelumnya"[^>]*disabled/);
@@ -262,7 +269,7 @@ describe("tenant analytics decision context", () => {
       html.indexOf(">Dibuat</th>"),
     );
     expect(html).toContain(
-      "href=\"/app/analitik?rentang=kustom&amp;dari=2026-07-01&amp;sampai=2026-07-07&amp;tz=Asia%2FJayapura&amp;halaman=2\"",
+      "href=\"/app/analitik?rentang=kustom&amp;dari=2026-07-01&amp;sampai=2026-07-07&amp;tz=Asia%2FJakarta&amp;halaman=2\"",
     );
   });
 

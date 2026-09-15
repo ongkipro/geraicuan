@@ -200,7 +200,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
         ) : (
             <Table
               className="min-w-[38rem]"
-              containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+              containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               containerProps={{ "aria-label": "Riwayat permintaan cetak label; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
             >
               <TableCaption className="sr-only">Riwayat permintaan cetak label</TableCaption>

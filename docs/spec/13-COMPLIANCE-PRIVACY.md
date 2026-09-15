@@ -25,3 +25,9 @@ Collect only tenant account data and shipment data needed to obtain estimates, c
 | Sender/recipient names, phone, address | Reusable tenant contacts; estimate, order, label | Mengantar for selected shipment only | Required |
 | Package, COD, declared value | Provider order and label | Mengantar | Required |
 | Provider IDs/AWB/status | Lifecycle and reprint | GeraiCUAN | Required |
+
+## PRIV-2 — Authorized operational display (PR-36)
+
+Tenant Admins and Operators may view complete sender/recipient phone numbers, provider AWBs, and internal shipment references in authenticated operational contact, draft, shipment, return, and label views. Contact directory and contact search responses contain complete phones only after server-derived tenant authorization; shipment queues retain their existing tenant/outlet query scope. This enables contact selection and shipment handling without copying incomplete identifiers. The product owner explicitly accepted this display policy on 2026-09-15.
+
+This permission does not expand anonymous or Super Admin monitoring access, return additional street addresses in queue payloads, or authorize personal data in logs, errors, fixtures, screenshots, or public URLs. Provider credentials, passwords, keys, tokens, sessions, and existing monitoring redaction remain protected. This is a product display policy, not a legal-compliance determination.

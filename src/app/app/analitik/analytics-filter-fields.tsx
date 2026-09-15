@@ -7,7 +7,6 @@ import { shipmentStatuses } from "@/lib/domain-enums";
 import type { AnalyticsEventBasis, AnalyticsFilters } from "@/lib/analytics-filters";
 import {
   ANALYTICS_PRESETS,
-  ANALYTICS_TIMEZONES,
   type AnalyticsPresetId,
 } from "@/lib/analytics-range";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
@@ -18,7 +17,6 @@ export type AnalyticsFilterValues = AnalyticsFilters & {
   endDate: string;
   presetId: AnalyticsPresetId;
   startDate: string;
-  timezone: string;
 };
 
 type AnalyticsFilterFieldsProps = {
@@ -30,7 +28,7 @@ type AnalyticsFilterFieldsProps = {
 };
 
 const selectClassName =
-  "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function AnalyticsFilterFields({
   hintId,
@@ -87,14 +85,6 @@ export function AnalyticsFilterFields({
       </select>
     </label>
   );
-  const timezone = (
-    <label className={fieldClassName} htmlFor="analytics-tz">
-      Zona waktu
-      <select className={cn(selectClassName, controlClassName)} defaultValue={values.timezone} id="analytics-tz" name="tz">
-        {ANALYTICS_TIMEZONES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-      </select>
-    </label>
-  );
   const eventBasis = (
     <label className={fieldClassName} htmlFor="analytics-basis">
       Basis tabel & ekspor
@@ -109,9 +99,9 @@ export function AnalyticsFilterFields({
 
   return <div>
     <div className="grid grid-cols-2 gap-3">{period}{outlet}</div>
-    <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={values.presetId === "kustom" || Boolean(values.courier || values.lifecycleStatus) || values.timezone !== "Asia/Jakarta" || values.eventBasis !== "created"}>
+    <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={values.presetId === "kustom" || Boolean(values.courier || values.lifecycleStatus) || values.eventBasis !== "created"}>
       <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Filter lanjutan<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
-      <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-3">{startDate}{endDate}{timezone}{courier}{lifecycle}{eventBasis}</div>
+      <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-3">{startDate}{endDate}{courier}{lifecycle}{eventBasis}</div>
     </details>
   </div>;
 }

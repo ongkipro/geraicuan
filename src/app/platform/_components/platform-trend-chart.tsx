@@ -60,7 +60,7 @@ export function PlatformTrendChart({
         ))}
       </ul>
       <ChartContainer
-        className="aspect-auto h-64 w-full rounded-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 md:h-72"
+        className="aspect-auto h-64 w-full rounded-md md:h-72"
         config={chartConfig}
       >
         <LineChart accessibilityLayer data={data} margin={{ bottom: 16, left: 8, right: 12, top: 12 }}>

@@ -21,10 +21,10 @@ import {
   users,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
-import { maskPhone } from "@/lib/pii-redaction";
 
 export type PrintableLabel = {
   shipmentId: string;
+  publicReference: string;
   awb: string;
   courier: string;
   providerService: string;
@@ -66,6 +66,7 @@ export type PrintEventRecord = {
 
 export type PrintableShipmentRow = {
   shipmentId: string;
+  publicReference: string;
   awb: string | null;
   courier: string;
   providerService: string;
@@ -73,7 +74,7 @@ export type PrintableShipmentRow = {
   issuedAt: Date | null;
   destinationAreaLabel: string;
   recipientName: string;
-  recipientPhoneMasked: string;
+  recipientPhone: string;
   isCod: boolean;
   providerCodAmountIdr: number | null;
   printCount: number;
@@ -172,6 +173,7 @@ export async function loadPrintableLabel(
   const [row] = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       shipmentStatus: shipments.status,
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       packageContent: shipmentDrafts.packageContent,
@@ -294,6 +296,7 @@ export async function loadPrintableLabel(
 
   return {
     shipmentId: row.shipmentId,
+    publicReference: row.publicReference,
     awb,
     courier: row.courier,
     providerService: row.providerService,
@@ -572,6 +575,7 @@ export async function listPrintableShipments(
   const rows = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       cnoteNo: providerOrderSnapshots.cnoteNo,
       courier: providerBatches.courier,
       providerService: providerOrderSnapshots.providerService,
@@ -638,6 +642,7 @@ export async function listPrintableShipments(
 
   return rows.map((row) => ({
     shipmentId: row.shipmentId,
+    publicReference: row.publicReference,
     awb: row.cnoteNo?.trim() ?? null,
     courier: row.courier,
     providerService: row.providerService,
@@ -645,7 +650,7 @@ export async function listPrintableShipments(
     issuedAt: row.status === "ISSUED" ? row.resolvedAt : null,
     destinationAreaLabel: row.destinationAreaLabel,
     recipientName: row.recipientName,
-    recipientPhoneMasked: maskPhone(row.recipientPhone),
+    recipientPhone: row.recipientPhone,
     isCod: row.isCod,
     providerCodAmountIdr: row.providerCodAmountIdr,
     printCount: row.printCount,

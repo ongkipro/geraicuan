@@ -158,6 +158,10 @@ describe("Member governance page acceptance", () => {
     expect(html).toContain("Tenant Admin aktif terakhir");
     expect(html).not.toContain("Simpan peran");
     expect(html).not.toContain("Nonaktifkan anggota");
+    expect(html).toContain('aria-describedby="member-invite-role-help"');
+    expect(html).toContain('id="member-invite-role-help"');
+    expect(html).toContain("Operator mengelola kiriman.");
+    expect(html).not.toContain("Token dan sesi tidak ditampilkan.");
   });
 
   it("renders populated and inactive members in stable order with actions only for an active peer", async () => {
@@ -186,8 +190,9 @@ describe("Member governance page acceptance", () => {
     expect(html.indexOf("Bima Operator")).toBeLessThan(html.indexOf("Citra Nonaktif"));
     expect(html).toMatch(/Total anggota<\/dt><dd[^>]*>3<\/dd>/);
     expect(html).toMatch(/Aktif<\/dt><dd[^>]*>2<\/dd>/);
-    expect(html).toContain("Anggota nonaktif tidak dapat memakai CMS tenant");
-    expect(occurrences(html, "Kelola akses")).toBe(1);
+    expect(html).toContain("Akses nonaktif. Undang ulang email ini");
+    expect(occurrences(html, "Kelola akses")).toBe(2);
+    expect(html).toContain('aria-label="Kelola akses Bima Operator"');
     expect(html).not.toContain(SECRET_SENTINEL);
   });
 

@@ -12,7 +12,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegen
 import { Input } from "@/components/ui/input";
 import type { TenantMemberRole } from "@/db/member-governance-repository";
 
-const selectClassName = "min-h-11 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive";
+const selectClassName = "min-h-11 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-destructive";
 
 function ActionMessage({ resultRef, state }: { resultRef: React.RefObject<HTMLDivElement | null>; state: MemberActionState }) {
   if (!state.message) return null;
@@ -63,24 +63,27 @@ export function InviteMemberForm({ attemptId }: { attemptId: string }) {
     <form action={formAction} aria-busy={pending} className="grid gap-4" noValidate>
       <input name="attemptId" type="hidden" value={state.nextAttemptId ?? attemptId} />
       <FieldSet disabled={pending}>
-        <FieldGroup className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_13rem]">
+        <FieldGroup>
           <Field data-invalid={Boolean(emailError)}>
             <FieldLabel htmlFor="member-invite-email">Email akun GeraiCUAN</FieldLabel>
             <Input aria-describedby={emailError ? "member-invite-email-error" : "member-invite-email-help"} aria-invalid={Boolean(emailError)} autoComplete="email" className="max-w-2xl min-h-11" defaultValue={state.values?.email ?? ""} id="member-invite-email" key={`${state.resultToken ?? "initial"}-email`} maxLength={254} name="email" ref={emailRef} type="email" />
-            <FieldDescription className="max-w-2xl" id="member-invite-email-help">Gunakan akun aktif yang belum menjadi anggota tenant lain. Token dan sesi tidak ditampilkan.</FieldDescription>
+            <FieldDescription className="max-w-2xl" id="member-invite-email-help">Gunakan email akun aktif yang belum menjadi anggota tenant lain.</FieldDescription>
             <FieldError id="member-invite-email-error">{emailError}</FieldError>
           </Field>
           <Field data-invalid={Boolean(roleError)}>
             <FieldLabel htmlFor="member-invite-role">Peran awal</FieldLabel>
-            <select aria-describedby={roleError ? "member-invite-role-error" : undefined} aria-invalid={Boolean(roleError)} className={selectClassName} defaultValue={state.values?.role ?? "OPERATOR"} id="member-invite-role" key={`${state.resultToken ?? "initial"}-role`} name="role" ref={roleRef}>
+            <select aria-describedby={roleError ? "member-invite-role-error member-invite-role-help" : "member-invite-role-help"} aria-invalid={Boolean(roleError)} className={`${selectClassName} sm:max-w-xs`} defaultValue={state.values?.role ?? "OPERATOR"} id="member-invite-role" key={`${state.resultToken ?? "initial"}-role`} name="role" ref={roleRef}>
               <option value="OPERATOR">Operator</option>
               <option value="TENANT_ADMIN">Tenant Admin</option>
             </select>
+            <FieldDescription id="member-invite-role-help">
+              Operator mengelola kiriman. Tenant Admin juga mengelola outlet dan akses anggota.
+            </FieldDescription>
             <FieldError id="member-invite-role-error">{roleError}</FieldError>
           </Field>
         </FieldGroup>
       </FieldSet>
-      <div className="flex justify-end"><Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Memproses undangan…" : "Undang anggota"}</Button></div>
+      <div className="flex justify-end border-t pt-4"><Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Memproses undangan…" : "Undang anggota"}</Button></div>
       <ActionMessage resultRef={resultRef} state={state} />
     </form>
   );
@@ -138,19 +141,19 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
   if (status === "SUSPENDED") {
     return (
       <div className="grid gap-3">
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground" role="status">Anggota nonaktif tidak dapat memakai CMS tenant. Undang ulang email yang sama untuk mengaktifkannya kembali.</p>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground" role="status">Akses nonaktif. Undang ulang email ini untuk mengaktifkan kembali.</p>
         <ActionMessage resultRef={deactivateResultRef} state={deactivateState} />
       </div>
     );
   }
   if (isCurrentUser) {
-    return <p className="text-sm leading-6 text-muted-foreground" role="status">{isLastActiveAdmin ? "Akun ini adalah Tenant Admin aktif terakhir dan tidak dapat diubah atau dinonaktifkan." : "Peran dan status akun Anda harus diubah oleh Tenant Admin aktif lain."}</p>;
+    return <p className="text-sm leading-6 text-muted-foreground" role="status">{isLastActiveAdmin ? "Tenant Admin aktif terakhir. Peran dan akses akun ini dilindungi." : "Peran dan status akun Anda harus diubah oleh Tenant Admin aktif lain."}</p>;
   }
 
   return (
     <Collapsible className="grid gap-3" onOpenChange={setExpanded} open={expanded}>
       <CollapsibleTrigger asChild>
-        <Button className="group min-h-11 justify-between max-sm:w-full sm:w-fit md:min-h-8" size="sm" type="button" variant="outline">
+        <Button aria-label={`Kelola akses ${name}`} className="group min-h-11 justify-between max-sm:w-full sm:w-fit" size="sm" type="button" variant="outline">
           Kelola akses
           <ChevronDown aria-hidden="true" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </Button>
@@ -161,7 +164,7 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
           <input name="membershipId" type="hidden" value={membershipId} />
           <FieldSet disabled={rolePending}>
             <FieldLegend>Ubah peran</FieldLegend>
-            <FieldDescription>Pilih peran baru, lalu tinjau konfirmasi sebelum menyimpan.</FieldDescription>
+            <FieldDescription>Pilih akses yang diperlukan anggota ini.</FieldDescription>
             <FieldGroup className="gap-4">
               <Field data-invalid={Boolean(roleState.errors?.role)}>
                 <FieldLabel htmlFor={`member-role-${suffix}`}>Peran {name}</FieldLabel>

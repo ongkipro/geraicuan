@@ -120,7 +120,7 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
     <div
       aria-busy={searchPending || selectionPending}
       aria-describedby={saveError ? `${prefix}ContactSelection-error` : undefined}
-      className="grid min-w-0 gap-3 rounded-lg border border-dashed bg-muted/30 p-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="grid min-w-0 gap-3 rounded-lg border border-dashed bg-muted/30 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       id={`${prefix}ContactSelection`}
       tabIndex={-1}
     >
@@ -196,8 +196,7 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
                 >
                   <span className="grid min-w-0 gap-0.5 wrap-anywhere">
                     <strong>{result.name}</strong>
-                    {" · "}
-                    {result.phoneMasked}
+                    <span className="text-xs font-normal tabular-nums text-muted-foreground">{result.phone}</span>
                   </span>
                   <span className="block text-sm font-normal leading-5 text-muted-foreground">
                     {result.addressLabel}
@@ -356,7 +355,7 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
         value={effectiveDestination.mode === "empty" ? "" : effectiveDestination.areaLabel}
       />
       {errorEntries.length > 0 ? (
-        <section className="grid gap-3 rounded-lg border border-destructive/40 bg-card p-4 text-destructive outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="shipment-draft-errors" ref={errorSummaryRef} role="alert" tabIndex={-1}>
+        <section className="grid gap-3 rounded-lg border border-destructive/40 bg-card p-4 text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring" id="shipment-draft-errors" ref={errorSummaryRef} role="alert" tabIndex={-1}>
           <h2 className="flex items-center gap-2 font-medium"><CircleAlert aria-hidden="true" className="size-4 shrink-0" />Periksa {errorEntries.length} isian berikut</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {errorEntries.map(([field, message]) => (
@@ -531,7 +530,7 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
             <fieldset
               aria-describedby={describedBy("paymentType")}
               aria-invalid={Boolean(fieldError("paymentType"))}
-              className="grid gap-3 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="grid gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               id="paymentType"
               tabIndex={-1}
             >

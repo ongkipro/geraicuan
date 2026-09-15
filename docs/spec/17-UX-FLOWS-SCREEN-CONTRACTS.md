@@ -130,7 +130,7 @@ Public Indonesian shipping-dashboard evidence supports this coverage: Mengantar 
 
 | Region | Operator | Tenant Admin | Completion rule |
 |---|---|---|---|
-| Scope and time | Tenant, URL-persisted date range, WIB or selected IANA timezone, generated-at time | Same | Scope and time remain visible beside the compact date filter |
+| Scope and time | Tenant, URL-persisted date range, fixed WIB (Asia/Jakarta), generated-at time | Same | Scope and time remain visible beside the compact date filter |
 | Priority analytics | Period shipment input, COD input, non-COD input, and authoritative issued outcomes | Same | Counts and COD/non-COD composition use the same tenant-scoped created-time range; issued uses authoritative provider resolution time and is labelled separately |
 | Operational status | Draft/estimated work, current failed/unknown work | Same plus awaiting-payment and reconciliation exception counts | Current snapshot values sit below period analytics and link to the queue that produces them |
 | Readiness | Read-only blocking notice with escalation guidance | Actionable outlet/provider readiness notice | Do not show a healthy decorative card; show only a condition that changes work |
@@ -148,7 +148,7 @@ Public Indonesian shipping-dashboard evidence supports this coverage: Mengantar 
 
 **Decision sequence:** understand the selected period → compare against the prior equal period → identify lifecycle/courier change → inspect the exact filtered records.
 
-1. **Filter bar:** preset/custom range, outlet, courier, lifecycle, timezone, and the detail/export basis (`created`, `issued`, provider `outcome`, or current `exceptions`). URL parameters are the shareable source of view state; mobile uses the accepted native disclosure around the same server-rendered form tree and retains active filter chips/count plus reset on the page. Unknown tenant scope or basis fails closed rather than broadening the result.
+1. **Filter bar:** preset/custom range, outlet, courier, lifecycle, fixed WIB context, and the detail/export basis (`created`, `issued`, provider `outcome`, or current `exceptions`). URL parameters are the shareable source of view state; mobile uses the accepted native disclosure around the same server-rendered form tree and retains active filter chips/count plus reset on the page. Unknown tenant scope or basis fails closed rather than broadening the result.
 2. **KPI row:** created, issued, issuance success rate with denominator, and unresolved operational exceptions. Each includes basis, prior-period delta where valid, non-colour direction cue, and a link to supporting rows. Snapshot KPIs say `Saat ini` and cannot masquerade as period events.
 3. **Primary trend:** two-series line chart for created versus issued by WIB/local day. Series differ by colour plus dash/marker; axes and units are named; every datum exists in an immediately associated semantic table.
 4. **Breakdown:** a sorted courier comparison or lifecycle table appears only when the metric can answer an operator decision. Bars start at zero; low-volume rates show their denominator and do not imply certainty.
@@ -208,3 +208,32 @@ Primary period/outlet filters remain visible on narrow screens. Secondary filter
 ### Phase 13 — Ringkasan recomposition (T-119, 2026-09-14)
 
 Ringkasan follows the shadcn-admin dashboard pattern: summary KPIs → chart plus recent-shipments card → current work. The page header carries the period/outlet filter row; a compact line below it names the applied dates, timezone, and outlet at every width. Period stat cards follow, and a supporting-record table appears when `support` is set. The comparative shipment chart and the *Kiriman terbaru* card share one 4:3 row from `lg` (both cards stretch to the row height) and stack below it. The current-work cards come last. The former separate eight-row *Kiriman terbaru* table and *Tindak lanjut* card are merged into that one card: both reads remain, each shipment is listed once, actionable rows lead with their role-specific next action, and recent rows that need no action (for example *Resi terbit*) keep their reference, status, recipient, destination, AWB when available, and a short absolute WIB time without an action button. Product owner decision (2026-09-14): the card stays compact — per-status guidance lives on the shipment detail page, not in the card rows. From `lg` both cards stretch to the row height and the chart plot grows into the extra height, so no blank area opens under the chart. URL parameters, drill-down links, role gating, metric bases (spec 19), and freshness disclosures are unchanged. Browser evidence for this order is owned by T-125 and is not yet recorded.
+
+### PR-34–PR-37 operational refinement (2026-09-15)
+
+The shared header provides role-filtered shadcn Dialog/Command page search and a hydration-safe live WIB clock with seconds. Search highlights the active option separately from the current page, returns focus on cancellation, and does not intercept editable contexts. On narrow screens the clock occupies a second header row.
+
+Pengiriman exposes Buat kiriman and Histori kiriman alongside RTS and Kontak. Administration exposes one Pengaturan destination; outlet and member management remain internal tabs. Full tenant-authorized operational phone numbers and shipment references wrap without masking or ellipsis. Platform monitoring and logs continue to exclude recipient PII.
+
+All date filters and date/year boundaries use WIB. Legacy timezone URLs normalize to Asia/Jakarta and the UI removes timezone selection; stored instants remain UTC. This supersedes earlier timezone-selection and tenant phone-masking descriptions.
+
+### PR-39 / PR-40 — Quick rate-check screen
+
+Entry: tenant-only Cek Tarif header action and search result; planned route `/app/cek-tarif`. The sidebar retains eight Admin/five Operator destinations, with two visible group headings and Dasbor first. Search additionally includes the rate tool; platform navigation remains unchanged. Pengaturan contains only outlet and membership governance.
+
+Primary job: compare shipping prices before preparing a shipment. A focused form contains ready outlet (origin derived), searchable destination and weight in grams. Results show service, IDR shipping estimate, delivery window and COD support, plus WIB retrieval time. Use existing shadcn Field/Input/Select/Command/Button/Table primitives with the PR-38 single-focus treatment. No public/customer form or recipient phone/name is required.
+
+States: loading route; no ready outlet with Admin configuration link or Operator contact-admin guidance; untouched form; local/server validation; pending quote with duplicate submit disabled; provider unavailable with preserved input/retry; rate-limited feedback; no eligible services; successful list; stale input change hides prior results. No default fabricated prices, total-payment claim, hidden order creation, or provider mutation. Closing/leaving the screen discards only unsaved quote state.
+
+Persistence: local form/action state only; selected outlet may be initialized by authorized query, but no operational record is written. Server rate-limit bookkeeping remains an existing security side effect. Quotes are not reused as issuance authority.
+
+Quick-rate origin context: before retrieval, explain that the selected outlet pickup determines the origin; show the authoritative area label with the returned quote. Do not guess an origin from outlet name or an unbound stored label.
+
+
+### PR-42 — Analytics progressive disclosure
+
+`/app/analitik` orders the existing filter/context, operational summary, compact current reconciliation alert, shipment trend, courier performance, financial context and supporting shipments. Charts, two principal/margin cards, COD liability guidance and the paginated supporting shipment table remain visible. Reconciliation retains its independent tenant-wide/current scope and count-based exception emphasis, including a nonzero count with zero net amount.
+
+Three labelled native disclosures reveal the complete trend table, courier table and four cost cards. They start closed, use 44px keyboard-focusable summaries and preserve all rows, metric definitions, low-volume qualifications and recovery states. Labels describe already-loaded detail rather than implying a network load-more request. Browser-local open state is not a URL filter or persisted preference. Existing URL filters, KPI anchors, CSV export and shipment pagination keep their meanings. Loading follows the final order and compact geometry.
+
+Shared ChartContainer retains Recharts accessibility behavior and supplies a visible 2px inset focus outline on its interactive SVG surface. This corrects the missing indicator found by real-browser verification.

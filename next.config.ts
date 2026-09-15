@@ -5,6 +5,7 @@ const allowedDevOrigins = process.env.NEXT_ALLOWED_DEV_ORIGINS?.split(",")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
+  logging: { serverFunctions: false },
   ...(allowedDevOrigins ? { allowedDevOrigins } : {}),
 };
 

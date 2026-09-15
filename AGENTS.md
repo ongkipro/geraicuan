@@ -24,7 +24,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Non-Negotiable Invariants
 - Next.js App Router, PostgreSQL, Drizzle, Better Auth, and Coolify are selected decisions. Verify installed versions before implementation.
 - Every tenant-owned record, query, job, cache key, export, and provider operation carries server-derived tenant and outlet scope. PostgreSQL RLS is defense in depth, never the only authorization control.
-- Resolve Mengantar credentials server-side: complete private outlet configuration first, then platform environment defaults. Never emit credentials, credential-bearing URLs, recipient PII, or secret fragments to browser code, logs, errors, fixtures, or commits.
+- Resolve Mengantar credentials server-side: complete private outlet configuration first, then platform environment defaults. Never emit credentials, credential-bearing URLs, or secret fragments to browser code, logs, errors, fixtures, or commits. Keep recipient PII out of logs, errors, real-data fixtures, commits, public surfaces and platform monitoring. Authenticated tenant/outlet-scoped operational UI may display complete phone numbers under PR-36; synthetic fixtures are permitted for verification.
 - Provider `cnote_no` is the only AWB authority. Dynamic-AWB courier batches must serialize per Mengantar account. Never retry unknown order submission before reconciliation.
 - COD principal is a liability, not revenue. Ledger entries are append-only and derive only from authoritative state transitions.
 - The public site is a sales page plus login entry points. Shipment, provider, contacts, analytics, finance, and tenant management are authenticated CMS-only capabilities.

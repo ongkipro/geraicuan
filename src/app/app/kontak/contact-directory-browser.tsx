@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { searchContacts, type ContactSearchState, type SafeContactSearchRow } from "@/app/app/kontak/actions";
+import { searchContacts, type ContactSearchState, type ContactSearchRow } from "@/app/app/kontak/actions";
 import { EmptyState } from "@/components/cms/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ export function ContactDirectoryBrowser({
   initialRows,
   status,
 }: {
-  initialRows: SafeContactSearchRow[];
+  initialRows: ContactSearchRow[];
   status: "active" | "archived";
 }) {
   const initialState: ContactSearchState = { rows: initialRows, searched: false };
@@ -70,15 +70,15 @@ export function ContactDirectoryBrowser({
       {state.error ? (
         <Alert id="contact-search-error" ref={errorRef} role="alert" tabIndex={-1} variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Pencarian tidak dapat diproses</AlertTitle><AlertDescription><a href="#contact-search">{state.error}</a></AlertDescription></Alert>
       ) : (
-        <section aria-label="Hasil pencarian kontak" className="grid min-w-0 gap-3 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" ref={resultRef} tabIndex={-1}>
+        <section aria-label="Hasil pencarian kontak" className="grid min-w-0 gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" ref={resultRef} tabIndex={-1}>
           <p aria-live="polite" className="text-sm text-muted-foreground">Menampilkan {state.rows.length} kontak {status === "archived" ? "diarsipkan" : "aktif"}.</p>
           {state.rows.length === 0 ? (
             <EmptyState action={status === "active" ? <Button asChild className="min-h-11"><Link href="/app/kontak/baru"><Plus aria-hidden="true" />Buat kontak</Link></Button> : undefined} description={state.searched ? "Periksa ejaan atau hapus pencarian." : status === "archived" ? "Kontak yang diarsipkan akan tersedia di sini." : "Kontak tersimpan akan mempercepat pengisian draf kiriman."} icon={Search} title={state.searched ? "Tidak ada kontak yang cocok" : status === "archived" ? "Belum ada kontak diarsipkan" : "Belum ada kontak"} />
           ) : (
-            <Table className="min-w-[34rem]" containerClassName="rounded-lg border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50" containerProps={{ "aria-label": "Daftar kontak; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}>
+            <Table className="min-w-[34rem]" containerClassName="rounded-lg border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" containerProps={{ "aria-label": "Daftar kontak; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}>
               <TableCaption className="sr-only">Kontak tenant</TableCaption>
               <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card">Nama</TableHead><TableHead>Telepon</TableHead><TableHead>Peran</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-              <TableBody>{state.rows.map((contact) => <TableRow className="group" key={contact.id}><TableCell className="sticky left-0 z-10 max-w-56 whitespace-normal bg-card font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]"><Link className="flex min-h-11 items-center wrap-anywhere text-primary underline-offset-4 hover:underline" href={`/app/kontak/${contact.id}`}>{contact.name}</Link></TableCell><TableCell className="font-mono text-xs tabular-nums">{contact.phoneMasked}</TableCell><TableCell><div className="flex flex-wrap gap-1">{contact.isSender ? <Badge variant="secondary">Pengirim</Badge> : null}{contact.isRecipient ? <Badge variant="outline">Penerima</Badge> : null}</div></TableCell><TableCell>{contact.archived ? <Badge variant="outline">Diarsipkan</Badge> : <Badge variant="secondary">Aktif</Badge>}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{state.rows.map((contact) => <TableRow className="group" key={contact.id}><TableCell className="sticky left-0 z-10 max-w-56 whitespace-normal bg-card font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]"><Link className="flex min-h-11 items-center wrap-anywhere text-primary underline-offset-4 hover:underline" href={`/app/kontak/${contact.id}`}>{contact.name}</Link></TableCell><TableCell className="max-w-48 whitespace-normal wrap-anywhere font-mono text-xs tabular-nums">{contact.phone}</TableCell><TableCell><div className="flex flex-wrap gap-1">{contact.isSender ? <Badge variant="secondary">Pengirim</Badge> : null}{contact.isRecipient ? <Badge variant="outline">Penerima</Badge> : null}</div></TableCell><TableCell>{contact.archived ? <Badge variant="outline">Diarsipkan</Badge> : <Badge variant="secondary">Aktif</Badge>}</TableCell></TableRow>)}</TableBody>
             </Table>
           )}
         </section>

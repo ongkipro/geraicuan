@@ -65,7 +65,6 @@ import {
 import { shipmentStatuses } from "@/db/schema";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
-  ANALYTICS_TIMEZONES,
   formatInZone,
   formatRangeLabel,
 } from "@/lib/analytics-range";
@@ -120,7 +119,7 @@ const tenantStatusLabels: Record<string, string> = {
 };
 
 const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium";
-const controlClass = "h-11 md:h-8 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
+const controlClass = "h-11 md:h-8 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 // Capped like every other description in the CMS: uncapped, these run to 102ch
 // on the wide platform container.
 const hintClass = "max-w-2xl text-sm leading-6 text-muted-foreground";
@@ -164,7 +163,7 @@ function FilterPanel({ filters, options, issues, route, actualRoute }: { filters
   const owned=facetOwnership(route);
   const tenantField=route!=="/platform/tenant/[tenantId]";
   const tenantValue=filters.scope.kind==="tenant"?filters.scope.tenantId:"";
-  const advancedOpen = filters.range.presetId === "kustom" || filters.range.timezone !== "Asia/Jakarta" || (!owned.courier && filters.courier) || (!owned.status && filters.status) || filters.query || issues.length;
+  const advancedOpen = filters.range.presetId === "kustom" || (!owned.courier && filters.courier) || (!owned.status && filters.status) || filters.query || issues.length;
   const hidden:[string,string][]=[
     ...(owned.tenant&&tenantValue?[["tenant",tenantValue] as [string,string]]:[]),
     ...(owned.courier&&filters.courier?[["kurir",filters.courier] as [string,string]]:[]),
@@ -184,7 +183,6 @@ function FilterPanel({ filters, options, issues, route, actualRoute }: { filters
         <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-3">
           <label className={fieldClass}>Dari<input className={controlClass} defaultValue={filters.range.startDate} name="dari" type="date" /></label>
           <label className={fieldClass}>Sampai<input className={controlClass} defaultValue={filters.range.lastIncludedDate} name="sampai" type="date" /></label>
-          <label className={fieldClass}>Zona waktu<select className={controlClass} defaultValue={filters.range.timezone} name="tz">{ANALYTICS_TIMEZONES.map(z=><option key={z.id} value={z.id}>{z.label}</option>)}</select></label>
           {!owned.courier?<label className={fieldClass}>Kurir<select className={controlClass} defaultValue={filters.courier??""} name="kurir"><option value="">Semua kurir</option>{options.couriers.map(c=><option key={c} value={c}>{c}</option>)}</select></label>:null}
           {!owned.status?<label className={fieldClass}>Status<select className={controlClass} defaultValue={filters.status??""} name="status"><option value="">Semua status</option>{shipmentStatuses.map(s=><option key={s} value={s}>{statusLabels[s]} ({s})</option>)}</select></label>:null}
           {route==="/platform/tenant"?<label className={fieldClass}>Cari tenant<input className={controlClass} defaultValue={filters.query??""} maxLength={80} minLength={2} name="q" type="search" /></label>:null}
@@ -230,6 +228,7 @@ function Degraded({name}:{name:string}){return <Alert variant="destructive" role
 function TableRegion({caption,id,children,surface="background"}:{caption:string;id:string;children:ReactNode;surface?:"background"|"card"}){
   return (
     <Table
+      data-pin-first-column=""
       className={cn(
         "[&_th]:px-3 [&_td]:px-3 [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_tbody_tr>*:first-child]:sticky [&_tbody_tr>*:first-child]:left-0 [&_tbody_tr>*:first-child]:z-10",
         surface==="card"?"[&_thead_th:first-child]:bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))] [&_tbody_tr>*:first-child]:bg-card":"[&_thead_th:first-child]:bg-[color-mix(in_oklab,var(--muted)_40%,var(--background))] [&_tbody_tr>*:first-child]:bg-background",
@@ -403,7 +402,7 @@ function Usage({data,filters,overview,options}:{data:{rows:TenantUsageRow[];tota
   const table=data.rows.length?(
     <TableRegion caption={`Penggunaan tenant · ${label.periodLabel} · ${label.timezoneLabel}`} id="tenant-caption" surface={overview?"card":"background"}>
       <HeaderRow><Head>Tenant</Head><Head>Status</Head><Head numeric>Outlet</Head><Head numeric>Anggota</Head><Head numeric>Kiriman</Head><Head numeric>Batch</Head><Head numeric>Resi</Head><Head numeric>Belum dibayar</Head><Head numeric>Gagal</Head><Head numeric>Tidak diketahui</Head><Head>Aktivitas terakhir</Head></HeaderRow>
-      <TableBody>{data.rows.map(r=><TableRow key={r.tenantId}><RowHead><Link className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline focus-visible:underline" href={`/platform/tenant/${r.tenantId}?rentang=${filters.range.presetId}&tz=${encodeURIComponent(filters.range.timezone)}`} prefetch={false}>{r.name}</Link></RowHead><TableCell><Badge variant="outline">{tenantStatusLabels[r.status]}</Badge></TableCell><TableCell className={numericClass}>{r.outletConfigured}/{r.outletTotal}</TableCell><TableCell className={numericClass}>{formatCount(r.members)}</TableCell><TableCell className={numericClass}>{formatCount(r.shipments)}</TableCell><TableCell className={numericClass}>{formatCount(r.batches)}</TableCell><TableCell className={numericClass}>{formatCount(r.issued)}</TableCell><TableCell className={numericClass}>{formatCount(r.unpaid)}</TableCell><TableCell className={numericClass}>{formatCount(r.failed)}</TableCell><TableCell className={numericClass}>{formatCount(r.unknown)}</TableCell><TableCell>{r.lastActivityAt?formatInZone(r.lastActivityAt,filters.range.timezone):"—"}</TableCell></TableRow>)}</TableBody>
+      <TableBody>{data.rows.map(r=><TableRow key={r.tenantId}><RowHead><Link className="inline-flex min-h-11 min-w-28 max-w-48 items-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:underline focus-visible:underline" href={`/platform/tenant/${r.tenantId}?rentang=${filters.range.presetId}&tz=${encodeURIComponent(filters.range.timezone)}`} prefetch={false}>{r.name}</Link></RowHead><TableCell><Badge variant="outline">{tenantStatusLabels[r.status]}</Badge></TableCell><TableCell className={numericClass}>{r.outletConfigured}/{r.outletTotal}</TableCell><TableCell className={numericClass}>{formatCount(r.members)}</TableCell><TableCell className={numericClass}>{formatCount(r.shipments)}</TableCell><TableCell className={numericClass}>{formatCount(r.batches)}</TableCell><TableCell className={numericClass}>{formatCount(r.issued)}</TableCell><TableCell className={numericClass}>{formatCount(r.unpaid)}</TableCell><TableCell className={numericClass}>{formatCount(r.failed)}</TableCell><TableCell className={numericClass}>{formatCount(r.unknown)}</TableCell><TableCell>{r.lastActivityAt?formatInZone(r.lastActivityAt,filters.range.timezone):"—"}</TableCell></TableRow>)}</TableBody>
     </TableRegion>
   ):<Empty description={filtered?"Ubah atau hapus filter untuk menampilkan tenant lain.":"Provision tenant pertama untuk memulai konfigurasi platform."} title={filtered?"Tidak ada hasil filter":"Belum ada tenant"}/>;
   const description="Urutan memprioritaskan tenant dengan kegagalan atau status tidak diketahui.";

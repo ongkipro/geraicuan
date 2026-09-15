@@ -168,3 +168,16 @@ sequenceDiagram
 
 ## Verification Design
 Use sanitized contract fixtures for estimates, paid orders, unpaid orders, COD-blocked routes, and concurrent dynamic-AWB orders. Non-mutating estimates may run only under the separately approved probe procedure. Do not create sandbox or production orders as a smoke test, and do not remove the TD-14 release gate based on fixture evidence.
+
+## TD-18 — Scoped quick rate checks (PR-40)
+
+Reuse `fetchMengantarEstimate`, current credential resolution, `validateMengantarDestinationAreaSelection`, and estimate/location rate limits. A new tenant Server Action validates ready outlet, selected area binding and integer gram weight, resolves origin/pickup server-side, requests provider estimates outside the DB transaction, then verifies the account authority/pickup/origin is unchanged before returning a minimal quote DTO. Raw provider payloads, URLs and credentials never reach the browser or generic errors.
+
+This action creates no draft, immutable shipment estimate snapshot, issuance batch, payment or ledger entry. Rate-limit storage is its only DB write. Published services contain only already-normalized supported services; missing insurance remains absent. Provider issuance remains release-gated. Unit/action tests cover scope denial, forged/mismatched area, changed authority, invalid weights, provider error and supported results without writes; real-browser evidence covers the form and header entry.
+
+
+### PR-41 — Persisted operational shipment references
+
+Shipments retain their UUID primary key, composite tenant/outlet foreign keys, URLs and idempotency semantics. New human `public_reference` is immutable and unique, with `created_by_user_id`, numeric `reference_user_number`, full WIB calendar `reference_date`, and `daily_sequence`. Users receive a stable numeric `public_number` starting10000; display widths are minimums, never truncation limits. The reference is e.g.95758-260914-001; counter keys use the full date and concurrent allocation uses one atomic counter-row upsert. YYMMDD is the accepted display; the unique constraint fails closed on century reuse and must be replaced by YYYYMMDD before that horizon.
+
+A private counter table and a narrowly scoped, pinned-search-path PostgreSQL trigger allocate the reference. Runtime actors are checked against server-derived app.user_id and tenant membership; clients cannot set or change reference components or use the counter table. Existing shipments have no reliable creator record: backfill deterministic00000 legacy references ordered by created_at/id within each WIB date, without attributing them to an administrator. Existing UUIDs, snapshots, ledger records, parties, orders and AWBs remain unchanged. Local migration is explicitly authorized; test fresh/upgrade/concurrency and preserve local account data before applying it. No reset/reseed.

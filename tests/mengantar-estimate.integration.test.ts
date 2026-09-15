@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchMengantarEstimate,
   MengantarEstimateError,
+  MengantarNoSupportedServicesError,
   normalizeMengantarEstimateServices,
 } from "@/lib/mengantar-estimate";
 
@@ -64,6 +65,39 @@ describe("Mengantar estimate normalization", () => {
   it("fails closed for an unrecognized provider payload", () => {
     expect(() => normalizeMengantarEstimateServices({ JNE: { currency: "USD", price: 1 } }))
       .toThrow(MengantarEstimateError);
+  });
+
+  it("distinguishes an explicitly unsupported route while retaining the existing error superclass", () => {
+    expect(() => normalizeMengantarEstimateServices({
+      JNE: { unsupported: true }, SAP: { unsupported: true },
+    })).toThrow(MengantarNoSupportedServicesError);
+    expect(new MengantarNoSupportedServicesError()).toBeInstanceOf(MengantarEstimateError);
+  });
+
+  it.each([{}, { JNE: { price: "bad" } }, { JNE: { unsupported: true }, broken: null },
+    { "invalid/service": { unsupported: true } }, []])(
+    "keeps malformed or unknown payloads as provider failures: %j", (payload) => {
+      try {
+        normalizeMengantarEstimateServices(payload);
+        expect.fail("The malformed payload must fail.");
+      } catch (error) {
+        expect(error).toBeInstanceOf(MengantarEstimateError);
+        expect(error).not.toBeInstanceOf(MengantarNoSupportedServicesError);
+      }
+    },
+  );
+
+  it("only returns the unsupported-route distinction for a successful provider envelope", async () => {
+    const data = { JNE: { unsupported: true } };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data }), {
+        headers: { "content-type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: false, data }), {
+        headers: { "content-type": "application/json" },
+      })));
+    await expect(fetchMengantarEstimate(credentials, request)).rejects.toBeInstanceOf(MengantarNoSupportedServicesError);
+    await expect(fetchMengantarEstimate(credentials, request)).rejects.not.toBeInstanceOf(MengantarNoSupportedServicesError);
   });
 
   it("uses an HTTPS origin-only base URL and encodes the credential path segment", async () => {

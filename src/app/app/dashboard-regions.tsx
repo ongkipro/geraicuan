@@ -61,7 +61,6 @@ import {
   shipmentQueueHref,
   type TenantShipmentRole,
 } from "@/lib/shipment-queue";
-import { shipmentReference } from "@/lib/shipment-reference";
 import { cn } from "@/lib/utils";
 
 export type OutletReadinessRow = { id: string; name: string; ready: boolean };
@@ -172,13 +171,13 @@ async function settle<T>(promise: Promise<T>) {
   }
 }
 
-function ShipmentReferenceLink({ className, shipmentId }: { className?: string; shipmentId: string }) {
+function ShipmentReferenceLink({ className, shipmentId, publicReference }: { className?: string; shipmentId: string; publicReference: string }) {
   return (
     <Link
-      className={cn("inline-flex min-h-11 items-center rounded-sm font-mono text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8", className)}
+      className={cn("inline-flex min-h-11 max-w-40 items-center whitespace-normal wrap-anywhere rounded-sm font-mono text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8", className)}
       href={`/app/pengiriman/${encodeURIComponent(shipmentId)}`}
     >
-      {shipmentReference(shipmentId)}
+      {publicReference}
     </Link>
   );
 }
@@ -312,7 +311,7 @@ export async function DashboardPeriodSupportRegion({
             <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card">Kiriman</TableHead><TableHead>Waktu aktivitas</TableHead><TableHead>Outlet</TableHead><TableHead>Pembayaran</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>{support.rows.map((row) => {
               const status = SHIPMENT_STATUS_PRESENTATION[row.status];
-              return <TableRow key={row.shipmentId}><TableCell className="sticky left-0 z-10 bg-card"><ShipmentReferenceLink shipmentId={row.shipmentId} /></TableCell><TableCell>{formatInZone(row.occurredAt, context.range.timezone)}</TableCell><TableCell>{row.outletName}</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell></TableRow>;
+              return <TableRow key={row.shipmentId}><TableCell className="sticky left-0 z-10 bg-card"><ShipmentReferenceLink shipmentId={row.shipmentId} publicReference={row.publicReference} /></TableCell><TableCell>{formatInZone(row.occurredAt, context.range.timezone)}</TableCell><TableCell>{row.outletName}</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell></TableRow>;
             })}</TableBody>
           </Table>
         </DataTableShell>
@@ -484,7 +483,7 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
                 // under the row on phones and in a right-hand column from sm, so rows align.
                 <li className="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-2 px-(--card-spacing) py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" data-actionable={action ? "true" : undefined} key={row.shipmentId}>
                   <div className="grid min-w-0 gap-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><ShipmentReferenceLink className="md:min-h-6" shipmentId={row.shipmentId} /><ShipmentStatusBadge label={status.label} tone={status.tone} /></div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><ShipmentReferenceLink className="md:min-h-6" shipmentId={row.shipmentId} publicReference={row.publicReference} /><ShipmentStatusBadge label={status.label} tone={status.tone} /></div>
                     <p className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       <span className="flex min-w-0 max-w-full items-center gap-x-1.5">
                         <time className="shrink-0 whitespace-nowrap tabular-nums" dateTime={row.updatedAt.toISOString()} title={formatWibDateTime(row.updatedAt)}>{recentTimeFormatter.format(row.updatedAt)}<span className="sr-only"> WIB</span></time>

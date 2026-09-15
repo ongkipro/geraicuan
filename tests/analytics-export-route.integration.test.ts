@@ -52,6 +52,7 @@ vi.mock("@/db/analytics-repository", () => {
         totalCount: 1,
         rows: [{
           shipmentId: "00000000-0000-4000-8000-000000003121",
+          publicReference: "95758-260830-121",
           createdAt: new Date("2026-08-30T01:00:00.000Z"),
           issuedAt: new Date("2026-08-30T02:00:00.000Z"),
           outletName: "=HYPERLINK(\"https://invalid.test\")\nOutlet",
@@ -92,6 +93,9 @@ describe("tenant analytics CSV export route", () => {
     expect(body).toContain("'=" + "HYPERLINK");
     expect(body).toContain("'+FORMULA");
     expect(body).not.toContain("\nOutlet");
+    expect(body).toContain("shipment_reference");
+    expect(body).toContain("95758-260830-121");
+    expect(body).not.toContain("00000000-0000-4000-8000-000000003121");
     expect(loadShipmentExport).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ tenantId: "00000000-0000-4000-8000-000000003101" }),

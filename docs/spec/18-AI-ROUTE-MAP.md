@@ -14,6 +14,9 @@ disk win.
 
 ## 1. Snapshot and maturity rules
 
+Current refinement snapshot: 2026-09-15, base `199c3d9`, T-132 through T-144 working tree. The historical audit below records previous verification, not current branch cleanliness. T-143 adds `/app/cek-tarif`: inventory is 23 UI pages and four Route Handlers. Sidebar navigation remains eight Tenant Admin, five Operator and three Platform destinations; both tenant roles also have the header/search-only Cek Tarif destination.
+
+
 - Audited: 2026-09-11 against HEAD `69e6be6` (T-76 through T-77's round-2
   repairs, over `67beb92`) plus every Phase 10 task's uncommitted repairs
   since: T-77 (twenty-three independent review rounds; rounds 1-18 and
@@ -29,7 +32,7 @@ disk win.
   all clean). T-76 through T-82 — the entire Phase 10 queue — are complete.
   See STATUS.md and BUILD-LOG.md for the full history.
 - Framework: Next.js App Router 16.3.3, React 19.2.8.
-- Inventory: 22 UI pages and four committed Route Handlers. The Mengantar
+- Inventory: 23 UI pages and four Route Handlers. The Mengantar
   webhook is mounted but closed — it refuses every request; see its row in
   section 8.
 - Shared UI: Tailwind CSS and copied shadcn/ui components.
@@ -61,8 +64,8 @@ flowchart TD
     Root --> PlatformLogin[Platform login]
 
     TenantLogin --> TenantShell[Tenant CMS shell]
-    TenantShell --> Summary[Ringkasan]
-    TenantShell --> Shipments[Kiriman]
+    TenantShell --> Summary[Dasbor]
+    TenantShell --> Shipments[Histori kiriman]
     Shipments --> NewShipment[Create draft]
     Shipments --> ShipmentDetail[Shipment detail]
     Shipments --> Rts[Return workflow]
@@ -74,8 +77,9 @@ flowchart TD
     Contacts --> ContactDetail[Contact detail]
     TenantShell --> Analytics[Analytics]
     TenantShell --> Finance[Finance]
-    TenantShell --> Settings[Outlet settings]
-    TenantShell --> Members[Member governance]
+    TenantShell --> Settings[Pengaturan]
+    Settings --> OutletSettings[Outlet settings tab]
+    Settings --> Members[Member governance tab]
 
     PlatformLogin --> PlatformShell[Platform CMS shell]
     PlatformShell --> PlatformSummary[Platform overview]
@@ -93,18 +97,17 @@ flowchart TD
 | Scope | Layout and access owner | Navigation groups | Actor |
 |---|---|---|---|
 | Public | src/app/layout.tsx | Sales page links only | Unauthenticated visitor |
-| Tenant CMS | src/app/app/layout.tsx and src/lib/cms-auth.ts | Utama; Operasional; Wawasan; Administrasi | Active Tenant Admin or Operator membership |
+| Tenant CMS | src/app/app/layout.tsx and src/lib/cms-auth.ts | Dasbor; Pengiriman; Pengelolaan | Active Tenant Admin or Operator membership |
 | Platform CMS | src/app/platform/layout.tsx and src/app/platform/platform-access.ts | Platform | Active Super Admin only |
 
 Tenant navigation is owned by src/lib/cms-shell-navigation.ts:
 
-- Utama: Ringkasan.
-- Operasional: Kiriman, Retur (RTS), Kontak.
-- Wawasan, Tenant Admin only: Analitik, Keuangan.
-- Administrasi, Tenant Admin only: Outlet & koneksi, Anggota & akses.
+- Dasbor appears first without a redundant group heading.
+- Pengiriman: Buat kiriman, Histori kiriman, Retur (RTS), Kontak.
+- Pengelolaan, Tenant Admin only: Analitik, Keuangan, Pengaturan. Outlet and member pages remain internal tabs; `/app/anggota` maps to the Pengaturan current state.
 - Impor and Label are contextual shipment destinations. They intentionally keep
-  Kiriman selected instead of adding top-level navigation.
-- Detail, create, and print pages inherit the nearest parent destination.
+  Histori kiriman selected instead of adding top-level navigation.
+- Detail and print pages inherit the nearest parent destination; create has its own Buat kiriman entry.
 - Hiding a navigation item is not authorization. Every page, Server Action,
   Route Handler, and repository target must enforce authority again.
 
@@ -129,7 +132,7 @@ tests/auth-config.integration.test.ts.
 
 | Route | Source and navigation | Actor and primary job | Canonical URL state | Reads and mutation owners | State boundary and completion | Maturity |
 |---|---|---|---|---|---|---|
-| /app | src/app/app/page.tsx; Ringkasan | Both tenant roles choose the next permitted daily action from shallow period analytics, readiness, exceptions, and actionable recent shipments. | rentang, dari, sampai, tz, outlet, support; draft redirects to /app/pengiriman/baru?draft=validated-id. Invalid scope is removed rather than broadened. | src/db/tenant-dashboard-repository.ts and outlet-readiness-repository.ts. Read-only; links to create, queue, analytics, finance, or settings according to role. | Parent loading/error; first-run readiness, healthy empty, filtered empty, partial/stale, actionable exceptions, populated. Must not present COD principal as revenue. | COMMITTED and UNREVIEWED: navigation and dashboard support changed in `67beb92`. |
+| /app | src/app/app/page.tsx; Dasbor | Both tenant roles choose the next permitted daily action from shallow period analytics, readiness, exceptions, and actionable recent shipments. | rentang, dari, sampai, tz, outlet, support; draft redirects to /app/pengiriman/baru?draft=validated-id. Invalid scope is removed rather than broadened. | src/db/tenant-dashboard-repository.ts and outlet-readiness-repository.ts. Read-only; links to create, queue, analytics, finance, or settings according to role. | Parent loading/error; first-run readiness, healthy empty, filtered empty, partial/stale, actionable exceptions, populated. Must not present COD principal as revenue. | COMMITTED and UNREVIEWED: navigation and dashboard support changed in `67beb92`. |
 | /app/pengiriman | src/app/app/pengiriman/page.tsx; Kiriman | Both roles triage lifecycle work and open the one valid next action. | status and page. Status accepts ALL, ACTION_REQUIRED, READY_TO_PROGRESS, ISSUED_TODAY, or a stored shipment status; page is positive integer. | loadShipmentQueuePage in shipment-queue-repository.ts; lifecycle links from src/lib/shipment-queue.ts. | Local loading/error; system empty, filtered empty, invalid filter adjustment, populated, stale, pagination. | COMMITTED at `69e6be6`. T-85 rewrote the guidance for the six lifecycle statuses it added and folded five label vocabularies into one shared source; that work passed independent review before this commit. The queue's own presentation was never re-reviewed as a whole. |
 | /app/pengiriman/baru | src/app/app/pengiriman/baru/page.tsx; contextual Kiriman | Both roles create or resume one tenant-scoped shipment draft, select destination authority, and load a provider estimate. | Optional draft UUID; invalid or foreign IDs do not become scope. | Common actions in src/app/app/actions.ts; destination actions in location-actions.ts; estimate action in estimate-actions.ts. Repositories: outlet readiness, contact, shipment draft, estimate. | Local loading/error; blocked outlet, pristine, contact search, destination loading/empty/error/selected, validation error, duplicate warning, saved, estimate pending/success/failure. | COMMITTED, UNREVIEWED and RELEASE-GATED: the duplicate warning and COGS field shipped in `67beb92`; the live provider estimate remains gated. The COGS field now persists through `validateShipmentDraft` (T-83). |
 | /app/pengiriman/[shipmentId] | src/app/app/pengiriman/[shipmentId]/page.tsx; child of Kiriman | Both roles inspect immutable shipment context and perform only the action allowed by lifecycle and role. | Dynamic shipment UUID only; malformed or foreign/missing target returns not-found without cross-tenant disclosure. | loadShipmentDetail; confirmShipmentIssuance; checkStaleShipmentOperation; Tenant Admin-only reconcileShipmentUnknownSubmission and recoverShipmentUnpaidPayment. | Local loading/error/not-found; every lifecycle status, stale operation, pending/success/failure, estimate/provider result, label history. | COMMITTED and RELEASE-GATED for issuance/reconciliation/recovery transport. |
@@ -433,3 +436,44 @@ Inventory remains22pages (15tenant,4platform,3public); no handler, Server Action
 Compact period/operational count summaries on `/app`, `/app/analitik` and platform health use two phone columns with matching skeletons; detailed current-work/full-IDR regions remain stacked. Platform Counts cards fit their own content and tenant scope uses three desktop columns. Shared table headers use the existing muted tint with opaque pinned equivalents. Analytics section prose is capped to the existing2xl measure. Platform shared loading uses visible generic controls and the same count-column choices; its two control placeholders do not exactly reproduce the overview's three fields. No Suspense/read boundary changes.
 
 T-134 verification passes:18route/viewport observations,487actual focus probes, nine role observations, custom/preset/facet submission checks, full83-file integration suite, production build and independent source/visual review. BUILD-LOG retains native-key delivery, generic loading and control-height limits. No new route/read/action boundary is introduced.
+
+
+### T-137 — Outlet and member settings presentation (2026-09-15)
+
+Route inventory, handlers, Server Actions, authorization, URL state and data ownership are unchanged. `/app/pengaturan` retains the URL-selected outlet and independent location/credential actions. Its selected-outlet header is flat, the derived origin is a labelled native output with polite announcements, and a `Digunakan` badge follows the persisted connection source rather than the draft radio choice. Existing shadcn Field, RadioGroup, Popover/Command and confirmation dialogs own interaction. Page/loading/error header copy is aligned.
+
+`/app/anggota` retains count summaries, the ordered semantic member list, per-peer Collapsible controls and the inline invite form. The last-admin badge conveys protection with a lock and neutral outline; the last-admin Alert and authorization rules remain. Each access disclosure includes its member name in the accessible name. The invite form stacks email and native role selector inside shadcn FieldGroup, with associated role guidance and one submit. Loading geometry follows the revised spacing.
+
+This bounded polish preserves the already delivered Phase 13 composition. Older spec10 Pattern4 proposals for status tabs, member table, invite Dialog and other settings workflow changes are not implemented or declared complete here; their residual task ownership remains unchanged. No new settings workflow or credential capability is implied. Verification: `scripts/ui-audit/settings-ux.mjs`, nearest page/action regressions and T-137 BUILD-LOG/ledger evidence.
+
+## Indonesian operational refinement (PR-34–PR-37)
+
+- Shared header client state: `src/app/_components/cms-header-tools.tsx` owns local dialog/query focus and the live Asia/Jakarta clock; `cms-shell.tsx` owns responsive placement and anchor clearance. Search consumes the same role-filtered navigation as the sidebar, performs no global data query, and does not grant authorization.
+- Navigation owner remains `src/lib/cms-shell-navigation.ts`; `/app/pengiriman/baru` and `/app/pengiriman` are explicit create/history destinations. Settings tabs retain their existing routes and server access checks.
+- Date state owner remains `src/lib/analytics-range.ts`: legacy timezone URLs normalize to WIB, canonical serialization retains `tz=Asia/Jakarta`, and range UTC bounds derive from WIB dates. Dashboard, analytics, finance and platform filter leaves no longer offer conflicting timezone controls. Metrics formulas and event basis are unchanged; spec 19 owns bucket semantics.
+- Full operational phone projections: contact actions/directory, shipment draft search, RTS repository/page, and label repository/queue. `shipmentReference` preserves the complete internal ID; platform batch formatting remains independently abbreviated. Tenant/outlet authorization and platform/log PII restrictions remain enforced.
+- Verification owners: header browser runner `scripts/ui-audit/header-tools.mjs`; header/nav, analytics range/filter, finance, platform monitoring, operational phone, contact render, label and RTS integration suites. Final executed evidence is recorded in BUILD-LOG.md under T-139–T-141.
+
+T-139–T-141 verification snapshot (2026-09-15):203 focused tests plus34 isolated repository tests,12 header and18 operations observations, and a focused DOM keyboard replay. TypeScript/lint/build and independent source/visual review pass. The new client leaf is WORKTREE; affected existing pages remain MODIFIED supporting behavior. No new Server Action or Route Handler was introduced. Ledger provenance and native-input limits remain in BUILD-LOG.
+
+Implemented T-143 route: `/app/cek-tarif`, authenticated Tenant Admin/Operator, ready-outlet query + authoritative location lookup + ephemeral rate-check Server Action. Header/search entry only; no new sidebar group. TD-18 and PR-40 own its scoped read/no-order contract.
+
+
+### T-143/T-144 route and data ownership (2026-09-15)
+
+| Surface | Owner | State / contract |
+| --- | --- | --- |
+| `/app/cek-tarif` | `src/app/app/cek-tarif/page.tsx`, `quick-rate-form.tsx`, `actions.ts`, `loading.tsx`, `error.tsx` | Tenant Admin/Operator authentication; ready outlet; existing destination selector with fixed outlet; whole grams. Client form owns ephemeral pending/error/empty/quote and invalidates old results on input changes. No URL filters or persisted business quote. Header and search only; no sidebar entry. |
+| `checkShippingRates` | `src/app/app/cek-tarif/actions.ts` | Server scope, committed attempt limit, authoritative area lookup, account/origin/pickup readiness recheck before and after provider estimate; minimal display DTO; no shipment/estimate/ledger persistence. |
+| Shipment number display | DB migration0038 + `schema.ts`, `shipment-draft-repository.ts`, queue/dashboard/analytics/ledger/RTS/label read models | Persisted publicReference uses numeric creator, WIB date and daily serial. Existing unknown creators use00000. UI/CSV show this number; UUID remains route/action/PK/FK identity and cnote_no remains the sole AWB. |
+
+Verification owners: `quick-rate-actions.integration.test.ts`, `quick-rate-render.integration.test.ts`, `cms-ui-audit-inventory.integration.test.ts`, `shipment-reference-repository.integration.test.ts`, migration upgrade script, and real-browser quick-rate/reference scripts. PR-41 supersedes the earlier T-141 full-UUID display decision; phone completeness remains unchanged.
+
+
+### T-145 — Analytics hierarchy and supporting detail
+
+Inventory remains23 pages and4 Route Handlers. No navigation destination, Server Action, read query or authorization boundary is added. `/app/analitik/page.tsx` places reconciliation immediately after summary, then trend, courier, financial and supporting shipment regions. `loading.tsx` mirrors this order; `error.tsx` uses the same page identity. Existing independent Suspense/error boundaries remain.
+
+`analytics-regions.tsx` owns three initially closed native details: trend table, courier table and cost cards. DOM-local open state has no query parameter and no persisted preference. Charts, principal/margin cards, reconciliation and shipment pagination stay outside those disclosures. Existing filters, support basis, KPI anchors, full references, pagination and export retain their owners and meanings. Shared `src/components/ui/chart.tsx` owns SVG focus presentation for analytics, tenant dashboard and platform trend consumers.
+
+Verification owner: `analytics-progressive-disclosure.integration.test.ts`, existing decision-context/streaming suites and `scripts/ui-audit/analytics-disclosure.mjs`. Executed viewport, disclosure, focus and recovery evidence belongs to the T-145 BUILD-LOG entry.

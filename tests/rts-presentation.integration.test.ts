@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+
 /**
  * Guards for the return-queue composition T-77 repaired.
  *
@@ -40,6 +41,7 @@ const fixture = {
     rows: [
       {
         shipmentId: "72000000-0000-4000-8000-000000000003",
+        publicReference: "95758-260901-003",
         status: "RTS_QUEUED",
         createdAt: new Date("2026-09-01T02:00:00.000Z"),
         updatedAt: new Date("2026-09-02T02:00:00.000Z"),
@@ -50,16 +52,17 @@ const fixture = {
         isCod: true,
         declaredValueIdr: 575_000,
         recipientName: "Joko Santoso",
-        recipientPhoneMasked: "•••• 0010",
+        recipientPhone: "080000000010",
         providerService: "JNE REG",
         awb: "SANITIZED-CNOTE-0003",
         latestEventNotes: "Penerima tidak dapat dihubungi.",
         latestEventAt: new Date("2026-09-02T02:00:00.000Z"),
       },
       {
-        // No AWB: the row where the truncated identifier legitimately appears,
+        // No AWB: the row where the internal reference legitimately appears,
         // because it is then the only identifier the row has.
         shipmentId: "72000009-0000-4000-8000-000000000009",
+        publicReference: "95758-260901-009",
         status: "PROBLEM",
         createdAt: new Date("2026-09-01T02:00:00.000Z"),
         updatedAt: new Date("2026-09-03T02:00:00.000Z"),
@@ -70,7 +73,7 @@ const fixture = {
         isCod: true,
         declaredValueIdr: 725_000,
         recipientName: "Dedi Kurniawan",
-        recipientPhoneMasked: "•••• 0004",
+        recipientPhone: "080000000004",
         providerService: "JNE REG",
         awb: null,
         latestEventNotes: null,
@@ -132,6 +135,15 @@ describe("return queue presentation", () => {
     fixture.auditHeader = null;
     fixture.page.rows[0].awb = "SANITIZED-CNOTE-0003";
     html = await render();
+  });
+
+  it("shows complete operational phones and destinations", () => {
+    const visible = html.replace(/<[^>]+>/g, " ");
+    for (const row of fixture.page.rows) {
+      expect(visible).toContain(row.recipientPhone);
+      expect(visible).toContain(row.destinationAreaLabel);
+    }
+    expect(visible).not.toContain("••••");
   });
 
   it("wraps full provider-length AWBs, recipients and outlets while keeping Status & Waktu merged", async () => {
@@ -222,63 +234,21 @@ describe("return queue presentation", () => {
     }
   });
 
-  it("never prints a second identifier beside a provider AWB", () => {
-    // Every row rendered `ID: 72000000` in a field of its own, beside an AWB
-    // that already identified the row and linked to it. Matched in the output,
-    // so a helper or a template literal rebuilding it is the same finding.
-    // Bound to the identifier, not to the word "ID" or to a slice length.
-    // `Ref {row.shipmentId.slice(0, 7)}` prints a second identifier on every
-    // row just as plainly, and a check looking for `ID:` and exactly eight
-    // characters sees none of it.
-    const rendered = html.replace(/<[^>]*>/g, " ");
-    // Rows with no AWB legitimately print one truncated id as their link
-    // text; rows with one never print any slice of their own id at all.
-    // Prefix and suffix both — `Ref {shipmentId.slice(-8)}` is the same
-    // defect at the other end of the string.
-    //
-    // Grouped by the exact slice value rather than checked per row, because
-    // two ids can share a slice (both start "7200000" through length 7 here)
-    // — skipping a shared slice instead of pooling it let a mutation on the
-    // *other* row hide behind the shared one's own legitimate appearance.
-    // The budget for a group is the number of no-AWB rows in it: any count
-    // above that is a second identifier from whichever row contributed it.
-    //
-    // Every contiguous run of the id, not only its prefix and suffix: a slice
-    // taken from the middle (`shipmentId.slice(9, 17)`) is the same defect and
-    // a check that only looked at the two ends never saw it. The floor is 5,
-    // not the 6 an earlier version used — independent review defeated that
-    // with a 5-character middle slice. It is not lower still: at 4 characters
-    // "0003" collides with the unrelated AWB "SANITIZED-CNOTE-0003" and the
-    // check cannot tell that legitimate coincidence from a real second
-    // identifier, so it would fail on the very fixture that has no defect.
-    for (let length = 5; length <= 12; length++) {
-      const owners = new Map<string, typeof fixture.page.rows[number][]>();
-      for (const row of fixture.page.rows) {
-        const id = row.shipmentId;
-        for (let start = 0; start + length <= id.length; start++) {
-          const slice = id.slice(start, start + length);
-          owners.set(slice, [...(owners.get(slice) ?? []), row]);
-        }
+  it("uses one complete primary identifier per row", () => {
+    const body = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
+    const rows = [...body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)];
+    expect(rows).toHaveLength(fixture.page.rows.length);
+    rows.forEach(([, markup], index) => {
+      const row = fixture.page.rows[index];
+      const primaryCell = markup.match(/<td[^>]*>([\s\S]*?)<\/td>/)?.[1] ?? "";
+      const visiblePrimary = primaryCell.replace(/<[^>]+>/g, " ").trim();
+      expect(visiblePrimary).toBe(row.awb ?? row.publicReference);
+      const visibleRow = markup.replace(/<[^>]+>/g, " ");
+      if (row.awb) {
+        expect(visibleRow).not.toContain(row.shipmentId);
+        expect(visibleRow).not.toContain(row.publicReference);
       }
-      for (const [slice, rows] of owners) {
-        const uniqueRows = [...new Set(rows)];
-        const budget = uniqueRows.filter((row) => !row.awb).length;
-        const seen = (rendered.match(new RegExp(slice, "gi")) ?? []).length;
-        expect(seen, `${length}-char slice ${slice} of ${uniqueRows.map((r) => r.shipmentId).join(", ")}`)
-          .toBeLessThanOrEqual(budget);
-      }
-    }
-
-    expect(occurrences(html, "SANITIZED-CNOTE-0003")).toBe(1);
-    // Counted as rendered text, not as a substring: both fixture ids appear in
-    // `href`s, and a check that cannot tell an address from a printed field
-    // would fail for the wrong reason and pass for the wrong reason too.
-    const printed = [...html.matchAll(/>([^<>]+)</g)].map((match) => match[1].trim());
-    // The AWB-less row prints the shared reference (the id tail); the AWB row
-    // prints no reference at all.
-    expect(printed.filter((value) => value === "00000009")).toHaveLength(1);
-    expect(printed.filter((value) => /^0000000[0-9]$/.test(value))).toHaveLength(1);
-    expect(html).toMatch(/>00000009<\/a>/);
+    });
   });
 
   it("keeps the wide table scrollable rather than clipped", () => {

@@ -9,12 +9,9 @@ import {
   FileText,
   LayoutDashboard,
   PackagePlus,
-  Printer,
   RotateCcw,
   Settings2,
   Truck,
-  Upload,
-  UsersRound,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -49,12 +46,9 @@ const navigationIcons: Record<string, LucideIcon> = {
   contacts: ContactRound,
   dashboard: LayoutDashboard,
   finance: BookOpenText,
-  labels: Printer,
-  members: UsersRound,
   rts: RotateCcw,
   settings: Settings2,
   shipments: Truck,
-  "shipment-import": Upload,
   "shipment-new": PackagePlus,
   "platform-audit": ClipboardList,
   "platform-overview": LayoutDashboard,
@@ -122,7 +116,7 @@ export function CmsNavigation(props: CmsNavigationProps) {
         <SidebarContent>
           {groups.map((group) => (
             <SidebarGroup key={group.label}>
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              {group.label !== "Utama" ? <SidebarGroupLabel>{group.label}</SidebarGroupLabel> : null}
               <SidebarGroupContent>
                 <SidebarMenu>
                   {group.items.map((item) => {

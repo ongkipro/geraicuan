@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ANALYTICS_PRESETS,
-  ANALYTICS_TIMEZONES,
   type AnalyticsPresetId,
 } from "@/lib/analytics-range";
 import { cn } from "@/lib/utils";
@@ -17,7 +16,6 @@ export type DashboardPeriodFilterValues = {
   outletId?: string;
   presetId: AnalyticsPresetId;
   startDate: string;
-  timezone: string;
 };
 
 type DashboardPeriodFilterProps = {
@@ -28,7 +26,7 @@ type DashboardPeriodFilterProps = {
 };
 
 const selectClassName =
-  "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function FilterFields({
   outlets,
@@ -52,19 +50,14 @@ function FilterFields({
           {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
         </select>
       </label></div>
-      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={values.presetId === "kustom" || values.timezone !== "Asia/Jakarta"}>
-        <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Tanggal & zona waktu<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
-        <div className="grid gap-3 pt-3 sm:grid-cols-3">      <label className={fieldClassName} htmlFor="dashboard-dari">
+      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={values.presetId === "kustom"}>
+        <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Tanggal khusus<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
+        <div className="grid gap-3 pt-3 sm:grid-cols-2">      <label className={fieldClassName} htmlFor="dashboard-dari">
         Dari tanggal
         <Input className={controlClassName} defaultValue={values.startDate} id="dashboard-dari" max={todayLocalDate} name="dari" type="date" />
       </label>      <label className={fieldClassName} htmlFor="dashboard-sampai">
         Sampai tanggal
         <Input className={controlClassName} defaultValue={values.endDate} id="dashboard-sampai" max={todayLocalDate} name="sampai" type="date" />
-      </label>      <label className={fieldClassName} htmlFor="dashboard-tz">
-        Zona waktu
-        <select className={cn(selectClassName, controlClassName)} defaultValue={values.timezone} id="dashboard-tz" name="tz">
-          {ANALYTICS_TIMEZONES.map((timezone) => <option key={timezone.id} value={timezone.id}>{timezone.label}</option>)}
-        </select>
       </label></div>
       </details>
     </div>

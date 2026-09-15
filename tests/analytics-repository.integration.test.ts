@@ -333,7 +333,7 @@ function range(timezone: "Asia/Jakarta" | "Asia/Jayapura") {
 
 describe("tenant shipment analytics repository", () => {
   it.each(["Asia/Jakarta", "Asia/Jayapura"] as const)(
-    "uses authoritative event and ledger time in %s",
+    "uses authoritative event and ledger time with %s normalized to WIB",
     async (timezone) => {
       const selected = range(timezone);
       const result = await withTenantContext(
@@ -386,10 +386,7 @@ describe("tenant shipment analytics repository", () => {
       { key: "2026-08-31", createdCount: 2, issuedCount: 1 },
     ]);
     expect(jayapura.generatedAt).toBeInstanceOf(Date);
-    expect(jayapura.points).toEqual([
-      { key: "2026-08-30", createdCount: 1, issuedCount: 0 },
-      { key: "2026-08-31", createdCount: 3, issuedCount: 2 },
-    ]);
+    expect(jayapura.points).toEqual(jakarta.points);
   });
 
   it("uses the selected event basis for supporting rows", async () => {

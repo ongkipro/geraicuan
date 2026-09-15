@@ -200,7 +200,7 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
     return { summary, support, trend, previousTrend };
   })();
   const todayLocalDate = parseAnalyticsRange({ rentang: "hari-ini", tz: range.timezone }, now).startDate;
-  const activeFilterCount = Number(range.presetId !== "7-hari") + Number(range.timezone !== "Asia/Jakarta") + Number(Boolean(selectedOutlet));
+  const activeFilterCount = Number(range.presetId !== "7-hari") + Number(Boolean(selectedOutlet));
   const analyticsQuery = serializeAnalyticsRange(range);
   if (selectedOutlet) analyticsQuery.set("outlet", selectedOutlet.id);
   const analyticsHref = principal.role === "TENANT_ADMIN" ? `/app/analitik?${analyticsQuery.toString()}` : undefined;
@@ -223,7 +223,7 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
       <section aria-labelledby="dashboard-period-heading" className="grid gap-4">
         <h2 className="sr-only" id="dashboard-period-heading">Ringkasan periode</h2>
         <div className="space-y-3">
-          <DashboardPeriodFilter activeCount={activeFilterCount} key={analyticsQuery.toString()} outlets={outletRows} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate, timezone: range.timezone }} />
+          <DashboardPeriodFilter activeCount={activeFilterCount} key={analyticsQuery.toString()} outlets={outletRows} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate }} />
           <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
           {range.issues.length > 0 ? <Alert><AlertTitle>Filter disesuaikan</AlertTitle><AlertDescription><ul className="list-disc pl-5">{range.issues.map((issue, index) => <li key={`${issue}-${index}`}>{analyticsIssueMessage(issue)}</li>)}</ul></AlertDescription></Alert> : null}
           {invalidOutlet ? <Alert variant="destructive"><AlertTitle>Filter outlet ditolak</AlertTitle><AlertDescription>Outlet pada alamat halaman tidak tersedia untuk tenant ini.<div className="mt-3"><Button asChild variant="outline"><Link href="/app">Reset ke filter aman</Link></Button></div></AlertDescription></Alert> : null}

@@ -3,6 +3,11 @@ import "server-only";
 export const UI_AUDIT_HEADER = "x-geraicuan-ui-audit";
 
 export type UiAuditScenario =
+  | "quick-rate-demo"
+  | "quick-rate-empty"
+  | "quick-rate-provider-error"
+  | "quick-rate-error"
+  | "quick-rate-stale"
   | "analytics-first-run"
   | "analytics-page-error"
   | "analytics-stale"
@@ -143,6 +148,7 @@ type UiAuditScenarioContract = {
   mode: "read-only";
   ownerTask?: `T-${number}`;
   route:
+    | "/app/cek-tarif"
     | "/app"
     | "/app/analitik"
     | "/app/impor"
@@ -166,6 +172,11 @@ type UiAuditScenarioContract = {
 };
 
 export const UI_AUDIT_SCENARIO_CONTRACTS = {
+  "quick-rate-demo": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "populated" },
+  "quick-rate-empty": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "healthy-empty" },
+  "quick-rate-provider-error": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "partial-error" },
+  "quick-rate-error": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "route-error" },
+  "quick-rate-stale": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "stale" },
   "bulk-import-error": { mode: "read-only", route: "/app/impor", state: "route-error" },
   "bulk-import-mixed": { mode: "read-only", route: "/app/impor", state: "partial-error" },
   "bulk-import-no-valid": { mode: "read-only", route: "/app/impor", state: "partial-error" },
@@ -312,6 +323,11 @@ const COMMON_PAGE_STATES = [
 ] as const satisfies readonly CmsUiAuditState[];
 
 export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
+  {
+    kind: "page", ownerTask: "T-143", roles: ["TENANT_ADMIN", "OPERATOR"],
+    route: "/app/cek-tarif", source: "src/app/app/cek-tarif/page.tsx",
+    states: [...COMMON_PAGE_STATES, "partial-error", "pending", "primary-success", "stale", "unauthorized"],
+  },
   {
     kind: "page",
     ownerTask: "T-38",
@@ -483,6 +499,11 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
 ] as const satisfies readonly CmsUiAuditRouteContract[];
 
 export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
+  {
+    consumers: ["/app/cek-tarif"], exportName: "checkShippingRates", ownerTask: "T-143",
+    roles: ["TENANT_ADMIN", "OPERATOR"], source: "src/app/app/cek-tarif/actions.ts",
+    states: ["healthy-empty", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
+  },
   {
     consumers: ["/app/kontak"],
     exportName: "searchContacts",

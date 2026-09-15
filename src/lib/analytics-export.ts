@@ -12,7 +12,7 @@ function csvCell(value: string | number | boolean | null) {
 
 export function serializeAnalyticsCsv(rows: ShipmentRow[]) {
   const header = [
-    "shipment_id",
+    "shipment_reference",
     "created_at_utc",
     "issued_at_utc",
     "outlet",
@@ -24,7 +24,7 @@ export function serializeAnalyticsCsv(rows: ShipmentRow[]) {
     "cod_amount_idr",
   ];
   const body = rows.map((row) => [
-    row.shipmentId,
+    row.publicReference,
     row.createdAt.toISOString(),
     row.issuedAt?.toISOString() ?? null,
     row.outletName,

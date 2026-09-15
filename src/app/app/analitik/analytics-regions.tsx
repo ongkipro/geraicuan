@@ -2,6 +2,7 @@ import {
   BadgePercent,
   Boxes,
   CircleAlert,
+  ChevronDown,
   HandCoins,
   Landmark,
   Package,
@@ -67,7 +68,6 @@ import { AnalyticsComparisonCue } from "./comparison-cue";
 import { CourierIssueRateChart } from "./courier-issue-rate-chart";
 import { courierIssueRate, isLowVolumeCourier, lowVolumeLabel, orderCouriersForRanking } from "./courier-volume";
 import { ShipmentTrendChart } from "./shipment-trend-chart";
-import { shipmentReference } from "@/lib/shipment-reference";
 
 const DEFAULT_PAGE_SIZE = 50;
 const countFormatter = new Intl.NumberFormat("id-ID");
@@ -79,7 +79,8 @@ const idrFormatter = new Intl.NumberFormat("id-ID", {
 // `focus:` not `focus-visible:`: these targets only take focus from script (hash, retry), and a
 // mouse-triggered retry would otherwise move focus with no visible ring.
 const focusRing = "rounded-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
-const tableRegion = "rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+const detailTrigger = "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 text-sm font-medium text-primary hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden";
+const tableRegion = "rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export type AnalyticsResolvedRegionProps = {
   activeDimensionCount: number;
@@ -242,7 +243,7 @@ export async function AnalyticsSummaryRegion({
 
   return (
     <section aria-labelledby="analytics-summary-heading" className="space-y-4">
-      <SectionHeading description={`Event ${context.periodLabel} dibanding ${context.previousPeriodLabel}; antrean tindakan adalah snapshot saat halaman dimuat.`} id="analytics-summary-heading" title="Ringkasan operasional" />
+      <SectionHeading id="analytics-summary-heading" title="Ringkasan operasional" />
       <MetricCards className="grid-cols-2 lg:grid-cols-4 [&_[data-slot=card-title]]:min-h-15 md:[&_[data-slot=card-title]]:min-h-10" metrics={operationalMetrics} />
       <div className="space-y-1">
         <DataFreshnessControl formattedGeneratedAt={formatInZone(eventGeneratedAt, context.range.timezone)} generatedAtIso={eventGeneratedAt.toISOString()} initiallyStale={isDataStale(eventGeneratedAt, new Date())} />
@@ -256,18 +257,24 @@ export async function AnalyticsFinancialRegion({ promise }: { promise: Promise<S
   const result = await settle(promise);
   if (!result.ok) return <AnalyticsRegionError description="Ringkasan operasional dan tren tetap tersedia bila berhasil dimuat." focusTargetId="analytics-financial-heading" title="Nilai kiriman tidak dapat dimuat" />;
   const { current: kpis, previous } = result.value;
-  const financialMetrics: Metric[] = [
+  const primaryMetrics: Metric[] = [
+    { context: "Titipan penerima, bukan pendapatan GeraiCUAN.", current: kpis.codPrincipalIdr, icon: Landmark, label: "Pokok COD (liabilitas)", previous: previous.codPrincipalIdr, value: idrFormatter.format(kpis.codPrincipalIdr) },
+    { context: "Pokok COD dikurangi COGS, Ongkir, Layanan, & PPN.", current: kpis.netMarginIdr, icon: TrendingUp, label: "Net Margin (Estimasi)", previous: previous.netMarginIdr, value: idrFormatter.format(kpis.netMarginIdr) },
+  ];
+  const costMetrics: Metric[] = [
     { current: kpis.providerShippingIdr, icon: Truck, label: "Ongkir provider", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
     { current: kpis.codServiceFeeIdr, icon: HandCoins, label: "Biaya layanan COD", previous: previous.codServiceFeeIdr, value: idrFormatter.format(kpis.codServiceFeeIdr) },
     { current: kpis.codVatIdr, icon: Receipt, label: "PPN biaya layanan", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
-    { context: "Titipan penerima, bukan pendapatan GeraiCUAN.", current: kpis.codPrincipalIdr, icon: Landmark, label: "Pokok COD (liabilitas)", previous: previous.codPrincipalIdr, value: idrFormatter.format(kpis.codPrincipalIdr) },
     { current: kpis.cogsIdr, icon: Boxes, label: "COGS / Modal HPP", previous: previous.cogsIdr, value: idrFormatter.format(kpis.cogsIdr) },
-    { context: "Pokok COD dikurangi COGS, Ongkir, Layanan, & PPN.", current: kpis.netMarginIdr, icon: TrendingUp, label: "Net Margin (Estimasi)", previous: previous.netMarginIdr, value: idrFormatter.format(kpis.netMarginIdr) },
   ];
   return (
     <section aria-labelledby="analytics-financial-heading" className="space-y-4">
       <SectionHeading description="Mengikuti tanggal efektif catatan keuangan pada periode terpilih." id="analytics-financial-heading" title="Nilai kiriman" />
-      <MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={financialMetrics} />
+      <MetricCards className="sm:grid-cols-2" metrics={primaryMetrics} />
+      <details className="group border-t pt-2" data-analytics-detail="costs">
+        <summary className={detailTrigger}><span>Lihat rincian biaya</span><ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <div className="pt-3"><MetricCards className="sm:grid-cols-2 lg:grid-cols-4" metrics={costMetrics} /></div>
+      </details>
       <Alert><CircleAlert aria-hidden="true" /><AlertTitle>Pokok COD bukan pendapatan</AlertTitle><AlertDescription>Nilai di atas bukan kas yang sudah diterima. Rekonsiliasi dan sumber ledger tersedia di buku besar.</AlertDescription></Alert>
     </section>
   );
@@ -285,16 +292,17 @@ export async function AnalyticsReconciliationRegion({
 
   const variance = result.value;
   return (
-    <section aria-labelledby="analytics-reconciliation-heading" className="space-y-4">
-      <SectionHeading description="Selisih rekonsiliasi terbaru untuk semua outlet tenant ini. Tidak mengikuti filter periode, outlet, kurir, atau status; bukan pendapatan." id="analytics-reconciliation-heading" title="Selisih rekonsiliasi saat ini" />
-      <MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={[{
-        context: `${countFormatter.format(variance.varianceCount)} hasil rekonsiliasi terbaru masih memiliki selisih.`,
-        current: variance.totalSignedVarianceIdr,
-        href: reconciliationVarianceHref(),
-        icon: Scale,
-        label: "Total selisih (+/−)",
-        value: idrFormatter.format(variance.totalSignedVarianceIdr),
-      }]} />
+    // A streamed page region, not an interruption: `status` like Keuangan, and a real h2 for heading navigation.
+    <section aria-labelledby="analytics-reconciliation-heading">
+    <Alert role="status" variant={variance.varianceCount > 0 ? "destructive" : "default"}>
+      <Scale aria-hidden="true" />
+      <AlertTitle><h2 className={focusRing} id="analytics-reconciliation-heading" tabIndex={-1}>Selisih rekonsiliasi saat ini</h2></AlertTitle>
+      <AlertDescription className="grid gap-2">
+        <p><strong className="font-semibold">{countFormatter.format(variance.varianceCount)} hasil rekonsiliasi</strong> masih memiliki selisih. Total selisih (+/−): <strong className="font-semibold tabular-nums">{variance.totalSignedVarianceIdr > 0 ? "+" : ""}{idrFormatter.format(variance.totalSignedVarianceIdr)}</strong>.</p>
+        <p className="text-xs">Seluruh outlet tenant · tidak mengikuti filter periode, outlet, kurir, atau status · bukan pendapatan.</p>
+        <Button asChild className="min-h-11 w-fit" variant="outline"><Link href={reconciliationVarianceHref()}>Lihat rekonsiliasi</Link></Button>
+      </AlertDescription>
+    </Alert>
     </section>
   );
 }
@@ -327,14 +335,16 @@ export async function AnalyticsTrendRegion({
       <CardContent className="space-y-5">
         <div><p className="text-xs font-medium text-muted-foreground">Data tren</p><DataFreshnessControl formattedGeneratedAt={formatInZone(result.value.generatedAt, context.range.timezone)} generatedAtIso={result.value.generatedAt.toISOString()} initiallyStale={isDataStale(result.value.generatedAt, new Date())} /></div>
         <ShipmentTrendChart data={rows} granularity={context.range.granularity} />
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Data tren dalam tabel</h3>
+        <details className="group border-t pt-2" data-analytics-detail="trend">
+          <summary className={detailTrigger}><span>Lihat data tren <span className="font-normal text-muted-foreground">({countFormatter.format(rows.length)} {context.range.granularity === "harian" ? "hari" : "bulan"})</span></span><ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+          <div className="pt-3">
           <Table className="min-w-[20rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel tren kiriman", role: "region", tabIndex: 0 }}>
             <TableCaption className="px-3 pb-3 text-left">Detail jumlah kiriman dibuat dan resi terbit / {context.periodLabel} / {context.timezoneLabel}</TableCaption>
             <TableHeader><TableRow><TableHead>{context.range.granularity === "harian" ? "Tanggal" : "Bulan"}</TableHead><TableHead className="text-right">Kiriman dibuat</TableHead><TableHead className="text-right">Resi terbit</TableHead></TableRow></TableHeader>
             <TableBody>{rows.map((row) => <TableRow key={row.key}><TableCell className="font-medium" scope="row">{row.label}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.createdCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.issuedCount)}</TableCell></TableRow>)}</TableBody>
           </Table>
-        </div>
+          </div>
+        </details>
       </CardContent>
     </Card>
   );
@@ -376,14 +386,16 @@ export async function AnalyticsCourierRegion({
         {couriers.length > 0 ? (
           <>
             {chartData.length > 0 ? <CourierIssueRateChart data={chartData} /> : null}
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Data performa kurir dalam tabel</h3>
+            <details className="group border-t pt-2" data-analytics-detail="couriers">
+              <summary className={detailTrigger}><span>Lihat detail performa kurir <span className="font-normal text-muted-foreground">({countFormatter.format(couriers.length)})</span></span><ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+              <div className="pt-3">
               <Table className="min-w-[24rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel performa kurir", role: "region", tabIndex: 0 }}>
                 <TableCaption className="px-3 pb-3 text-left">Perbandingan kurir berdasarkan waktu outcome provider / {context.periodLabel} / {context.timezoneLabel}.</TableCaption>
                 <TableHeader><TableRow><TableHead>Kurir</TableHead><TableHead className="text-right">Resi terbit</TableHead><TableHead className="text-right">Outcome terselesaikan</TableHead><TableHead className="text-right">Tingkat penerbitan</TableHead></TableRow></TableHeader>
                 <TableBody>{couriers.map((row) => <TableRow key={row.courier}><TableCell className="font-medium uppercase" scope="row">{row.courier}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.issuedCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.resolvedSubmissionCount)}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.rate)}%{row.lowVolume ? <span className="block text-xs text-muted-foreground">{lowVolumeLabel(row)}</span> : null}</TableCell></TableRow>)}</TableBody>
               </Table>
-            </div>
+              </div>
+            </details>
           </>
         ) : <p className="py-4 text-sm text-muted-foreground">Belum ada outcome provider yang terselesaikan pada filter ini.</p>}
       </CardContent>
@@ -439,10 +451,10 @@ export async function AnalyticsShipmentRegion({
           {shipmentPage.rows.map((row) => {
             const status = SHIPMENT_STATUS_PRESENTATION[row.status];
             const detailHref = analyticsShipmentDetailHref(context.role, row.shipmentId);
-            const reference = shipmentReference(row.shipmentId);
+            const reference = row.publicReference;
             return (
               <TableRow key={row.shipmentId}>
-                <TableCell className="sticky left-0 z-10 bg-background font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline md:min-h-0" href={detailHref}>{reference}</Link> : reference}</TableCell>
+                <TableCell className="sticky left-0 z-10 bg-background font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 max-w-40 items-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:underline md:min-h-0" href={detailHref}>{reference}</Link> : reference}</TableCell>
                 <TableCell>{formatInZone(row.createdAt, context.range.timezone)}</TableCell>
                 <TableCell>{row.issuedAt ? formatInZone(row.issuedAt, context.range.timezone) : "—"}</TableCell>
                 <TableCell>{row.outletName}</TableCell>
@@ -475,19 +487,19 @@ export function AnalyticsSummarySkeleton() {
 }
 
 export function AnalyticsFinancialSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat nilai kiriman" className="space-y-4"><Skeleton className="h-6 w-40" /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => statCardSkeleton(index))}</div></div>;
+  return <div aria-busy="true" aria-label="Memuat nilai kiriman" className="space-y-4"><Skeleton className="h-6 w-40" /><div className="grid gap-4 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => statCardSkeleton(index))}</div><Skeleton className="h-11 w-full" /></div>;
 }
 
 export function AnalyticsReconciliationSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat exception rekonsiliasi" className="space-y-4"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-72 max-w-full" /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{statCardSkeleton(0)}</div></div>;
+  return <div aria-busy="true" aria-label="Memuat exception rekonsiliasi" className="grid gap-3 rounded-md border p-4"><Skeleton className="h-5 w-48" /><Skeleton className="h-4 w-full max-w-lg" /><Skeleton className="h-11 w-40" /></div>;
 }
 
 export function AnalyticsTrendSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat tren analitik" className="space-y-4 rounded-xl p-4 ring-1 ring-foreground/10 lg:col-span-full"><Skeleton className="h-5 w-44" /><Skeleton className="h-72 w-full" /><Skeleton className="h-24 w-full" /></div>;
+  return <div aria-busy="true" aria-label="Memuat tren analitik" className="space-y-4 rounded-xl p-4 ring-1 ring-foreground/10 lg:col-span-full"><Skeleton className="h-5 w-44" /><Skeleton className="h-72 w-full" /><Skeleton className="h-11 w-full" /></div>;
 }
 
 export function AnalyticsCourierSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat performa kurir" className="space-y-4 rounded-xl p-4 ring-1 ring-foreground/10 lg:col-span-full"><Skeleton className="h-5 w-40" /><Skeleton className="h-40 w-full" />{Array.from({ length: 3 }, (_, index) => <Skeleton className="h-10 w-full" key={index} />)}</div>;
+  return <div aria-busy="true" aria-label="Memuat performa kurir" className="space-y-4 rounded-xl p-4 ring-1 ring-foreground/10 lg:col-span-full"><Skeleton className="h-5 w-40" /><Skeleton className="h-40 w-full" /><Skeleton className="h-11 w-full" /></div>;
 }
 
 export function AnalyticsShipmentSkeleton() {

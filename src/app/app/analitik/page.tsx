@@ -43,7 +43,6 @@ import { buildAnalyticsDecisionContext } from "@/lib/analytics-decision-context"
 import { parseTenantAnalyticsQuery, type TenantAnalyticsIssue } from "@/lib/analytics-filters";
 import {
   ANALYTICS_PRESETS,
-  ANALYTICS_TIMEZONES,
   analyticsIssueMessage,
   parseAnalyticsRange,
 } from "@/lib/analytics-range";
@@ -62,15 +61,14 @@ type AnalyticsPageProps = {
 
 type FilterChip = { href: string; label: string };
 
-function withoutFilter(query: URLSearchParams, key: "basis" | "kurir" | "outlet" | "rentang" | "status" | "tz") {
+function withoutFilter(query: URLSearchParams, key: "basis" | "kurir" | "outlet" | "rentang" | "status") {
   const params = new URLSearchParams(query);
   params.delete("halaman");
   if (key === "rentang") {
     params.set("rentang", "30-hari");
     params.delete("dari");
     params.delete("sampai");
-  } else if (key === "tz") {
-    params.set("tz", "Asia/Jakarta");
+
   } else if (key === "basis") {
     params.delete("basis");
   } else {
@@ -171,10 +169,9 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
   const exportHref = `/app/analitik/export.csv?${canonicalQueryString}`;
   const selectedOutlet = baseData.filterOptions.outlets.find((outlet) => outlet.id === filters.outletId);
   const activeDimensionCount = Number(Boolean(filters.outletId)) + Number(Boolean(filters.courier)) + Number(Boolean(filters.lifecycleStatus));
-  const activeCount = activeDimensionCount + Number(range.presetId !== "30-hari") + Number(range.timezone !== "Asia/Jakarta") + Number(eventBasis !== "created");
+  const activeCount = activeDimensionCount + Number(range.presetId !== "30-hari") + Number(eventBasis !== "created");
   const chips: FilterChip[] = [];
   if (range.presetId !== "30-hari") chips.push({ href: withoutFilter(canonicalQuery, "rentang"), label: `Periode: ${ANALYTICS_PRESETS.find((item) => item.id === range.presetId)?.label ?? decisionContext.periodLabel}` });
-  if (range.timezone !== "Asia/Jakarta") chips.push({ href: withoutFilter(canonicalQuery, "tz"), label: `Zona: ${ANALYTICS_TIMEZONES.find((item) => item.id === range.timezone)?.label ?? range.timezone}` });
   if (selectedOutlet) chips.push({ href: withoutFilter(canonicalQuery, "outlet"), label: `Outlet: ${selectedOutlet.name}` });
   if (filters.courier) chips.push({ href: withoutFilter(canonicalQuery, "kurir"), label: `Kurir: ${filters.courier}` });
   if (filters.lifecycleStatus) chips.push({ href: withoutFilter(canonicalQuery, "status"), label: `Lifecycle: ${SHIPMENT_STATUS_PRESENTATION[filters.lifecycleStatus].label}` });
@@ -188,7 +185,6 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     outletId: filters.outletId,
     presetId: range.presetId,
     startDate: range.startDate,
-    timezone: range.timezone,
   };
   const todayLocalDate = parseAnalyticsRange({ rentang: "hari-ini", tz: range.timezone }, now).startDate;
   const regionContext: AnalyticsResolvedRegionProps = {
@@ -214,7 +210,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
 
   return (
     <PageContainer width="wide">
-      <PageHeader eyebrow="Wawasan" description="Ringkasan operasional dan nilai kiriman mengikuti filter; exception tenant-wide ditandai terpisah." actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} focusTargetId="analytics-page-heading" title="Analitik" />
+      <PageHeader eyebrow="Wawasan" description="Pantau aktivitas kiriman, performa kurir, dan rincian biaya." actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} focusTargetId="analytics-page-heading" title="Analitik" />
 
       <AnalyticsFilters key={canonicalQueryString} activeCount={activeCount} options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} />
 
@@ -230,12 +226,12 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
         <>
           <span aria-live="polite" className="sr-only">Analitik dimuat per bagian.</span>
           <Suspense fallback={<AnalyticsSummarySkeleton />}><AnalyticsSummaryRegion context={regionContext} promise={reads.summary} /></Suspense>
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-7">
+          <Suspense fallback={<AnalyticsReconciliationSkeleton />}><AnalyticsReconciliationRegion promise={reads.reconciliationVariance} /></Suspense>
+          <div className="grid grid-cols-1 items-start gap-4">
             <Suspense fallback={<AnalyticsTrendSkeleton />}><AnalyticsTrendRegion context={regionContext} promise={reads.trend} /></Suspense>
             <Suspense fallback={<AnalyticsCourierSkeleton />}><AnalyticsCourierRegion context={regionContext} promise={reads.courier} /></Suspense>
           </div>
           <Suspense fallback={<AnalyticsFinancialSkeleton />}><AnalyticsFinancialRegion promise={reads.summary} /></Suspense>
-          <Suspense fallback={<AnalyticsReconciliationSkeleton />}><AnalyticsReconciliationRegion promise={reads.reconciliationVariance} /></Suspense>
           <Suspense fallback={<AnalyticsShipmentSkeleton />}><AnalyticsShipmentRegion comparisonPromise={reads.comparison} context={regionContext} promise={reads.shipment} requestedPage={requestedPage} /></Suspense>
         </>
       ) : null}

@@ -32,6 +32,7 @@ const fixture = vi.hoisted(() => ({
       occurredAt: new Date("2026-08-31T08:00:00.000Z"),
       outletName: "Outlet dashboard",
       shipmentId: "00000000-0000-3602-0000-000000000001",
+      publicReference: "95758-260831-001",
       status: "ISSUED" as const,
     }],
     totalCount: 1,
@@ -46,6 +47,7 @@ const fixture = vi.hoisted(() => ({
     outletName: string;
     recipientName: string;
     shipmentId: string;
+    publicReference: string;
     status: "AWAITING_UPSTREAM_PAYMENT" | "DRAFT" | "FAILED" | "ISSUED" | "SUBMISSION_UNKNOWN";
     updatedAt: Date;
   }>>>(async () => []),
@@ -143,6 +145,8 @@ describe("analytics-led tenant dashboard", () => {
     expect(html).toContain("Ringkasan periode");
     expect(html).toContain('value="7-hari" selected=""');
     expect(html).toContain("WIB (UTC+07:00)");
+    expect(html).not.toMatch(/name="tz"/);
+    expect(html).not.toContain("Tanggal &amp; zona waktu");
     expect(html).toContain("Kiriman dibuat");
     expect(html).toContain("Kiriman COD");
     expect(html).toContain("Kiriman non-COD");
@@ -306,17 +310,17 @@ describe("analytics-led tenant dashboard", () => {
   };
   type ShipmentRow = Awaited<ReturnType<typeof fixture.shipments>>[number];
   const shipment = (suffix: string, recipientName: string, status: ShipmentRow["status"], updatedAt: string, awb: string | null = null): ShipmentRow => ({
-    awb, destinationAreaLabel: `Area ${recipientName}`, outletName: "Outlet dashboard", recipientName, shipmentId: `00000000-0000-3603-0000-${suffix.padStart(12, "0")}`, status, updatedAt: new Date(updatedAt),
+    awb, destinationAreaLabel: `Area ${recipientName}`, outletName: "Outlet dashboard", recipientName, shipmentId: `00000000-0000-3603-0000-${suffix.padStart(12, "0")}`, publicReference: `95758-260831-${parseInt(suffix, 16).toString().padStart(3, "0")}`, status, updatedAt: new Date(updatedAt),
   });
 
   it("merges recent and actionable shipments into one compact card, each shipment once, actionable first", async () => {
     const payment = "00000000-0000-3603-0000-0000000000a1";
     const draft = "00000000-0000-3603-0000-0000000000b2";
     const issued = "00000000-0000-3603-0000-0000000000c3";
-    const paymentRow = { awb: null, destinationAreaLabel: "Bandung", outletName: "Outlet dashboard", recipientName: "Penerima Satu", shipmentId: payment, status: "AWAITING_UPSTREAM_PAYMENT" as const, updatedAt: new Date("2026-08-31T11:00:00.000Z") };
-    const draftRow = { awb: null, destinationAreaLabel: "Bogor", outletName: "Outlet dashboard", recipientName: "Penerima Dua", shipmentId: draft, status: "DRAFT" as const, updatedAt: new Date("2026-08-31T11:55:00.000Z") };
+    const paymentRow = { awb: null, destinationAreaLabel: "Bandung", outletName: "Outlet dashboard", recipientName: "Penerima Satu", shipmentId: payment, publicReference: "95758-260831-161", status: "AWAITING_UPSTREAM_PAYMENT" as const, updatedAt: new Date("2026-08-31T11:00:00.000Z") };
+    const draftRow = { awb: null, destinationAreaLabel: "Bogor", outletName: "Outlet dashboard", recipientName: "Penerima Dua", shipmentId: draft, publicReference: "95758-260831-178", status: "DRAFT" as const, updatedAt: new Date("2026-08-31T11:55:00.000Z") };
     // Newest overall, but not actionable: it must follow the actionable rows.
-    const issuedRow = { awb: "AWB-DASH-3603", destinationAreaLabel: "Cirebon", outletName: "Outlet dashboard", recipientName: "Penerima Tiga", shipmentId: issued, status: "ISSUED" as const, updatedAt: new Date("2026-08-31T11:58:00.000Z") };
+    const issuedRow = { awb: "AWB-DASH-3603", destinationAreaLabel: "Cirebon", outletName: "Outlet dashboard", recipientName: "Penerima Tiga", shipmentId: issued, publicReference: "95758-260831-195", status: "ISSUED" as const, updatedAt: new Date("2026-08-31T11:58:00.000Z") };
     fixture.shipments.mockImplementation(async (_tx, _context, input) =>
       input.mode === "actionable" ? [paymentRow, draftRow] : [issuedRow, draftRow, paymentRow]);
 
@@ -335,6 +339,8 @@ describe("analytics-led tenant dashboard", () => {
     expect(items[0]).toContain("Pulihkan pembayaran");
     expect(items[1]).toContain(`href="/app/pengiriman/baru?draft=${draft}"`);
     expect(items[1]).toContain("Bogor");
+    expect(items[1].replace(/<[^>]+>/g, " ")).toContain("95758-260831-178");
+    expect(items[1].replace(/<[^>]+>/g, " ")).not.toContain(draft);
     // Visible time is the short absolute WIB time; the full instant stays in dateTime.
     expect(items[1].replaceAll("<!-- -->", "")).toMatch(/<time[^>]*dateTime="2026-08-31T11:55:00.000Z"[^>]*>31 Agu, 18\.55<span class="sr-only"> WIB<\/span><\/time>/);
     // The issued outcome keeps its destination and AWB, with no next-action button.

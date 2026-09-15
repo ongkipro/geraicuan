@@ -40,7 +40,7 @@ export function OutletSettingsWorkspace({
         <button
           aria-controls="outlet-navigation-list"
           aria-expanded={open}
-          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 xl:hidden"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring xl:hidden"
           onClick={() => setOpen((current) => !current)}
           type="button"
         >
@@ -75,7 +75,7 @@ export function OutletSettingsWorkspace({
                       1280px. */}
                   <Link
                     aria-current={active ? "true" : undefined}
-                    className={`flex min-h-11 items-start gap-2 rounded-md px-3 py-2 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50 ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                    className={`flex min-h-11 items-start gap-2 rounded-md px-3 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                     href={`/app/pengaturan?outlet=${encodeURIComponent(outlet.id)}#outlet-detail-title`}
                     onClick={() => setOpen(false)}
                   >

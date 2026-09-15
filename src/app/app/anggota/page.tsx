@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { Metadata } from "next";
-import { CircleAlert, Users } from "lucide-react";
+import { CircleAlert, LockKeyhole, Users } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -127,10 +127,10 @@ export default async function TenantMembersPage() {
       >
         <div className="grid min-w-0 gap-8">
           {activeAdminCount === 1 ? (
-            <Alert className="lg:max-w-xl">
+            <Alert>
               <CircleAlert aria-hidden="true" />
               <AlertTitle>Hanya satu Tenant Admin aktif</AlertTitle>
-              <AlertDescription>Admin terakhir tidak dapat diturunkan perannya atau dinonaktifkan. Undang Tenant Admin lain terlebih dahulu untuk menjaga akses tenant.</AlertDescription>
+              <AlertDescription>Admin terakhir tidak dapat diturunkan perannya atau dinonaktifkan. Undang Tenant Admin lain agar akses tenant tetap terjaga.</AlertDescription>
             </Alert>
           ) : null}
 
@@ -154,7 +154,7 @@ export default async function TenantMembersPage() {
           <ContentSection
             contentClassName="lg:max-w-none"
             headingLevel={2}
-            description="Anggota aktif ditampilkan lebih dulu. Buka kontrol hanya pada anggota yang ingin dikelola."
+            description="Kelola peran dan akses setiap anggota. Anggota aktif ditampilkan lebih dulu."
             id="tenant-members-title"
             title="Daftar anggota"
           >
@@ -173,17 +173,17 @@ export default async function TenantMembersPage() {
                     const roleLabel = member.role === "TENANT_ADMIN" ? "Tenant Admin" : "Operator";
                     const statusLabel = member.status === "ACTIVE" ? "Aktif" : "Nonaktif";
                     return (
-                      <li className="grid min-w-0 gap-3 px-4 py-3" key={member.id}>
+                      <li className="grid min-w-0 gap-3 px-4 py-4" key={member.id}>
                         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="grid min-w-0 gap-0.5">
-                            <p className="text-sm font-medium" id={`member-name-${member.id}`}>{member.name}{isCurrentUser ? " (Anda)" : ""}</p>
+                            <p className="text-sm font-semibold leading-6 [overflow-wrap:anywhere]" id={`member-name-${member.id}`}>{member.name}{isCurrentUser ? " (Anda)" : ""}</p>
                             <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" title={member.email}>{member.email}</p>
                             <p className="text-xs text-muted-foreground">Diperbarui {updatedAtFormatter.format(member.updatedAt)} WIB</p>
                           </div>
                           <div aria-label={`Peran ${roleLabel}; status ${statusLabel}`} className="flex shrink-0 flex-wrap gap-2 sm:justify-end" role="group">
                             <Badge variant="outline">{roleLabel}</Badge>
                             <Badge variant={member.status === "ACTIVE" ? "secondary" : "outline"}>{statusLabel}</Badge>
-                            {isLastActiveAdmin ? <Badge variant="destructive">Admin terakhir</Badge> : null}
+                            {isLastActiveAdmin ? <Badge variant="outline"><LockKeyhole aria-hidden="true" />Admin terakhir</Badge> : null}
                           </div>
                         </div>
                         <MemberControls
@@ -205,7 +205,7 @@ export default async function TenantMembersPage() {
           </ContentSection>
 
           <ContentSection
-            description="Tambahkan akun GeraiCUAN yang sudah aktif."
+            description="Berikan akses tenant kepada akun GeraiCUAN yang sudah aktif."
             headingLevel={2}
             id="invite-member-title"
             title="Undang anggota"

@@ -448,6 +448,22 @@ describe("design token contrast", () => {
     expect(contrast(token("--primary-foreground"), token("--primary-hover"))).toBeGreaterThanOrEqual(4.5);
   });
 
+  it("shares the accepted blue accent between actions and sidebar navigation", () => {
+    expect(token("--primary")).toEqual(parse("#2e47ba"));
+    for (const [sidebar, shared] of [
+      ["--sidebar-primary", "--primary"],
+      ["--sidebar-primary-foreground", "--primary-foreground"],
+      ["--sidebar-accent", "--accent"],
+      ["--sidebar-accent-foreground", "--accent-foreground"],
+      ["--sidebar-ring", "--ring"],
+    ] as const) {
+      expect(token(sidebar), sidebar).toEqual(token(shared));
+    }
+    expect(contrast(token("--sidebar-accent-foreground"), token("--sidebar-accent")))
+      .toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token("--sidebar-ring"), token("--sidebar"))).toBeGreaterThanOrEqual(3);
+  });
+
   it("paints a focus ring that meets the 3:1 WCAG 1.4.11 asks of it", () => {
     // Nothing defined `--ring` at all, so the global rule
     // `:focus-visible { outline: 3px solid var(--ring) }` and every
@@ -468,9 +484,9 @@ describe("design token contrast", () => {
     const painter = cssRules.find(
       (rule) => rule.selector === ":focus-visible"
         && appliesOnScreen(rule)
-        && /^3px solid var\(--ring\)$/.test(rule.declarations.get("outline") ?? ""),
+        && /^2px solid var\(--ring\)$/.test(rule.declarations.get("outline") ?? ""),
     );
-    expect(painter, "the global :focus-visible outline rule").toBeDefined();
+    expect(painter, "the base-layer native :focus-visible fallback").toBeDefined();
 
     // And nothing may switch the ring back off, by any of the properties that
     // make an outline invisible. Independent review turned it off three ways
@@ -567,12 +583,12 @@ describe("design token contrast", () => {
       .not.toMatch(/@apply[^;]*\boutline-ring\/\d+/);
   });
 
-  it("includes the neutral dark palette without automatic activation", () => {
+  it("includes the blue dark companion without automatic activation", () => {
     const dark = cssRules.find((rule) => rule.selector === ".dark");
     expect(dark).toBeDefined();
     expect(dark?.declarations.get("--background")).toBe("oklch(0.145 0 0)");
-    // T-118: shadcn neutral, near-white primary on the dark ground.
-    expect(dark?.declarations.get("--primary")).toBe("oklch(0.922 0 0)");
+    // T-132: lighter blue keeps dark labels and links readable.
+    expect(dark?.declarations.get("--primary")).toBe("#a5b4fc");
     expect(dark?.declarations.get("--input")).toBe("oklch(1 0 0 / 15%)");
   });
 
@@ -673,6 +689,18 @@ describe("design token contrast", () => {
       expect(contrast(darkToken("--ring"), darkToken(ground)), `dark --ring on ${ground}`)
         .toBeGreaterThanOrEqual(3);
     }
+    for (const [sidebar, shared] of [
+      ["--sidebar-primary", "--primary"],
+      ["--sidebar-primary-foreground", "--primary-foreground"],
+      ["--sidebar-accent", "--accent"],
+      ["--sidebar-accent-foreground", "--accent-foreground"],
+      ["--sidebar-ring", "--ring"],
+    ] as const) {
+      expect(darkToken(sidebar), `dark ${sidebar}`).toEqual(darkToken(shared));
+    }
+    expect(contrast(darkToken("--sidebar-accent-foreground"), darkToken("--sidebar-accent")))
+      .toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkToken("--sidebar-ring"), darkToken("--sidebar"))).toBeGreaterThanOrEqual(3);
     for (const stroke of ["--chart-4", "--chart-2"]) {
       expect(contrast(darkToken(stroke), darkToken("--card")), `dark ${stroke}`).toBeGreaterThanOrEqual(3);
     }

@@ -8,6 +8,8 @@ import { DataTablePagination, getPageNumbers } from "@/components/cms/data-table
 import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { ContentSection, SettingsLayout } from "@/components/cms/settings-layout";
 import { StatCard } from "@/components/cms/stat-card";
+import { DataTableShell } from "@/components/cms/data-table-shell";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
@@ -30,6 +32,31 @@ const render = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderTo
 function tagsWith(html: string, tag: string, marker: string) {
   return [...html.matchAll(new RegExp(`<${tag}\\b[^>]*>`, "g"))].map((m) => m[0]).filter((t) => t.includes(marker));
 }
+
+describe("Table scroll semantics", () => {
+  const body = createElement(TableBody, null, createElement(TableRow, null, createElement(TableCell, null, "Complete reference")));
+
+  it("keeps the accessible name, description and focus on the actual scroll region", () => {
+    const html = render(createElement(Table, {
+      containerProps: { role: "region", tabIndex: 0, "aria-label": "Shipment queue", "aria-describedby": "queue-help" },
+    }, body));
+    const [region] = tagsWith(html, "div", 'role="region"');
+    expect(region).toContain('data-slot="table-container"');
+    expect(region).toContain('aria-label="Shipment queue"');
+    expect(region).toContain('aria-describedby="queue-help"');
+    expect(region).toContain('tabindex="0"');
+    // Width is unknown during SSR, so no misleading hint or dangling description.
+    expect(tagsWith(html, "p", "hidden")).toHaveLength(1);
+    expect(html).toContain("Complete reference");
+  });
+
+  it("retains one measured scroll owner when a plain Table is inside DataTableShell", () => {
+    const html = render(DataTableShell({ label: "Supporting rows", children: createElement(Table, null, body) }));
+    expect(tagsWith(html, "div", 'role="region"')).toHaveLength(1);
+    expect(tagsWith(html, "div", 'data-slot="table-scroll-shell"')).toHaveLength(1);
+    expect(tagsWith(html, "table", 'data-slot="table"')).toHaveLength(1);
+  });
+});
 
 describe("StatCard", () => {
   it("is one link named 'title: value' when it has a destination", () => {

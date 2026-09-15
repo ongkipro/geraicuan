@@ -45,7 +45,7 @@ describe("rendered CMS shell", () => {
       match[1].replace(/<[^>]*>/g, "").trim(),
     );
     expect(current).toEqual(["Kontak"]);
-    for (const label of ["Ringkasan", "Kiriman", "Retur (RTS)", "Analitik", "Keuangan", "Outlet &amp; koneksi", "Anggota &amp; akses"]) {
+    for (const label of ["Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Analitik", "Keuangan", "Pengaturan"]) {
       expect(html).toContain(`<span>${label}</span>`);
     }
   });

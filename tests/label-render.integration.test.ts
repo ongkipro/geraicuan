@@ -39,8 +39,9 @@ const mocks = vi.hoisted(() => ({
     providerCodAmountIdr: number | null;
     providerService: string;
     recipientName: string;
-    recipientPhoneMasked: string;
+    recipientPhone: string;
     shipmentId: string;
+    publicReference: string;
     status: "AWAITING_UPSTREAM_PAYMENT" | "ISSUED";
   }>,
 }));
@@ -126,6 +127,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
       phone: "081211110000",
     },
     shipmentId: SHIPMENT_ID,
+    publicReference: "95758-260901-431",
     shippingAmountIdr: 8_000,
     ...overrides,
   };
@@ -211,8 +213,9 @@ describe("label route render contracts", () => {
       providerCodAmountIdr: null,
       providerService: "REG",
       recipientName: "Penerima Label",
-      recipientPhoneMasked: "•••• 8765",
+      recipientPhone: "081299998765",
       shipmentId: SHIPMENT_ID,
+      publicReference: "95758-260901-431",
       status: "ISSUED",
     });
     const html = await renderIndex();
@@ -224,6 +227,8 @@ describe("label route render contracts", () => {
     expect(scroller).toContain('tabindex="0"');
     expect(html.match(/sticky left-0/g)).toHaveLength(2);
     expect(html).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/label\//);
+    expect(html).toContain("081299998765");
+    expect(html).not.toContain("••••");
     expect(html).toContain("Permintaan cetak");
     expect(html).not.toMatch(/>Cetak<\/th>/);
   });
@@ -288,6 +293,8 @@ describe("physical LabelSheet contract", () => {
     expect(html.match(/class="label-payment"/g)).toHaveLength(1);
     expect(html.match(/class="label-footer"/g)).toHaveLength(1);
     expect(html).toContain("JNE-LABEL-000431");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260901-431");
+    expect(html.replace(/<[^>]+>/g, " ")).not.toContain(SHIPMENT_ID);
     expect(html).toContain("Penerima Label");
     expect(html).toContain("Pengirim Label");
     expect(html).not.toContain("label-hide");

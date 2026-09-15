@@ -35,8 +35,15 @@ try {
 
   for (const migration of migrations.slice(0, destinationAuthorityIndex)) {
     const sql = await readFile(join(migrationsDirectory, migration), "utf8");
-    for (const statement of sql.split("--> statement-breakpoint").map((part) => part.trim()).filter(Boolean)) {
-      await client.query(statement);
+    await client.query("BEGIN");
+    try {
+      for (const statement of sql.split("--> statement-breakpoint").map((part) => part.trim()).filter(Boolean)) {
+        await client.query(statement);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     }
   }
 
@@ -132,8 +139,15 @@ try {
 
   for (const migration of migrations.slice(destinationAuthorityIndex)) {
     const sql = await readFile(join(migrationsDirectory, migration), "utf8");
-    for (const statement of sql.split("--> statement-breakpoint").map((part) => part.trim()).filter(Boolean)) {
-      await client.query(statement);
+    await client.query("BEGIN");
+    try {
+      for (const statement of sql.split("--> statement-breakpoint").map((part) => part.trim()).filter(Boolean)) {
+        await client.query(statement);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     }
   }
 
@@ -184,6 +198,23 @@ try {
     !contactsPolicy.some(({ policyname }) => policyname === "contacts_active_tenant")
   ) {
     throw new Error("Representative fixture or tenant isolation policy was not preserved.");
+  }
+
+  const { rows: references } = await client.query(`
+    SELECT public_reference, reference_date, daily_sequence, created_by_user_id
+    FROM shipments WHERE id = '00000000-0000-0000-0000-000000000903'
+  `);
+  if (!/^00000-\d{6}-001$/.test(references[0]?.public_reference ?? "") || references[0].created_by_user_id !== null) {
+    throw new Error("Legacy shipment reference was not backfilled without inventing a creator.");
+  }
+  const { rows: nextReference } = await client.query(`
+    INSERT INTO shipments (tenant_id, outlet_id, created_at)
+    SELECT tenant_id, outlet_id, created_at FROM shipments
+    WHERE id = '00000000-0000-0000-0000-000000000903'
+    RETURNING public_reference, daily_sequence
+  `);
+  if (nextReference[0]?.daily_sequence !== 2 || nextReference[0].public_reference === references[0].public_reference) {
+    throw new Error("Backfilled daily counter did not continue without reusing a reference.");
   }
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);

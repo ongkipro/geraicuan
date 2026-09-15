@@ -335,7 +335,7 @@ describe("contact Server Actions", () => {
     expect(mocks.added).toEqual([]);
   });
 
-  it("serializes only masked phones from active or archived searches", async () => {
+  it("returns complete phones to an authorized tenant contact search", async () => {
     const rawPhone = "081234567890";
     mocks.searchRows.push({
       archivedAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -358,11 +358,11 @@ describe("contact Server Actions", () => {
         isRecipient: true,
         isSender: false,
         name: "Kontak Arsip",
-        phoneMasked: "•••• 7890",
+        phone: rawPhone,
       }],
       searched: true,
     });
-    expect(JSON.stringify(state)).not.toContain(rawPhone);
+    expect(JSON.stringify(state)).toContain(rawPhone);
     expect(mocks.searches).toEqual([{ query: "Arsip", status: "archived" }]);
 
     const invalid = new FormData();

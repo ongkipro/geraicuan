@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-14
+Updated: 2026-09-15
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -30,6 +30,20 @@ covers the whole worktree and further Phase 10 tasks will change it again.
 security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
 
+## Analytics simplification — T-145 (2026-09-15)
+
+`/app/analitik` now shows reconciliation directly after the operational summary, keeps charts, COD principal and estimated margin visible, and places the daily trend table, courier table and four secondary cost cards in closed native disclosures. Shared chart SVGs carry a visible keyboard focus outline. No metric formula, query, role, export or pagination behavior changed.
+
+Verification: TypeScript, scoped ESLint and 69 focused tests pass; seven mutations each fail one guard; 9 analytics browser observations (1440/390/320, disclosures, KPI link, pagination, empty/error) and 4 chart-focus measurements pass. Independent review failed once (restored `Wawasan` eyebrow, reconciliation live-region semantics, tightened guards) and then passed. Changes remain local and uncommitted on `feat/phase14-completion`.
+
+## Latest accepted refinement — T-139–T-141 (2026-09-15)
+
+The existing PRD and AI development map now describe PR-34–PR-37 and their parallel implementation. Header page search, a live WIB clock, unified Pengaturan, Histori kiriman, fixed-WIB filters and complete tenant operational numbers are integrated in `feat/phase14-completion` over `199c3d9`. T-132–T-138 work is preserved.
+
+Verification:203 focused tests,34 isolated DB tests, TypeScript/lint/build,12 header role/viewport observations and18 operation observations pass. Independent source and visual review accept the implementation; the strengthened DOM keyboard replay and successor boundary verification are recorded in BUILD-LOG. Native keyboard delivery remains an explicit environment limitation.
+
+The implementation ledger's late dirty-path accounting failure is retained honestly; successor `RUN-20260914T183048Z-4df2745b` owns final R3 verification. Latest changes remain local and uncommitted. The local account database on55450 is preserved; validation used a separate55451 database.
+
 ## Current continuation — T-126 onward (2026-09-14)
 
 Authoritative execution worktree: `/home/ongki/Projects/geraicuan-completion`,
@@ -44,8 +58,32 @@ corrected probe now tests these explicitly. The final route sweep covers all 66 
 verification passed all 655 tests in 82 files, and the production build exited 0.
 See the latest T-126 BUILD-LOG entry for findings and independent review limits.
 
-T-127 resolved long AWBs. T-129 resolved batch reference collisions. T-131 reconciled design prose; T-134 resolved Admin/Super Admin count summaries, filters, table headers and card alignment. Latest full integration passes83files; production build passes. Final browser parity covers18observations with487actual focus probes, plus nine role observations and scoped filter flows. T-126–T-131, T-133 and T-134 are complete. T-132 is the sole remaining task in this authorized follow-up scope: it requires an explicit replacement palette decision. Current neutral identity is retained consistently across Admin/Super Admin. Resume with that decision, designer review, token contrast tests and the requested three-width sweep; do not infer approval from elapsed time.
-Visual parity has independent bounded acceptance; generic loading geometry and native-key delivery limits remain explicit in BUILD-LOG. No deployment readiness, commit or push is claimed.
+T-127 resolved long AWBs. T-129 resolved batch reference collisions. T-131 reconciled design prose; T-134 resolved Admin/Super Admin count summaries, filters, table headers and card alignment. Latest full integration passes83files; production build passes. Final browser parity covers18observations with487actual focus probes, plus nine role observations and scoped filter flows. All follow-up tasks T-126–T-134 are complete. The owner accepted the blue recommendation with the subsequent visual-refinement instruction. T-132 applies shared blue interaction/sidebar tokens with a dormant dark companion. Its66route/viewport sweep,12theme/scope observations and independent40-screenshot review pass; no palette decision remains pending. Neutral surfaces, semantic status colours, charts and layout remain intact.
+Visual parity has independent bounded acceptance; generic loading geometry, native-key delivery and native-hover capture limits remain explicit in BUILD-LOG. Baseline199c3d9 was committed and pushed to the public repository; the subsequent T-132 palette edits are local and uncommitted. No deployment readiness or deployment is claimed.
+
+## Table UX refinement — T-135 (2026-09-14)
+
+The owner-authorized analysis and refinement is complete in the same completion worktree. Shared tables now expose a hint above genuinely overflowing regions, consistent opaque headers and pinned-column dividers, row focus/selection continuity, stable mobile pagination, and complete wrapping platform tenant names. The change keeps server data, permissions, URL filters and page links intact. T-132 colour source and its test remain unchanged.
+
+T-135 evidence:84focused tests, TypeScript/lint, optimized production build,30route/viewport observations (45table observations), a final interaction replay, and independent visual/correctness review. Native ArrowRight delivery is unverified in the headless browser; programmatic native-region scrolling and focus are verified. BUILD-LOG and ledger `RUN-20260914T163359Z-3c55b10f` retain failed harness attempts and precise limits. Palette and table refinements remain local and uncommitted; the public remote still holds199c3d9. Earlier residual Phase12 features remain open.
+
+## Local Mengantar connection — T-136 (2026-09-15)
+
+Existing stored Mengantar credentials are connected to local development at `http://100.127.67.86:3127`. The configured official pickup is saved in the local fixture outlet and persists after reload. The device-only launcher derives the runtime origin from that pickup because the previously stored origin differs; the canonical secrets store is unchanged. Restart with `secrets-env run -- node /home/ongki/.config/ai-local/geraicuan-dev.mjs` from this device. The launcher targets the completion worktree and local database on55450.
+
+Read-only account, area and rate calls pass. A legitimate multiline street address in another pickup previously prevented all options from loading; the narrow normalization repair and regression now pass. Next development Server Function argument logging is disabled. Browser settings save/reload, server-only credential boundaries, TypeScript/lint and independent review pass. This is local connectivity evidence, not sandbox certification or universal courier support: some estimate rows omit explicit route-support flags. No provider orders, payments, remote writes, commit, push or deployment were performed.
+
+## Settings usability — T-137 (2026-09-15)
+
+Outlet and member administration refinements are applied in the completion worktree using installed shadcn primitives. Outlet guidance is shorter, the derived origin is explicitly automatic, and the persisted connection source remains distinct from an unsaved choice. Member identity, protected-admin status, access disclosures and invite role guidance are clearer. Existing actions, counts, permissions, provider configuration and local saved pickup remain intact.
+
+Focused page/action regression passes 94 tests; TypeScript/lint and real-browser fixture checks cover both surfaces. Native Tab/Arrow delivery remains unverified in this headless environment; explicit focus, draft selections, cancel restoration and invalid-invite recovery are tested separately. This is a local presentation change, with no credential, membership or provider mutation, commit, push or deployment. Final visual and boundary evidence is recorded under T-137 in BUILD-LOG.
+
+## Pickup selector refinement — T-138 (2026-09-15)
+
+The active local preview now contains complete long pickup addresses inside an auto-height trigger. A location icon, wrapping option labels, checked accent, active-option ring and explicit search label clarify the shadcn combobox. The popup keeps its search visible above a scrolling list; when a very tall address leaves too little room on either side, opening makes enough space below. Pickup guidance follows the saved connection source. No provider/settings write or connection-state change.
+
+Actual saved-label geometry passes at1440/768/390, plus four synthetic long-label/short-screen interaction cases. All44focused tests and static checks pass; independent designer accepts the final revised captures. The previously pasted old copy is absent on the actual3127 page; refresh the local preview to see current changes.
 
 ## Delivery state machine
 
@@ -1556,3 +1594,29 @@ deploy, or release action occurred. Delivery-ledger run:
 `RUN-20260831T235917Z-aba50484` remains FAIL because its immutable baseline
 could not retroactively accept the required schema/consumer scope expansion;
 the corrective run accepts the complete already-verified surface.
+
+
+### 2026-09-15 — T-142 controls and navigation
+
+Removed the unlayered global outline that stacked on shadcn rings. Native fallback now lives in the base layer; copied controls own a contrasting 2px focus ring and a neutral 1px idle border. Command search delegates focus to its wrapper. Invalid controls retain their red border even on hover; disabled and keyboard-selected menu states remain distinct. Tenant navigation now shows Dasbor, Pengiriman and Pengelolaan with no Produk or unsupported tool placeholders.
+
+Executed: 58 tests in design-token-contrast/cms-shell/cms-shell-render/cms-header-tools; TypeScript, lint and production build; 43 synthetic Chrome focus cases; settings UX 18 observations; final control-refinement 34 observations at1440/390. The final runner verifies input/textarea/Radix/native select, single search focus owner, invalid and disabled states and error-border persistence under CSS-forced hover. Screenshots use document coordinates after a reviewer caught incorrect textarea crops. Native keyboard/pointer hover delivery remains unverified. Independent review found and prompted fixes for inset-outline contrast measurement and invalid-hover specificity; final designer review checks corrected captures and measurement. No business/provider writes, commit, push or deploy.
+
+Official Indonesian-market evidence and accepted Cek Tarif contracts are in PRD PR-39/40, TD-18 and UX/map planning sections. Latest owner steering supersedes displayed UUIDs with persisted creator/WIB-date/daily-serial references (PR-41, T-144); database implementation and legacy backfill are still pending at this entry.
+
+
+### 2026-09-15 — T-143 quick rates and T-144 shipment references
+
+Implemented the market-validated Cek Tarif workflow at `/app/cek-tarif`, reachable from the tenant header and shadcn search for both tenant roles. The form uses a ready outlet, authoritative destination and whole gram weight; provider quotes are ephemeral and include only service, shipping amount, delivery estimate and COD availability with WIB retrieval context. Changes invalidate the previous quote. No shipment, estimate snapshot, order or ledger is created by this tool. Scoped DEV scenarios exercise page/error/empty/stale presentation after authentication; they never change the production provider contract.
+
+Implemented PR-41's persisted creator/date/daily-sequence reference, superseding displayed UUIDs. UUIDs remain route/action/PK/FK identities; provider cnote_no remains AWB authority. Display/export now uses publicReference in queue, detail, new-draft confirmation, dashboard, analytics, finance, RTS and labels. Users have immutable numeric public numbers; unknown historical creators use00000 rather than an invented user attribution. Numbers expand after999 daily creations. The database enforces atomic allocation, actor validation, reference immutability and uniqueness. The accepted YYMMDD display fails closed for century reuse; it needs a future format expansion before that horizon.
+
+Parallel isolated workers supplied a four-file quote-action patch and twelve-file database patch. The first database patch contained malformed EOF markers and was rejected before integration; corrected patch16e7e5d1f57a8b5678ad81f9e78486495186e68f9098453638ff773699d57e36 passed git apply checks and integrated through delivery-ledger. Root supplied shared UI, RTS/label projections, reference consumers and docs.
+
+Database evidence: worker and independent reviewer each passed14 allocator/posture tests; root passed44 repository tests across7files. Fresh39migrations and representative upgrade/backfill/counter continuation pass on isolated55451. The primary local55450 migration was applied only after independent SQL/security approval and a0600 backup outside Git. Its historical bootstrap password no longer matched the role, so the TCP runner failed before issuing SQL. The fallback used installed Drizzle readMigrationFiles SQL/hash/when via local container psql, one transaction, migration-journal update and before/after fingerprint assertions. All27shipments now have27unique nonempty references; fingerprints preserve8users,50parties,27drafts,20provider snapshots and60ledgerentries. Backup restored successfully into separate geraicuan_t144_backup_check, proving27pre-migration shipments and the preceding schema. No reset, reseed, role/password change or production operation.
+
+Verification: worker55quote tests and95reference render tests; independent79integrated tests; root focused suite126passed/one obsolete column-label expectation, corrected and22route tests then passed. TypeScript, lint and production build pass; unused audit helper warning removed and scoped lint rerun. Browser evidence includes live read-only Mengantar quote/stale flow, responsive quick-rate states at320/390/768/1024/1440,18WIB/full-phone/reference observations and12reference route/viewport checks with no visible UUID. Designer accepted mobile result/COD scroll and full label/detail references. Dev runtime was restarted at the same3127 address after it stopped during checks; an auth-limit rejection correctly delayed the header replay. Native keyboard/pointer delivery remains unclaimed; programmatic input events and actual route/action requests are distinguished.
+
+T-145/PR-42 records the newly requested analytics simplification before its implementation. No commit, push, deployment or provider order was performed.
+
+Final quick-rate replay:13fixture observations pass, including programmatic native input-value setter plus bubbled input/change events hiding the old quote. No direct form-handler invocation is used; no provider request is made by this replay. The earlier live quote remains a separate read-only provider proof.

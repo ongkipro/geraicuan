@@ -7,19 +7,17 @@ import { HashFocusTarget } from "@/components/cms/hash-focus-target";
 import { Button } from "@/components/ui/button";
 
 const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium text-foreground";
-const controlClass = "h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:h-9";
+const controlClass = "h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9";
 
 type Option = { id: string; label: string };
 
 export type FinanceFiltersProps = {
   range: {
     presetId: string;
-    timezone: string;
     startDate: string;
     lastIncludedDate: string;
   };
   presets: readonly Option[];
-  timezones: readonly Option[];
   outlets: readonly { id: string; name: string }[];
   outletId?: string;
   rawStatus?: string;
@@ -51,9 +49,9 @@ function FilterFields({ props }: { props: FinanceFiltersProps }) {
           Without this, that would be "Terapkan rentang khusus" below and every Enter would
           send khusus=1 and force a custom range; hidden, it applies the plain filter instead. */}
       <button aria-hidden="true" hidden tabIndex={-1} type="submit" />
-      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={props.range.presetId === "kustom" || props.range.timezone !== "Asia/Jakarta" || Boolean(props.rawStatus)}>
+      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={props.range.presetId === "kustom" || Boolean(props.rawStatus)}>
         <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Tanggal & status<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
-        <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-3">
           <label className={fieldClass} htmlFor="finance-start">
             Dari tanggal
             <input aria-describedby={hintId} className={controlClass} defaultValue={props.range.startDate} id="finance-start" max={props.todayLocalDate} name="dari" type="date" />
@@ -62,12 +60,6 @@ function FilterFields({ props }: { props: FinanceFiltersProps }) {
             Sampai tanggal
             <input aria-describedby={hintId} className={controlClass} defaultValue={props.range.lastIncludedDate} id="finance-end" max={props.todayLocalDate} name="sampai" type="date" />
             <span className="text-xs font-normal leading-5 text-muted-foreground" id={hintId}>Dipakai saat memilih Rentang khusus.</span>
-          </label>
-          <label className={fieldClass} htmlFor="finance-timezone">
-            Zona waktu
-            <select className={controlClass} defaultValue={props.range.timezone} id="finance-timezone" name="tz">
-              {props.timezones.map((timezone) => <option key={timezone.id} value={timezone.id}>{timezone.label}</option>)}
-            </select>
           </label>
           <label className={fieldClass} htmlFor="finance-status">
             Status rekonsiliasi

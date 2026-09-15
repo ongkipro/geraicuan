@@ -23,10 +23,9 @@ import { db } from "@/db/client";
 import { listLedgerEntries, listLedgerReconciliations, listLatestReconciliationVariances, summarizeLedger, type LedgerReconciliationRow, type LedgerWorkspaceEntry } from "@/db/ledger-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { listTenantOutlets } from "@/db/tenant-repository";
-import { ANALYTICS_PRESETS, ANALYTICS_TIMEZONES, analyticsIssueMessage, formatInZone, formatRangeLabel, parseAnalyticsRange, parsePageNumber, serializeAnalyticsRange, type AnalyticsRange } from "@/lib/analytics-range";
+import { ANALYTICS_PRESETS, analyticsIssueMessage, formatInZone, formatRangeLabel, parseAnalyticsRange, parsePageNumber, serializeAnalyticsRange, type AnalyticsRange } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
-import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -122,7 +121,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
   const invalidOutlet = Boolean(requestedOutletId && !data.outletId);
   const issues = [...range.issues, ...parsedPage.issues];
   const pageAdjusted = parsedPage.page > totalPages;
-  const isNotDefault = range.presetId !== "30-hari" || range.timezone !== "Asia/Jakarta" || Boolean(data.outletId) || Boolean(rawStatus) || issues.length > 0 || invalidOutlet;
+  const isNotDefault = range.presetId !== "30-hari" || Boolean(data.outletId) || Boolean(rawStatus) || issues.length > 0 || invalidOutlet;
   const selectedOutletName = data.outletId ? data.outlets.find((outlet) => outlet.id === data.outletId)?.name : undefined;
   const filterSummary = `${periodLabel} · ${timezoneLabel} · ${selectedOutletName ?? "Semua outlet"} · ${varianceOnly ? "Hanya selisih" : invalidStatus ? "Status tidak valid" : "Semua status"}`;
   const exactRow = requestedReconciliationId ? data.reconciliations.find((row) => row.id === requestedReconciliationId) : undefined;
@@ -139,7 +138,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
 
   return <PageContainer width="data">
     <PageHeader description="Periksa selisih dan telusuri catatan transaksi." eyebrow="Keuangan" title="Ledger & rekonsiliasi" />
-    <FinanceFilters isNotDefault={isNotDefault} outletId={data.outletId} outlets={data.outlets} presets={ANALYTICS_PRESETS} range={actionContext.range} rawStatus={rawStatus} summary={filterSummary} timezones={ANALYTICS_TIMEZONES} todayLocalDate={todayLocalDate} />
+    <FinanceFilters isNotDefault={isNotDefault} outletId={data.outletId} outlets={data.outlets} presets={ANALYTICS_PRESETS} range={actionContext.range} rawStatus={rawStatus} summary={filterSummary} todayLocalDate={todayLocalDate} />
     <div aria-live="polite" className="flex min-h-11 flex-wrap items-center gap-x-2 text-xs leading-5 text-muted-foreground" role="status"><Clock3 aria-hidden="true" className="size-4" /><span>Data dimuat {new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: range.timezone }).format(now)}. {presetLabel}; batas waktu mengikuti {timezoneLabel}.</span></div>
     {staleData ? <Alert role="alert" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Data keuangan mungkin sudah kedaluwarsa</AlertTitle><AlertDescription className="max-w-2xl space-y-3"><p>Data terakhir belum diperbarui. Jangan mengambil keputusan rekonsiliasi sampai data dimuat ulang.</p><Button asChild className="min-h-11" variant="outline"><Link href={workspaceHref(range, data.outletId, rawStatus)}>Muat ulang data</Link></Button></AlertDescription></Alert> : null}
 
@@ -173,7 +172,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
       <div><h2 className={sectionTitleClass} id="ledger-entries-title">Entri ledger</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Catatan transaksi pada {periodLabel}. Koreksi dibuat sebagai catatan baru; catatan lama tetap tersimpan. Tanda positif atau negatif menunjukkan arah pencatatan.</p></div>
       {data.entries.rows.length === 0 ? <div className={emptyClass} role="status"><h3>Tidak ada entri pada {periodLabel}.</h3><p>Ubah periode atau outlet untuk melihat catatan lain.</p></div> : <Table className="min-w-[1120px]" containerClassName={tableRegionClass} containerProps={{ "aria-label": "Tabel entri ledger", role: "region", tabIndex: 0 }}>
         <TableCaption className="sr-only">Entri efektif pada {periodLabel} ({timezoneLabel})</TableCaption><TableHeader><TableRow><TableHead className="sticky left-0 z-20 bg-[color-mix(in_oklch,var(--muted)_40%,var(--background))]">Efektif</TableHead><TableHead>Outlet</TableHead><TableHead>Jenis</TableHead><TableHead>Kelas</TableHead><TableHead className="text-right">Nilai</TableHead><TableHead>Sumber</TableHead><TableHead>Penyesuaian</TableHead></TableRow></TableHeader>
-        <TableBody>{data.entries.rows.map((entry) => <TableRow key={entry.id}><TableCell className="sticky left-0 z-10 bg-background font-medium">{formatInZone(entry.effectiveAt, range.timezone)}</TableCell><TableCell>{entry.outletName}</TableCell><TableCell>{entryTypeLabel[entry.entryType]}</TableCell><TableCell>{financialClassLabel[entry.financialClass]}</TableCell><TableCell className="text-right font-medium tabular-nums">{signedIdrFormatter.format(entry.amountIdr)}</TableCell><TableCell>{entry.shipmentId ? <Button asChild className="min-h-11" variant="link"><Link href={`/app/pengiriman/${entry.shipmentId}`}>Kiriman {shipmentReference(entry.shipmentId)}</Link></Button> : <span>Rekonsiliasi {entry.sourceEventId.slice(0, 12)}</span>}</TableCell><TableCell>{entry.adjustmentState === "AVAILABLE" ? <ReversalActionPanel action={reverseLedgerEntry} amountLabel={signedIdrFormatter.format(entry.amountIdr)} context={{ ...actionContext, attemptId: randomUUID() }} entryId={entry.id} entryType={entryTypeLabel[entry.entryType]} /> : entry.adjustmentState === "ADJUSTED" ? <Badge variant="outline">Sudah dibalik</Badge> : <span aria-label="Tidak dapat disesuaikan">—</span>}</TableCell></TableRow>)}</TableBody>
+        <TableBody>{data.entries.rows.map((entry) => <TableRow key={entry.id}><TableCell className="sticky left-0 z-10 bg-background font-medium">{formatInZone(entry.effectiveAt, range.timezone)}</TableCell><TableCell>{entry.outletName}</TableCell><TableCell>{entryTypeLabel[entry.entryType]}</TableCell><TableCell>{financialClassLabel[entry.financialClass]}</TableCell><TableCell className="text-right font-medium tabular-nums">{signedIdrFormatter.format(entry.amountIdr)}</TableCell><TableCell>{entry.shipmentId ? <Button asChild className="min-h-11" variant="link"><Link href={`/app/pengiriman/${entry.shipmentId}`}>Kiriman {entry.publicReference}</Link></Button> : <span>Rekonsiliasi {entry.sourceEventId.slice(0, 12)}</span>}</TableCell><TableCell>{entry.adjustmentState === "AVAILABLE" ? <ReversalActionPanel action={reverseLedgerEntry} amountLabel={signedIdrFormatter.format(entry.amountIdr)} context={{ ...actionContext, attemptId: randomUUID() }} entryId={entry.id} entryType={entryTypeLabel[entry.entryType]} /> : entry.adjustmentState === "ADJUSTED" ? <Badge variant="outline">Sudah dibalik</Badge> : <span aria-label="Tidak dapat disesuaikan">—</span>}</TableCell></TableRow>)}</TableBody>
       </Table>}
       <DataTablePagination hrefForPage={(target) => workspaceHref(range, data.outletId, rawStatus, target)} label="Navigasi halaman ledger" page={page} summary={`${countFormatter.format(data.entries.totalCount)} entri`} totalCount={data.entries.totalCount} totalPages={totalPages} />
     </section>

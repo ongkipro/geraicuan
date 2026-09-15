@@ -124,15 +124,14 @@ beforeEach(() => {
 });
 
 describe("contact route render contracts", () => {
-  it("renders a masked directory row and a safe invalid-status recovery", async () => {
+  it("renders a complete phone directory row and a safe invalid-status recovery", async () => {
     mocks.contacts.push(activeContact());
 
     const populated = await renderDirectory();
     expect(populated).toContain("Penerima Aman");
-    expect(populated).toContain("•••• 7890");
-    // The old mask revealed the carrier prefix as well; it must not come back.
+    expect(populated).toContain("081234567890");
     expect(populated).not.toContain("0812••••890");
-    expect(populated).not.toContain("081234567890");
+    expect(populated).not.toContain("••••");
     expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru"/);
 
     // The status filter exposes its selection programmatically, not by button

@@ -42,7 +42,7 @@ export function ShipmentReconciliationPanel({ fixtureEnabled, shipmentId }: { fi
         <form action={action} className="grid gap-4">
           <input name="shipmentId" type="hidden" value={shipmentId} />
           <Field className="max-w-2xl items-start" data-disabled={!fixtureEnabled || pending} orientation="horizontal">
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={!fixtureEnabled || pending} id="reconciliation-confirmation" name="confirmation" required value="confirmed" />
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={!fixtureEnabled || pending} id="reconciliation-confirmation" name="confirmation" required value="confirmed" />
             <FieldLabel className="font-normal leading-6" htmlFor="reconciliation-confirmation">Saya memahami rekonsiliasi hanya mencocokkan hasil yang sudah ada dan tidak boleh membuat atau mengirim ulang pesanan.</FieldLabel>
           </Field>
           <div className="flex border-t pt-4">

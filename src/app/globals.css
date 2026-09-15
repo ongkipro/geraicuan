@@ -13,13 +13,11 @@
   --accent-hover:var(--primary-hover);
   --field-border:var(--input);
 }
-/* T-118: shadcn neutral palette. Three values deliberately depart from the
-   stock neutral theme to hold WCAG AA (tests/design-token-contrast): muted
-   text 0.53 (stock 0.556 measures 4.34:1 on --muted), ring 0.556 (stock 0.708
-   measures 2.59:1 on white), destructive darkened for its /10 tint. */
+/* T-132: shared blue interaction palette on neutral surfaces. Keep semantic
+   status and categorical chart colours independent from the brand accent. */
 :root {
-  --accent:oklch(0.97 0 0);
-  --ring:oklch(0.556 0 0);
+  --accent:#eef2ff;
+  --ring:#2e47ba;
   --danger:#b42318;
   --danger-surface:#fff1f0;
   --ok:#087443;
@@ -34,14 +32,14 @@
   --card-foreground:oklch(0.145 0 0);
   --popover:oklch(1 0 0);
   --popover-foreground:oklch(0.145 0 0);
-  --primary:oklch(0.205 0 0);
-  --primary-hover:oklch(0.3 0 0);
-  --primary-foreground:oklch(0.985 0 0);
+  --primary:#2e47ba;
+  --primary-hover:#243a9b;
+  --primary-foreground:#ffffff;
   --secondary:oklch(0.97 0 0);
   --secondary-foreground:oklch(0.205 0 0);
   --muted:oklch(0.97 0 0);
   --muted-foreground:oklch(0.53 0 0);
-  --accent-foreground:oklch(0.205 0 0);
+  --accent-foreground:#2e47ba;
   --destructive:oklch(0.505 0.19 27.5);
   --border:oklch(0.922 0 0);
   --input:oklch(0.922 0 0);
@@ -56,12 +54,12 @@
   --radius:0.45rem;
   --sidebar:oklch(0.985 0 0);
   --sidebar-foreground:oklch(0.145 0 0);
-  --sidebar-primary:oklch(0.205 0 0);
-  --sidebar-primary-foreground:oklch(0.985 0 0);
-  --sidebar-accent:oklch(0.97 0 0);
-  --sidebar-accent-foreground:oklch(0.205 0 0);
+  --sidebar-primary:#2e47ba;
+  --sidebar-primary-foreground:#ffffff;
+  --sidebar-accent:#eef2ff;
+  --sidebar-accent-foreground:#2e47ba;
   --sidebar-border:oklch(0.922 0 0);
-  --sidebar-ring:oklch(0.556 0 0);
+  --sidebar-ring:#2e47ba;
   --background:oklch(1 0 0);
   --foreground:oklch(0.145 0 0);
 }
@@ -114,7 +112,6 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
   text-decoration:none;
 }
 .auth-return:hover { color:var(--primary); text-decoration:underline; text-underline-offset:.18em; }
-:focus-visible { outline:3px solid var(--ring); outline-offset:2px; }
 .label-preview { overflow:auto; padding:1rem; border:1px solid var(--hairline); border-radius:.35rem; background:var(--surface-sunken); }
 .label-history { margin-top:2rem; padding-bottom:3rem; }
 .label-history > h2 { margin:0 0 1rem; font-family:var(--font-display); font-size:1.75rem; }
@@ -220,6 +217,8 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
   --radius-4xl:calc(var(--radius) * 2.6);
 }
 @layer base {
+  /* Native fallback; shadcn utilities own their single focus indicator. */
+  :focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
   * {
     @apply border-border outline-ring;
   }
@@ -274,19 +273,19 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
   --card-foreground:oklch(0.985 0 0);
   --popover:oklch(0.205 0 0);
   --popover-foreground:oklch(0.985 0 0);
-  --primary:oklch(0.922 0 0);
-  --primary-hover:oklch(0.85 0 0);
-  --primary-foreground:oklch(0.205 0 0);
+  --primary:#a5b4fc;
+  --primary-hover:#c7d2fe;
+  --primary-foreground:#171717;
   --secondary:oklch(0.269 0 0);
   --secondary-foreground:oklch(0.985 0 0);
   --muted:oklch(0.269 0 0);
   --muted-foreground:oklch(0.708 0 0);
-  --accent:oklch(0.269 0 0);
-  --accent-foreground:oklch(0.985 0 0);
+  --accent:#202b50;
+  --accent-foreground:#a5b4fc;
   --destructive:oklch(0.78 0.13 22);
   --border:oklch(1 0 0 / 10%);
   --input:oklch(1 0 0 / 15%);
-  --ring:oklch(0.556 0 0);
+  --ring:#a5b4fc;
   --chart-1:#0072b2;
   --chart-2:#009e73;
   --chart-3:#e69f00;
@@ -294,12 +293,12 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
   --chart-5:#d55e00;
   --sidebar:oklch(0.205 0 0);
   --sidebar-foreground:oklch(0.985 0 0);
-  --sidebar-primary:oklch(0.922 0 0);
-  --sidebar-primary-foreground:oklch(0.205 0 0);
-  --sidebar-accent:oklch(0.269 0 0);
-  --sidebar-accent-foreground:oklch(0.985 0 0);
+  --sidebar-primary:#a5b4fc;
+  --sidebar-primary-foreground:#171717;
+  --sidebar-accent:#202b50;
+  --sidebar-accent-foreground:#a5b4fc;
   --sidebar-border:oklch(1 0 0 / 10%);
-  --sidebar-ring:oklch(0.556 0 0);
+  --sidebar-ring:#a5b4fc;
 }
 
 /* Shared work surfaces: structure and density, using the supplied theme tokens. */

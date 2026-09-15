@@ -22,6 +22,13 @@ describe("platform monitoring URL contract", () => {
     expect(stable.canonicalQuery.toString()).toBe(parsed.canonicalQuery.toString());
   });
 
+  it("normalizes old timezone links to WIB without an active timezone filter", () => {
+    const parsed = parsePlatformFilters({ tz: "UTC", rentang: "hari-ini" }, { ...options, now: new Date("2026-12-31T17:00:00Z") });
+    expect(parsed.filters.range).toMatchObject({ timezone: "Asia/Jakarta", startDate: "2027-01-01", lastIncludedDate: "2027-01-01" });
+    expect(parsed.canonicalQuery.get("tz")).toBe("Asia/Jakarta");
+    expect(parsed.issues).toEqual([]);
+  });
+
   it("drops invalid and route-inapplicable input without blanking the result", () => {
     const parsed = parsePlatformFilters({ tz: "Mars/Base", outlet: outletId, status: "unknown", hasil: "DENIED", q: "x", extra: "1" }, options);
     expect(parsed.filters).toMatchObject({ scope: { kind: "global" }, outletId: null, status: null, outcome: null, query: null, page: 1 });

@@ -134,6 +134,7 @@ function populatedFixtures() {
       outletName: "Outlet Jakarta",
       reversesEntryId: null,
       shipmentId: SHIPMENT_ID,
+      publicReference: "95758-260820-431",
       sourceEvent: "PROVIDER_ORDER_ISSUED",
       sourceEventId: "provider-order-fixture",
     }],
@@ -220,6 +221,8 @@ describe("Finance page acceptance", () => {
     expect(firstSubmit).not.toBe("");
     expect(firstSubmit).not.toContain('name="khusus"');
     expect(filterForm).toContain('name="khusus"');
+    expect(filterForm).not.toContain('name="tz"');
+    expect(filterForm).not.toContain("Zona waktu");
     // Submit and reset return focus to this heading, so it must be visible, not sr-only.
     const filterHeading = html.match(/<h2[^>]*id="finance-filter-title"[^>]*>/)?.[0] ?? "";
     expect(filterHeading).toContain('tabindex="-1"');
@@ -237,6 +240,8 @@ describe("Finance page acceptance", () => {
   it("renders populated money and variance tables as local scrollers with sticky context", async () => {
     populatedFixtures();
     const html = await renderPage();
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260820-431");
+    expect(html.replace(/<[^>]+>/g, " ")).not.toContain(SHIPMENT_ID);
     const scrollers = html.match(
       /<div[^>]*role="region"[^>]*tabindex="0"[^>]*>\s*<table/g,
     ) ?? [];

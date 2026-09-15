@@ -43,7 +43,7 @@ export default function TenantMembersLoading() {
               <div className="hidden h-10 border-b bg-muted/50 sm:block" />
               <div className="divide-y">
                 {Array.from({ length: 3 }, (_, index) => (
-                  <div className="grid gap-3 px-4 py-3" key={index}>
+                  <div className="grid gap-3 px-4 py-4" key={index}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
                       <div className="grid gap-1.5">
                         <Skeleton className="h-4 w-44 max-w-full" />
@@ -52,7 +52,7 @@ export default function TenantMembersLoading() {
                       </div>
                       <Skeleton className="h-5 w-36" />
                     </div>
-                    <Skeleton className="h-11 w-full sm:w-32 md:h-8" />
+                    <Skeleton className="h-11 w-full sm:w-32" />
                   </div>
                 ))}
               </div>
@@ -61,7 +61,11 @@ export default function TenantMembersLoading() {
           <div className="grid gap-4">
             <Skeleton className="h-6 w-36" />
             <Separator />
-            <Skeleton className="h-24 w-full lg:max-w-xl" />
+            <div className="grid gap-5 lg:max-w-xl">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-11 w-full sm:ml-auto sm:w-36" />
+            </div>
           </div>
         </div>
       </SettingsLayout>

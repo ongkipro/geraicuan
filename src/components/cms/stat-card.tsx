@@ -56,7 +56,7 @@ export function StatCard({ className, description, footer, href, icon: Icon, tit
       // A ReactNode value has no safe string form: name the link by the rendered title and value instead.
       aria-label={spokenValue === undefined ? undefined : `${title}: ${spokenValue}`}
       aria-labelledby={spokenValue === undefined ? `${titleId} ${valueId}` : undefined}
-      className="group/stat block min-h-11 rounded-xl focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      className="group/stat block min-h-11 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       href={href}
     >
       {card}

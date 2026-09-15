@@ -4,6 +4,7 @@ import { ChevronsUpDown } from "lucide-react";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { CmsHeaderClock, CmsHeaderSearch, CmsQuickRateLink } from "@/app/_components/cms-header-tools";
 import { CmsNavigation } from "@/app/_components/cms-navigation";
 import { SignOutControl, type LoginDestination } from "@/app/_components/sign-out-control";
 import { SkipLink } from "@/app/_components/skip-link";
@@ -95,25 +96,25 @@ export function CmsShell(props: CmsShellProps) {
           />
         )}
         <SidebarInset className="min-w-0" id="konten-utama" tabIndex={-1}>
-          {/* shadcn-admin Header: trigger, separator, then page context. */}
-          <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background px-4 md:rounded-t-xl">
-            <SidebarTrigger
-              aria-label="Buka atau tutup navigasi"
-              className="size-11 md:size-8"
-              variant="outline"
-            />
-            <Separator className="h-6!" orientation="vertical" />
-            <div className="flex min-w-0 flex-col">
-              <span className="flex min-w-0 items-center gap-2">
-                <strong className="truncate text-sm font-medium">{props.scopeTitle}</strong>
-                <Badge variant="secondary">{props.roleLabel}</Badge>
-              </span>
-              <span className="hidden truncate text-xs text-muted-foreground sm:block">
-                {props.scopeDescription}
-              </span>
+          <header className={`sticky top-0 z-30 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b bg-background px-4 md:rounded-t-xl ${props.scope === "tenant" ? "xl:h-16 xl:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]" : "md:h-16 md:grid-cols-[auto_minmax(0,1fr)_auto_auto]"}`} data-slot="cms-header">
+            <div className="flex h-16 items-center gap-3">
+              <SidebarTrigger aria-label="Buka atau tutup navigasi" className="size-11 md:size-8" variant="outline" />
+              <Separator className="hidden h-6! md:block" orientation="vertical" />
             </div>
+            <div className="flex min-w-0 flex-col">
+              <span className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                <strong className="max-w-full truncate text-sm font-medium" title={props.scopeTitle}>{props.scopeTitle}</strong>
+                <Badge className="shrink-0" variant="secondary">{props.roleLabel}</Badge>
+              </span>
+              <span className="hidden truncate text-xs text-muted-foreground sm:block">{props.scopeDescription}</span>
+            </div>
+            {props.scope === "tenant" ? <CmsHeaderSearch role={props.navigationRole} scope="tenant" /> : <CmsHeaderSearch scope="platform" />}
+            {props.scope === "tenant" ? <div className="col-span-3 flex min-h-14 items-center justify-between gap-3 border-t xl:contents">
+              <CmsQuickRateLink />
+              <div className="xl:border-l xl:pl-3"><CmsHeaderClock compact /></div>
+            </div> : <div className="col-span-3 flex h-8 items-center border-t md:col-span-1 md:h-auto md:border-t-0 md:border-l md:pl-3"><CmsHeaderClock /></div>}
           </header>
-          <div className="cms-main min-w-0 self-center">
+          <div className={`cms-main min-w-0 self-center ${props.scope === "tenant" ? "[&_[id]]:scroll-mt-36 xl:[&_[id]]:scroll-mt-20" : "[&_[id]]:scroll-mt-28 md:[&_[id]]:scroll-mt-20"}`}>
             {props.children}
           </div>
         </SidebarInset>

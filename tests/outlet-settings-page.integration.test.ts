@@ -373,8 +373,27 @@ describe("Outlet settings page acceptance", () => {
     expect(html).toMatch(/<input type="password"[^>]*autoComplete="new-password"[^>]*name="apiKey"/);
     expect(html).not.toMatch(/name="apiKey"[^>]*value=/);
     expect(html).toContain("Ganti API key");
+    expect(html).toContain("Daftar pickup dari akun Mengantar outlet.");
     expect(html).not.toContain("Tersambung");
     expect(html).not.toContain(SECRET_SENTINEL);
+  });
+
+  it("labels derived area and distinguishes the persisted connection source", async () => {
+    mocks.outlets = [outlet({
+      defaultOriginAreaId: "origin-ready",
+      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
+      defaultPickupAddressId: "pickup-ready",
+      defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
+      readinessStatus: "ready",
+    })];
+    const html = await renderPage();
+    expect(html).toMatch(new RegExp(`<output[^>]*aria-live="polite"[^>]*for="pickup-${OUTLET_ONE}"[^>]*id="origin-${OUTLET_ONE}"`));
+    expect(html).toContain(`for="origin-${OUTLET_ONE}"`);
+    expect(html).toContain('aria-labelledby="outlet-location-title"');
+    expect(html).toContain('aria-labelledby="outlet-connection-title"');
+    expect(occurrences(html, "Digunakan")).toBe(1);
+    expect(html).toContain("Daftar pickup dari Default GeraiCUAN.");
+    expect(html).not.toContain("Default GeraiCUAN sedang digunakan.");
   });
 
   it("keeps the shadcn connection workflow explicit and free of secret-derived UI", () => {

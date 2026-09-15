@@ -178,7 +178,7 @@ export default async function LabelIndexPage({
           // container and let the destination wrap instead of forcing width.
           <Table
             className="min-w-[56rem]"
-            containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+            containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{ "aria-label": "Daftar label kiriman; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
           >
             <TableCaption className="sr-only">
@@ -216,11 +216,10 @@ export default async function LabelIndexPage({
                       {row.providerService}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-w-56 whitespace-normal wrap-anywhere">
                     {row.recipientName}
-                    <span className="text-xs text-muted-foreground">
-                      <br />
-                      {row.recipientPhoneMasked}
+                    <span className="block text-xs tabular-nums text-muted-foreground">
+                      {row.recipientPhone}
                     </span>
                   </TableCell>
                   <TableCell className="min-w-48 max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell>

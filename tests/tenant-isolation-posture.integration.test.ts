@@ -193,6 +193,10 @@ describe("tenant isolation posture", () => {
     }
   });
 
+  it("keeps global reference allocation metadata inaccessible to tenant SQL", async () => {
+    expect(await effectiveGrants("shipment_reference_counters")).toEqual([]);
+  });
+
   it("never lets the application role rewrite a row's identity or owner", async () => {
     // A tenant move must be impossible at the privilege layer, not only
     // rejected by a policy's WITH CHECK.
@@ -203,7 +207,8 @@ describe("tenant isolation posture", () => {
       mengantar_connections: ["id", "tenant_id", "created_at", "outlet_id"],
       outlets: ["id", "tenant_id", "created_at"],
       shipment_drafts: ["tenant_id", "created_at", "shipment_id"],
-      shipments: ["id", "tenant_id", "created_at", "outlet_id"],
+      shipments: ["id", "tenant_id", "created_at", "outlet_id", "created_by_user_id", "public_reference", "reference_user_number", "reference_date", "daily_sequence"],
+      users: ["public_number"],
       tenants: ["id", "created_at"],
     };
 

@@ -65,6 +65,7 @@ export type LedgerWorkspaceEntry = Pick<
   | "sourceEventId"
   | "reversesEntryId"
 > & {
+  publicReference: string | null;
   outletName: string;
   adjustmentState: "AVAILABLE" | "ADJUSTED" | "INELIGIBLE";
 };
@@ -678,6 +679,7 @@ export async function listLedgerEntries(
     .select({
       id: ledgerEntries.id,
       shipmentId: ledgerEntries.shipmentId,
+      publicReference: shipments.publicReference,
       entryType: ledgerEntries.entryType,
       financialClass: ledgerEntries.financialClass,
       amountIdr: ledgerEntries.amountIdr,
@@ -701,6 +703,11 @@ export async function listLedgerEntries(
         eq(outlets.tenantId, ledgerEntries.tenantId),
       ),
     )
+    .leftJoin(shipments, and(
+      eq(shipments.id, ledgerEntries.shipmentId),
+      eq(shipments.tenantId, ledgerEntries.tenantId),
+      eq(shipments.outletId, ledgerEntries.outletId),
+    ))
     .where(rangePredicate(context, range))
     .orderBy(desc(ledgerEntries.effectiveAt), desc(ledgerEntries.id))
     .limit(pagination.limit)

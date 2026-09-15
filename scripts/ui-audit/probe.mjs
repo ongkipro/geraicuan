@@ -451,23 +451,109 @@ export const PROBE = `JSON.stringify((() => {
   // /app/keuangan and /app/analitik) were never examined at all. The
   // contrast check above inspects every text element with no such cap;
   // focus/computedStyle per element is equally cheap.
+  const focusStyle = (el) => {
+    const cs = getComputedStyle(el);
+    return { width: parseFloat(cs.outlineWidth), style: cs.outlineStyle,
+      color: cs.outlineColor, offset: parseFloat(cs.outlineOffset), shadow: cs.boxShadow };
+  };
+  const shadowLayers = (value) => {
+    const layers = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i <= value.length; i++) {
+      if (value[i] === '(') depth++;
+      if (value[i] === ')') depth--;
+      if (i === value.length || (value[i] === ',' && depth === 0)) {
+        layers.push(value.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    return layers;
+  };
+  const indicatorContrast = (owner, before) => {
+    const cs = focusStyle(owner);
+    let opacity = 1;
+    for (let node = owner; node; node = node.parentElement) {
+      const paint = getComputedStyle(node);
+      opacity *= Number(paint.opacity);
+      if (paint.visibility === 'hidden' || paint.display === 'none') opacity = 0;
+    }
+    const ground = backdrop(owner.parentElement || document.body);
+    const inkContrast = (ink, on = ground) => ratio(over({ ...ink, a: ink.a * opacity }, on), on);
+    const outlineChanged = ['width', 'style', 'color', 'offset'].some(key => cs[key] !== before[key]);
+    const box = owner.getBoundingClientRect();
+    const outlineInk = parse(cs.color);
+    // An inset outline paints over the control; a straddling outline must
+    // remain distinguishable against both the control and its surroundings.
+    const outlineContrast = cs.offset + cs.width <= 0
+      ? inkContrast(outlineInk, backdrop(owner))
+      : cs.offset < 0
+        ? Math.min(inkContrast(outlineInk), inkContrast(outlineInk, backdrop(owner)))
+        : inkContrast(outlineInk);
+    // A huge negative offset can collapse the outline inside the element.
+    let best = outlineChanged && cs.width >= 2 && !['none', 'hidden'].includes(cs.style)
+      && cs.offset > -Math.min(box.width, box.height) / 2
+      ? outlineContrast : 0;
+    const previousLayers = shadowLayers(before.shadow);
+    const coveredSpread = { outer: 0, inset: 0 };
+    for (const layer of shadowLayers(cs.shadow)) {
+      if (layer === 'none') continue;
+      const inset = /\\binset\\b/.test(layer);
+      const plane = inset ? 'inset' : 'outer';
+      // Computed shadows serialize the color before four pixel lengths.
+      const parts = layer.replace(/\\binset\\b/, '').trim().match(/^(.*)\\s+(-?[\\d.]+)px\\s+(-?[\\d.]+)px\\s+(-?[\\d.]+)px\\s+(-?[\\d.]+)px$/);
+      if (!parts) continue;
+      const [, color, x, y, blur, spreadText] = parts;
+      const ink = parse(color);
+      if (ink.a === 0) continue;
+      const spread = inset ? Math.min(Number(spreadText), Math.min(box.width, box.height) / 2) : Number(spreadText);
+      // Crisp centered rings provide a measurable band, outside or inset.
+      // Earlier shadows paint above later ones; never count a covered ring.
+      if (Number(x) !== 0 || Number(y) !== 0 || Number(blur) !== 0) {
+        coveredSpread[plane] = Infinity;
+        continue;
+      }
+      if (spread - coveredSpread[plane] >= 2 && !previousLayers.includes(layer)) {
+        best = Math.max(best, inkContrast(ink, inset ? backdrop(owner) : ground));
+      }
+      coveredSpread[plane] = Math.max(coveredSpread[plane], spread);
+    }
+    return { contrast: best, style: cs };
+  };
   const weakFocusRing = [];
   let focusProbed = 0;
   const focusables = [...document.querySelectorAll('a[href], button, input, select, textarea, [tabindex="0"]')]
     .filter(e => { const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4; });
   for (const el of focusables) {
-    el.focus();
-    if (document.activeElement !== el || !el.matches(':focus-visible')) continue;
-    focusProbed++;
-    const cs = getComputedStyle(el);
-    const width = parseFloat(cs.outlineWidth);
-    const shown = width >= 2 && cs.outlineStyle !== 'none';
-    const ground = backdrop(el.parentElement || document.body);
-    const c = shown ? ratio(over(parse(cs.outlineColor), ground), ground) : 0;
-    if (!shown || c + 0.005 < 3) {
-      weakFocusRing.push({
-        where: el.tagName.toLowerCase() + ':' + (el.textContent || '').trim().slice(0, 18),
-        outline: cs.outlineWidth + ' ' + cs.outlineStyle, ratio: Math.round(c * 100) / 100,
+    // shadcn InputGroup owns its direct input's indicator. No arbitrary
+    // ancestor or addon button may borrow a surrounding container's ring.
+    const group = el.matches('input[data-slot="input-group-control"], textarea[data-slot="input-group-control"], input[data-slot="command-input"]')
+      && el.parentElement?.matches('[data-slot="input-group"]') ? el.parentElement : null;
+    const owners = group ? [el, group] : [el];
+    // Measure settled styles, not the first 0px frame of transition-all.
+    // Preserve only transition declarations; focus handlers may edit other styles.
+    const transitions = owners.map(owner => [...owner.style]
+      .filter(key => key === 'transition' || key.startsWith('transition-'))
+      .map(key => [key, owner.style.getPropertyValue(key), owner.style.getPropertyPriority(key)]));
+    owners.forEach(owner => owner.style.setProperty('transition', 'none', 'important'));
+    try {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      const before = owners.map(focusStyle);
+      el.focus();
+      if (document.activeElement !== el || !el.matches(':focus-visible')) continue;
+      focusProbed++;
+      const indicators = owners.map((owner, index) => indicatorContrast(owner, before[index]));
+      const c = Math.max(...indicators.map(indicator => indicator.contrast));
+      if (c + 0.005 < 3) {
+        const cs = indicators[0].style;
+        weakFocusRing.push({
+          where: el.tagName.toLowerCase() + ':' + (el.textContent || '').trim().slice(0, 18),
+          outline: cs.width + 'px ' + cs.style, shadow: cs.shadow, ratio: Math.round(c * 100) / 100,
+        });
+      }
+    } finally {
+      owners.forEach((owner, index) => {
+        owner.style.removeProperty('transition');
+        for (const [key, value, priority] of transitions[index]) owner.style.setProperty(key, value, priority);
       });
     }
   }

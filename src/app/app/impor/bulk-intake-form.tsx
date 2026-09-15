@@ -169,7 +169,7 @@ export function BulkIntakeForm({ initialPreview, outlets }: BulkIntakeFormProps)
         </CardContent>
       </Card>
 
-      {preview ? <section aria-labelledby="hasil-pemeriksaan-title" className="min-w-0 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="hasil-pemeriksaan" ref={previewRef} tabIndex={-1}>
+      {preview ? <section aria-labelledby="hasil-pemeriksaan-title" className="min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring" id="hasil-pemeriksaan" ref={previewRef} tabIndex={-1}>
         <Card>
           <CardHeader aria-live="polite">
             <CardTitle id="hasil-pemeriksaan-title">Hasil pemeriksaan</CardTitle>
@@ -185,7 +185,7 @@ export function BulkIntakeForm({ initialPreview, outlets }: BulkIntakeFormProps)
       <Card>
         <CardContent>
           <details className="group/csv min-w-0" open>
-            <summary className="flex min-h-11 cursor-pointer items-center rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:min-h-8"><ChevronDown aria-hidden="true" className="mr-2 size-4 transition-transform group-open/csv:rotate-180" />Format CSV</summary><p className="max-w-2xl mt-2 text-sm text-muted-foreground">Nama dan urutan judul kolom harus sama persis. Semua kolom wajib kecuali tiga dimensi: isi ketiganya atau kosongkan semuanya.</p>
+            <summary className="flex min-h-11 cursor-pointer items-center rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"><ChevronDown aria-hidden="true" className="mr-2 size-4 transition-transform group-open/csv:rotate-180" />Format CSV</summary><p className="max-w-2xl mt-2 text-sm text-muted-foreground">Nama dan urutan judul kolom harus sama persis. Semua kolom wajib kecuali tiga dimensi: isi ketiganya atau kosongkan semuanya.</p>
             <Table containerClassName="mt-4 rounded-md border" containerProps={{ "aria-label": "Dokumentasi kolom CSV", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Kolom template</TableCaption><TableHeader><TableRow><TableHead>Kolom</TableHead><TableHead>Aturan</TableHead></TableRow></TableHeader><TableBody>{BULK_TEMPLATE_HEADERS.map((header) => <TableRow key={header}><TableCell className="font-mono text-xs font-medium">{header}</TableCell><TableCell>{header === "panjang_cm" || header === "lebar_cm" || header === "tinggi_cm" ? "Opsional; isi ketiga dimensi bila digunakan." : header === "lokasi_tujuan" ? "Wajib; isi kelurahan/kecamatan/kota/provinsi/kode pos. Sistem hanya menerima satu hasil Mengantar yang tidak ambigu." : "Wajib; ikuti format dan batas formulir draf."}</TableCell></TableRow>)}</TableBody></Table>
           </details>
         </CardContent>

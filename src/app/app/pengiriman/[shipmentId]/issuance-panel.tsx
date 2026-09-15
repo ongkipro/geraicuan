@@ -113,7 +113,7 @@ export function ShipmentIssuancePanel({
             <legend className="text-sm font-medium">Layanan Mengantar yang tersimpan</legend>
             <div className="overflow-hidden rounded-md border">
               <Table
-                containerClassName="focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                containerClassName="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 containerProps={{ "aria-label": "Pilihan estimasi layanan Mengantar", role: "region", tabIndex: 0 }}
               >
                 <TableCaption className="sr-only">Pilihan layanan dari estimasi terbaru</TableCaption>
@@ -190,7 +190,7 @@ export function ShipmentIssuancePanel({
           ) : null}
 
           <Field className="max-w-2xl items-start" data-disabled={!selected || !fixtureEnabled || pending} orientation="horizontal">
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selected || !fixtureEnabled || pending} id="issuance-confirmation" key={selectedId} name="confirmation" required value="confirmed" />
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selected || !fixtureEnabled || pending} id="issuance-confirmation" key={selectedId} name="confirmation" required value="confirmed" />
             <FieldLabel className="font-normal leading-6" htmlFor="issuance-confirmation">Saya sudah memeriksa layanan dan nilai di atas, lalu mengonfirmasi penerbitan AWB satu kali.</FieldLabel>
           </Field>
           <div className="flex border-t pt-4">

@@ -50,7 +50,6 @@ import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture"
 import { isSanctionedUnpaidRecoveryFixtureEnabled } from "@/lib/sanctioned-unpaid-recovery-fixture";
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
-import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -212,7 +211,7 @@ export default async function ShipmentDetailPage({
         description="Snapshot operasional kiriman di dalam tenant aktif."
         eyebrow="Detail pengiriman"
         focusTargetId="shipment-detail-heading"
-        title={<>Kiriman <span className="font-mono">{shipmentReference(detail.shipmentId)}</span></>}
+        title={<>Kiriman <span className="font-mono">{detail.publicReference}</span></>}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
@@ -383,7 +382,7 @@ export default async function ShipmentDetailPage({
             {detail.estimate ? (
               detail.estimate.services.length > 0 ? (
                 <Table
-                  containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                  containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   containerProps={{ "aria-label": "Daftar estimasi tersimpan", role: "region", tabIndex: 0 }}
                 >
                   <TableHeader>

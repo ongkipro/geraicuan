@@ -22,7 +22,6 @@ import { withTenantContext } from "@/db/tenant-context";
 import { outlets, shipmentDrafts, shipments } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
-import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = { robots: { index: false } };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,6 +63,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
             declaredValueIdr: shipmentDrafts.declaredValueIdr,
             destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
             id: shipments.id,
+            publicReference: shipments.publicReference,
             isCod: shipmentDrafts.isCod,
             outletName: outlets.name,
             status: shipments.status,
@@ -109,6 +109,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
     declaredValueIdr: 100_000,
     destinationAreaLabel: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
     id: auditDraftId,
+    publicReference: "00000-260901-001",
     isCod: true,
     outletName: "Outlet Bandung",
     status: "ESTIMATED" as const,
@@ -159,7 +160,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
           draft states. */}
       <nav
         aria-label="Tahapan pembuatan kiriman"
-        className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         tabIndex={0}
       >
         <ol className="grid min-w-[32rem] grid-cols-4 divide-x text-sm">
@@ -179,12 +180,12 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
       </nav>
 
     {data.savedDraft ? (
-      <FocusRegion className="rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10 outline-none focus-visible:ring-3 focus-visible:ring-ring/50" role="status">
+      <FocusRegion className="rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10 outline-none focus-visible:ring-2 focus-visible:ring-ring" role="status">
         <div className="flex gap-3">
           <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
           <div className="grid min-w-0 gap-1">
             <h2 className="font-medium">Draf kiriman tersimpan</h2>
-            <p>Nomor draf: <span className="font-mono">{shipmentReference(data.savedDraft.id)}</span> · <strong className="font-medium">{data.savedDraft.status}</strong></p>
+            <p>Nomor kiriman: <span className="font-mono">{data.savedDraft.publicReference}</span> · <strong className="font-medium">{data.savedDraft.status}</strong></p>
             <p className="wrap-anywhere text-muted-foreground">{data.savedDraft.outletName} → {data.savedDraft.destinationAreaLabel}</p>
             <p className="text-muted-foreground">Muat estimasi di bawah untuk membandingkan layanan. Belum ada pesanan yang dikirim ke penyedia.</p>
             <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:flex-wrap">

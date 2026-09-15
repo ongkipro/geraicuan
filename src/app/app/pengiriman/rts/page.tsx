@@ -42,7 +42,6 @@ import {
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
 import { cn } from "@/lib/utils";
-import { shipmentReference } from "@/lib/shipment-reference";
 
 export const metadata: Metadata = {
   title: "Retur (RTS) | GeraiCUAN",
@@ -280,7 +279,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
         ) : (
           <Table
             className="min-w-[60rem]"
-            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Daftar kiriman retur; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -322,7 +321,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                         className="flex min-h-11 max-w-40 items-center break-all font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
                         href={`/app/pengiriman/${row.shipmentId}`}
                       >
-                        {row.awb ? row.awb : shipmentReference(row.shipmentId)}
+                        {row.awb ? row.awb : row.publicReference}
                       </Link>
 
                     </TableCell>
@@ -331,10 +330,10 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                       <div className="font-medium text-xs sm:text-sm">
                         {row.recipientName}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {row.recipientPhoneMasked}
+                      <div className="wrap-anywhere text-xs tabular-nums text-muted-foreground">
+                        {row.recipientPhone}
                       </div>
-                      <div className="truncate text-xs text-muted-foreground" title={row.destinationAreaLabel}>
+                      <div className="wrap-anywhere text-xs text-muted-foreground">
                         {row.destinationAreaLabel}
                       </div>
                     </TableCell>

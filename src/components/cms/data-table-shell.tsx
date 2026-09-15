@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TableScrollRegion } from "@/components/ui/table-scroll-region";
 
 import { cn } from "@/lib/utils";
 
@@ -15,13 +16,13 @@ export type DataTableShellProps = {
  */
 export function DataTableShell({ children, className, label }: DataTableShellProps) {
   return (
-    <div
+    <TableScrollRegion
       aria-label={label}
       className={cn("min-w-0 overflow-x-auto rounded-md border", className)}
       role="region"
       tabIndex={0}
     >
       {children}
-    </div>
+    </TableScrollRegion>
   );
 }

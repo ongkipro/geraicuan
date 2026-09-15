@@ -25,7 +25,6 @@ import {
   type TenantTransaction,
 } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { maskPhone } from "@/lib/pii-redaction";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -51,7 +50,7 @@ export type ShipmentContactSearchResult = {
   contactId: string;
   destinationAreaLabel: string | null;
   name: string;
-  phoneMasked: string;
+  phone: string;
 };
 
 export type ShipmentContactSearchActionState = {
@@ -368,7 +367,7 @@ async function searchShipmentContactsForRole(
               contactId: contact.id,
               destinationAreaLabel: address.destinationAreaLabel,
               name: contact.name,
-              phoneMasked: maskPhone(contact.phone),
+              phone: contact.phone,
             }));
         }),
       );

@@ -13,7 +13,7 @@ export default function OutletSettingsLoading() {
         currentHref="/app/pengaturan"
         header={
           <PageHeader
-            description="Atur pickup, area asal, dan koneksi Mengantar. Nilai kredensial tidak pernah dikirim ke browser."
+            description="Kelola lokasi pickup dan koneksi pengiriman outlet."
             eyebrow="Pengaturan"
             title="Outlet & koneksi"
           />
@@ -50,9 +50,9 @@ export default function OutletSettingsLoading() {
               </div>
             </div>
             <div className="grid min-w-0 gap-8">
-              <div className="grid gap-2 rounded-md border px-4 py-3 lg:max-w-xl">
+              <div className="grid gap-2 border-b pb-5">
                 <Skeleton className="h-3 w-20" />
-                <Skeleton className="h-5 w-48 max-w-full" />
+                <Skeleton className="h-7 w-48 max-w-full" />
                 <Skeleton className="h-4 w-64 max-w-full" />
               </div>
               {Array.from({ length: 2 }, (_, index) => (

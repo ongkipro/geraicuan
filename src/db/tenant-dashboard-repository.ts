@@ -42,6 +42,7 @@ export type TenantDashboardRecentShipment = {
   outletName: string;
   recipientName: string;
   shipmentId: string;
+  publicReference: string;
   status: (typeof shipments.$inferSelect)["status"];
   updatedAt: Date;
 };
@@ -79,6 +80,7 @@ export type TenantDashboardPeriodSupport = {
     occurredAt: Date;
     outletName: string;
     shipmentId: string;
+    publicReference: string;
     status: (typeof shipments.$inferSelect)["status"];
   }>;
   totalCount: number;
@@ -265,6 +267,7 @@ export async function loadTenantDashboardPeriodSupport(
     isCod: shipmentDrafts.isCod,
     outletName: outlets.name,
     shipmentId: shipments.id,
+    publicReference: shipments.publicReference,
     status: shipments.status,
     totalCount: sql<number>`count(*) over()::int`.mapWith(Number),
   };
@@ -346,6 +349,7 @@ export async function loadTenantDashboardPeriodSupport(
         occurredAt: row.occurredAt,
         outletName: row.outletName,
         shipmentId: row.shipmentId,
+        publicReference: row.publicReference,
         status: row.status,
       };
     }),
@@ -454,6 +458,7 @@ export async function loadTenantDashboardShipments(
       outletName: outlets.name,
       recipientName: shipmentParties.name,
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       status: shipments.status,
       updatedAt: shipments.updatedAt,
     })

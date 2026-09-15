@@ -146,7 +146,14 @@ export function normalizeMengantarPickupOptions(payload: unknown): MengantarPick
     const pickupAddressId = requiredText(address._id, MAX_IDENTIFIER_LENGTH);
     const originAreaId = requiredText(address.PICKUP_AUTOFILL, MAX_IDENTIFIER_LENGTH);
     const pickupName = requiredText(address.PICKUP_NAME, MAX_LABEL_LENGTH);
-    const pickupAddress = requiredText(address.PICKUP_ADDRESS, MAX_LABEL_LENGTH);
+    // Provider street addresses may be multiline; display them on one line.
+    // All other controls, identifiers and label limits retain strict validation.
+    const pickupAddress = requiredText(
+      typeof address.PICKUP_ADDRESS === "string"
+        ? address.PICKUP_ADDRESS.replace(/\r\n?|\n/g, " ")
+        : address.PICKUP_ADDRESS,
+      MAX_LABEL_LENGTH,
+    );
     const district = requiredText(address.PICKUP_DISTRICT, MAX_LABEL_LENGTH);
     const city = requiredText(address.PICKUP_CITY, MAX_LABEL_LENGTH);
     const province = requiredText(address.PICKUP_REGION, MAX_LABEL_LENGTH);

@@ -203,10 +203,9 @@ describe("tenant RTS repository", () => {
       shipmentId: id,
       status: "RTS_IN_TRANSIT",
     });
-    // The queue is an index view, so it must carry a masked number and never
-    // the recipient's real one anywhere in the payload.
-    expect(page.rows[0]?.recipientPhoneMasked).toBe("•••• 0000");
-    expect(JSON.stringify(page)).not.toContain("081299990000");
+    // Authorized tenant operators need the complete phone for return handling.
+    expect(page.rows[0]?.recipientPhone).toBe("081299990000");
+    expect(JSON.stringify(page)).toContain("081299990000");
     expect(page.rows[0]?.latestEventAt).toEqual(new Date(Date.UTC(2026, 7, 30, 6, 0)));
   });
 

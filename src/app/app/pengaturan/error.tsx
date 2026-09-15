@@ -25,7 +25,7 @@ export default function OutletSettingsError({ reset }: { reset: () => void }) {
         currentHref="/app/pengaturan"
         header={
           <PageHeader
-            description="Atur pickup, area asal, dan koneksi Mengantar. Nilai kredensial tidak pernah dikirim ke browser."
+            description="Kelola lokasi pickup dan koneksi pengiriman outlet."
             eyebrow="Pengaturan"
             title="Outlet & koneksi"
           />

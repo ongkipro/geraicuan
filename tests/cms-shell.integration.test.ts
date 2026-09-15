@@ -25,30 +25,30 @@ describe("tenant CMS shell contract", () => {
       (item) => item.label,
     );
 
-    expect(operatorLabels).toEqual(["Ringkasan", "Kiriman", "Retur (RTS)", "Kontak"]);
+    expect(operatorLabels).toEqual(["Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Kontak"]);
     expect(operatorLabels).not.toContain("Analitik");
-    expect(operatorLabels).not.toContain("Outlet & koneksi");
+    expect(operatorLabels).not.toContain("Pengaturan");
     expect(operatorLabels).not.toContain("Anggota & akses");
     expect(adminLabels).toContain("Analitik");
-    expect(adminLabels).toContain("Outlet & koneksi");
-    expect(adminLabels).toContain("Anggota & akses");
+    expect(adminLabels).toContain("Pengaturan");
+    expect(adminLabels).not.toContain("Anggota & akses");
   });
 
   it.each([
-    ["/app", "Ringkasan"],
-    ["/app/impor", "Kiriman"],
-    ["/app/pengiriman", "Kiriman"],
-    ["/app/pengiriman/baru", "Kiriman"],
-    ["/app/pengiriman/3b4f", "Kiriman"],
+    ["/app", "Dasbor"],
+    ["/app/impor", "Histori kiriman"],
+    ["/app/pengiriman", "Histori kiriman"],
+    ["/app/pengiriman/baru", "Buat kiriman"],
+    ["/app/pengiriman/3b4f", "Histori kiriman"],
     ["/app/pengiriman/rts", "Retur (RTS)"],
-    ["/app/label", "Kiriman"],
-    ["/app/label/3b4f", "Kiriman"],
+    ["/app/label", "Histori kiriman"],
+    ["/app/label/3b4f", "Histori kiriman"],
     ["/app/analitik", "Analitik"],
     ["/app/kontak", "Kontak"],
     ["/app/kontak/baru", "Kontak"],
     ["/app/kontak/3b4f", "Kontak"],
-    ["/app/pengaturan", "Outlet & koneksi"],
-    ["/app/anggota", "Anggota & akses"],
+    ["/app/pengaturan", "Pengaturan"],
+    ["/app/anggota", "Pengaturan"],
   ])("marks exactly one current destination for %s", (pathname, label) => {
     const items = itemsFor("TENANT_ADMIN", pathname);
     const current = items.filter((item) => item.current);
@@ -60,10 +60,10 @@ describe("tenant CMS shell contract", () => {
   it("uses the accepted navigation groups in task order", () => {
     expect(
       tenantCmsNavigation("TENANT_ADMIN", "/app").map((group) => group.label),
-    ).toEqual(["Utama", "Operasional", "Wawasan", "Administrasi"]);
+    ).toEqual(["Utama", "Pengiriman", "Pengelolaan"]);
     expect(
       tenantCmsNavigation("OPERATOR", "/app").map((group) => group.label),
-    ).toEqual(["Utama", "Operasional"]);
+    ).toEqual(["Utama", "Pengiriman"]);
   });
 
   it.each(["/app/analitik", "/app/keuangan", "/app/pengaturan", "/app/anggota"])(
@@ -81,7 +81,7 @@ describe("tenant CMS shell contract", () => {
     );
 
     expect(current).toHaveLength(1);
-    expect(current[0]?.label).toBe("Ringkasan");
+    expect(current[0]?.label).toBe("Dasbor");
   });
 });
 

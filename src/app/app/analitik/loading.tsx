@@ -25,12 +25,12 @@ export default function AnalyticsLoading() {
       <div className="grid grid-cols-2 gap-3 border-y py-3"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-9 w-36" /></div>
       <Skeleton className="h-10 w-full" />
       <AnalyticsSummarySkeleton />
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-7">
+      <AnalyticsReconciliationSkeleton />
+      <div className="grid grid-cols-1 items-start gap-4">
         <AnalyticsTrendSkeleton />
         <AnalyticsCourierSkeleton />
       </div>
       <AnalyticsFinancialSkeleton />
-      <AnalyticsReconciliationSkeleton />
       <AnalyticsShipmentSkeleton />
     </PageContainer>
   );

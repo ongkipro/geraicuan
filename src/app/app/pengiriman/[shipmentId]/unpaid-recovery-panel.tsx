@@ -63,7 +63,7 @@ export function ShipmentUnpaidRecoveryPanel({
             <FieldLegend variant="label">Konfirmasi pemulihan satu kali</FieldLegend>
             <Field className="max-w-2xl items-start" data-disabled={!fixtureEnabled || pending} orientation="horizontal">
               <input type="checkbox"
-                className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!fixtureEnabled || pending}
                 id="unpaid-recovery-confirmation"
                 name="confirmation"

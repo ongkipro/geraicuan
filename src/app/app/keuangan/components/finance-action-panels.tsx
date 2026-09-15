@@ -32,7 +32,6 @@ function HiddenContext({ context, attemptId }: { context: CommonHiddenFields; at
   return <>
     <input name="attemptId" type="hidden" value={attemptId} />
     <input name="rentang" type="hidden" value={context.range.presetId} />
-    <input name="tz" type="hidden" value={context.range.timezone} />
     <input name="dari" type="hidden" value={context.range.startDate} />
     <input name="sampai" type="hidden" value={context.range.lastIncludedDate} />
     <input name="khusus" type="hidden" value="1" />
@@ -80,7 +79,7 @@ export function ReconciliationActionPanel({ action, context, outlets, periodLabe
     <ActionResult resultRef={resultRef} state={state} />
     <label className="grid max-w-lg gap-2 text-sm font-medium" htmlFor="reconciliation-outlet">
       Outlet yang ditutup
-      <select className="min-h-11 rounded-lg border border-input bg-background px-3 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" id="reconciliation-outlet" onChange={(event) => setOutletId(event.target.value)} value={outletId}>
+      <select className="min-h-11 rounded-lg border border-input bg-background px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring" id="reconciliation-outlet" onChange={(event) => setOutletId(event.target.value)} value={outletId}>
         {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
       </select>
     </label>
@@ -147,7 +146,7 @@ export function ReversalActionPanel({ action, amountLabel, context, entryId, ent
           <input name="entryId" type="hidden" value={entryId} />
           <AlertDialogHeader><AlertDialogTitle>Konfirmasi pembalikan penuh</AlertDialogTitle><AlertDialogDescription>Entri {entryType} senilai {amountLabel} akan diberi entri pembalik. Entri asal tetap utuh dan tindakan ini tidak dapat diulang.</AlertDialogDescription></AlertDialogHeader>
           <Label className="my-5 min-h-11 rounded-lg border p-3" htmlFor={`confirm-${entryId}`}>
-            <input className="size-4 shrink-0 accent-primary outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" type="checkbox" id={`confirm-${entryId}`} name="confirmation" required value="confirmed" />Saya memahami pembalikan penuh ini.
+            <input className="size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" type="checkbox" id={`confirm-${entryId}`} name="confirmation" required value="confirmed" />Saya memahami pembalikan penuh ini.
           </Label>
           <AlertDialogFooter><AlertDialogCancel className="min-h-11" disabled={pending}>Batal</AlertDialogCancel><Button className="min-h-11" disabled={pending} type="submit" variant="destructive">{pending ? "Menyimpan…" : "Buat entri pembalik"}</Button></AlertDialogFooter>
         </form>

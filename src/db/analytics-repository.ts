@@ -76,6 +76,7 @@ export type ShipmentTrend = {
 
 export type ShipmentRow = {
   shipmentId: string;
+  publicReference: string;
   createdAt: Date;
   issuedAt: Date | null;
   outletName: string;
@@ -694,6 +695,7 @@ export async function loadShipmentPage(
   const rows = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       createdAt: shipments.createdAt,
       issuedAt: providerOrderSnapshots.resolvedAt,
       outletName: sql<string>`coalesce(${outlets.name}, '—')`,
@@ -779,6 +781,7 @@ export async function loadShipmentExport(
   const rows = await tx
     .select({
       shipmentId: shipments.id,
+      publicReference: shipments.publicReference,
       createdAt: shipments.createdAt,
       issuedAt: providerOrderSnapshots.resolvedAt,
       outletName: sql<string>`coalesce(${outlets.name}, '—')`,

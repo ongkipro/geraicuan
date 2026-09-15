@@ -1,5 +1,3 @@
-import { shipmentReference } from "@/lib/shipment-reference";
-
 const countFormatter = new Intl.NumberFormat("id-ID");
 
 export function formatCount(value: number): string {
@@ -21,5 +19,5 @@ export function formatDuration(milliseconds: number | null): string {
 }
 
 export function formatShortId(id: string): string {
-  return shipmentReference(id);
+  return id.replaceAll("-", "").slice(-8).toUpperCase();
 }

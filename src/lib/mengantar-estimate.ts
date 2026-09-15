@@ -30,6 +30,8 @@ export class MengantarEstimateError extends Error {
   }
 }
 
+export class MengantarNoSupportedServicesError extends MengantarEstimateError {}
+
 async function readBoundedResponseBody(response: Response, controller: AbortController) {
   const reader = response.body?.getReader();
   if (!reader) throw new MengantarEstimateError();
@@ -99,7 +101,16 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
     });
   }
 
-  if (services.length === 0) throw new MengantarEstimateError();
+  if (services.length === 0) {
+    const entries = Object.entries(data);
+    const allUnsupported = entries.length > 0 && entries.every(([name, value]) => (
+      PROVIDER_SERVICE_PATTERN.test(name)
+      && value && typeof value === "object" && !Array.isArray(value)
+      && (value as ProviderService).unsupported === true
+    ));
+    if (allUnsupported) throw new MengantarNoSupportedServicesError();
+    throw new MengantarEstimateError();
+  }
   return services;
 }
 

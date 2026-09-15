@@ -460,7 +460,7 @@ describe("platform monitoring page states", () => {
     expect(hiddenInput(tenantForm, "kurir")).toContain('value="JNE"');
     expect(hiddenInput(tenantForm, "status")).toContain('value="FAILED"');
     expect(tenantForm).toMatch(/<select[^>]*name="rentang"/);
-    expect(tenantForm).toMatch(/<select[^>]*name="tz"/);
+    expect(tenantForm).not.toMatch(/name="tz"/);
     expect(tenantForm).toMatch(/<input[^>]*name="q"/);
     expect(tenantHtml).toContain('aria-label="Tenant: Alpha Outlet"');
     expect(tenantHtml).toContain('aria-label="Kurir: JNE"');
@@ -495,7 +495,8 @@ describe("platform monitoring page states", () => {
       expect(form).not.toMatch(/<details[^>]*\bopen=""/);
       expect(form.match(/name="rentang"/g)).toHaveLength(1);
       expect(form.match(/name="outlet"/g)).toHaveLength(1);
-      expect(form).toMatch(/<details[^>]*>[^]*name="dari"[^]*name="sampai"[^]*name="tz"[^]*<\/details>/);
+      expect(form).toMatch(/<details[^>]*>[^]*name="dari"[^]*name="sampai"[^]*<\/details>/);
+      expect(form).not.toContain('name="tz"');
       expect(form.match(/type="submit"/g)).toHaveLength(1);
     }
     const custom = await renderOverview({ rentang: "kustom", dari: "2026-08-01", sampai: "2026-08-30", tz: "Asia/Jayapura" });

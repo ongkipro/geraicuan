@@ -46,6 +46,7 @@ type DestinationAreaSelectorProps = {
   outlets: DestinationAreaOutlet[];
   required?: boolean;
   submitOutletWithoutSelection?: boolean;
+  showSourceContext?: boolean;
 };
 
 export function DestinationAreaSelector({
@@ -60,6 +61,7 @@ export function DestinationAreaSelector({
   outlets,
   required = false,
   submitOutletWithoutSelection = false,
+  showSourceContext = true,
 }: DestinationAreaSelectorProps) {
   const id = useId();
   const [outletId, setOutletId] = useState(fixedOutletId ?? defaultSelection?.outletId ?? defaultQuery?.outletId ?? (outlets.length === 1 ? outlets[0].id : ""));
@@ -161,7 +163,7 @@ export function DestinationAreaSelector({
       ) : (
         <div className="grid min-w-0 gap-3">
           {fixedOutletId || outlets.length === 1 ? (
-            <p className="text-sm text-muted-foreground">Sumber pencarian: <span className="font-medium text-foreground">{fixedOutlet?.name ?? outlets[0]?.name}</span></p>
+            showSourceContext && <p className="text-sm text-muted-foreground">Sumber pencarian: <span className="font-medium text-foreground">{fixedOutlet?.name ?? outlets[0]?.name}</span></p>
           ) : (
             <Select
               disabled={blocked || pending}
@@ -297,7 +299,7 @@ export function DestinationAreaSelector({
             </Button>
           ) : null}
 
-          <p aria-live={searchError ? undefined : "polite"} className="max-w-2xl rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id={`${id}-status`} ref={statusRef} tabIndex={-1}>{searchError ? null : message}</p>
+          <p aria-live={searchError ? undefined : "polite"} className="max-w-2xl rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" id={`${id}-status`} ref={statusRef} tabIndex={-1}>{searchError ? null : message}</p>
         </div>
       )}
       <input name={names.areaId} type="hidden" value={selected?.areaId ?? ""} />
@@ -305,7 +307,7 @@ export function DestinationAreaSelector({
       <input name={names.areaQuery} type="hidden" value={selected?.query ?? ""} />
       <input name={names.areaOutletId} type="hidden" value={selected?.outletId ?? (submitOutletWithoutSelection ? outletId : "")} />
       <input name={names.areaSelectionChanged} type="hidden" value={selectionChanged ? "1" : "0"} />
-      <FieldDescription className="max-w-2xl" id={`${id}-help`}>Cari dengan nama kelurahan atau kecamatan, lalu pilih hierarki yang sesuai. ID provider tidak ditampilkan.{required ? " Area wajib dipilih untuk draf kiriman." : ""}</FieldDescription>
+      <FieldDescription className="max-w-2xl" id={`${id}-help`}>Cari kelurahan atau kecamatan, lalu pilih area tujuan yang sesuai.{required ? " Area wajib dipilih untuk melanjutkan." : ""}</FieldDescription>
       <FieldError id={`${id}-error`}>{error}</FieldError>
     </Field>
   );

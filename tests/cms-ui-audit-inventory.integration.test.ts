@@ -18,6 +18,7 @@ const repositoryRoot = process.cwd();
 const forbiddenLegacyClass = /\b(?:sales|ship|ops|an|bulk)-(?:[a-z0-9_-]+)?/gi;
 
 const expectedStatesByRoute = {
+  "/app/cek-tarif": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/app": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/analitik": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/analitik/export.csv": ["invalid-query", "primary-success", "route-error", "unauthorized"],
@@ -42,6 +43,7 @@ const expectedStatesByRoute = {
 } as const;
 
 const expectedOwnerByRoute = {
+  "/app/cek-tarif": "T-143",
   "/app": "T-38",
   "/app/analitik": "T-38",
   "/app/analitik/export.csv": "T-38",
@@ -367,7 +369,7 @@ describe("CMS UI audit inventory", () => {
     expect(routes.sort()).toEqual(Object.keys(expectedStatesByRoute).sort());
 
     for (const contract of CMS_UI_AUDIT_ROUTE_CONTRACTS) {
-      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72)$/);
+      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72|143)$/);
       expect(contract.ownerTask).toBe(expectedOwnerByRoute[contract.route]);
       expect(contract.roles.length).toBeGreaterThan(0);
       expect(contract.states.length).toBeGreaterThan(0);
@@ -385,7 +387,7 @@ describe("CMS UI audit inventory", () => {
     }
 
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "page"))
-      .toHaveLength(19);
+      .toHaveLength(20);
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "endpoint"))
       .toHaveLength(2);
 
@@ -764,6 +766,7 @@ describe("CMS UI audit inventory", () => {
 
   it("limits every audit-contract import to its route-bound read-only page consumers", () => {
     const allowedImporters = new Set([
+      "src/app/app/cek-tarif/page.tsx",
       "src/app/app/analitik/page.tsx",
       "src/app/app/anggota/page.tsx",
       "src/app/app/page.tsx",

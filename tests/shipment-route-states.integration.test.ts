@@ -84,6 +84,7 @@ vi.mock("@/db/shipment-queue-repository", () => ({
         providerService: null,
         recipientName: "Penerima audit",
         shipmentId,
+        publicReference: "95758-260901-039",
         status: "DRAFT",
         updatedAt: new Date("2026-09-01T02:00:00.000Z"),
       },
@@ -142,6 +143,7 @@ vi.mock("@/db/shipment-queue-repository", () => ({
     recipient: { address: "Alamat penerima audit", name: "Penerima audit", phone: "080000000002" },
     sender: { address: "Alamat pengirim audit", name: "Pengirim audit", phone: "080000000001" },
     shipmentId,
+    publicReference: "95758-260901-039",
     status: fixture.status,
     updatedAt: new Date("2026-09-01T02:00:00.000Z"),
   })),
@@ -192,6 +194,8 @@ describe("T-39 shipment queue and lifecycle route states", () => {
 
     expect(html).toContain('id="shipment-queue-heading"');
     expect(html).toContain("Tampilan antrean");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260901-039");
+    expect(html.replace(/<[^>]+>/g, " ")).not.toContain(shipmentId);
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="Daftar kiriman; geser horizontal untuk melihat seluruh kolom"');
     expect(html).toContain('tabindex="0"');
@@ -203,7 +207,7 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     // content width; every value the nine-column table printed is still in it.
     const headers = [...html.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((match) => match[1]);
     expect(headers).toEqual([
-      "Referensi", "Status / Pembayaran", "Penerima / Tujuan", "Paket / Outlet", "Layanan / AWB", "Aktivitas terakhir",
+      "Nomor kiriman", "Status / Pembayaran", "Penerima / Tujuan", "Paket / Outlet", "Layanan / Resi", "Aktivitas terakhir",
     ]);
     for (const value of ["Draf", "COD", "Bandung", "Paket audit", "1 kg", "Gerai utama", "—"]) {
       expect(html, value).toContain(value);

@@ -29,18 +29,24 @@ const navigationGroups: readonly {
       {
         href: "/app",
         key: "dashboard",
-        label: "Ringkasan",
-        shortLabel: "RG",
+        label: "Dasbor",
+        shortLabel: "DB",
       },
     ],
   },
   {
-    label: "Operasional",
+    label: "Pengiriman",
     items: [
+      {
+        href: "/app/pengiriman/baru",
+        key: "shipment-new",
+        label: "Buat kiriman",
+        shortLabel: "BK",
+      },
       {
         href: "/app/pengiriman",
         key: "shipments",
-        label: "Kiriman",
+        label: "Histori kiriman",
         shortLabel: "KI",
       },
       {
@@ -58,7 +64,7 @@ const navigationGroups: readonly {
     ],
   },
   {
-    label: "Wawasan",
+    label: "Pengelolaan",
     items: [
       {
         href: "/app/analitik",
@@ -74,24 +80,12 @@ const navigationGroups: readonly {
         roles: ["TENANT_ADMIN"],
         shortLabel: "KE",
       },
-    ],
-  },
-  {
-    label: "Administrasi",
-    items: [
       {
         href: "/app/pengaturan",
         key: "settings",
-        label: "Outlet & koneksi",
+        label: "Pengaturan",
         roles: ["TENANT_ADMIN"],
         shortLabel: "OK",
-      },
-      {
-        href: "/app/anggota",
-        key: "members",
-        label: "Anggota & akses",
-        roles: ["TENANT_ADMIN"],
-        shortLabel: "AA",
       },
     ],
   },
@@ -166,11 +160,14 @@ export function tenantCmsNavigation(
     pathname.startsWith("/app/impor/") ||
     pathname === "/app/label" ||
     pathname.startsWith("/app/label/");
+  const navigationPath = pathname === "/app/anggota" || pathname.startsWith("/app/anggota/")
+    ? "/app/pengaturan"
+    : pathname;
   const matchedDefinition = navigationGroups
     .flatMap((group) => group.items)
     .sort((a, b) => b.href.length - a.href.length)
-    .find((item) => routeMatches(pathname, item.href));
-  const currentKey = contextualShipmentRoute
+    .find((item) => routeMatches(navigationPath, item.href));
+  const currentKey = pathname === "/app/cek-tarif" ? "quick-rate" : contextualShipmentRoute
     ? "shipments"
     : matchedDefinition?.key ?? "dashboard";
 
@@ -184,4 +181,13 @@ export function platformCmsNavigation(pathname: string): CmsNavigationGroup[] {
     "platform-overview";
 
   return resolveNavigation(platformNavigationGroups, currentKey);
+}
+
+
+/** Header-only tools share role navigation search without adding sidebar clutter. */
+export function tenantCmsSearchNavigation(role: TenantCmsRole, pathname: string): CmsNavigationGroup[] {
+  return [...tenantCmsNavigation(role, pathname), {
+    label: "Alat",
+    items: [{ current: pathname === "/app/cek-tarif", href: "/app/cek-tarif", key: "quick-rate", label: "Cek Tarif", shortLabel: "CT" }],
+  }];
 }

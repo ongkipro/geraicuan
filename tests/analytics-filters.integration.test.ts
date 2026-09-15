@@ -13,7 +13,7 @@ describe("tenant analytics URL filters", () => {
     const parsed = parseTenantAnalyticsQuery(
       {
         rentang: "7-hari",
-        tz: "Asia/Jakarta",
+        tz: "Asia/Jayapura",
         outlet: outletId,
         kurir: "jne",
         status: "issued",
@@ -28,6 +28,7 @@ describe("tenant analytics URL filters", () => {
     );
 
     expect(parsed.issues).toEqual([]);
+    expect(parsed.query.range.timezone).toBe("Asia/Jakarta");
     expect(parsed.query).toMatchObject({
       filters: {
         outletId,

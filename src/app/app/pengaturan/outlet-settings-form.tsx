@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsUpDown, CircleAlert, RefreshCw } from "lucide-react";
+import { ChevronsUpDown, CircleAlert, MapPin, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 
@@ -43,7 +43,6 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
   FieldSet,
   FieldTitle,
 } from "@/components/ui/field";
@@ -94,6 +93,7 @@ type ReturnedOutletSettingsState = OutletSettingsActionState & {
 };
 
 type PickupSelectorProps = {
+  connectionSource: SafeOutletReadiness["connectionSource"];
   disabled: boolean;
   error?: string;
   onSelectionChange: (selection: MengantarPickupOption | null) => void;
@@ -104,6 +104,7 @@ type PickupSelectorProps = {
 };
 
 function PickupSelector({
+  connectionSource,
   disabled,
   error,
   onSelectionChange,
@@ -138,6 +139,18 @@ function PickupSelector({
   }
 
   function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen && triggerRef.current) {
+      const bounds = triggerRef.current.getBoundingClientRect();
+      // A long address can occupy most of a short screen. Make room below it
+      // for the search field and readable results before Radix places the popup.
+      const popupSpace = Math.min(280, window.innerHeight - 32);
+      if (Math.max(bounds.top, window.innerHeight - bounds.bottom) < popupSpace) {
+        window.scrollBy({
+          top: bounds.bottom - (window.innerHeight - popupSpace - 16),
+          behavior: "instant",
+        });
+      }
+    }
     setOpen(nextOpen);
     if (nextOpen && options === null && !loadState.message && !loading) loadOptions();
   }
@@ -171,7 +184,7 @@ function PickupSelector({
             aria-describedby={error ? `pickup-error-${outletId}` : `pickup-help-${outletId}`}
             aria-expanded={open}
             aria-invalid={Boolean(error)}
-            className="min-h-11 w-full justify-between whitespace-normal px-3 py-2 text-left font-normal"
+            className="h-auto min-h-11 w-full items-start justify-between gap-3 whitespace-normal px-3 py-3 text-left font-normal"
             disabled={disabled}
             id={`pickup-${outletId}`}
             ref={triggerRef}
@@ -179,15 +192,17 @@ function PickupSelector({
             type="button"
             variant="outline"
           >
-            <span className="min-w-0 leading-5">
+            <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 leading-5 [overflow-wrap:anywhere]">
               {selection ? selection.pickupLabel : "Pilih alamat pickup"}
             </span>
-            <ChevronsUpDown aria-hidden="true" className="ml-2 size-4 shrink-0 opacity-50" />
+            <ChevronsUpDown aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-(--radix-popover-trigger-width) max-w-[calc(100vw-2rem)] p-0"
+          className="max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
+          collisionPadding={16}
         >
           {loading ? (
             <div aria-live="polite" className="space-y-2 p-3">
@@ -234,15 +249,16 @@ function PickupSelector({
               </Button>
             </div>
           ) : (
-            <Command>
-              <CommandInput placeholder="Cari nama pickup atau lokasi…" ref={searchRef} />
-              <CommandList id={listId}>
-                <CommandEmpty>
+            <Command className="min-h-0">
+              <CommandInput aria-label="Cari alamat pickup" className="min-w-0 flex-1 shrink" placeholder="Cari nama pickup atau lokasi…" ref={searchRef} />
+              <CommandList className="min-h-0 max-h-[min(22rem,calc(var(--radix-popover-content-available-height)-4.5rem))] overscroll-contain" id={listId}>
+                <CommandEmpty className="px-4 leading-6">
                   Tidak ada pickup yang cocok. Hapus atau ubah kata pencarian.
                 </CommandEmpty>
                 <CommandGroup heading="Alamat pickup">
                   {(options ?? []).map((option) => (
                     <CommandItem
+                      className="min-h-14 items-start gap-3 rounded-md px-3 py-3 data-[checked=true]:bg-accent data-[checked=true]:text-accent-foreground data-[selected=true]:ring-1 data-[selected=true]:ring-inset data-[selected=true]:ring-ring [&>svg]:mt-0.5 [&>svg]:text-primary"
                       data-checked={selection?.pickupAddressId === option.pickupAddressId}
                       key={option.pickupAddressId}
                       onSelect={() => {
@@ -256,11 +272,11 @@ function PickupSelector({
                           ? "Terpilih."
                           : ""}
                       </span>
-                      <span className="grid min-w-0 gap-1 py-1">
-                        <span className="whitespace-normal font-medium leading-5">
+                      <span className="grid min-w-0 flex-1 gap-1">
+                        <span className="whitespace-normal font-medium leading-5 [overflow-wrap:anywhere]">
                           {option.pickupLabel}
                         </span>
-                        <span className="whitespace-normal text-xs leading-5 text-muted-foreground">
+                        <span className="whitespace-normal text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                           Area asal: {option.originLabel}
                         </span>
                       </span>
@@ -273,7 +289,9 @@ function PickupSelector({
         </PopoverContent>
       </Popover>
       <FieldDescription id={`pickup-help-${outletId}`}>
-        Daftar diambil dari akun Mengantar yang aktif. Area asal mengikuti pickup terpilih.
+        {connectionSource === "platform_default"
+          ? "Daftar pickup dari Default GeraiCUAN."
+          : "Daftar pickup dari akun Mengantar outlet."}
       </FieldDescription>
       <FieldError id={`pickup-error-${outletId}`}>{error}</FieldError>
     </Field>
@@ -332,14 +350,7 @@ function ConnectionStatus({ outlet }: { outlet: SafeOutletReadiness }) {
     );
   }
 
-  return (
-    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md border px-4 py-2">
-      <p className="text-sm leading-6 text-muted-foreground">
-        Kredensial dikelola oleh GeraiCUAN untuk outlet ini.
-      </p>
-      <Badge variant="outline">Default GeraiCUAN</Badge>
-    </div>
-  );
+  return null;
 }
 
 export function OutletSettingsForm({
@@ -416,12 +427,12 @@ export function OutletSettingsForm({
 
   return (
     <section aria-labelledby="outlet-detail-title" className="grid min-w-0 gap-8">
-      <header className="flex flex-wrap items-start justify-between gap-3 rounded-md border px-4 py-3 lg:max-w-xl">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-5">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">
             Outlet aktif
           </p>
-          <h2 className="mt-0.5 rounded-sm text-base font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50" id="outlet-detail-title" tabIndex={-1}>
+          <h2 className="mt-1 rounded-sm text-xl font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring" id="outlet-detail-title" tabIndex={-1}>
             {outlet.name}
           </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -439,12 +450,7 @@ export function OutletSettingsForm({
       </header>
 
       <ContentSection
-        description={
-          <>
-            Pilih pickup dari akun Mengantar aktif. Area asal ditentukan otomatis oleh
-            Mengantar dan disimpan sebagai satu pasangan.
-          </>
-        }
+        description="Tentukan lokasi penjemputan untuk pengiriman outlet."
         id="outlet-location-title"
         title="Lokasi pengiriman"
       >
@@ -458,8 +464,7 @@ export function OutletSettingsForm({
             <input name="connectionMode" type="hidden" value={outlet.connectionSource} />
             <FieldError>{locationState.errors?.outletId}</FieldError>
 
-            <FieldSet>
-              <FieldLegend className="sr-only">Lokasi pengiriman</FieldLegend>
+            <FieldSet aria-labelledby="outlet-location-title">
               {hasLegacyLocation ? (
                 <Alert>
                   <CircleAlert aria-hidden="true" />
@@ -472,6 +477,7 @@ export function OutletSettingsForm({
               ) : null}
               <FieldGroup>
                 <PickupSelector
+                  connectionSource={outlet.connectionSource}
                   disabled={isBusy}
                   error={pickupError}
                   onSelectionChange={setSelectedPickup}
@@ -481,22 +487,22 @@ export function OutletSettingsForm({
                   triggerRef={pickupRef}
                 />
 
-                <Field>
-                  <FieldLabel>Area asal</FieldLabel>
-                  <div
+                <Field className="rounded-md bg-muted/50 px-3 py-3">
+                  <FieldLabel htmlFor={`origin-${outlet.id}`}>
+                    Area asal <span className="font-normal text-muted-foreground">(otomatis)</span>
+                  </FieldLabel>
+                  <output
                     aria-live="polite"
-                    className="flex min-h-11 items-center rounded-md border bg-muted/40 px-3 py-2 text-sm leading-5"
+                    className="block text-sm leading-6 [overflow-wrap:anywhere]"
+                    htmlFor={`pickup-${outlet.id}`}
+                    id={`origin-${outlet.id}`}
                   >
                     {selectedPickup?.originLabel ?? (
                       <span className="text-muted-foreground">
                         Akan terisi setelah pickup dipilih
                       </span>
                     )}
-                  </div>
-                  <FieldDescription>
-                    Mengikuti area yang terhubung ke pickup di Mengantar; tidak dapat diedit
-                    terpisah.
-                  </FieldDescription>
+                  </output>
                 </Field>
               </FieldGroup>
             </FieldSet>
@@ -531,12 +537,11 @@ export function OutletSettingsForm({
       </ContentSection>
 
       <ContentSection
-        description="Pilih sumber kredensial Mengantar untuk outlet ini."
+        description="Gunakan koneksi GeraiCUAN atau akun Mengantar milik outlet."
         id="outlet-connection-title"
         title="Koneksi Mengantar"
       >
-          <FieldSet>
-            <FieldLegend className="sr-only">Koneksi Mengantar</FieldLegend>
+          <FieldSet aria-labelledby="outlet-connection-title">
             <ConnectionStatus outlet={outlet} />
 
             <Field>
@@ -562,8 +567,11 @@ export function OutletSettingsForm({
                       value="platform_default"
                     />
                     <FieldContent>
-                      <FieldTitle>Default GeraiCUAN</FieldTitle>
-                      <FieldDescription>Kredensial disediakan dan dikelola platform.</FieldDescription>
+                      <FieldTitle className="flex-wrap">
+                        Default GeraiCUAN
+                        {outlet.connectionSource === "platform_default" ? <Badge variant="secondary">Digunakan</Badge> : null}
+                      </FieldTitle>
+                      <FieldDescription>Dikelola GeraiCUAN, tanpa memasukkan API key.</FieldDescription>
                     </FieldContent>
                   </Field>
                 </FieldLabel>
@@ -578,9 +586,12 @@ export function OutletSettingsForm({
                       value="private"
                     />
                     <FieldContent>
-                      <FieldTitle>Akun Mengantar sendiri</FieldTitle>
+                      <FieldTitle className="flex-wrap">
+                        Akun Mengantar sendiri
+                        {outlet.connectionSource === "private" ? <Badge variant="secondary">Digunakan</Badge> : null}
+                      </FieldTitle>
                       <FieldDescription>
-                        Masukkan API key milik outlet untuk membuat atau menggantinya.
+                        Gunakan API key dari akun Mengantar milik outlet.
                       </FieldDescription>
                     </FieldContent>
                   </Field>
@@ -707,11 +718,7 @@ export function OutletSettingsForm({
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
-            ) : (
-              <p className="text-sm leading-6 text-muted-foreground">
-                Default GeraiCUAN sedang digunakan. Pilih akun sendiri untuk memasukkan API key.
-              </p>
-            )}
+            ) : null}
 
             {fallbackState.message ? (
               <Alert

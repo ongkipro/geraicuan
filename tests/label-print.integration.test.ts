@@ -444,7 +444,7 @@ describe("tenant-scoped AWB labels", () => {
     });
   });
 
-  it("lists masked same-tenant rows and treats cross-tenant ids as not found", async () => {
+  it("lists complete same-tenant phones and treats cross-tenant ids as not found", async () => {
     const issuedA = await seedProviderShipment({
       sequence: 5,
       awb: "JNE-TENANT-A-ABC123",
@@ -471,10 +471,10 @@ describe("tenant-scoped AWB labels", () => {
       shipmentId: issuedA.shipmentId,
       awb: "JNE-TENANT-A-ABC123",
       recipientName: "Penerima Snapshot",
-      recipientPhoneMasked: "•••• 8765",
+      recipientPhone: "081299998765",
     });
     expect(issuedRows[0]).not.toHaveProperty("recipientAddress");
-    expect(JSON.stringify(issuedRows[0])).not.toContain("081299998765");
+    expect(JSON.stringify(issuedRows[0])).toContain("081299998765");
     expect(JSON.stringify(issuedRows[0])).not.toContain(
       "Alamat penerima snapshot yang tidak berubah",
     );
