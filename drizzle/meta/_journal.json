@@ -274,6 +274,83 @@
       "when": 1789412414778,
       "tag": "0038_public_shipment_reference",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1789444845468,
+      "tag": "0039_provider_settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789462143991,
+      "tag": "0040_tenant_shipment_numbers",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789548543991,
+      "tag": "0041_mengantar_field_parity",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789548544991,
+      "tag": "0042_destination_area_verification_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789548545991,
+      "tag": "0043_mengantar_settlement_basis",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789548546991,
+      "tag": "0044_drop_dropshipper_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1789548547991,
+      "tag": "0045_outlet_pickup_points",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1789548548991,
+      "tag": "0046_pickup_point_origin_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1789548549991,
+      "tag": "0047_provider_delivery_transitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789548550991,
+      "tag": "0048_cod_amount_gross_up",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1789548551991,
+      "tag": "0049_mengantar_settlement_money",
+      "breakpoints": true
     }
   ]
 }

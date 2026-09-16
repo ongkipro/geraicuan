@@ -403,12 +403,14 @@ describe("T23 Tenant Admin unpaid recovery", () => {
     ).toEqual([]);
 
     const first = await recoverAs(adminA, tenantA);
+    // PR-44: the label link is the tenant's shipment number, never the UUID.
+    const { rows: [{ tenant_number: recoveredNumber }] } = await adminPool.query("SELECT tenant_number FROM shipments WHERE id = $1", [shipmentId]);
     expect(first).toEqual({
       duplicate: false,
       shipments: [
         {
           awb: "SANITIZED-CNOTE-RECOVERED-0001",
-          labelHref: `/app/label/${shipmentId}`,
+          labelHref: `/app/label/${recoveredNumber}`,
           shipmentId,
         },
       ],

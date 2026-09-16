@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function LabelDetailLoading() {
   return (
     <PageContainer aria-busy="true">
-      <PageHeader description="Data kiriman dan riwayat cetak sedang disiapkan." eyebrow="Label 100 × 150 mm" title="Memuat label kiriman…" />
+      <PageHeader description="Data kiriman dan riwayat cetak sedang disiapkan." eyebrow="Label termal" title="Memuat label kiriman…" />
       <div aria-label="Memuat detail label" className="grid gap-6" role="status">
         <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"><Skeleton className="h-11 w-40 md:h-8" /><Skeleton className="h-4 w-64 max-w-full" /></div>
         <Skeleton className="aspect-[2/3] w-full max-w-[100mm] rounded-lg" />

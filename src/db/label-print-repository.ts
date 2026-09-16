@@ -4,13 +4,16 @@ import {
   and,
   desc,
   eq,
+  gte,
   ilike,
   inArray,
   isNull,
+  lt,
   sql,
 } from "drizzle-orm";
 
 import {
+  outlets,
   printEvents,
   providerBatches,
   providerOrderSnapshots,
@@ -21,6 +24,7 @@ import {
   users,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import type { AnalyticsRange } from "@/lib/analytics-range";
 
 export type PrintableLabel = {
   shipmentId: string;
@@ -49,6 +53,8 @@ export type PrintableLabel = {
     declaredValueIdr: number;
   };
   destinationAreaLabel: string;
+  /** The shipment's own outlet, printed on the T-176 sender stub. */
+  outletName: string;
   sender: { name: string; phone: string; address: string };
   recipient: { name: string; phone: string; address: string };
   printCount: number;
@@ -78,6 +84,20 @@ export type PrintableShipmentRow = {
   isCod: boolean;
   providerCodAmountIdr: number | null;
   printCount: number;
+};
+
+/** PR-52 print-state entry on Cetak resi; `semua` is the unfiltered total. */
+export type LabelPrintStateFilter = "semua" | "belum" | "sudah";
+
+export type LabelPrintSummary = {
+  "LBL-ALL": number;
+  "LBL-PRINTED": number;
+  "LBL-UNPRINTED": number;
+};
+
+export type LabelIndexPage = {
+  rows: PrintableShipmentRow[];
+  summary: LabelPrintSummary;
 };
 
 export type LabelUnavailableReason =
@@ -183,6 +203,7 @@ export async function loadPrintableLabel(
       packageWidthCm: shipmentDrafts.packageWidthCm,
       packageHeightCm: shipmentDrafts.packageHeightCm,
       declaredValueIdr: shipmentDrafts.declaredValueIdr,
+      outletName: outlets.name,
       courier: providerBatches.courier,
       providerService: providerOrderSnapshots.providerService,
       providerStatus: providerOrderSnapshots.status,
@@ -204,6 +225,13 @@ export async function loadPrintableLabel(
       and(
         eq(shipmentDrafts.shipmentId, shipments.id),
         eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      outlets,
+      and(
+        eq(outlets.id, shipments.outletId),
+        eq(outlets.tenantId, shipments.tenantId),
       ),
     )
     .innerJoin(
@@ -323,6 +351,7 @@ export async function loadPrintableLabel(
       declaredValueIdr: row.declaredValueIdr,
     },
     destinationAreaLabel: row.destinationAreaLabel,
+    outletName: row.outletName,
     sender: {
       name: sender.name,
       phone: sender.phone,
@@ -337,6 +366,129 @@ export async function loadPrintableLabel(
     lastPrintedAt: summary?.lastPrintedAt
       ? new Date(summary.lastPrintedAt)
       : null,
+  };
+}
+
+/** PR-55 Riwayat cetak resi row: one recorded print attempt. */
+export type PrintHistoryRow = {
+  actorRole: "TENANT_ADMIN" | "OPERATOR";
+  outcome: "PRINTED" | "BLOCKED";
+  outletName: string;
+  printEventId: string;
+  printedAt: Date;
+  publicReference: string;
+  reasonCode: string | null;
+  /**
+   * Spec 19 RPT-PRN-REPRINTS. Successful prints after the first, read off the
+   * recorded sequences of this shipment's whole print record rather than of
+   * the filtered window: a reprint is an audit fact about the shipment, and a
+   * narrower window would report a second print as a first one.
+   */
+  reprintCount: number;
+  sequence: number | null;
+  shipmentId: string;
+};
+
+export type PrintHistoryPage = {
+  generatedAt: Date;
+  rows: PrintHistoryRow[];
+  /** Spec 19 RPT-PRN-EVENTS: events the filters match, not rows listed. */
+  totalCount: number;
+};
+
+const PRINT_HISTORY_MAX_ROWS = 200;
+
+/**
+ * PR-55 Riwayat cetak resi.
+ *
+ * Tenant Admin only: the page is an audit record, and the read refuses rather
+ * than trusting the surface that calls it. The tenant predicate is the
+ * `print_events` table's own column, not row-level security alone, and the
+ * outlet dimension is the shipment's outlet — `print_events` has none.
+ */
+export async function loadPrintHistoryPage(
+  tx: TenantTransaction,
+  context: TenantContext,
+  filter: {
+    /** PR-53 window on the printed-at basis. */
+    range: AnalyticsRange;
+    outletId?: string | null;
+  },
+): Promise<PrintHistoryPage> {
+  if (context.role !== "TENANT_ADMIN") {
+    throw new Error("Print history report requires TENANT_ADMIN.");
+  }
+
+  const where = and(
+    eq(printEvents.tenantId, context.tenantId),
+    eq(shipments.tenantId, context.tenantId),
+    gte(printEvents.printedAt, filter.range.startInclusive),
+    lt(printEvents.printedAt, filter.range.endExclusive),
+    filter.outletId ? eq(shipments.outletId, filter.outletId) : undefined,
+  );
+
+  const [countRow] = await tx
+    .select({
+      generatedAt: sql<Date>`statement_timestamp()`.mapWith(
+        (value) => value instanceof Date ? value : new Date(String(value)),
+      ),
+      totalCount: sql<number>`count(*)::int`.mapWith(Number),
+    })
+    .from(printEvents)
+    .innerJoin(
+      shipments,
+      and(
+        eq(shipments.id, printEvents.shipmentId),
+        eq(shipments.tenantId, printEvents.tenantId),
+      ),
+    )
+    .where(where);
+
+  const rows = await tx
+    .select({
+      actorRole: printEvents.actorRole,
+      outcome: printEvents.outcome,
+      outletName: outlets.name,
+      printEventId: printEvents.id,
+      printedAt: printEvents.printedAt,
+      publicReference: shipments.publicReference,
+      reasonCode: printEvents.reasonCode,
+      // The highest recorded sequence is the number of successful prints, so
+      // one less than it is the number of reprints, floored at zero for a
+      // shipment whose only events were blocked.
+      reprintCount: sql<number>`greatest((
+        SELECT coalesce(max(reprint_history.sequence), 0)
+        FROM ${printEvents} AS reprint_history
+        WHERE reprint_history.tenant_id = ${context.tenantId}
+          AND reprint_history.shipment_id = ${printEvents.shipmentId}
+          AND reprint_history.outcome = 'PRINTED'
+      ) - 1, 0)::int`.mapWith(Number),
+      sequence: printEvents.sequence,
+      shipmentId: printEvents.shipmentId,
+    })
+    .from(printEvents)
+    .innerJoin(
+      shipments,
+      and(
+        eq(shipments.id, printEvents.shipmentId),
+        eq(shipments.tenantId, printEvents.tenantId),
+      ),
+    )
+    .innerJoin(
+      outlets,
+      and(
+        eq(outlets.id, shipments.outletId),
+        eq(outlets.tenantId, shipments.tenantId),
+      ),
+    )
+    .where(where)
+    .orderBy(desc(printEvents.printedAt), desc(printEvents.id))
+    .limit(PRINT_HISTORY_MAX_ROWS);
+
+  return {
+    generatedAt: countRow?.generatedAt ?? new Date(),
+    rows,
+    totalCount: countRow?.totalCount ?? 0,
   };
 }
 
@@ -561,10 +713,61 @@ export async function appendPrintAttempt(
   return replayOrConflict(tx, context, shipmentId, attemptId);
 }
 
+/**
+ * "Sudah dicetak" as one SQL predicate, so the panel count and the filtered
+ * list can never disagree about what a printed label is. The tenant predicate
+ * is the table's own column, not row-level security alone.
+ */
+function printedPredicate(context: TenantContext) {
+  return sql`EXISTS (
+    SELECT 1
+    FROM ${printEvents} AS print_state
+    WHERE print_state.tenant_id = ${context.tenantId}
+      AND print_state.shipment_id = ${shipments.id}
+      AND print_state.outcome = 'PRINTED'
+  )`;
+}
+
+/**
+ * PR-53 issued basis for Cetak resi. `resolved_at` is the instant the provider
+ * settled the order; an order still waiting on upstream payment has no settled
+ * instant, so its creation instant stands in rather than dropping the row out
+ * of every range.
+ */
+function issuedWithin(range: AnalyticsRange | undefined) {
+  return range
+    ? and(
+        gte(
+          sql`coalesce(${providerOrderSnapshots.resolvedAt}, ${providerOrderSnapshots.createdAt})`,
+          range.startInclusive,
+        ),
+        lt(
+          sql`coalesce(${providerOrderSnapshots.resolvedAt}, ${providerOrderSnapshots.createdAt})`,
+          range.endExclusive,
+        ),
+      )
+    : undefined;
+}
+
+function printStatePredicate(
+  context: TenantContext,
+  printState: LabelPrintStateFilter | undefined,
+) {
+  if (printState === "sudah") return printedPredicate(context);
+  if (printState === "belum") return sql`NOT ${printedPredicate(context)}`;
+  return undefined;
+}
+
 export async function listPrintableShipments(
   tx: TenantTransaction,
   context: TenantContext,
-  filter: { status: "issued" | "unpaid"; awbSuffix?: string },
+  filter: {
+    status: "issued" | "unpaid";
+    awbSuffix?: string;
+    printState?: LabelPrintStateFilter;
+    /** PR-53 issued-basis window; omitted means the tenant's whole lifetime. */
+    range?: AnalyticsRange;
+  },
 ): Promise<PrintableShipmentRow[]> {
   const awbSuffix = filter.awbSuffix?.trim();
   if (awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix)) return [];
@@ -635,6 +838,8 @@ export async function listPrintableShipments(
         awbSuffix
           ? ilike(providerOrderSnapshots.cnoteNo, `%${awbSuffix}`)
           : undefined,
+        printStatePredicate(context, filter.printState),
+        issuedWithin(filter.range),
       ),
     )
     .orderBy(desc(providerOrderSnapshots.resolvedAt), desc(shipments.createdAt))
@@ -655,4 +860,94 @@ export async function listPrintableShipments(
     providerCodAmountIdr: row.providerCodAmountIdr,
     printCount: row.printCount,
   }));
+}
+
+/**
+ * PR-52: the Cetak resi list and its state panel in one pass.
+ *
+ * The counts are scoped exactly like the list they filter — the same tenant,
+ * the same status facet and the same AWB suffix — so an entry's number always
+ * equals the number of rows choosing it returns.
+ */
+export async function loadLabelIndexPage(
+  tx: TenantTransaction,
+  context: TenantContext,
+  filter: {
+    status: "issued" | "unpaid";
+    awbSuffix?: string;
+    printState?: LabelPrintStateFilter;
+    /** PR-53 issued-basis window; omitted means the tenant's whole lifetime. */
+    range?: AnalyticsRange;
+  },
+): Promise<LabelIndexPage> {
+  const awbSuffix = filter.awbSuffix?.trim();
+  if (awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix)) {
+    return { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0 } };
+  }
+
+  const status = filter.status === "issued" ? "ISSUED" : "AWAITING_UPSTREAM_PAYMENT";
+  const printed = printedPredicate(context);
+  const [summaryRow] = await tx
+    .select({
+      all: sql<number>`count(*)::int`.mapWith(Number),
+      printed: sql<number>`count(*) FILTER (WHERE ${printed})::int`.mapWith(Number),
+      unprinted: sql<number>`count(*) FILTER (WHERE NOT ${printed})::int`.mapWith(Number),
+    })
+    .from(shipments)
+    // The same four joins the list makes, or a shipment without a draft, batch
+    // or recipient party would be counted and never listed.
+    .innerJoin(
+      shipmentDrafts,
+      and(
+        eq(shipmentDrafts.shipmentId, shipments.id),
+        eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      providerOrderSnapshots,
+      and(
+        eq(providerOrderSnapshots.shipmentId, shipments.id),
+        eq(providerOrderSnapshots.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      providerBatches,
+      and(
+        eq(providerBatches.id, providerOrderSnapshots.batchId),
+        eq(providerBatches.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
+    .innerJoin(
+      shipmentParties,
+      and(
+        eq(shipmentParties.shipmentId, shipments.id),
+        eq(shipmentParties.tenantId, shipments.tenantId),
+        eq(shipmentParties.role, "RECIPIENT"),
+      ),
+    )
+    .where(
+      and(
+        eq(shipments.tenantId, context.tenantId),
+        eq(shipments.status, status),
+        eq(providerOrderSnapshots.status, status),
+        filter.status === "issued"
+          ? sql`char_length(btrim(${providerOrderSnapshots.cnoteNo})) BETWEEN 1 AND 160`
+          : isNull(providerOrderSnapshots.cnoteNo),
+        awbSuffix
+          ? ilike(providerOrderSnapshots.cnoteNo, `%${awbSuffix}`)
+          : undefined,
+        issuedWithin(filter.range),
+      ),
+    );
+
+  const rows = await listPrintableShipments(tx, context, filter);
+
+  return {
+    rows,
+    summary: {
+      "LBL-ALL": summaryRow?.all ?? 0,
+      "LBL-PRINTED": summaryRow?.printed ?? 0,
+      "LBL-UNPRINTED": summaryRow?.unprinted ?? 0,
+    },
+  };
 }

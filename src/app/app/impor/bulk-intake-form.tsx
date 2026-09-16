@@ -8,6 +8,7 @@ import { createSelectedDrafts, type BulkConfirmState, type BulkUploadState, uplo
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fieldWidth } from "@/components/cms/cms-layouts";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -78,7 +79,7 @@ function PreviewConfirmation({ preview }: { preview: ConfirmablePreview }) {
         <TableBody>{preview.validRows.map((row) => {
           const checked = selectedRows.has(row.row);
           return <TableRow data-state={checked ? "selected" : undefined} key={row.row}>
-            <TableCell className="sticky left-0 z-10 bg-card"><div className="flex min-h-11 items-center justify-center"><Checkbox className="after:-inset-3.5" aria-label={`Pilih baris ${row.row}`} checked={checked} name="rowToken" onCheckedChange={(value) => toggleRow(row.row, value === true)} value={row.confirmationToken} /></div></TableCell>
+            <TableCell className="sticky left-0 z-10 bg-inherit"><div className="flex min-h-11 items-center justify-center"><Checkbox className="after:-inset-3.5" aria-label={`Pilih baris ${row.row}`} checked={checked} name="rowToken" onCheckedChange={(value) => toggleRow(row.row, value === true)} value={row.confirmationToken} /></div></TableCell>
             <TableCell className="sticky left-14 z-10 bg-card font-medium">{row.row}</TableCell><TableCell>{row.recipientName}</TableCell><TableCell className="max-w-56 whitespace-normal">{row.destinationQuery}</TableCell><TableCell className="max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell><TableCell className="text-right tabular-nums">{row.packageWeightGrams} g</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell className="text-right tabular-nums">Rp {formatRupiah(row.declaredValueIdr)}</TableCell>
           </TableRow>;
         })}</TableBody>
@@ -135,7 +136,7 @@ export function BulkIntakeForm({ initialPreview, outlets }: BulkIntakeFormProps)
           >
             {fileError ? <Alert className="mb-5" ref={uploadErrorRef} role="alert" tabIndex={-1} variant="destructive"><AlertTitle>Impor belum dapat diproses</AlertTitle><AlertDescription>{fileError.message}</AlertDescription></Alert> : null}
             <FieldSet><FieldGroup>
-              <Field className="max-w-md" data-invalid={Boolean(outletError) || undefined}>
+              <Field className={fieldWidth.lg} data-invalid={Boolean(outletError) || undefined}>
                 <FieldLabel htmlFor="outletId">Outlet asal</FieldLabel>
                 {/* The chosen value is submitted through a plain hidden input, as on
                     the draft form, so it survives the form reset after an action. */}
@@ -176,7 +177,7 @@ export function BulkIntakeForm({ initialPreview, outlets }: BulkIntakeFormProps)
             <CardDescription>{preview.totalRows} baris · {preview.uniqueDestinationQueries} lokasi unik diperiksa · {preview.validRows.length} baris valid · {preview.errors.length} kesalahan</CardDescription>
           </CardHeader>
           <CardContent className="grid min-w-0 gap-4">
-            {preview.errors.length > 0 ? <Table className="min-w-[720px]" containerClassName="rounded-md border" containerProps={{ "aria-label": "Baris CSV bermasalah", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Baris bermasalah</TableCaption><TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card">Baris</TableHead><TableHead>Kolom</TableHead><TableHead>Lokasi di CSV</TableHead><TableHead>Kesalahan</TableHead></TableRow></TableHeader><TableBody>{preview.errors.map((error, index) => <TableRow className="group" key={`${error.row}-${error.field}-${index}`}><TableCell className="sticky left-0 z-10 bg-card font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">Baris {error.row}</TableCell><TableCell>{error.field}</TableCell><TableCell className="max-w-56 whitespace-normal">{error.query ?? "—"}</TableCell><TableCell className="max-w-96 whitespace-normal text-destructive"><p>{error.message}</p>{error.candidateLabels?.length ? <p className="mt-1 text-xs text-muted-foreground">Kemungkinan: {error.candidateLabels.join(" · ")}</p> : null}</TableCell></TableRow>)}</TableBody></Table> : null}
+            {preview.errors.length > 0 ? <Table className="min-w-[720px]" containerClassName="rounded-md border" containerProps={{ "aria-label": "Baris CSV bermasalah", role: "region", tabIndex: 0 }}><TableCaption className="sr-only">Baris bermasalah</TableCaption><TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Baris</TableHead><TableHead>Kolom</TableHead><TableHead>Lokasi di CSV</TableHead><TableHead>Kesalahan</TableHead></TableRow></TableHeader><TableBody>{preview.errors.map((error, index) => <TableRow className="group" key={`${error.row}-${error.field}-${index}`}><TableCell className="sticky left-0 z-10 bg-inherit font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">Baris {error.row}</TableCell><TableCell>{error.field}</TableCell><TableCell className="max-w-56 whitespace-normal">{error.query ?? "—"}</TableCell><TableCell className="max-w-96 whitespace-normal text-destructive"><p>{error.message}</p>{error.candidateLabels?.length ? <p className="mt-1 text-xs text-muted-foreground">Kemungkinan: {error.candidateLabels.join(" · ")}</p> : null}</TableCell></TableRow>)}</TableBody></Table> : null}
             <PreviewConfirmation key={preview.submissionId} preview={preview} />
           </CardContent>
         </Card>

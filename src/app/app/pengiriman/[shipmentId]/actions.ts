@@ -8,7 +8,10 @@ import { db, dbPool } from "@/db/client";
 import { OrderBatchUnavailableError } from "@/db/order-batch-repository";
 import { TenantContextDeniedError } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { MengantarOrderTransportUnavailableError } from "@/lib/mengantar-order";
+import {
+  MengantarOrderPayloadError,
+  MengantarOrderTransportUnavailableError,
+} from "@/lib/mengantar-order";
 import { OrderRateLimitedError } from "@/lib/order-rate-limit";
 import {
   isSanctionedOrderFixtureEnabled,
@@ -23,9 +26,28 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type ShipmentIssuanceActionState = {
+  /** Present only for `MengantarOrderPayloadError`, so the panel can offer a
+   *  specific recovery (e.g. re-verifying a destination area) instead of a
+   *  generic retry. */
+  code?: string;
   error?: string;
   issued?: { awb: string; duplicate: boolean; labelHref: string };
 };
+
+// One Indonesian operator message per `MengantarOrderPayloadError.safeCode`,
+// each saying what to do next. The safeCode also already carries telemetry
+// (emitted where the payload was rejected, in `mengantar-order.ts`), so this
+// mapping only owns the UI message.
+const PAYLOAD_ERROR_MESSAGES: Record<string, string> = {
+  ORDER_COD_AMOUNT_MISSING:
+    "Total COD kiriman ini belum lengkap. Muat ulang estimasi COD lalu konfirmasi ulang.",
+  ORDER_DESTINATION_AREA_UNVERIFIED:
+    "Area tujuan draf ini belum pernah diverifikasi ke Mengantar. Verifikasi ulang tujuan di bawah, lalu konfirmasi kembali.",
+  ORDER_WEIGHT_UNCONVERTIBLE:
+    "Berat paket tidak dapat dikonversi ke satuan penyedia. Perbarui berat paket pada draf kiriman.",
+};
+const PAYLOAD_ERROR_FALLBACK_MESSAGE =
+  "Data kiriman ini tidak dapat diproses penyedia. Perbarui draf lalu coba lagi.";
 
 async function requireTenantPrincipal() {
   try {
@@ -83,7 +105,7 @@ export async function confirmShipmentIssuance(
       confirmation: { shipmentId, estimateSnapshotId, estimateServiceId },
       resolveTransport: resolveSanctionedOrderFixtureTransport,
     });
-    revalidatePath(`/app/pengiriman/${shipmentId}`);
+    revalidatePath("/app/pengiriman/[shipmentId]", "page");
     revalidatePath("/app/pengiriman");
     if (result.status !== "ISSUED" || !result.awb || !result.labelHref) {
       return {
@@ -104,6 +126,12 @@ export async function confirmShipmentIssuance(
   } catch (error) {
     if (error instanceof OrderRateLimitedError) {
       return { error: "Terlalu banyak konfirmasi. Tunggu beberapa menit lalu coba lagi." };
+    }
+    if (error instanceof MengantarOrderPayloadError) {
+      return {
+        code: error.safeCode,
+        error: PAYLOAD_ERROR_MESSAGES[error.safeCode] ?? PAYLOAD_ERROR_FALLBACK_MESSAGE,
+      };
     }
     if (
       error instanceof CodTotalsUnavailableError ||

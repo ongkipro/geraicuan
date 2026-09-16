@@ -58,6 +58,10 @@ const services = [
     currency: "IDR",
     shippingAmountIdr: 10_000,
     shippingSourceField: "price",
+    codFeeIdr: null,
+    discountIdr: null,
+    normalPriceIdr: null,
+    specialPriceIdr: null,
     insuranceAmountIdr: null,
     insuranceSourceField: null,
     deliveryEstimate: "2 - 3 days",
@@ -68,6 +72,10 @@ const services = [
     currency: "IDR",
     shippingAmountIdr: 9_000,
     shippingSourceField: "price",
+    codFeeIdr: null,
+    discountIdr: null,
+    normalPriceIdr: null,
+    specialPriceIdr: null,
     insuranceAmountIdr: null,
     insuranceSourceField: null,
     deliveryEstimate: "1 - 2 days",
@@ -202,9 +210,10 @@ describe("shipment COD totals", () => {
       currency: "IDR",
       goodsValueIdr: 100_000,
       shippingAmountIdr: 10_000,
-      serviceFeeIdr: 3_300,
-      vatAmountIdr: 363,
-      providerCodAmountIdr: 113_663,
+      serviceFeeIdr: 3_414,
+      vatAmountIdr: 376,
+      providerCodAmountIdr: 113_790,
+      codFormulaVersion: 2,
     });
 
     const stored = await adminDb
@@ -245,9 +254,10 @@ describe("shipment COD totals", () => {
       id: persisted.id,
       goodsValueIdr: 100_000,
       shippingAmountIdr: 10_000,
-      serviceFeeIdr: 3_300,
-      vatAmountIdr: 363,
-      providerCodAmountIdr: 113_663,
+      serviceFeeIdr: 3_414,
+      vatAmountIdr: 376,
+      providerCodAmountIdr: 113_790,
+      codFormulaVersion: 2,
     });
   });
 
@@ -353,6 +363,44 @@ describe("shipment COD totals", () => {
 
     const rows = await adminDb.select().from(schema.shipmentCodTotals);
     expect(rows).toEqual([]);
+  });
+
+  /**
+   * T-157 review: an outlet can hold several pickup points, and the estimate is
+   * taken at the chosen one's origin — `coalesce(draft.origin_area_id,
+   * outlet.default_origin_area_id)`. This repository kept matching the outlet
+   * default alone, so every COD shipment sent from a *non-default* pickup point
+   * failed confirmation with CodTotalsUnavailableError and could never ship.
+   */
+  it("reads the COD totals of an estimate taken at a non-default pickup point", async () => {
+    await adminDb
+      .update(schema.shipmentDrafts)
+      .set({ originAreaId: "origin-b", pickupAddressId: "pickup-b" })
+      .where(eq(schema.shipmentDrafts.shipmentId, eligibleShipment));
+    const snapshotId = await withTenantContext(
+      appDb,
+      "cod-user-a",
+      tenantA,
+      (tx, context) => appendEstimateSnapshot(
+        tx,
+        context,
+        eligibleShipment,
+        { ...codRequest, originAreaId: "origin-b" },
+        services,
+      ),
+    );
+
+    const totals = await withTenantContext(appDb, "cod-user-a", tenantA, (tx, context) =>
+      persistCodTotalsForEstimate(tx, context, {
+        shipmentId: eligibleShipment,
+        snapshotId,
+        providerService: "JNE-COD",
+      }),
+    );
+
+    expect(totals).toMatchObject({ shipmentId: eligibleShipment, snapshotId });
+    const stored = await adminDb.select().from(schema.shipmentCodTotals);
+    expect(stored).toHaveLength(1);
   });
 
   it("rejects a COD snapshot whose readable destination label drifted from the draft", async () => {

@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-15
+Updated: 2026-09-17
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -29,6 +29,86 @@ covers the whole worktree and further Phase 10 tasks will change it again.
 `Review-Risk: R4` is the highest risk any of those reviews found, set by T-79's
 security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
+
+## COD money and the thermal label — T-175, T-176, T-177, T-178, T-91, T-150, T-151, T-174 (2026-09-17)
+
+The owner narrowed the product's purpose — "GeraiCUAN is for creating orders with our thermal label and for shipment reports" — and asked that COD be exact and never lose money. Everything here was derived from the owner's own Mengantar account rather than from documentation, as counts only.
+
+- **The COD amount under-collected Mengantar's fee.** On 100/100 real COD orders Mengantar keeps exactly 3.33% of the whole COD amount (3% plus 11% VAT), and on 2,866/2,866 real settlement lines the deducted price is shipping plus that fee. GeraiCUAN grossed the amount up by 3.33% of goods plus shipping instead, so a seller on a courier with no discount received 0.11% less than the goods value — Rp 100,000 of goods came back as Rp 99,878. The amount is now the smallest whole rupiah that leaves the seller whole, proven across every value from 1 to 3,000,000, and the database enforces it with each old row kept valid under the formula it was written with.
+- **The Mengantar settlement pull failed on real data.** Its parser rejected fractional amounts; 202 of 600 real reconciliation invoices carry one, and the first aborted the whole pull. Every correct COD settlement also read as mismatched, because the expected payout ignored the fee. Both fixed. The ledger had been booking Mengantar's fee as GeraiCUAN revenue; new issuances now book it as a cost, and history is untouched.
+- **Reports carry shipping, the COD fee and the estimated disbursement — not omset or margin.** Net margin, COGS and goods-value sums are withdrawn from every surface, type and export; the draft no longer asks for a goods cost; PR-33 is amended. Every report row now adds up: COD − shipping − COD fee = estimated disbursement, to the rupiah.
+- **Thermal label.** 10 × 15 cm by default — a 10 × 10 package label, a cut line at exactly 10 cm, and a 10 × 5 handover stub for the sender that deliberately carries no recipient name, phone or address — or 10 × 10 alone. Every barcode was rasterised at 203 dpi, reduced to pure black and white and decoded back to its AWB.
+- **Detail pages.** Shipment recovery, reconciliation and the label link moved into the detail rail; the list-page data pattern held on inspection and gained a guard.
+
+Worth the owner's attention: `POST /order` still needs Mengantar's answer (T-153 blocks nothing else). Two money items are recorded rather than decided — `COD_SERVICE_FEE_VAT_PAYABLE` still reads as a GeraiCUAN VAT liability although that VAT is inside Mengantar's 3.33%, and nothing has yet been printed on a physical thermal printer or scanned by a courier.
+
+Verification: `tsc` and ESLint clean; suite 112 files / 1,116 tests; migrations 0048 and 0049 through the upgrade verifier; developer database at 50 migrations with ledger money identical by entry type before and after.
+
+## Admin experience wave four — T-159, T-165, T-166, T-169, T-173 (2026-09-16)
+
+Anggota & akses joined the settings pattern and the whole authenticated admin was screened at four widths; Laporan pengiriman (with CSV export) and Riwayat cetak resi exist; Mengantar's reported delivery states now move the shipment lifecycle instead of leaving it frozen at issuance; and the courier list became the provider's own, Shopee Express included.
+
+Three things worth the owner's attention:
+
+- **Delivery status is now real, within limits.** Until today `shipments.status` was never written past issuance, so the dashboard outcome and the RTS queue were showing seed data. The trigger is the existing manual settlement pull — not a schedule and not the webhook, which stays closed because its postmortem conditions are unmet — so the figures lag the last pull, and every surface that shows a delivery outcome now says so. Nothing maps to "sedang jalan": the captured provider vocabulary contained no in-transit value, and the code refuses to guess one.
+- **Two real accessibility defects were found and fixed** by the screening pass, both invisible to every test: the destructive button's focus ring measured 1.41:1 (a half-alpha ring the contract forbids), and the compact stepper's screen-reader label measured 2.57:1 painted over the primary colour. The sweep that found them was itself faulty twice over — it screened three pages twice and the three detail pages never — which a deliberately reintroduced defect surviving a full run is what exposed.
+- **`POST /order` remains blocked on Mengantar.** The owner authorized live calls; fourteen request shapes were refused with an undetailed HTTP 400 and nothing was created. Two of the three provisional payload keys are provably wrong (`isDangerousGoods`, and no shipping-instruction field exists at all), but the request contract itself needs Mengantar's answer on key scope, wallet balance or the current documented body.
+
+Verification: suite 109 files / 1083 tests, `tsc` and ESLint clean, twelve browser audits green including a 22-route × 4-width screening sweep with zero overflow, focus, contrast, heading or target findings. Developer database migrated to 0047 after a verified backup, business data unchanged.
+
+## Admin experience wave three — T-156, T-157, T-158, T-162, T-163 (2026-09-16)
+
+Pengaturan is now a real settings menu with Profil toko at its index, an outlet can hold more than one Mengantar pickup point (migration 0045, with the chosen point travelling into the order payload), and Outlet and Koneksi Mengantar are separate pages. Every operational list page gained a state summary panel whose entries are the filter, and one date-range control replaced the period select and the "Tanggal khusus" disclosure everywhere and reached the three list pages that had no time filter at all.
+
+Two things for the owner to weigh, both recorded rather than decided quietly:
+
+- **Histori kiriman, Retur and Cetak resi now default to a 30-day window.** That is what PR-53 asks for, but it is a behaviour change: a shipment older than 30 days is outside the page until the range is widened (ceiling 366 days). The resolved range is stated in text on each page.
+- **The date-range panel is a disclosure, not a dialog.** Keeping the native date inputs inside the page's single GET form means the panel content never unmounts, so it traps no focus and has no modality; it shipped claiming `role="dialog"` anyway, which also collided with the command palette's dialog and was caught in the browser. It is now a labelled group. PR-53's written anatomy still names `aria-haspopup="dialog"`.
+
+Independent review then returned FAIL on the pickup work: COD shipments sent from a non-default pickup point could never be issued, because the COD totals read — and, underneath it, three row-level-security INSERT policies — still required the estimate's origin to equal the *outlet* default. Migration 0046 moves the policies onto the same rule the application uses. Four more findings were taken in the same round: a pickup point can no longer be removed while an unissued shipment holds it, the migration verifier's incomplete-pair guard is no longer vacuous, the queue panel names a status filter it does not itself carry, and the shipment detail replays the range so going back does not reset to 30 days.
+
+Verification: suite 104 files / 1028 tests, `tsc` and ESLint clean, seven browser audits green (`admin-programme`, `admin-patterns`, `table-compact`, `header-tools`, `settings-ux`, `pickup-selector`, `shipment-numbers`). Developer database migrated to 0046 after a verified backup; 27 shipments and 5 tenants unchanged, one complete pickup pair converted and two fixture outlets that never held a label correctly did not.
+
+## Admin experience wave two — T-154, T-164, T-167, T-172 (2026-09-16)
+
+One search pattern (three characters, results appear on their own) across area, pickup and contact lookups; the navigation finally lists every destination in six collapsible groups, so Impor CSV and Cetak resi stop being button-only; Kontak separates Pengirim and Penerima with a complete address row; and the visual pass was redone after the owner reviewed screenshots — the table header tint had been mathematically invisible and the zebra stripe was being painted over by pinned cells.
+
+Independent review then returned FAIL on the visual pass: the new zebra stripe was a translucent fill, and a pinned column inherits its row's fill, so the cells scrolling underneath a pinned column showed through it on every second row. The stripe is now an opaque token, the three tables that still repainted over it inherit like the rest, and the rendered pinned cell is measured on every route that pins a column. The same review removed a silent navigation fallback (an unmapped route marked Dasbor current) and made the contact directory's primary-address pick deterministic.
+
+Verification: suite 98 files / 942 tests, browser and command-palette audits green, dev database synced to migration 0044 after a verified backup.
+
+## Admin experience programme — T-149, T-152, T-160, T-161, T-168 (2026-09-16)
+
+Five tasks shipped together, then reworked after an independent review returned FAIL:
+
+- **One page frame.** Every `/app` page uses the same 1408 px frame, so the page title starts at the same position on every route; form and detail pages use a two-column layout with a sticky rail, and controls are sized by the data they hold instead of stretching. Buat kiriman now shows its four steps as a vertical stepper with a written state per step and a sticky action bar on phones.
+- **Mengantar field parity.** Shipping instruction, dropshipper, hazardous flag and address landmark reach the provider payload; normal and special provider prices are ingested and shown. The seller-payout figure was wrong on first delivery — it mixed two provider price scales and could exceed the goods value — and now uses the identity already verified against 554 real invoices, with a guard that hides the figure when the two prices look like different quotes.
+- **Draft recovery.** Drafts created before migration 0041 are unverified by definition. Rather than backfilling them as verified, an audited re-verification asks Mengantar again and stamps only on an exact match; a refused payload is now a handled, explained, telemetry-visible outcome that no longer aborts sibling batches.
+- **Dashboard.** Shipping outcome (with a "Masih berjalan" row so the table sums to the cohort it names) and a per-courier recap, with the cost column limited to Tenant Admin and margin left out while D-3 is undecided. The old snapshot block was removed at the owner's request; its counts move to the queue panels planned in PR-52.
+- **Cek resi.** A tenant-scoped tracking lookup where an unknown key and another tenant's key are indistinguishable, reached from the new "Cek" sidebar group together with Cek tarif.
+- **Freshness.** No refresh buttons remain: data refreshes itself once per generated instant while the tab is visible.
+
+Verification: full integration suite 96 files / 910 tests on an isolated database with migrations through 0042; guards mutation-checked, including two of my own that first passed while broken; browser evidence at 1920/1440/1024/390 proving one title position, prose within the 672 px cap, and no overflow, focus or contrast findings. Two independent reviews ran; the first failed the work and its nine blockers were fixed. Changes remain local and uncommitted on `feat/phase14-completion`.
+
+Provider cost basis corrected on owner decision 2026-09-16: the ledger now records what Mengantar actually deducts (the special rate) instead of the normal rate the buyer is charged, so reconciliation stops reporting a variance on every discounted COD shipment; existing ledger rows keep the old basis and the documents say so. Screening finding open as PR-57 / T-169: no code path ever writes the delivery states (`IN_TRANSIT`, `DELIVERED`, `PROBLEM`, RTS), so the delivery outcome surfaces are fed by seed data in development and would stay empty for a real tenant until the provider observations are mapped onto the lifecycle. Open owner decisions: whether the seller payout should be shown net of GeraiCUAN's 3% fee and 11% VAT; the margin definition (D-3); and T-153, which needs approval before any real Mengantar call can confirm the six new payload key names.
+
+## Compact shipment tables — T-148 (2026-09-15)
+
+Long admin tables now stack related facts: date over time, courier over AWB, and recipient name over phone over district–city. Full addresses appear only on shipment detail and the label. Applied to Histori kiriman, analytics shipments, label list, RTS and Keuangan ledger entries; the analytics table no longer scrolls sideways at 1440 px.
+
+Verification: full integration suite 92 files / 793 tests on a fresh isolated database, six bound mutations, and 10 browser observations at 1440/390 with no page overflow, focus or contrast failures. The ledger escalated the run to R3 because it touches uncommitted T-146/T-147 files; an independent review passed and its two should-fix items (area labels with 3 or 4 parts, overstated browser evidence) were fixed. Changes remain local and uncommitted on `feat/phase14-completion`. Next queued: T-149 Shopify-style settings layout (to be planned and confirmed).
+
+## Per-tenant shipment numbers — T-147 (2026-09-15)
+
+Shipment numbers are per tenant (`GC-10013`, growing past 99999) and replace the creator-date-serial reference on every screen, table, label and export. URLs use the number (`/app/pengiriman/10013`); old UUID links and pasted `GC-10013` redirect. Each Tenant Admin can choose a 2–5 character prefix once in Pengaturan; an active Super Admin can unlock a mistaken prefix with audit. The design does not require a superuser migration role.
+
+Verification: full integration suite 91 files / 791 tests on a fresh isolated database, migration upgrade verifier with multi-tenant history, 17 bound mutations, 18 browser observations, and an independent review that failed on a production-role blocker and passed after rework. Migration 0040 is applied to the local dev database after a backup; the dev tenant's prefix is still unlocked so the owner can choose it. Changes remain local and uncommitted on `feat/phase14-completion`.
+
+## Mengantar settlement reconciliation — T-146 (2026-09-15)
+
+Keuangan can pull Mengantar's own settlement invoices and order statuses read-only and compare provider payouts with the ledger per AWB. Evidence is append-only, Tenant Admin only, PII-free and restricted to AWBs issued through the same Mengantar account; a shared platform account never reveals account-wide totals. The ledger is not written. Because production issuance remains disabled (D-5), live pulls currently match no GeraiCUAN AWB.
+
+Verification: full integration suite 90 files / 779 tests on an ephemeral isolated database with all 40 migrations; 11 mutations bound; live browser pull at 1440/390; independent security/finance review failed once and then passed. Migration 0039 is applied to the local dev database after a backup. Changes remain local and uncommitted on `feat/phase14-completion`. Next accepted task: T-147 per-tenant prefixed shipment numbers (PR-44).
 
 ## Analytics simplification — T-145 (2026-09-15)
 
@@ -263,7 +343,7 @@ migration now fixed by `0037`) and three already resolved before this task
 started (README's test-environment and re-seed documentation, and the
 `MENGANTAR_WEBHOOK_SECRET` reference, all stale against the current, already-
 closed webhook). Every named document (`STATUS.md`, `BUILD-LOG.md`,
-`OBSERVABILITY.md`, `RELEASE.md`, `18-AI-ROUTE-MAP.md`, `02-PRD.md`) is
+`OBSERVABILITY.md`, `RELEASE.md`, `18-SYSTEM-MAP.md`, `02-PRD.md`) is
 harmonized against the current repository state. The full verification
 battery passes clean: `pnpm tsc --noEmit`, `pnpm lint`, `pnpm build` (zero
 errors or warnings), `pnpm test:integration` (591/591), `pnpm

@@ -246,7 +246,9 @@ describe("tenant ledger and reconciliation workspace", () => {
       COD_PRINCIPAL_COLLECTABLE: 99500,
       MENGANTAR_SHIPPING_COST: 10000,
       MENGANTAR_INSURANCE_COST: 500,
-      GERAICUAN_COD_SERVICE_FEE_REVENUE: 3285,
+      // T-178: a post-change issuance posts its fee as a Mengantar cost.
+      MENGANTAR_COD_FEE_COST: 3285,
+      GERAICUAN_COD_SERVICE_FEE_REVENUE: 0,
       COD_SERVICE_FEE_VAT_PAYABLE: 361,
       NON_COD_UPSTREAM_PAYMENT: 0,
     });
@@ -259,7 +261,7 @@ describe("tenant ledger and reconciliation workspace", () => {
       varianceIdr: -500,
       status: "VARIANCE",
     });
-    expect(daily.runs).toHaveLength(6);
+    expect(daily.runs).toHaveLength(7);
     expect(daily.runs.every((run) => run.outletId === outletA)).toBe(true);
 
     await adminPool.query(
@@ -314,7 +316,7 @@ describe("tenant ledger and reconciliation workspace", () => {
         })),
     ]);
     expect(concurrentReconciliations[0]).toEqual(concurrentReconciliations[1]);
-    expect(concurrentReconciliations[0].reconciliations).toHaveLength(6);
+    expect(concurrentReconciliations[0].reconciliations).toHaveLength(7);
     expect(concurrentReconciliations[0].sourceTotals).toEqual(
       daily.reconciliation.sourceTotals,
     );
@@ -370,7 +372,7 @@ describe("tenant ledger and reconciliation workspace", () => {
        WHERE tenant_id = $1 AND source_event_id LIKE $2`,
       [tenantA, `reconciliation:${concurrentAttemptId}:%`],
     );
-    expect(persistedConcurrentGroup.rows[0]?.count).toBe(6);
+    expect(persistedConcurrentGroup.rows[0]?.count).toBe(7);
 
     await expect(
       withTenantContext(appDb, adminA, tenantA, (tx, context) =>
@@ -441,7 +443,7 @@ describe("tenant ledger and reconciliation workspace", () => {
     });
 
     const revenueEntry = daily.entries.rows.find(
-      (entry) => entry.entryType === "GERAICUAN_COD_SERVICE_FEE_REVENUE",
+      (entry) => entry.entryType === "MENGANTAR_COD_FEE_COST",
     );
     const shippingEntry = daily.entries.rows.find(
       (entry) => entry.entryType === "MENGANTAR_SHIPPING_COST",

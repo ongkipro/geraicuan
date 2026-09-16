@@ -1,0 +1,138 @@
+{
+  "contract": "GET /api/public/{key}/order/estimate?courier=all — every service key the account can be quoted for. Key names and route counts only: no price, no credential, no address.",
+  "capturedAt": "2026-09-16",
+  "host": "api-public.mengantar.com",
+  "routesSampled": [
+    {
+      "destination": "KELAPA GADING, JAKARTA UTARA",
+      "quoted": 16,
+      "supported": 15
+    },
+    {
+      "destination": "COBLONG, BANDUNG",
+      "quoted": 16,
+      "supported": 15
+    },
+    {
+      "destination": "DENPASAR BARAT, DENPASAR",
+      "quoted": 16,
+      "supported": 14
+    }
+  ],
+  "serviceKeys": [
+    "JNE",
+    "JNECargo",
+    "JT",
+    "Ninja",
+    "SAP",
+    "SAPLite",
+    "SapCargo",
+    "SiCepat",
+    "SiCepatCargo",
+    "anteraja",
+    "iDexpress",
+    "iDexpressCargo",
+    "lion",
+    "paxel",
+    "pos",
+    "spx"
+  ],
+  "services": [
+    {
+      "serviceKey": "anteraja",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "iDexpress",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "iDexpressCargo",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "JNE",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "JNECargo",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "JT",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "lion",
+      "quotedOn": 3,
+      "supportedOn": 2,
+      "codSupportedOn": 2
+    },
+    {
+      "serviceKey": "Ninja",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "paxel",
+      "quotedOn": 3,
+      "supportedOn": 0,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "pos",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "SAP",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "SapCargo",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "SAPLite",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    },
+    {
+      "serviceKey": "SiCepat",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "SiCepatCargo",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 0
+    },
+    {
+      "serviceKey": "spx",
+      "quotedOn": 3,
+      "supportedOn": 3,
+      "codSupportedOn": 3
+    }
+  ]
+}

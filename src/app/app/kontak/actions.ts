@@ -3,12 +3,17 @@
 import { redirect } from "next/navigation";
 
 import { validateMengantarDestinationAreaSelection } from "@/app/app/location-actions";
-import { createContact, listContacts } from "@/db/contact-repository";
+import { createContact, listContactDirectory, type ContactDirectoryRow } from "@/db/contact-repository";
 import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { validateContactDirectory } from "@/lib/contact-directory";
+import {
+  contactRoleFilterToRepositoryRole,
+  parseContactRoleFilter,
+  parseContactStatusFilter,
+} from "@/lib/contact-role-filter";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -42,7 +47,10 @@ export type CreateContactState = {
 };
 
 export type ContactSearchRow = {
+  address: string | null;
+  addressCount: number;
   archived: boolean;
+  destinationAreaLabel: string | null;
   id: string;
   isRecipient: boolean;
   isSender: boolean;
@@ -76,9 +84,12 @@ async function requireTenantPrincipal() {
   }
 }
 
-function contactSearchRows(rows: Awaited<ReturnType<typeof listContacts>>): ContactSearchRow[] {
+function contactSearchRows(rows: ContactDirectoryRow[]): ContactSearchRow[] {
   return rows.map((contact) => ({
+    address: contact.address,
+    addressCount: contact.addressCount,
     archived: Boolean(contact.archivedAt),
+    destinationAreaLabel: contact.destinationAreaLabel,
     id: contact.id,
     isRecipient: contact.isRecipient,
     isSender: contact.isSender,
@@ -94,8 +105,14 @@ export async function searchContacts(
   const principal = await requireTenantPrincipal();
   const requestedQuery = formData.get("q");
   const requestedStatus = formData.get("status");
+  const requestedPeran = formData.get("peran");
   const query = typeof requestedQuery === "string" ? requestedQuery.trim() : "";
-  const status = requestedStatus === "archived" ? "archived" : "active";
+  const { status } = parseContactStatusFilter(
+    typeof requestedStatus === "string" ? requestedStatus : undefined,
+  );
+  const role = contactRoleFilterToRepositoryRole(
+    parseContactRoleFilter(typeof requestedPeran === "string" ? requestedPeran : undefined).peran,
+  );
   if (query && (query.length < 2 || query.length > 80)) {
     return {
       error: query.length < 2
@@ -106,7 +123,7 @@ export async function searchContacts(
     };
   }
   const rows = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-    listContacts(tx, context, query, status),
+    listContactDirectory(tx, context, { query, role, status }),
   );
   return { rows: contactSearchRows(rows), searched: Boolean(query) };
 }

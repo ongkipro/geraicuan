@@ -22,7 +22,7 @@ export default function ContactDetailError({ reset }: { reset: () => void }) {
   };
 
   return (
-    <PageContainer width="form">
+    <PageContainer>
       <PageHeader eyebrow="Kontak" title="Detail kontak" />
       <Alert ref={alertRef} tabIndex={-1} variant="destructive">
         <CircleAlert aria-hidden="true" />

@@ -254,6 +254,7 @@ describe("tenant-scoped AWB labels", () => {
         heightCm: 25,
         declaredValueIdr: 100000,
       },
+      outletName: "Outlet Label A",
       sender: {
         name: "Pengirim Snapshot",
         phone: "081211110000",

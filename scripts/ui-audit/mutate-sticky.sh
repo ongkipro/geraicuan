@@ -50,7 +50,9 @@ for spelling in "group-hover:bg-muted/50|fractional opacity utility" \
   apply "$label" "$OPAQUE" "$value" && check "$label"
 done
 
-apply 'column no longer sticky' 'sticky left-0 z-10 bg-card font-mono' 'z-10 bg-card font-mono' && check 'column no longer sticky'
+# T-172: the pinned cell inherits its row's fill instead of repainting `bg-card`,
+# so the class this mutation drops `sticky` from moved with it.
+apply 'column no longer sticky' 'sticky left-0 z-10 max-w-40 whitespace-normal bg-inherit' 'z-10 max-w-40 whitespace-normal bg-inherit' && check 'column no longer sticky'
 
 apply 'background-image gradient fading to transparent on hover' \
   "$OPAQUE" 'group-hover:bg-[image:linear-gradient(var(--muted),transparent)]' && \

@@ -1,6 +1,6 @@
 .table {
-  --table-header: color-mix(in oklab, var(--muted) 40%, var(--card));
-  --table-highlight: color-mix(in oklab, var(--muted) 50%, var(--card));
+  --table-header: var(--muted);
+  --table-highlight: var(--accent);
 }
 
 /* Opaque headers keep the pinned cell continuous with the rest of the header. */

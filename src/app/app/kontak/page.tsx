@@ -8,18 +8,25 @@ import { ContactDirectoryBrowser } from "@/app/app/kontak/contact-directory-brow
 import type { ContactSearchRow } from "@/app/app/kontak/actions";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { listContacts } from "@/db/contact-repository";
+import { loadContactDirectoryPage } from "@/db/contact-repository";
 import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import {
+  CONTACT_STATUS_ENTRIES,
+  contactRoleFilterToRepositoryRole,
+  parseContactRoleFilter,
+  parseContactStatusFilter,
+} from "@/lib/contact-role-filter";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
 type SearchValue = string | string[] | undefined;
-type ContactDirectoryPageProps = { searchParams: Promise<{ status?: SearchValue }> };
+type ContactDirectoryPageProps = { searchParams: Promise<{ peran?: SearchValue; status?: SearchValue }> };
 
 function firstValue(value: SearchValue) {
   return Array.isArray(value) ? value[0] : value;
@@ -40,18 +47,21 @@ export default async function ContactDirectoryPage({ searchParams }: ContactDire
     : null;
   if (auditScenario === "contacts-error") throw new Error("Intentional development-only contact directory failure.");
 
-  const requestedStatus = firstValue((await searchParams).status);
-  const status = requestedStatus === "archived" ? "archived" : "active";
-  const invalidStatus = Boolean(requestedStatus && requestedStatus !== "active" && requestedStatus !== "archived");
-  let rowsPromise = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-    listContacts(tx, context, "", status),
+  const { invalid: invalidStatus, status } = parseContactStatusFilter(firstValue((await searchParams).status));
+  const { invalid: invalidPeran, peran } = parseContactRoleFilter(firstValue((await searchParams).peran));
+  const role = contactRoleFilterToRepositoryRole(peran);
+  let pagePromise = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+    loadContactDirectoryPage(tx, context, { query: "", role, status }),
   );
   if (auditScenario === "contacts-stream") {
-    rowsPromise = rowsPromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
+    pagePromise = pagePromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
   }
-  const rows = await rowsPromise;
+  const { rows, summary } = await pagePromise;
   const contactRows: ContactSearchRow[] = rows.map((contact) => ({
+    address: contact.address,
+    addressCount: contact.addressCount,
     archived: Boolean(contact.archivedAt),
+    destinationAreaLabel: contact.destinationAreaLabel,
     id: contact.id,
     isRecipient: contact.isRecipient,
     isSender: contact.isSender,
@@ -68,7 +78,24 @@ export default async function ContactDirectoryPage({ searchParams }: ContactDire
         title="Kontak"
       />
       {invalidStatus ? <Alert role="status"><AlertTitle>Filter status disesuaikan</AlertTitle><AlertDescription>Status tidak dikenali; kontak aktif ditampilkan.</AlertDescription></Alert> : null}
-      <ContactDirectoryBrowser initialRows={contactRows} status={status} />
+      {invalidPeran ? <Alert role="status"><AlertTitle>Filter peran disesuaikan</AlertTitle><AlertDescription>Peran tidak dikenali; semua kontak ditampilkan.</AlertDescription></Alert> : null}
+      {/* PR-52: replaces the browser's own Aktif/Diarsipkan chips, so the page
+          has one control for `status` and each entry states its count. */}
+      <StateSummaryPanel
+        action="/app/kontak"
+        entries={CONTACT_STATUS_ENTRIES.map((entry) => ({
+          count: summary[entry.metricId],
+          description: entry.description,
+          label: entry.label,
+          metricId: entry.metricId,
+          value: entry.value,
+        }))}
+        label="Ringkasan status kontak"
+        param="status"
+        preserved={{ peran: peran === "semua" ? undefined : peran }}
+        selected={status}
+      />
+      <ContactDirectoryBrowser initialRows={contactRows} peran={peran} status={status} />
     </PageContainer>
   );
 }

@@ -1,9 +1,13 @@
 "use client";
 
-import { CircleAlert, ExternalLink, ShieldCheck } from "lucide-react";
+import { CircleAlert, ExternalLink, MapPinCheck, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 
+import {
+  type DestinationAreaVerificationState,
+  verifyShipmentDraftDestinationArea,
+} from "@/app/app/actions";
 import {
   confirmShipmentIssuance,
   type ShipmentIssuanceActionState,
@@ -50,6 +54,7 @@ type ShipmentIssuancePanelProps = {
 };
 
 const initialState: ShipmentIssuanceActionState = {};
+const initialVerificationState: DestinationAreaVerificationState = {};
 const idr = new Intl.NumberFormat("id-ID", {
   currency: "IDR",
   maximumFractionDigits: 0,
@@ -59,8 +64,8 @@ const idr = new Intl.NumberFormat("id-ID", {
 const breakdownRows: readonly [keyof CodBreakdown, string][] = [
   ["goodsValueIdr", "Nilai barang dideklarasikan"],
   ["shippingAmountIdr", "Ongkir penyedia"],
-  ["serviceFeeIdr", "Biaya layanan COD GeraiCUAN"],
-  ["vatAmountIdr", "PPN biaya layanan"],
+  ["serviceFeeIdr", "Biaya COD"],
+  ["vatAmountIdr", "PPN biaya COD"],
   ["providerCodAmountIdr", "Total ditagih ke pelanggan"],
 ];
 
@@ -72,6 +77,10 @@ export function ShipmentIssuancePanel({
   snapshotId,
 }: ShipmentIssuancePanelProps) {
   const [state, action, pending] = useActionState(confirmShipmentIssuance, initialState);
+  const [verificationState, verifyAction, verifyPending] = useActionState(
+    verifyShipmentDraftDestinationArea,
+    initialVerificationState,
+  );
   const [selectedId, setSelectedId] = useState("");
   const resultRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.estimateServiceId === selectedId);
@@ -201,11 +210,39 @@ export function ShipmentIssuancePanel({
         </form>
       )}
 
-      {state.error ? (
+      {/* Once the destination is verified the earlier refusal is answered: keeping the
+          destructive alert on screen beside "Tujuan sudah terverifikasi" would tell the
+          operator two contradictory things at once. */}
+      {state.error && !verificationState.verified ? (
         <Alert aria-live="assertive" ref={resultRef} tabIndex={-1} variant="destructive">
           <CircleAlert aria-hidden="true" />
           <AlertTitle>Penerbitan tidak berhasil</AlertTitle>
           <AlertDescription>{state.error} Muat ulang halaman bila estimasi atau status sudah berubah.</AlertDescription>
+        </Alert>
+      ) : null}
+      {state.code === "ORDER_DESTINATION_AREA_UNVERIFIED" && !verificationState.verified ? (
+        <Alert id="destination-area-verification">
+          <MapPinCheck aria-hidden="true" />
+          <AlertTitle>Verifikasi ulang tujuan diperlukan</AlertTitle>
+          <AlertDescription className="grid gap-2">
+            <p>Cek ulang area tujuan draf ini ke Mengantar sebelum mengonfirmasi lagi. Alamat tidak berubah, hanya diperiksa ulang.</p>
+            <form action={verifyAction}>
+              <input name="shipmentId" type="hidden" value={shipmentId} />
+              <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={verifyPending} size="sm" type="submit" variant="outline">
+                {verifyPending ? "Memverifikasi tujuan…" : "Verifikasi ulang tujuan"}
+              </Button>
+            </form>
+            {verificationState.error ? (
+              <p aria-live="assertive" className="text-destructive">{verificationState.error}</p>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {verificationState.verified ? (
+        <Alert aria-live="polite" id="destination-area-verified">
+          <ShieldCheck aria-hidden="true" />
+          <AlertTitle>Tujuan sudah terverifikasi</AlertTitle>
+          <AlertDescription>Silakan konfirmasi ulang penerbitan AWB di atas.</AlertDescription>
         </Alert>
       ) : null}
       {state.issued ? (

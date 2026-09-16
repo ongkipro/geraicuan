@@ -15,9 +15,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Technical design: `docs/spec/03-TECHNICAL-DESIGN.md`.
 - Architecture and data: `docs/spec/04-SYSTEM-ARCHITECTURE.md`, `docs/spec/05-DATA-MODEL.md`.
 - Tenancy, IAM, security, privacy, operations, and UX: `docs/spec/06-TENANT-ISOLATION.md` through `docs/spec/16-OBSERVABILITY-RATE-LIMITING.md`.
-- AI Code Navigation Map: `docs/spec/18-AI-ROUTE-MAP.md`.
+- System Map (development map of pages, handlers, actions, data owners and integrations): `docs/spec/18-SYSTEM-MAP.md`.
 - Metrics and analytics: `docs/spec/19-METRICS-ANALYTICS-CONTRACT.md`. Every displayed number maps to one metric ID there; changing a formula updates that document and its test in the same change.
-- Route-map maintenance is mandatory: every added, renamed, or removed `page.tsx`, `route.ts`, navigation destination, Server Action, or route-owned state boundary must update `docs/spec/18-AI-ROUTE-MAP.md` in the same change. Keep its inventory counts, maturity labels, ownership, URL state, and verification evidence synchronized with repository truth.
+- System-map maintenance is mandatory: every added, renamed, or removed `page.tsx`, `route.ts`, Server Action, `src/db/` data owner, navigation destination, URL state key, provider integration or UI audit scenario must update `docs/spec/18-SYSTEM-MAP.md` **in the same change**, following the maintenance contract in its section 0. Keep its inventory counts, maturity labels, ownership, URL state, and verification evidence synchronized with repository truth. A page that exists but is not mapped is an incomplete change, and a page reachable only from a button is an unmapped destination.
 - Execution queue: root `TASKS.md`. Execute one task only after its requirement and constraints are accepted.
 - Runtime and release truth: `STATUS.md`, `BUILD-LOG.md`, `OBSERVABILITY.md`, and `RELEASE.md`.
 

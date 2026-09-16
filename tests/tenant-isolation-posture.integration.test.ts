@@ -29,6 +29,13 @@ afterAll(async () => {
  */
 const EXPLICIT_TENANT_SCOPED = ["tenants", "platform_roles"];
 
+/**
+ * Tables that carry `tenant_id` but that the application role must not reach at
+ * all: only an owner-run SECURITY DEFINER function uses them. No privilege is a
+ * stronger boundary than row-level security, and the last test asserts it.
+ */
+const INTERNAL_NO_RUNTIME_ACCESS = ["tenant_shipment_counters"];
+
 async function tenantScopedTables() {
   const { rows } = await adminPool.query<{
     relname: string;
@@ -48,15 +55,15 @@ async function tenantScopedTables() {
         AND n.nspname = 'public'
         AND (
           c.relname = ANY($1::text[])
-          OR EXISTS (
+          OR (NOT c.relname = ANY($2::text[]) AND EXISTS (
             SELECT 1 FROM information_schema.columns col
              WHERE col.table_schema = 'public'
                AND col.table_name = c.relname
                AND col.column_name = 'tenant_id'
-          )
+          ))
         )
       ORDER BY c.relname`,
-    [EXPLICIT_TENANT_SCOPED],
+    [EXPLICIT_TENANT_SCOPED, INTERNAL_NO_RUNTIME_ACCESS],
   );
   return rows;
 }
@@ -125,6 +132,9 @@ describe("tenant isolation posture", () => {
       "audit_events",
       "ledger_entries",
       "print_events",
+      "provider_order_status_observations",
+      "provider_settlement_items",
+      "provider_settlement_pulls",
       "reconciliation_runs",
       "shipment_cod_totals",
       "shipment_estimate_services",
@@ -183,7 +193,7 @@ describe("tenant isolation posture", () => {
       outlets:
         "UPDATE(default_origin_area_id,default_origin_area_label,default_pickup_address_id,default_pickup_address_label,mengantar_authority_version,name,updated_at)",
       shipment_drafts:
-        "UPDATE(cogs_amount_idr,declared_value_idr,destination_area_id,destination_area_label,is_cod,package_content,package_height_cm,package_length_cm,package_quantity,package_weight_grams,package_width_cm,updated_at)",
+        "UPDATE(cogs_amount_idr,declared_value_idr,destination_area_id,destination_area_label,destination_area_verified_at,is_cod,package_content,package_height_cm,package_length_cm,package_quantity,package_weight_grams,package_width_cm,updated_at)",
       shipments: "UPDATE(cogs_amount_idr,status,updated_at)",
       tenants: "UPDATE(name,status,updated_at)",
     };
@@ -285,6 +295,18 @@ describe("tenant isolation posture", () => {
       await adminPool.query("DELETE FROM shipments WHERE id = $1", [shipmentId]);
       await adminPool.query("DELETE FROM outlets WHERE id = $1", [outletId]);
       await adminPool.query("DELETE FROM tenants WHERE id = $1", [tenantId]);
+    }
+  });
+
+  it("gives the application role no privilege at all on internal allocator tables", async () => {
+    for (const table of INTERNAL_NO_RUNTIME_ACCESS) {
+      expect(await effectiveGrants(table), table).toEqual([]);
+      const { rows } = await adminPool.query<{ exists: boolean }>(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = 'tenant_id') AS exists",
+        [table],
+      );
+      // Keep the exemption honest: it only applies to tables that really are tenant-keyed.
+      expect(rows[0]?.exists, table).toBe(true);
     }
   });
 });

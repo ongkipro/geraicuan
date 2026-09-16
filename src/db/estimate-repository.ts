@@ -40,6 +40,14 @@ export type SupportedEstimateService = {
   insuranceSourceField: null;
   deliveryEstimate: string;
   codEligible: boolean;
+  /** `estimatedPrice` — the provider's normal price. */
+  normalPriceIdr: number | null;
+  /** `estimatedSpecialPrice` — the account's special price, when offered. */
+  specialPriceIdr: number | null;
+  /** `codFee` — what the provider charges for collecting COD. */
+  codFeeIdr: number | null;
+  /** `discount` — the provider's own discount on this service. */
+  discountIdr: number | null;
 };
 
 export type PersistedEstimateService = Omit<
@@ -76,7 +84,12 @@ async function loadEstimateContext(
     .select({
       shipmentId: shipments.id,
       outletId: shipments.outletId,
-      originAreaId: outlets.defaultOriginAreaId,
+      // T-157: the draft's own pickup point decides the origin; a pre-T-157
+      // draft has none and falls back to the outlet default.
+      originAreaId: sql<string | null>`coalesce(
+        ${shipmentDrafts.originAreaId},
+        ${outlets.defaultOriginAreaId}
+      )`,
       destinationAreaId: shipmentDrafts.destinationAreaId,
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       weightGrams: shipmentDrafts.packageWeightGrams,
@@ -211,14 +224,18 @@ export async function appendEstimateSnapshot(
     await tx.insert(shipmentEstimateServices).values(
       services.map((service) => ({
         codEligible: service.codEligible,
+        codFeeIdr: service.codFeeIdr,
         currency: service.currency,
         deliveryEstimate: service.deliveryEstimate,
+        discountIdr: service.discountIdr,
         insuranceAmountIdr: service.insuranceAmountIdr,
         insuranceSourceField: service.insuranceSourceField,
+        normalPriceIdr: service.normalPriceIdr,
         providerService: service.providerService,
         shippingAmountIdr: service.shippingAmountIdr,
         shippingSourceField: service.shippingSourceField,
         snapshotId: snapshot.id,
+        specialPriceIdr: service.specialPriceIdr,
         tenantId: context.tenantId,
       })),
     );
@@ -276,6 +293,10 @@ export async function loadLatestEstimateSnapshot(
       insuranceSourceField: shipmentEstimateServices.insuranceSourceField,
       deliveryEstimate: shipmentEstimateServices.deliveryEstimate,
       codEligible: shipmentEstimateServices.codEligible,
+      normalPriceIdr: shipmentEstimateServices.normalPriceIdr,
+      specialPriceIdr: shipmentEstimateServices.specialPriceIdr,
+      codFeeIdr: shipmentEstimateServices.codFeeIdr,
+      discountIdr: shipmentEstimateServices.discountIdr,
     })
     .from(shipmentEstimateServices)
     .where(

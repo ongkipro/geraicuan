@@ -1,3 +1,4 @@
+import { shipmentDetailHref } from "@/lib/shipment-number";
 import {
   formatRangeLabel,
   previousAnalyticsRange,
@@ -63,9 +64,7 @@ export function formatAnalyticsComparison(
 
 export function analyticsShipmentDetailHref(
   role: AnalyticsTenantRole,
-  shipmentId: string,
+  publicReference: string,
 ): string | null {
-  return role === "TENANT_ADMIN"
-    ? `/app/pengiriman/${encodeURIComponent(shipmentId)}`
-    : null;
+  return role === "TENANT_ADMIN" ? shipmentDetailHref(publicReference) : null;
 }

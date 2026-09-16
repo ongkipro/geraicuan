@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import {
   outlets,
@@ -10,7 +10,12 @@ import {
   shipmentRtsEvents,
   shipments,
 } from "@/db/schema";
+import {
+  loadProviderDeliveryStatusBasis,
+  type ProviderDeliveryStatusBasis,
+} from "@/db/provider-settlement-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import type { AnalyticsRange } from "@/lib/analytics-range";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
 export const RTS_STATUSES = [
@@ -52,6 +57,8 @@ export type RtsShipmentRow = {
 };
 
 export type RtsShipmentsPage = {
+  /** PR-57: where these return states came from, and how far behind they may be. */
+  basis: ProviderDeliveryStatusBasis;
   generatedAt: Date;
   page: number;
   pageSize: number;
@@ -68,6 +75,8 @@ export async function loadRtsShipmentsPage(
   input: {
     page: number;
     pageSize: number;
+    /** PR-53 created-basis window; omitted means the tenant's whole lifetime. */
+    range?: AnalyticsRange;
     status: RtsFilterStatus;
   },
 ): Promise<RtsShipmentsPage> {
@@ -76,8 +85,16 @@ export async function loadRtsShipmentsPage(
       ? ["RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED", "PROBLEM"]
       : [input.status];
 
+  const createdWithin = input.range
+    ? and(
+        gte(shipments.createdAt, input.range.startInclusive),
+        lt(shipments.createdAt, input.range.endExclusive),
+      )
+    : undefined;
+
   const where = and(
     eq(shipments.tenantId, context.tenantId),
+    createdWithin,
     inArray(shipments.status, allowedStatuses),
   );
 
@@ -98,6 +115,7 @@ export async function loadRtsShipmentsPage(
     .where(
       and(
         eq(shipments.tenantId, context.tenantId),
+        createdWithin,
         inArray(shipments.status, rtsSummaryStatuses),
       ),
     )
@@ -128,12 +146,17 @@ export async function loadRtsShipmentsPage(
     .from(shipments)
     .where(where);
 
+  // PR-57: the return states below are Mengantar's report, refreshed only when
+  // a Tenant Admin pulls provider data; the page says so above the table.
+  const basis = await loadProviderDeliveryStatusBasis(tx, context);
+
   const totalCount = countRow?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / input.pageSize));
   const page = Math.min(input.page, totalPages);
 
   if (totalCount === 0) {
     return {
+      basis,
       generatedAt: countRow?.generatedAt ? new Date(countRow.generatedAt) : new Date(),
       page: 1,
       pageSize: input.pageSize,
@@ -224,6 +247,7 @@ export async function loadRtsShipmentsPage(
   }));
 
   return {
+    basis,
     generatedAt: countRow?.generatedAt ? new Date(countRow.generatedAt) : new Date(),
     page,
     pageSize: input.pageSize,

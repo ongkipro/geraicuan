@@ -5,14 +5,16 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import {
+  CourierRecapSkeleton,
+  DashboardCourierRecapRegion,
   DashboardHeaderActions,
-  DashboardMetricsRegion,
+  DashboardOutcomeRegion,
   DashboardPeriodSummaryRegion,
   DashboardPeriodSupportRegion,
   DashboardPeriodTrendRegion,
   DashboardRecentRegion,
   dashboardOverviewGridClassName,
-  MetricsSkeleton,
+  OutcomeSkeleton,
   OutletReadinessRegion,
   PeriodSummarySkeleton,
   PeriodSupportSkeleton,
@@ -30,7 +32,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db/client";
 import { listOutletReadinessSummary } from "@/db/outlet-readiness-repository";
 import {
+  loadTenantDashboardCourierRecap,
   loadTenantDashboardMetrics,
+  loadTenantDashboardOutcomeSummary,
   loadTenantDashboardPeriodSummary,
   loadTenantDashboardPeriodSupport,
   loadTenantDashboardPeriodTrend,
@@ -165,12 +169,12 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
       if (auditScenario === "dashboard-period-error") throw new Error("Intentional development-only dashboard period failure.");
       if (auditScenario === "dashboard-first-run" || auditScenario === "dashboard-period-empty") return {
         ...value,
-        current: { codCount: 0, codDeclaredValueIdr: 0, createdCount: 0, issuedCount: 0, nonCodCount: 0, nonCodDeclaredValueIdr: 0 },
+        current: { codCount: 0, createdCount: 0, issuedCount: 0, nonCodCount: 0 },
       };
       if (auditScenario === "dashboard-period-demo") return {
         ...value,
-        current: { codCount: 7, codDeclaredValueIdr: 1_750_000, createdCount: 12, issuedCount: 8, nonCodCount: 5, nonCodDeclaredValueIdr: 925_000 },
-        previous: { codCount: 5, codDeclaredValueIdr: 1_250_000, createdCount: 9, issuedCount: 6, nonCodCount: 4, nonCodDeclaredValueIdr: 700_000 },
+        current: { codCount: 7, createdCount: 12, issuedCount: 8, nonCodCount: 5 },
+        previous: { codCount: 5, createdCount: 9, issuedCount: 6, nonCodCount: 4 },
       };
       return auditScenario === "dashboard-stale" ? {
         ...value,
@@ -197,7 +201,9 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
     const support = supportKind
       ? withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardPeriodSupport(tx, context, decisionContext.currentRange, supportKind, periodFilters))
       : null;
-    return { summary, support, trend, previousTrend };
+    const outcome = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardOutcomeSummary(tx, context, decisionContext.currentRange, periodFilters));
+    const courierRecap = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardCourierRecap(tx, context, decisionContext.currentRange, periodFilters));
+    return { courierRecap, outcome, summary, support, trend, previousTrend };
   })();
   const todayLocalDate = parseAnalyticsRange({ rentang: "hari-ini", tz: range.timezone }, now).startDate;
   const activeFilterCount = Number(range.presetId !== "7-hari") + Number(Boolean(selectedOutlet));
@@ -214,7 +220,7 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
   const resolvedOutletsPromise = Promise.resolve(outletRows);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader eyebrow="Operasional tenant" actions={<Suspense fallback={<Skeleton className="h-8 w-40 max-md:h-11 max-sm:w-full" />}><DashboardHeaderActions promise={resolvedOutletsPromise} role={principal.role} /></Suspense>} focusTargetId="dashboard-page-heading" title="Ringkasan" />
 
       <Suspense fallback={<ReadinessSkeleton />}><OutletReadinessRegion promise={resolvedOutletsPromise} role={principal.role} /></Suspense>
@@ -223,8 +229,8 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
       <section aria-labelledby="dashboard-period-heading" className="grid gap-4">
         <h2 className="sr-only" id="dashboard-period-heading">Ringkasan periode</h2>
         <div className="space-y-3">
-          <DashboardPeriodFilter activeCount={activeFilterCount} key={analyticsQuery.toString()} outlets={outletRows} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate }} />
-          <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
+          <DashboardPeriodFilter activeCount={activeFilterCount} comparisonLabel={decisionContext.previousPeriodLabel} key={analyticsQuery.toString()} outlets={outletRows} rangeLabel={decisionContext.periodLabel} timezoneLabel={decisionContext.timezoneLabel} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate }} />
+          <p className="max-w-2xl text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
           {range.issues.length > 0 ? <Alert><AlertTitle>Filter disesuaikan</AlertTitle><AlertDescription><ul className="list-disc pl-5">{range.issues.map((issue, index) => <li key={`${issue}-${index}`}>{analyticsIssueMessage(issue)}</li>)}</ul></AlertDescription></Alert> : null}
           {invalidOutlet ? <Alert variant="destructive"><AlertTitle>Filter outlet ditolak</AlertTitle><AlertDescription>Outlet pada alamat halaman tidak tersedia untuk tenant ini.<div className="mt-3"><Button asChild variant="outline"><Link href="/app">Reset ke filter aman</Link></Button></div></AlertDescription></Alert> : null}
         </div>
@@ -232,12 +238,19 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
         {periodReads?.support && supportKind ? <Suspense fallback={<PeriodSupportSkeleton />}><DashboardPeriodSupportRegion context={periodContext} kind={supportKind} promise={periodReads.support} /></Suspense> : null}
       </section>
 
+      {periodReads ? (
+        <Suspense fallback={<OutcomeSkeleton />}><DashboardOutcomeRegion context={periodContext} promise={periodReads.outcome} /></Suspense>
+      ) : null}
+
       <div className={dashboardOverviewGridClassName}>
         {periodReads ? <Suspense fallback={<PeriodTrendSkeleton />}><DashboardPeriodTrendRegion context={periodContext} demo={demoChart} previousPromise={periodReads.previousTrend} promise={periodReads.trend} /></Suspense> : null}
         <Suspense fallback={<RecentSkeleton />}><DashboardRecentRegion actionPromise={actionPromise} multipleOutlets={outletRows.length > 1} recentPromise={recentPromise} role={principal.role} /></Suspense>
       </div>
 
-      <Suspense fallback={<MetricsSkeleton />}><DashboardMetricsRegion metricsPromise={metricsPromise} /></Suspense>
+      {periodReads ? (
+        <Suspense fallback={<CourierRecapSkeleton />}><DashboardCourierRecapRegion context={periodContext} promise={periodReads.courierRecap} /></Suspense>
+      ) : null}
+
     </PageContainer>
   );
 }

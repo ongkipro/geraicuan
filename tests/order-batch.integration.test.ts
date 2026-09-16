@@ -20,6 +20,7 @@ import { checkShipmentStaleOperation } from "@/db/shipment-stale-operation-repos
 import { withTenantContext } from "@/db/tenant-context";
 import {
   buildMengantarOrderPayload,
+  MengantarOrderPayloadError,
   orchestrateFixtureBackedMengantarOrders,
   type MengantarOrderRequest,
   type MengantarOrderTransport,
@@ -99,9 +100,10 @@ async function seedEstimatedShipment(
   await adminPool.query(
     `INSERT INTO shipment_drafts (
       shipment_id, tenant_id, destination_area_id, destination_area_label,
-      package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod
+      package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod,
+      destination_area_verified_at
     ) VALUES ($1, $2, 'fixture-destination', 'Fixture destination',
-      'Sanitized fixture parcel', 1000, 1, 100000, $3)`,
+      'Sanitized fixture parcel', 1000, 1, 100000, $3, now())`,
     [value.shipmentId, tenantId, isCod],
   );
   await adminPool.query(
@@ -417,6 +419,193 @@ describe("fixture-backed Mengantar order orchestration", () => {
     });
     expect(payload).toHaveLength(1);
     expect(payload[0]?.destination_id).toBe("fixture-destination");
+  });
+
+  it("carries the stored PR-47 operational fields into the provider payload", async () => {
+    const confirmation = await seedEstimatedShipment(101, tenantA, outletA, "JNE");
+    await adminPool.query(
+      `UPDATE shipment_drafts
+       SET shipping_instruction = 'Titip ke satpam',
+           recipient_address_landmark = 'Seberang masjid',
+           is_hazardous = true
+       WHERE shipment_id = $1`,
+      [confirmation.shipmentId],
+    );
+
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
+
+    expect(buildMengantarOrderPayload(prepared.orders)[0]).toMatchObject({
+      is_hazardous: true,
+      receiver_landmark: "Seberang masjid",
+      shipping_instruction: "Titip ke satpam",
+      // 1000 g stays 1 kg under the explicit floor-and-round rule.
+      weight: 1,
+    });
+  });
+
+  it("refuses to submit a draft whose destination area was never re-verified", async () => {
+    const confirmation = await seedEstimatedShipment(102, tenantA, outletA, "JNE");
+    await adminPool.query(
+      "UPDATE shipment_drafts SET destination_area_verified_at = NULL WHERE shipment_id = $1",
+      [confirmation.shipmentId],
+    );
+
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
+
+    expect(prepared.orders[0].destinationAreaVerifiedAt).toBeNull();
+    expect(() => buildMengantarOrderPayload(prepared.orders)).toThrow(
+      MengantarOrderPayloadError,
+    );
+  });
+
+  it("refuses to submit a COD order whose COD total is missing", async () => {
+    const confirmation = await seedEstimatedShipment(103, tenantA, outletA, "JNE", true);
+    const [prepared] = await withTenantContext(
+      appDb,
+      "order-user-a",
+      tenantA,
+      (tx, context) => prepareProviderBatches(
+        tx,
+        context,
+        [confirmation],
+        async () => platformAccountKey,
+      ),
+    );
+    if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
+
+    expect(buildMengantarOrderPayload(prepared.orders)[0]?.cod_amount).toBe(111_596);
+    expect(() => buildMengantarOrderPayload([
+      { ...prepared.orders[0], providerCodAmountIdr: null },
+    ])).toThrow(MengantarOrderPayloadError);
+  });
+
+  it("B4: rejects an unverified-area batch without claiming it, calling transport, or crashing the run", async () => {
+    const confirmation = await seedEstimatedShipment(104, tenantA, outletA, "JNE");
+    await adminPool.query(
+      "UPDATE shipment_drafts SET destination_area_verified_at = NULL WHERE shipment_id = $1",
+      [confirmation.shipmentId],
+    );
+
+    const events: ShipmentLifecycleEvent[] = [];
+    let submissions = 0;
+    const result = await orchestrateFixtureBackedMengantarOrders({
+      ...input([confirmation], {
+        async submit() {
+          submissions += 1;
+          return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+        },
+      }),
+      telemetrySink(event) {
+        events.push(event);
+      },
+    });
+
+    expect(submissions).toBe(0);
+    expect(result.batches).toMatchObject([{
+      created: true,
+      submitted: false,
+      status: "SUBMISSION_QUEUED",
+      payloadRejectionCode: "ORDER_DESTINATION_AREA_UNVERIFIED",
+    }]);
+
+    // Nothing was claimed: the batch is still queued in the database and can
+    // be resumed once the operator re-verifies the destination.
+    const [batchRow] = await adminDb
+      .select({ status: schema.providerBatches.status })
+      .from(schema.providerBatches)
+      .where(eq(schema.providerBatches.tenantId, tenantA));
+    expect(batchRow?.status).toBe("SUBMISSION_QUEUED");
+
+    const orderEvents = events.filter((event) => event.operation === "order");
+    expect(orderEvents).toHaveLength(1);
+    expect(orderEvents[0]).toMatchObject({
+      outcome: "failure",
+      severity: "ERROR",
+      safeProviderStatus: "NOT_CALLED",
+      retryResult: "rejected",
+      queueResult: "not_applicable",
+    });
+
+    // Resubmitting after the operator fixes the draft (simulated here by
+    // stamping verification directly) submits exactly once — nothing was
+    // double-attempted by the earlier rejection.
+    await adminPool.query(
+      "UPDATE shipment_drafts SET destination_area_verified_at = now() WHERE shipment_id = $1",
+      [confirmation.shipmentId],
+    );
+    const resumed = await orchestrateFixtureBackedMengantarOrders(input([confirmation], {
+      async submit() {
+        submissions += 1;
+        return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+      },
+    }));
+    expect(resumed.batches).toMatchObject([{ submitted: true, status: "COMPLETED" }]);
+    expect(submissions).toBe(1);
+  });
+
+  it("B4: isolates a rejected batch from a sibling batch in the same confirmation run", async () => {
+    const badConfirmation = await seedEstimatedShipment(105, tenantA, outletA, "JNE");
+    await adminPool.query(
+      "UPDATE shipment_drafts SET destination_area_verified_at = NULL WHERE shipment_id = $1",
+      [badConfirmation.shipmentId],
+    );
+    const goodConfirmation = await seedEstimatedShipment(106, tenantA, outletA, "SAP");
+
+    let goodSubmissions = 0;
+    const result = await orchestrateFixtureBackedMengantarOrders(input(
+      [badConfirmation, goodConfirmation],
+      {
+        async submit(payload) {
+          goodSubmissions += 1;
+          expect(payload[0]?.destination_id).toBe("fixture-destination");
+          return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+        },
+      },
+    ));
+
+    expect(goodSubmissions).toBe(1);
+    expect(result.batches).toHaveLength(2);
+    expect(result.batches).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        submitted: false,
+        status: "SUBMISSION_QUEUED",
+        payloadRejectionCode: "ORDER_DESTINATION_AREA_UNVERIFIED",
+      }),
+      expect.objectContaining({ submitted: true, status: "COMPLETED" }),
+    ]));
+
+    const [goodShipment] = await adminPool.query(
+      "SELECT status FROM shipments WHERE id = $1",
+      [goodConfirmation.shipmentId],
+    ).then((r) => r.rows);
+    expect(goodShipment.status).toBe("ISSUED");
+    const [badShipment] = await adminPool.query(
+      "SELECT status FROM shipments WHERE id = $1",
+      [badConfirmation.shipmentId],
+    ).then((r) => r.rows);
+    expect(badShipment.status).toBe("SUBMISSION_QUEUED");
   });
 
   it("resumes a persisted unattempted queue exactly once", async () => {

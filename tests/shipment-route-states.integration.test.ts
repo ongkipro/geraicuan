@@ -49,6 +49,13 @@ vi.mock("@/db/tenant-context", () => ({
     work: (tx: unknown, context: unknown) => Promise<unknown>,
   ) => work({}, { role: fixture.role, tenantId, userId })),
 }));
+// Route keys resolve inside the tenant: 10039 is this fixture's number; anything else is absent.
+vi.mock("@/db/shipment-number-repository", () => ({
+  resolveShipmentRouteKey: vi.fn(async (_tx: unknown, _context: unknown, key: { kind: string; shipmentId?: string; tenantNumber?: number }) =>
+    (key.kind === "uuid" ? key.shipmentId === shipmentId : key.tenantNumber === 10039)
+      ? { shipmentId, tenantNumber: 10039 }
+      : null),
+}));
 vi.mock("@/db/cod-totals-repository", () => ({
   calculateCodAmounts: () => ({
     goodsValueIdr: 250_000,
@@ -76,20 +83,31 @@ vi.mock("@/db/shipment-queue-repository", () => ({
       {
         awb: fixture.awb,
         createdAt: new Date("2026-09-01T01:00:00.000Z"),
-        destinationAreaLabel: "Bandung",
+        // A real Mengantar label: subdistrict, district, city, province, zip.
+        destinationAreaLabel: "Cihapit, Bandung Wetan, Kota Bandung, Jawa Barat, 40114",
         isCod: true,
         outletName: "Gerai utama",
         packageContent: "Paket audit",
         packageWeightGrams: 1_000,
         providerService: null,
         recipientName: "Penerima audit",
+        recipientPhone: "081234567890",
         shipmentId,
-        publicReference: "95758-260901-039",
+        publicReference: "GC-10039",
         status: "DRAFT",
         updatedAt: new Date("2026-09-01T02:00:00.000Z"),
       },
     ],
     status: "ALL",
+    // PR-52 panel counts travel with the page the panel sits on.
+    summary: {
+      "QUE-ALL": 25,
+      "QUE-NEEDS-AWB": 9,
+      "QUE-AWAITING-PICKUP": 6,
+      "QUE-IN-TRANSIT": 4,
+      "QUE-DELIVERED": 3,
+      "QUE-ATTENTION": 3,
+    },
     totalCount: 25,
     totalPages: 5,
   })),
@@ -143,7 +161,7 @@ vi.mock("@/db/shipment-queue-repository", () => ({
     recipient: { address: "Alamat penerima audit", name: "Penerima audit", phone: "080000000002" },
     sender: { address: "Alamat pengirim audit", name: "Pengirim audit", phone: "080000000001" },
     shipmentId,
-    publicReference: "95758-260901-039",
+    publicReference: "GC-10039",
     status: fixture.status,
     updatedAt: new Date("2026-09-01T02:00:00.000Z"),
   })),
@@ -159,9 +177,22 @@ async function renderQueue(searchParams: Record<string, string | string[] | unde
   return render(await ShipmentQueuePage({ searchParams: Promise.resolve(searchParams) }));
 }
 
-async function renderDetail(id = shipmentId) {
+async function renderDetail(id = "10039") {
   return render(await ShipmentDetailPage({ params: Promise.resolve({ shipmentId: id }) }));
 }
+
+describe("PR-44 shipment detail route keys", () => {
+  it("serves the canonical number, redirects legacy UUID and prefixed keys, and 404s unknown or malformed keys", async () => {
+    fixture.status = "DRAFT";
+    await expect(renderDetail("10039")).resolves.toContain("GC-10039");
+    await expect(renderDetail(shipmentId)).rejects.toThrow("NEXT_REDIRECT:/app/pengiriman/10039");
+    await expect(renderDetail("GC-10039")).rejects.toThrow("NEXT_REDIRECT:/app/pengiriman/10039");
+    await expect(renderDetail("tkp-10039")).rejects.toThrow("NEXT_REDIRECT:/app/pengiriman/10039");
+    await expect(renderDetail("10040")).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(renderDetail("9999")).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(renderDetail("GC-10039-x")).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+});
 
 describe("T-39 shipment queue and lifecycle route states", () => {
   beforeEach(() => {
@@ -182,10 +213,10 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     const html = await renderQueue();
     const cells = [...html.matchAll(/<td\b[^>]*>[\s\S]*?<\/td>/g)].map(([cell]) => cell);
     const awb = cells.find(cell => cell.includes(fixture.awb!));
-    expect(awb).toContain("max-w-40");
+    expect(awb).toContain("max-w-44");
     expect(awb).toContain("whitespace-normal");
     expect(awb).toMatch(new RegExp(`<span[^>]*class="[^"]*break-all[^"]*"[^>]*>${fixture.awb}</span>`));
-    expect(cells.find(cell => cell.includes("Penerima audit"))).toMatch(/class="[^"]*max-w-44[^"]*whitespace-normal/);
+    expect(cells.find(cell => cell.includes("Penerima audit"))).toMatch(/class="[^"]*max-w-48[^"]*whitespace-normal/);
     expect(cells.find(cell => cell.includes("Gerai utama"))).toMatch(/class="[^"]*max-w-44[^"]*whitespace-normal/);
   });
 
@@ -194,7 +225,7 @@ describe("T-39 shipment queue and lifecycle route states", () => {
 
     expect(html).toContain('id="shipment-queue-heading"');
     expect(html).toContain("Tampilan antrean");
-    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260901-039");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("GC-10039");
     expect(html.replace(/<[^>]+>/g, " ")).not.toContain(shipmentId);
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="Daftar kiriman; geser horizontal untuk melihat seluruh kolom"');
@@ -207,11 +238,23 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     // content width; every value the nine-column table printed is still in it.
     const headers = [...html.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((match) => match[1]);
     expect(headers).toEqual([
-      "Nomor kiriman", "Status / Pembayaran", "Penerima / Tujuan", "Paket / Outlet", "Layanan / Resi", "Aktivitas terakhir",
+      "Nomor kiriman", "Status / Pembayaran", "Penerima", "Paket / Outlet", "Ekspedisi / Resi", "Aktivitas terakhir",
     ]);
-    for (const value of ["Draf", "COD", "Bandung", "Paket audit", "1 kg", "Gerai utama", "—"]) {
+    for (const value of ["Draf", "COD", "Paket audit", "1 kg", "Gerai utama", "—", "Belum ada resi"]) {
       expect(html, value).toContain(value);
     }
+    // T-148: name, phone and district–city stack in one cell; the full address stays on detail.
+    const cells = [...html.matchAll(/<td\b[^>]*>[\s\S]*?<\/td>/g)].map(([cell]) => cell);
+    const recipient = cells.find(cell => cell.includes("Penerima audit")) ?? "";
+    expect([...recipient.matchAll(/<span[^>]*class="[^"]*\bblock\b[^"]*"[^>]*>([^<]*)<\/span>/g)].map(match => match[1]))
+      .toEqual(["Penerima audit", "081234567890", "Bandung Wetan, Kota Bandung"]);
+    expect(html).not.toContain("Cihapit");
+    expect(html).not.toContain("40114");
+    // Date and time are two lines of one <time>, and the shipment number never wraps.
+    expect(html).toMatch(/<time[^>]*dateTime="2026-09-01T02:00:00.000Z"[^>]*><span class="block">1 Sep 2026<\/span><span class="block text-xs text-muted-foreground">09.00 WIB<\/span><\/time>/);
+    // T-163 review: the row link carries the queue's resolved range so the
+    // detail's "Kembali ke antrean" returns to the list the operator left.
+    expect(html).toMatch(/<a[^>]*class="[^"]*whitespace-nowrap[^"]*"[^>]*href="\/app\/pengiriman\/10039\?[^"]*rentang=/);
     // Below md the toolbar stacks and the status filter spans the row, so it
     // cannot overlap the freshness control at 390px.
     expect(html).toMatch(/class="[^"]*max-md:flex-col[^"]*"/);
@@ -347,6 +390,30 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(html).toContain("minta Tenant Admin menjalankan rekonsiliasi");
     expect(html).not.toContain('id="rekonsiliasi-pengiriman"');
     expect(html).not.toContain("Konfirmasi dan terbitkan AWB");
+  });
+
+  // T-151 / PR-45 detail pattern: status, resi and label entry, and every
+  // recovery action sit on the rail; data and history stay in the main column.
+  it.each([
+    ["ISSUED", "NONE", 'href="/app/label/10039"'],
+    ["AWAITING_UPSTREAM_PAYMENT", "NONE", 'id="pemulihan-pembayaran"'],
+    ["SUBMISSION_UNKNOWN", "NONE", 'id="rekonsiliasi-pengiriman"'],
+    ["SUBMISSION_QUEUED", "SUBMITTING", 'id="periksa-upaya-tersendat"'],
+  ] as const)("puts the %s action on the detail rail and keeps the data in the main column", async (status, batchStatus, action) => {
+    fixture.status = status;
+    if (batchStatus !== "NONE") fixture.batchStatus = batchStatus;
+    const html = await renderDetail();
+    const aside = /<aside[^>]*aria-label="Status kiriman"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? "";
+    const main = html.replace(aside, "");
+
+    expect(aside).toContain(action);
+    expect(main).not.toContain(action);
+    expect(aside).toContain('id="status-lifecycle-heading"');
+    expect(aside).toContain('id="riwayat-label-heading"');
+    for (const data of ['id="konteks-heading"', 'id="snapshot-pihak-heading"', 'id="hasil-penyedia-heading"']) {
+      expect(main).toContain(data);
+      expect(aside).not.toContain(data);
+    }
   });
 
   it("rejects malformed detail identifiers before repository data can render", async () => {

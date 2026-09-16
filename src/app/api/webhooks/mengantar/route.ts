@@ -40,6 +40,6 @@ import "server-only";
 export function POST() {
   // No body: an anonymous scanner learns nothing about what this path is or
   // whether it is merely switched off. The route inventory that describes it
-  // is `docs/spec/18-AI-ROUTE-MAP.md`, not an HTTP response.
+  // is `docs/spec/18-SYSTEM-MAP.md`, not an HTTP response.
   return new Response(null, { status: 404 });
 }

@@ -71,7 +71,7 @@ export async function reconcileShipmentUnknownSubmission(
       shipmentId,
       tenantId: principal.tenantId,
     });
-    revalidatePath(`/app/pengiriman/${shipmentId}`);
+    revalidatePath("/app/pengiriman/[shipmentId]", "page");
     revalidatePath("/app/pengiriman");
     return {
       reconciled: {

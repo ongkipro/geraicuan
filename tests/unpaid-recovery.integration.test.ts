@@ -82,9 +82,10 @@ async function seedEstimatedShipment(
   await adminPool.query(
     `INSERT INTO shipment_drafts (
       shipment_id, tenant_id, destination_area_id, destination_area_label,
-      package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod
+      package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod,
+      destination_area_verified_at
     ) VALUES ($1, $2, 'recovery-destination', 'Recovery destination',
-      'Sanitized recovery parcel', 1000, 1, 100000, false)`,
+      'Sanitized recovery parcel', 1000, 1, 100000, false, now())`,
     [value.shipmentId, tenantId],
   );
   await adminPool.query(

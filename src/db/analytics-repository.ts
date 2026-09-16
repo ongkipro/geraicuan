@@ -1,12 +1,14 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { BASIS_POINTS, MENGANTAR_COD_FEE_BASIS_POINTS } from "@/lib/mengantar-cod-fee";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import {
   ledgerEntries,
   outlets,
   providerBatches,
   providerOrderSnapshots,
+  shipmentCodTotals,
   shipmentStatuses,
   shipments,
 } from "@/db/schema";
@@ -46,9 +48,12 @@ export type ShipmentKpis = {
   providerShippingIdr: number;
   codServiceFeeIdr: number;
   codVatIdr: number;
-  codPrincipalIdr: number;
-  cogsIdr: number;
-  netMarginIdr: number;
+  /**
+   * Spec 19 FIN-COD-DISBURSEMENT-EST: per COD shipment whose receipt was issued
+   * in the range, COD amount − shipping Mengantar deducts − COD fee (service fee
+   * + VAT). An estimate of what Mengantar pays out, never money received.
+   */
+  codDisbursementEstimateIdr: number;
 };
 
 export type CourierPerformanceRow = {
@@ -260,22 +265,71 @@ function detailRangePredicate(
   return createdRangePredicate(context, range, filters);
 }
 
-function adjustedLedgerAmount(
-  entryType:
-    | "COD_PRINCIPAL_COLLECTABLE"
-    | "MENGANTAR_SHIPPING_COST"
-    | "GERAICUAN_COD_SERVICE_FEE_REVENUE"
-    | "COD_SERVICE_FEE_VAT_PAYABLE",
-) {
+/**
+ * Spec 19 FIN-COD-DISBURSEMENT-EST / RPT-SHP-COD-DISBURSEMENT-EST, per shipment:
+ * the COD amount submitted, less the shipping Mengantar deducts (the settlement
+ * basis, falling back to `price` for snapshots issued before it was stored),
+ * less **the fee Mengantar actually keeps** — `COD × 333 / 10000`, the rate
+ * proven on 2,866 real settlement lines (`MENGANTAR_COD_FEE_BASIS_POINTS`).
+ *
+ * It used to subtract the service fee and VAT GeraiCUAN *stored*. Those equal
+ * Mengantar's fee only for rows written under the T-175 gross-up; a row written
+ * under the old additive formula stored 3.33% of (goods + shipping), not of the
+ * COD amount, so the same shipment's expected disbursement read differently
+ * here and in Keuangan's SETTLE-EXPECTED-IDR. One money, one formula: this is
+ * that formula, and `expectedSettlementUnits` computes the same figure.
+ *
+ * Requires `provider_order_snapshots` and `shipment_cod_totals` joined for the
+ * same shipment, so the analytics total and the report column share it.
+ */
+/**
+ * Spec 19 RPT-SHP-COD-FEE-IDR: the COD fee **Mengantar keeps** on a shipment,
+ * `round(COD × 333 / 10000)` half-up to a whole rupiah — the same rate and the
+ * same rounding as `mengantarCodFeeIdr`. Not the fee GeraiCUAN stored: a row
+ * written under the old additive formula stored 3.33% of goods plus shipping,
+ * which is smaller than what Mengantar actually takes.
+ */
+export const mengantarCodFeeExpression = sql<number>`round(
+  ${shipmentCodTotals.providerCodAmountIdr}::numeric * ${MENGANTAR_COD_FEE_BASIS_POINTS} / ${BASIS_POINTS}
+)::bigint`;
+
+/**
+ * Built **from** the fee column rather than rounded on its own, so a report row
+ * always adds up: COD − Biaya kirim − Biaya COD = Estimasi dana dicairkan, to
+ * the rupiah, on every row. Rounding the whole difference separately would
+ * disagree by one rupiah whenever the fee lands exactly on a half. The exact
+ * sen-level comparison against a real settlement stays in Keuangan, where
+ * `expectedSettlementUnits` applies the same rate in ten-thousandths.
+ */
+export const codDisbursementEstimateExpression = sql<number>`(
+  ${shipmentCodTotals.providerCodAmountIdr}
+  - coalesce(${providerOrderSnapshots.providerChargedShippingIdr}, ${providerOrderSnapshots.shippingAmountIdr})
+  - ${mengantarCodFeeExpression}
+)::bigint`;
+
+type AdjustedLedgerEntryType =
+  | "MENGANTAR_SHIPPING_COST"
+  | "MENGANTAR_COD_FEE_COST"
+  | "GERAICUAN_COD_SERVICE_FEE_REVENUE"
+  | "COD_SERVICE_FEE_VAT_PAYABLE";
+
+/**
+ * Adjustment-aware sum over one or more entry types: each entry of a listed
+ * type, plus every ADJUSTMENT reversing an entry of a listed type. A list is
+ * how one figure spans a reclassification (T-178) without counting an entry
+ * twice.
+ */
+function adjustedLedgerAmount(...entryTypes: [AdjustedLedgerEntryType, ...AdjustedLedgerEntryType[]]) {
+  const types = sql.join(entryTypes.map((type) => sql`${type}`), sql`, `);
   return sql<number>`coalesce(sum(
     case
-      when ${ledgerEntries.entryType} = ${entryType} then ${ledgerEntries.amountIdr}
+      when ${ledgerEntries.entryType} in (${types}) then ${ledgerEntries.amountIdr}
       when ${ledgerEntries.entryType} = 'ADJUSTMENT'
         and ${ledgerEntries.reversesEntryId} in (
           select original.id
           from ledger_entries original
           where original.tenant_id = ${ledgerEntries.tenantId}
-            and original.entry_type = ${entryType}
+            and original.entry_type in (${types})
         )
         then ${ledgerEntries.amountIdr}
       else 0
@@ -338,11 +392,14 @@ async function loadShipmentKpisUnchecked(
   const [financials] = await tx
     .select({
       providerShippingIdr: adjustedLedgerAmount("MENGANTAR_SHIPPING_COST"),
+      // Spec 19 FIN-COD-FEE: Mengantar's COD fee under either ledger
+      // classification — MENGANTAR_COD_FEE_COST from T-178 on, the legacy
+      // GERAICUAN_COD_SERVICE_FEE_REVENUE before it (append-only, never moved).
       codServiceFeeIdr: adjustedLedgerAmount(
+        "MENGANTAR_COD_FEE_COST",
         "GERAICUAN_COD_SERVICE_FEE_REVENUE",
       ),
       codVatIdr: adjustedLedgerAmount("COD_SERVICE_FEE_VAT_PAYABLE"),
-      codPrincipalIdr: adjustedLedgerAmount("COD_PRINCIPAL_COLLECTABLE"),
     })
     .from(ledgerEntries)
     .innerJoin(
@@ -361,58 +418,46 @@ async function loadShipmentKpisUnchecked(
     )
     .where(ledgerRangePredicate(context, range, filters));
 
-  // COGS is recognized over the same population as the other four financial
-  // terms above — shipments with a ledger entry effective in this range — not
-  // shipments created in it. A shipment created near a period boundary
-  // otherwise contributed its COGS to one period and its shipping cost to the
-  // next, so netMarginIdr's five terms never described the same shipments.
-  // `cogsAmountIdr` is a fixed per-shipment value, not a per-entry amount, so
-  // it is summed once per *distinct* shipment id rather than once per ledger
-  // row the flat join above would otherwise produce (a shipment recognized
-  // through three entries — principal, service fee, VAT — would triple-count
-  // its own COGS if this reused that same joined row set).
-  const ledgerCohortShipmentIds = await tx
-    .selectDistinct({ shipmentId: ledgerEntries.shipmentId })
-    .from(ledgerEntries)
-    .innerJoin(
-      shipments,
-      and(
-        eq(shipments.id, ledgerEntries.shipmentId),
-        eq(shipments.tenantId, ledgerEntries.tenantId),
-      ),
-    )
-    .innerJoin(
-      providerBatches,
-      and(
-        eq(providerBatches.id, ledgerEntries.providerBatchId),
-        eq(providerBatches.tenantId, ledgerEntries.tenantId),
-      ),
-    )
-    .where(ledgerRangePredicate(context, range, filters));
-
-  const cohortShipmentIds = ledgerCohortShipmentIds
-    .map((row) => row.shipmentId)
-    .filter((shipmentId): shipmentId is string => shipmentId !== null);
-
-  const [ledgerCogs] = await tx
+  // T-177: GeraiCUAN reports shipping and the COD fee, not merchandise revenue
+  // or margin. The disbursement estimate is one figure per issued COD shipment,
+  // so it reads the stored order and its COD totals rather than the ledger.
+  const [disbursement] = await tx
     .select({
-      cogsIdr: sql<number>`coalesce(sum(${shipments.cogsAmountIdr}), 0)`.mapWith(Number),
+      codDisbursementEstimateIdr: sql<number>`coalesce(sum(${codDisbursementEstimateExpression}), 0)`.mapWith(Number),
     })
-    .from(shipments)
+    .from(providerOrderSnapshots)
+    .innerJoin(
+      shipments,
+      and(
+        eq(shipments.id, providerOrderSnapshots.shipmentId),
+        eq(shipments.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
+    .innerJoin(
+      providerBatches,
+      and(
+        eq(providerBatches.id, providerOrderSnapshots.batchId),
+        eq(providerBatches.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
+    .innerJoin(
+      shipmentCodTotals,
+      and(
+        eq(shipmentCodTotals.shipmentId, providerOrderSnapshots.shipmentId),
+        eq(shipmentCodTotals.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
     .where(
-      cohortShipmentIds.length
-        ? and(
-            eq(shipments.tenantId, context.tenantId),
-            inArray(shipments.id, cohortShipmentIds),
-          )
-        : sql`false`,
+      and(
+        issuedRangePredicate(context, range, filters),
+        eq(providerOrderSnapshots.isCod, true),
+      ),
     );
 
-  if (!created || !providerOutcomes || !financials || !ledgerCogs) {
+  if (!created || !providerOutcomes || !financials || !disbursement) {
     throw new Error("Shipment analytics were not loaded.");
   }
-  const netMarginIdr = financials.codPrincipalIdr - financials.providerShippingIdr - financials.codServiceFeeIdr - financials.codVatIdr - ledgerCogs.cogsIdr;
-  return { ...created, ...providerOutcomes, ...financials, cogsIdr: ledgerCogs.cogsIdr, netMarginIdr };
+  return { ...created, ...providerOutcomes, ...financials, ...disbursement };
 }
 
 export async function loadShipmentKpis(

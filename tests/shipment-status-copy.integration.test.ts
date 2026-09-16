@@ -143,13 +143,17 @@ describe("shipment lifecycle presentation copy", () => {
 
   it("keeps the queue filter offering exactly the stored statuses plus its views", () => {
     const values = SHIPMENT_STATUS_OPTIONS.map((option) => option.value);
-    expect(values.slice(0, 4)).toEqual([
+    // T-162 added NEEDS_ATTENTION (spec 19 QUE-ATTENTION), the PR-52 panel
+    // entry. It is offered in the select too, or choosing it from the panel
+    // would leave the select showing nothing.
+    expect(values.slice(0, 5)).toEqual([
       "ALL",
       "ACTION_REQUIRED",
+      "NEEDS_ATTENTION",
       "READY_TO_PROGRESS",
       "ISSUED_TODAY",
     ]);
-    expect(values.slice(4)).toEqual([...shipmentStatuses]);
+    expect(values.slice(5)).toEqual([...shipmentStatuses]);
   });
 
   it("renders the return queue from the shared presentation, not a second copy", () => {

@@ -9,6 +9,7 @@ import { DestinationAreaSelector, type DestinationAreaOutlet } from "@/app/app/d
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fieldWidth } from "@/components/cms/cms-layouts";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,7 +44,7 @@ export function QuickRateForm({ outlets, canManageSettings, initialState = {}, i
       <AlertTitle>Siapkan outlet untuk cek tarif</AlertTitle>
       <AlertDescription className="grid gap-3">
         <p>{canManageSettings ? "Pilih pickup dan koneksi Mengantar di pengaturan outlet terlebih dahulu." : "Minta Tenant Admin menyiapkan pickup dan koneksi Mengantar outlet."}</p>
-        {canManageSettings ? <Button asChild className="w-fit min-h-11" variant="outline"><Link href="/app/pengaturan">Buka pengaturan</Link></Button> : null}
+        {canManageSettings ? <Button asChild className="w-fit min-h-11" variant="outline"><Link href="/app/pengaturan/outlet">Buka pengaturan</Link></Button> : null}
       </AlertDescription>
     </Alert>
   );
@@ -52,7 +53,7 @@ export function QuickRateForm({ outlets, canManageSettings, initialState = {}, i
     <div className="grid min-w-0 gap-6">
       <form ref={form} action={action} aria-busy={pending} className="max-w-2xl" onChange={invalidate}>
         <FieldGroup>
-          <Field data-invalid={Boolean(visible.fieldErrors?.outletId)}>
+          <Field className={fieldWidth.lg} data-invalid={Boolean(visible.fieldErrors?.outletId)}>
             <FieldLabel htmlFor="rate-outlet">Outlet asal</FieldLabel>
             <Select disabled={pending} name="outletId" onValueChange={(value) => { setOutletId(value); invalidate(); }} value={outletId}>
               <SelectTrigger aria-describedby="rate-origin-hint" aria-invalid={Boolean(visible.fieldErrors?.outletId)} className="min-h-11 w-full" id="rate-outlet"><SelectValue /></SelectTrigger>
@@ -62,9 +63,9 @@ export function QuickRateForm({ outlets, canManageSettings, initialState = {}, i
             <FieldError>{visible.fieldErrors?.outletId}</FieldError>
           </Field>
           <DestinationAreaSelector disabled={pending} error={visible.fieldErrors?.destinationAreaLabel} fixedOutletId={outletId} key={outletId} onSelectionChange={invalidate} outlets={outlets} required showSourceContext={false} />
-          <Field data-invalid={Boolean(visible.fieldErrors?.weightGrams)}>
+          <Field className={fieldWidth.md} data-invalid={Boolean(visible.fieldErrors?.weightGrams)}>
             <FieldLabel htmlFor="rate-weight">Berat paket</FieldLabel>
-            <div className="flex max-w-xs items-center gap-3">
+            <div className="flex items-center gap-3">
               <Input aria-describedby="rate-weight-hint rate-weight-error" aria-invalid={Boolean(visible.fieldErrors?.weightGrams)} className="min-h-11" disabled={pending} id="rate-weight" inputMode="numeric" max={100000} min={1} name="weightGrams" onChange={(event) => setWeight(event.target.value)} required step={1} type="number" value={weight} />
               <span className="text-sm text-muted-foreground">gram</span>
             </div>

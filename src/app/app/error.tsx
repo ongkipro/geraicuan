@@ -21,7 +21,7 @@ export default function TenantError({
   useFocusTargetOnMount(HEADING_ID);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader eyebrow="Operasional tenant"
         focusTargetId={HEADING_ID}
         title="Ringkasan"

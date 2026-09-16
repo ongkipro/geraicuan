@@ -54,7 +54,11 @@ function firstElementAttributes(source: ts.SourceFile | null, tag: string) {
 }
 
 const header = (route: string, file: string) => firstElementAttributes(parse(route, file), "PageHeader");
-const width = (route: string, file: string) => firstElementAttributes(parse(route, file), "PageContainer")?.width ?? "standard";
+// T-149: the CMS ships one frame. No call site may pass a `width` prop — a
+// literal `undefined` here (not a hard-coded "wide" fallback) so a reintroduced
+// `width="data"` on either the page or its loading/error state is caught by
+// `assertStatesMirror` below instead of two constants comparing equal to each other.
+const width = (route: string, file: string) => firstElementAttributes(parse(route, file), "PageContainer")?.width;
 
 function skeletonOrder(route: string, file: string) {
   const source = parse(route, file);
@@ -106,6 +110,7 @@ function assertStatesMirror(route: string, compareTitle: boolean) {
     expect(state?.eyebrow, `${file} eyebrow`).toBe(page?.eyebrow);
     if (compareTitle) expect(state?.title, `${file} title`).toBe(page?.title);
     expect(width(route, file), `${file} width`).toBe(width(route, "page.tsx"));
+    expect(width(route, file), `${route || "/"} ${file} must not choose a frame width`).toBeUndefined();
   }
 }
 

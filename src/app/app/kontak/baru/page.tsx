@@ -3,8 +3,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ContactForm } from "@/app/app/kontak/contact-form";
+import { FormLayout, PageAside } from "@/components/cms/cms-layouts";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -35,5 +37,27 @@ export default async function NewContactPage() {
     listReadyShipmentOutlets,
   );
 
-  return <PageContainer width="form"><PageHeader eyebrow="Data" description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya." title="Buat kontak" /><ContactForm outlets={outlets} /></PageContainer>;
+  return (
+    <PageContainer>
+      <PageHeader description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya." eyebrow="Data" title="Buat kontak" />
+      <FormLayout
+        aside={(
+          <PageAside label="Bantuan kontak baru">
+            <Card>
+              <CardHeader>
+                <CardTitle>Sebelum menyimpan</CardTitle>
+                <CardDescription>Data yang benar mempercepat pembuatan kiriman berikutnya.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-2 text-sm text-muted-foreground">
+                <p>Nomor telepon dipakai untuk konfirmasi kurir; pastikan formatnya aktif.</p>
+                <p>Alamat pertama langsung tersedia sebagai pilihan saat membuat draf kiriman.</p>
+              </CardContent>
+            </Card>
+          </PageAside>
+        )}
+      >
+        <ContactForm outlets={outlets} />
+      </FormLayout>
+    </PageContainer>
+  );
 }

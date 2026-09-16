@@ -305,7 +305,9 @@ export async function createSelectedDrafts(
         await createShipmentDraft(
           tx,
           context,
-          input,
+          // The row's destination area was re-checked against this outlet's
+          // Mengantar account above before any draft is written.
+          { ...input, destinationAreaVerified: true },
           deriveBulkRowSubmissionId(submissionId, row),
         );
       }

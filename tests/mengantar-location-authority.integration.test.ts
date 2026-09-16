@@ -95,7 +95,7 @@ async function createEstimatedContactShipment() {
     resolveActiveContactAddress(tx, context, contactId, contactAddress.id, "RECIPIENT"));
   const shipmentId = await withTenantContext(appDb, operatorId, tenantId, (tx, context) =>
     createShipmentDraft(tx, context, {
-      declaredValueIdr: 125_000, cogsAmountIdr: null,
+      declaredValueIdr: 125_000,
       destinationAreaId: recipient.destinationAreaId ?? "",
       destinationAreaLabel: recipient.destinationAreaLabel ?? "",
       isCod: false,
@@ -106,6 +106,11 @@ async function createEstimatedContactShipment() {
       packageQuantity: 1,
       packageWeightGrams: 1_000,
       packageWidthCm: null,
+      pickupAddressId: null,
+      destinationAreaVerified: true,
+      isHazardous: false,
+      recipientAddressLandmark: null,
+      shippingInstruction: null,
       recipientAddress: recipient.address,
       recipientName: recipient.name,
       recipientPhone: recipient.phone,
@@ -131,6 +136,10 @@ async function createEstimatedContactShipment() {
       providerService: "JNE REG",
       shippingAmountIdr: 15_000,
       shippingSourceField: "price",
+      codFeeIdr: null,
+      discountIdr: null,
+      normalPriceIdr: null,
+      specialPriceIdr: null,
     }]));
   const estimate = await withTenantContext(appDb, operatorId, tenantId, (tx, context) =>
     loadLatestEstimateSnapshot(tx, context, shipmentId));

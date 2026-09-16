@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { validateMengantarDestinationAreaSelection } from "@/app/app/location-actions";
@@ -15,8 +16,10 @@ import {
   checkDuplicateShipment,
   DUPLICATE_SHIPMENT_WINDOW_DAYS,
   DraftSubmissionConflictError,
+  loadShipmentDraftDestinationForVerification,
   OutletUnavailableError,
   resolveExistingShipmentDraftReplay,
+  stampShipmentDraftDestinationVerified,
 } from "@/db/shipment-draft-repository";
 import { db } from "@/db/client";
 import {
@@ -100,6 +103,9 @@ const FORM_FIELDS = [
   "recipientName",
   "recipientPhone",
   "recipientAddress",
+  "recipientAddressLandmark",
+  "shippingInstruction",
+  "isHazardous",
   "destinationAreaId",
   "destinationAreaLabel",
   "destinationMode",
@@ -112,7 +118,6 @@ const FORM_FIELDS = [
   "packageWidthCm",
   "packageHeightCm",
   "declaredValue",
-  "cogsAmount",
   "paymentType",
   "outletId",
   "confirmDuplicate",
@@ -589,6 +594,10 @@ export async function saveShipmentDraft(
               ...validation.input,
               destinationAreaId: manualDestination.areaId,
               destinationAreaLabel: manualDestination.areaLabel,
+              // Both branches reach here only after
+              // validateMengantarDestinationAreaSelection confirmed the area
+              // against this outlet's Mengantar account.
+              destinationAreaVerified: true,
             }
           : null;
         if (manualInput) {
@@ -633,6 +642,7 @@ export async function saveShipmentDraft(
           ...validation.input,
           destinationAreaId: destination.areaId,
           destinationAreaLabel: destination.areaLabel,
+          destinationAreaVerified: true,
         };
         if (!manualInput) {
           const replay = await resolveExistingShipmentDraftReplay(
@@ -734,4 +744,69 @@ export async function saveShipmentDraft(
 
   if (!outcome.ok) return outcome.state;
   redirect(`/app/pengiriman/baru?draft=${outcome.shipmentId}`);
+}
+
+// B3: drafts written before PR-47's `destination_area_verified_at` column
+// (drizzle/0041) have it permanently NULL, which `buildMengantarOrderPayload`
+// refuses forever — nothing UPDATEs `shipment_drafts` otherwise. This is the
+// recovery: re-check the *stored* area (never the operator's word) against
+// the outlet's live Mengantar account, through the same
+// `validateMengantarDestinationAreaSelection` and rate limit every other
+// location search uses, and stamp the column only on a confirmed match.
+export type DestinationAreaVerificationState = {
+  error?: string;
+  verified?: boolean;
+};
+
+export async function verifyShipmentDraftDestinationArea(
+  _previous: DestinationAreaVerificationState,
+  formData: FormData,
+): Promise<DestinationAreaVerificationState> {
+  const shipmentId = formData.get("shipmentId");
+  if (typeof shipmentId !== "string" || !UUID_PATTERN.test(shipmentId)) {
+    return { error: "Kiriman tidak valid." };
+  }
+
+  const principal = await requireTenantPrincipal();
+  const draft = await withTenantContext(
+    db,
+    principal.userId,
+    principal.tenantId,
+    (tx, context) =>
+      loadShipmentDraftDestinationForVerification(tx, context, shipmentId),
+  );
+  if (!draft) {
+    return { error: "Draf tidak ditemukan atau sudah diproses. Muat ulang halaman." };
+  }
+  if (draft.destinationAreaVerifiedAt) {
+    return { verified: true };
+  }
+
+  const authority = await validateMengantarDestinationAreaSelection(
+    draft.outletId,
+    draft.destinationAreaLabel,
+    draft.destinationAreaId,
+    draft.destinationAreaLabel,
+  );
+  if (!authority.success || !authority.option) {
+    return {
+      error:
+        authority.message
+        ?? "Area tujuan yang tersimpan sudah tidak dikenali Mengantar. Perbarui alamat penerima dan pilih ulang area tujuan.",
+    };
+  }
+
+  const stamped = await withTenantContext(
+    db,
+    principal.userId,
+    principal.tenantId,
+    (tx, context) =>
+      stampShipmentDraftDestinationVerified(tx, context, shipmentId, authority.option!),
+  );
+  if (!stamped) {
+    return { error: "Draf ini berubah sebelum verifikasi selesai. Muat ulang halaman lalu coba lagi." };
+  }
+
+  revalidatePath("/app/pengiriman/[shipmentId]", "page");
+  return { verified: true };
 }

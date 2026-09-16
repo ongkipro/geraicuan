@@ -50,6 +50,13 @@ const cases = [
   ["group addon button", `<div data-slot="input-group">${control}</div>`, '[data-slot="input-group"]:focus-within{box-shadow:0 0 0 2px black}', 1],
   ["arbitrary ancestor", `<section>${control}</section>`, "section:focus-within{box-shadow:0 0 0 2px black}", 1],
   ["non-immediate group", '<div data-slot="input-group"><div><input data-slot="input-group-control" aria-label="Fixture input"></div></div>', '[data-slot="input-group"]:focus-within{box-shadow:0 0 0 2px black}', 1],
+  // Radix's form-value mirror is skipped, but only while all three of its
+  // properties hold. Drop any one of them and the control is inspected again.
+  ["radix bubble input", `${control}<input type="checkbox" aria-hidden="true" tabindex="-1" style="position:absolute;opacity:0;pointer-events:none;transform:translateX(-100%)">`, "button:focus-visible{outline:2px solid black}", 0, 1],
+  ["bubble input inside an aria-hidden wrapper", `${control}<span aria-hidden="true"><input type="checkbox" tabindex="-1" style="position:absolute;opacity:0"></span>`, "button:focus-visible{outline:2px solid black}", 0, 1],
+  ["aria-hidden control still in the tab order", '<input aria-label="Fixture input" aria-hidden="true" style="opacity:0">', "", 1, 1],
+  ["aria-hidden untabbable control that is still visible", '<input aria-label="Fixture input" aria-hidden="true" tabindex="-1">', "", 1, 1],
+  ["invisible control that is not aria-hidden", '<input aria-label="Fixture input" tabindex="-1" style="opacity:0">', "", 1, 1],
 ];
 const target = await open("about:blank");
 const session = await Session.attach(target.webSocketDebuggerUrl);
@@ -57,7 +64,7 @@ try {
   await session.send("Runtime.enable");
   await session.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   await session.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
-  for (const [name, markup, css, expected] of cases) {
+  for (const [name, markup, css, expected, expectedProbed = 1] of cases) {
     await session.evaluate(`(() => {
       document.head.innerHTML = '';
       document.body.innerHTML = ${JSON.stringify(markup)};
@@ -69,7 +76,7 @@ try {
     const result = JSON.parse(await session.evaluate(PROBE));
     const stylesAfter = await session.evaluate(`JSON.stringify([...document.querySelectorAll('button,input,[data-slot="input-group"]')].map(el => [[...el.style].sort().map(key => [key, el.style.getPropertyValue(key), el.style.getPropertyPriority(key)]), getComputedStyle(el).transition]))`);
     assert.equal(stylesAfter, stylesBefore, `${name}: transition declarations were not restored`);
-    assert.equal(result.focusProbed, 1, `${name}: control was not inspected`);
+    assert.equal(result.focusProbed, expectedProbed, `${name}: inspected ${result.focusProbed} controls, expected ${expectedProbed}`);
     assert.equal(result.weakFocusRing, expected, `${name}: ${JSON.stringify(result.focusDetail)}`);
   }
   console.log(`FOCUS SELFTEST PASS: ${cases.length} computed-style cases`);

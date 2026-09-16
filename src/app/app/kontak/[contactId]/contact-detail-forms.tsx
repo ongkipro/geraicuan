@@ -18,6 +18,7 @@ import { DestinationAreaSelector, type DestinationAreaOutlet } from "@/app/app/d
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fieldWidth, FieldRow } from "@/components/cms/cms-layouts";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -58,10 +59,10 @@ export function ContactIdentityForm({ contact }: { contact: { id: string; isReci
           <input name="contactId" type="hidden" value={contact.id} />
           <MutationFeedback state={state} targetRef={feedbackRef} />
           {Object.keys(errors).length > 0 ? <Alert role="alert" variant="destructive"><AlertTitle>Periksa data kontak</AlertTitle><AlertDescription><ul className="list-disc pl-5">{Object.entries(errors).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul></AlertDescription></Alert> : null}
-          <FieldSet><FieldLegend className="sr-only">Data kontak</FieldLegend><FieldGroup className="grid gap-5 sm:grid-cols-2">
-            <Field data-invalid={Boolean(errors.contactName)}><FieldLabel htmlFor="contactName">Nama kontak</FieldLabel><Input aria-describedby={errors.contactName ? "contactName-error" : undefined} aria-invalid={Boolean(errors.contactName)} className="min-h-11" defaultValue={values?.contactName ?? contact.name} id="contactName" maxLength={120} name="contactName" required /><FieldError id="contactName-error">{errors.contactName}</FieldError></Field>
-            <Field data-invalid={Boolean(errors.contactPhone)}><FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel><Input aria-describedby={errors.contactPhone ? "contactPhone-error" : undefined} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values?.contactPhone ?? contact.phone} id="contactPhone" name="contactPhone" required type="tel" /><FieldError id="contactPhone-error">{errors.contactPhone}</FieldError></Field>
-          </FieldGroup>
+          <FieldSet><FieldLegend className="sr-only">Data kontak</FieldLegend><FieldGroup><FieldRow>
+            <Field className={fieldWidth.lg} data-invalid={Boolean(errors.contactName)}><FieldLabel htmlFor="contactName">Nama kontak</FieldLabel><Input aria-describedby={errors.contactName ? "contactName-error" : undefined} aria-invalid={Boolean(errors.contactName)} className="min-h-11" defaultValue={values?.contactName ?? contact.name} id="contactName" maxLength={120} name="contactName" required /><FieldError id="contactName-error">{errors.contactName}</FieldError></Field>
+            <Field className={fieldWidth.md} data-invalid={Boolean(errors.contactPhone)}><FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel><Input aria-describedby={errors.contactPhone ? "contactPhone-error" : undefined} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values?.contactPhone ?? contact.phone} id="contactPhone" name="contactPhone" required type="tel" /><FieldError id="contactPhone-error">{errors.contactPhone}</FieldError></Field>
+          </FieldRow></FieldGroup>
           <fieldset aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} className="grid gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" id="roles" tabIndex={-1}>
             <legend className="text-sm font-medium">Peran kontak</legend>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -114,8 +115,8 @@ export function ContactAddressForm({
       <MutationFeedback state={state} targetRef={feedbackRef} />
       {Object.keys(errors).length > 0 ? <Alert role="alert" variant="destructive"><AlertTitle>{address ? "Periksa perubahan alamat" : "Periksa alamat baru"}</AlertTitle><AlertDescription><ul className="list-disc pl-5">{Object.entries(errors).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul></AlertDescription></Alert> : null}
       <FieldSet><FieldLegend>{address ? `Edit ${address.label}` : "Alamat baru"}</FieldLegend><FieldGroup>
-        <Field data-invalid={Boolean(errors.addressLabel)}><FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel><Input aria-describedby={errors.addressLabel ? "addressLabel-hint addressLabel-error" : "addressLabel-hint"} aria-invalid={Boolean(errors.addressLabel)} className="min-h-11" defaultValue={values.addressLabel ?? address?.label} id="addressLabel" maxLength={60} name="addressLabel" required /><FieldDescription id="addressLabel-hint">Contoh: Gudang Bandung, Rumah, Toko Pusat.</FieldDescription><FieldError id="addressLabel-error">{errors.addressLabel}</FieldError></Field>
-        <Field data-invalid={Boolean(errors.addressText)}><FieldLabel htmlFor="addressText">Alamat lengkap</FieldLabel><Textarea aria-describedby={errors.addressText ? "addressText-error" : undefined} aria-invalid={Boolean(errors.addressText)} defaultValue={values.addressText ?? address?.address} id="addressText" maxLength={500} name="addressText" required rows={3} /><FieldError id="addressText-error">{errors.addressText}</FieldError></Field>
+        <Field className={fieldWidth.lg} data-invalid={Boolean(errors.addressLabel)}><FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel><Input aria-describedby={errors.addressLabel ? "addressLabel-hint addressLabel-error" : "addressLabel-hint"} aria-invalid={Boolean(errors.addressLabel)} className="min-h-11" defaultValue={values.addressLabel ?? address?.label} id="addressLabel" maxLength={60} name="addressLabel" required /><FieldDescription id="addressLabel-hint">Contoh: Gudang Bandung, Rumah, Toko Pusat.</FieldDescription><FieldError id="addressLabel-error">{errors.addressLabel}</FieldError></Field>
+        <Field className={fieldWidth.full} data-invalid={Boolean(errors.addressText)}><FieldLabel htmlFor="addressText">Alamat lengkap</FieldLabel><Textarea aria-describedby={errors.addressText ? "addressText-error" : undefined} aria-invalid={Boolean(errors.addressText)} defaultValue={values.addressText ?? address?.address} id="addressText" maxLength={500} name="addressText" required rows={3} /><FieldError id="addressText-error">{errors.addressText}</FieldError></Field>
         <DestinationAreaSelector
           defaultArea={address?.destinationAreaId && address.destinationAreaLabel ? { areaId: address.destinationAreaId, areaLabel: address.destinationAreaLabel } : null}
           defaultQuery={state.areaQuery}

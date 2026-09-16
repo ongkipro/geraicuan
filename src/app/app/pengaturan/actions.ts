@@ -16,13 +16,24 @@ import {
   restorePlatformDefaultMengantarConnection,
 } from "@/db/managed-secret-repository";
 import {
-  OutletConnectionModeUnavailableError,
-  OutletSettingsDeniedError,
-  OutletSettingsInvalidError,
-  updateOutletReadiness,
-} from "@/db/outlet-readiness-repository";
-import { withTenantContext } from "@/db/tenant-context";
+  addOutletPickupPoint as addOutletPickupPointRow,
+  PickupPointDefaultRequiredError,
+  PickupPointInUseError,
+  PickupPointDeniedError,
+  PickupPointInvalidError,
+  PickupPointUnavailableError,
+  removeOutletPickupPoint as removeOutletPickupPointRow,
+  setDefaultOutletPickupPoint as setDefaultOutletPickupPointRow,
+} from "@/db/outlet-pickup-point-repository";
+import {
+  saveTenantShipmentPrefix,
+  ShipmentPrefixDeniedError,
+  ShipmentPrefixInvalidError,
+  ShipmentPrefixLockedError,
+} from "@/db/shipment-number-repository";
+import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { normalizeShipmentPrefixInput } from "@/lib/shipment-number";
 import {
   assertPlatformDefaultMengantarCredentialsComplete,
   MengantarConfigurationError,
@@ -39,24 +50,13 @@ const UUID_PATTERN =
 const MAX_OPAQUE_IDENTIFIER_LENGTH = 160;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 
-type OutletSettingsField =
-  | "outletId"
-  | "defaultPickupAddressId"
-  | "defaultOriginAreaId"
-  | "connectionMode";
+type PickupPointField = "outletId" | "pickupAddressId" | "confirmation";
 
-export type OutletSettingsActionState = {
-  errors?: Partial<Record<OutletSettingsField, string>>;
+export type PickupPointActionState = {
+  errors?: Partial<Record<PickupPointField, string>>;
   message?: string;
   resultToken?: string;
   success?: boolean;
-  values?: {
-    defaultPickupAddressId: string;
-    defaultPickupAddressLabel?: string;
-    defaultOriginAreaId?: string;
-    defaultOriginAreaLabel?: string;
-    connectionMode: "platform_default" | "private";
-  };
 };
 
 export type MengantarPickupOptionsActionState = {
@@ -74,32 +74,9 @@ export type MengantarCredentialActionState = {
   success?: boolean;
 };
 
-function formString(formData: FormData, name: OutletSettingsField) {
+function formString(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function validateOpaqueIdentifier(
-  value: string,
-  label: string,
-  field: OutletSettingsField,
-  errors: Partial<Record<OutletSettingsField, string>>,
-) {
-  if (!value) {
-    errors[field] = `${label} wajib diisi.`;
-  } else if (
-    value.length > MAX_OPAQUE_IDENTIFIER_LENGTH
-    || CONTROL_CHARACTER_PATTERN.test(value)
-  ) {
-    errors[field] = `${label} tidak valid.`;
-  }
-}
-
-function safeReturnedIdentifier(value: string) {
-  return value.length <= MAX_OPAQUE_IDENTIFIER_LENGTH
-    && !CONTROL_CHARACTER_PATTERN.test(value)
-    ? value
-    : "";
 }
 
 async function requireTenantAdminPrincipal() {
@@ -123,10 +100,15 @@ async function requireTenantAdminPrincipal() {
 }
 
 function revalidateOutletConfigurationPaths() {
-  revalidatePath("/app/pengaturan");
+  revalidatePath("/app/pengaturan/outlet");
+  revalidatePath("/app/pengaturan/pickup");
+  revalidatePath("/app/pengaturan/koneksi");
   revalidatePath("/app");
   revalidatePath("/app/pengiriman/baru");
   revalidatePath("/app/impor");
+  // Cek tarif quotes from the outlet's origin area too, so a promoted pickup
+  // point changes what it should answer.
+  revalidatePath("/app/cek-tarif");
 }
 
 function credentialFailureState(
@@ -316,139 +298,207 @@ export async function switchMengantarToPlatformDefault(
   };
 }
 
-export async function saveOutletSettings(
-  _previousState: OutletSettingsActionState,
-  formData: FormData,
-): Promise<OutletSettingsActionState> {
-  const principal = await requireTenantAdminPrincipal();
-  const outletId = formString(formData, "outletId");
-  const defaultPickupAddressId = formString(
-    formData,
-    "defaultPickupAddressId",
-  );
-  const connectionModeValue = formString(formData, "connectionMode");
-  const values = {
-    defaultPickupAddressId: safeReturnedIdentifier(defaultPickupAddressId),
-    connectionMode:
-      connectionModeValue === "private" ? "private" as const : "platform_default" as const,
-  };
-  const errors: Partial<Record<OutletSettingsField, string>> = {};
+function pickupFailureState(
+  message: string,
+  errors?: PickupPointActionState["errors"],
+): PickupPointActionState {
+  return { errors, message, resultToken: randomUUID() };
+}
 
-  if (!UUID_PATTERN.test(outletId)) {
-    errors.outletId = "Outlet tidak valid.";
-  }
-  validateOpaqueIdentifier(
-    defaultPickupAddressId,
-    "Alamat pickup",
-    "defaultPickupAddressId",
-    errors,
-  );
-  if (connectionModeValue !== "platform_default" && connectionModeValue !== "private") {
-    errors.connectionMode = "Sumber koneksi tidak valid.";
-  }
-  if (Object.keys(errors).length > 0) {
-    return {
-      errors,
-      message: "Periksa kembali pengaturan yang ditandai.",
-      resultToken: randomUUID(),
-      values,
-    };
-  }
-
-  let canonicalPickup: MengantarPickupOption;
-  let expectedConnectionUpdatedAt: Date | null;
-  try {
-    const { authority, options } = await fetchAuthorizedPickupOptions(principal, outletId);
-    const selected = options.find(
-      (option) => option.pickupAddressId === defaultPickupAddressId,
+/**
+ * Maps the repository's refusals to Indonesian operator copy. Every branch is a
+ * refusal: no pickup point is written unless the repository accepted it.
+ */
+function pickupErrorState(error: unknown): PickupPointActionState {
+  if (error instanceof PickupPointUnavailableError) {
+    return pickupFailureState(
+      "Titik pickup itu bukan milik outlet ini. Muat ulang halaman lalu coba lagi.",
+      { pickupAddressId: "Pilihan sudah berubah. Pilih ulang alamat pickup." },
     );
+  }
+  if (error instanceof PickupPointDefaultRequiredError) {
+    return pickupFailureState(
+      "Tetapkan titik pickup lain sebagai utama sebelum menghapus yang utama.",
+    );
+  }
+  if (error instanceof PickupPointInUseError) {
+    return pickupFailureState(
+      `Titik pickup ini masih dipakai ${error.shipmentCount} kiriman yang belum terbit resi. `
+      + "Terbitkan atau batalkan kiriman itu dulu.",
+    );
+  }
+  if (
+    error instanceof PickupPointDeniedError
+    || error instanceof PickupPointInvalidError
+    || error instanceof TenantContextDeniedError
+  ) {
+    return pickupFailureState("Titik pickup tidak dapat diubah.");
+  }
+  return pickupFailureState("Titik pickup belum dapat diubah. Coba lagi.");
+}
+
+function readPickupRequest(formData: FormData) {
+  const outletId = formString(formData, "outletId");
+  const pickupAddressId = formString(formData, "pickupAddressId");
+  const errors: PickupPointActionState["errors"] = {};
+  if (!UUID_PATTERN.test(outletId)) errors.outletId = "Outlet tidak valid.";
+  if (
+    !pickupAddressId
+    || pickupAddressId.length > MAX_OPAQUE_IDENTIFIER_LENGTH
+    || CONTROL_CHARACTER_PATTERN.test(pickupAddressId)
+  ) {
+    errors.pickupAddressId = "Pilih alamat pickup terlebih dahulu.";
+  }
+  return { errors, outletId, pickupAddressId };
+}
+
+/**
+ * Adds one of the outlet's Mengantar pickup addresses as a pickup point. The
+ * label and the derived origin area are taken from the provider's own current
+ * list, never from the browser: the form only names which address was chosen.
+ */
+export async function addOutletPickupPoint(
+  _previousState: PickupPointActionState,
+  formData: FormData,
+): Promise<PickupPointActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const { errors, outletId, pickupAddressId } = readPickupRequest(formData);
+  if (Object.keys(errors).length > 0) {
+    return pickupFailureState("Titik pickup belum ditambahkan.", errors);
+  }
+
+  let canonical: MengantarPickupOption;
+  try {
+    const { options } = await fetchAuthorizedPickupOptions(principal, outletId);
+    const selected = options.find((option) => option.pickupAddressId === pickupAddressId);
     if (!selected) {
-      return {
-        errors: {
-          defaultPickupAddressId:
-            "Pilihan sudah berubah di Mengantar. Cari dan pilih ulang.",
-        },
-        message: "Lokasi belum disimpan.",
-        resultToken: randomUUID(),
-        values,
-      };
+      return pickupFailureState("Titik pickup belum ditambahkan.", {
+        pickupAddressId: "Pilihan sudah berubah di Mengantar. Cari dan pilih ulang.",
+      });
     }
-    canonicalPickup = selected;
-    expectedConnectionUpdatedAt = authority.connectionUpdatedAt;
+    canonical = selected;
   } catch (error) {
     if (
       error instanceof MengantarConfigurationError
       || error instanceof MengantarLocationError
     ) {
-      return {
-        message:
-          "Lokasi belum dapat diverifikasi ke Mengantar. Pilihan tersimpan tidak berubah.",
-        resultToken: randomUUID(),
-        values,
-      };
+      return pickupFailureState(
+        "Alamat pickup belum dapat diverifikasi ke Mengantar. Daftar tersimpan tidak berubah.",
+      );
     }
-    return {
-      message: "Lokasi belum dapat diverifikasi. Coba lagi.",
-      resultToken: randomUUID(),
-      values,
-    };
+    return pickupFailureState("Alamat pickup belum dapat diverifikasi. Coba lagi.");
   }
 
   try {
-    await withTenantContext(
-      db,
-      principal.userId,
-      principal.tenantId,
-      (tx, context) => updateOutletReadiness(tx, context, {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      addOutletPickupPointRow(tx, context, {
         outletId,
-        defaultPickupAddressId: canonicalPickup.pickupAddressId,
-        defaultPickupAddressLabel: canonicalPickup.pickupLabel,
-        defaultOriginAreaId: canonicalPickup.originAreaId,
-        defaultOriginAreaLabel: canonicalPickup.originLabel,
-        connectionMode: connectionModeValue as "platform_default" | "private",
-        expectedConnectionUpdatedAt,
-      }),
-    );
+        originAreaId: canonical.originAreaId,
+        originAreaLabel: canonical.originLabel,
+        pickupAddressId: canonical.pickupAddressId,
+        pickupAddressLabel: canonical.pickupLabel,
+      }));
   } catch (error) {
-    if (error instanceof OutletConnectionModeUnavailableError) {
-      return {
-        errors: {
-          connectionMode:
-            "Koneksi privat aktif tidak dapat dialihkan ke default platform dari halaman ini.",
-        },
-        message: "Pengaturan belum disimpan.",
-        resultToken: randomUUID(),
-        values,
-      };
-    }
-    if (
-      error instanceof OutletSettingsDeniedError
-      || error instanceof OutletSettingsInvalidError
-    ) {
-      return {
-        message: "Pengaturan outlet tidak dapat diubah.",
-        resultToken: randomUUID(),
-        values,
-      };
-    }
-    return {
-      message: "Pengaturan belum dapat disimpan. Coba lagi.",
-      resultToken: randomUUID(),
-      values,
-    };
+    return pickupErrorState(error);
   }
 
   revalidateOutletConfigurationPaths();
   return {
-    message: "Pickup dan area asal Mengantar tersimpan untuk outlet ini.",
+    message: "Titik pickup tersimpan untuk outlet ini.",
     resultToken: randomUUID(),
     success: true,
-    values: {
-      connectionMode: values.connectionMode,
-      defaultOriginAreaId: canonicalPickup.originAreaId,
-      defaultOriginAreaLabel: canonicalPickup.originLabel,
-      defaultPickupAddressId: canonicalPickup.pickupAddressId,
-      defaultPickupAddressLabel: canonicalPickup.pickupLabel,
-    },
   };
+}
+
+export async function setDefaultOutletPickupPoint(
+  _previousState: PickupPointActionState,
+  formData: FormData,
+): Promise<PickupPointActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const { errors, outletId, pickupAddressId } = readPickupRequest(formData);
+  if (Object.keys(errors).length > 0) {
+    return pickupFailureState("Titik utama belum diubah.", errors);
+  }
+
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      setDefaultOutletPickupPointRow(tx, context, outletId, pickupAddressId));
+  } catch (error) {
+    return pickupErrorState(error);
+  }
+
+  revalidateOutletConfigurationPaths();
+  return {
+    message: "Titik pickup utama outlet ini diperbarui.",
+    resultToken: randomUUID(),
+    success: true,
+  };
+}
+
+export async function removeOutletPickupPoint(
+  _previousState: PickupPointActionState,
+  formData: FormData,
+): Promise<PickupPointActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const { errors, outletId, pickupAddressId } = readPickupRequest(formData);
+  if (formData.get("confirmation") !== "remove-pickup-point") {
+    errors.confirmation = "Konfirmasi penghapusan titik pickup diperlukan.";
+  }
+  if (Object.keys(errors).length > 0) {
+    return pickupFailureState("Titik pickup belum dihapus.", errors);
+  }
+
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      removeOutletPickupPointRow(tx, context, outletId, pickupAddressId));
+  } catch (error) {
+    return pickupErrorState(error);
+  }
+
+  revalidateOutletConfigurationPaths();
+  return {
+    message: "Titik pickup dihapus dari outlet ini.",
+    resultToken: randomUUID(),
+    success: true,
+  };
+}
+
+export type ShipmentPrefixActionState = {
+  error?: string;
+  savedPrefix?: string;
+  resultToken?: string;
+};
+
+export async function saveShipmentPrefix(
+  _previous: ShipmentPrefixActionState,
+  formData: FormData,
+): Promise<ShipmentPrefixActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const rawPrefix = formData.get("prefix");
+  const attemptId = formData.get("attemptId");
+  const prefix = typeof rawPrefix === "string" ? normalizeShipmentPrefixInput(rawPrefix) : null;
+  if (!prefix) {
+    return { error: "Awalan harus 2–5 huruf besar atau angka, tanpa spasi.", resultToken: randomUUID() };
+  }
+  if (typeof attemptId !== "string" || !UUID_PATTERN.test(attemptId) || formData.get("confirmation") !== "locked") {
+    return { error: "Konfirmasi penguncian awalan diperlukan. Muat ulang halaman lalu coba lagi.", resultToken: randomUUID() };
+  }
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveTenantShipmentPrefix(tx, context, prefix, attemptId));
+  } catch (error) {
+    if (error instanceof ShipmentPrefixLockedError) {
+      return { error: "Awalan sudah terkunci dan tidak dapat diubah. Hubungi Super Admin bila ada kesalahan.", resultToken: randomUUID() };
+    }
+    if (error instanceof ShipmentPrefixInvalidError) {
+      return { error: "Awalan harus 2–5 huruf besar atau angka, tanpa spasi.", resultToken: randomUUID() };
+    }
+    if (error instanceof ShipmentPrefixDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya Tenant Admin yang dapat mengatur awalan nomor kiriman.", resultToken: randomUUID() };
+    }
+    return { error: "Awalan belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
+  }
+  // Every screen that shows a shipment number must pick up the new prefix.
+  revalidatePath("/app", "layout");
+  return { savedPrefix: prefix, resultToken: randomUUID() };
 }

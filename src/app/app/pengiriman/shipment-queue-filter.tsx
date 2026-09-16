@@ -23,11 +23,19 @@ import {
 const OPERATIONAL_VALUES = new Set([
   "ALL",
   "ACTION_REQUIRED",
+  "NEEDS_ATTENTION",
   "READY_TO_PROGRESS",
   "ISSUED_TODAY",
 ]);
 
-export function ShipmentQueueFilter({ status }: { status: ShipmentQueueStatusFilter }) {
+export function ShipmentQueueFilter({
+  carry,
+  status,
+}: {
+  /** The page's range URL state, kept across a status change (PR-53). */
+  carry?: Readonly<Record<string, string>>;
+  status: ShipmentQueueStatusFilter;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const operational = SHIPMENT_STATUS_OPTIONS.filter((option) => OPERATIONAL_VALUES.has(option.value));
@@ -42,7 +50,7 @@ export function ShipmentQueueFilter({ status }: { status: ShipmentQueueStatusFil
         <span className="sr-only">Tampilan antrean</span>
         <Select
           disabled={pending}
-          onValueChange={(value) => startTransition(() => router.push(shipmentQueueHref(value as ShipmentQueueStatusFilter)))}
+          onValueChange={(value) => startTransition(() => router.push(shipmentQueueHref(value as ShipmentQueueStatusFilter, 1, carry)))}
           value={status}
         >
           <SelectTrigger className="w-full justify-start border-dashed max-md:min-h-11 md:w-[13.5rem]" id="status-kiriman">

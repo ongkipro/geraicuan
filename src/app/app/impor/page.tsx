@@ -5,10 +5,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { BulkIntakeForm } from "@/app/app/impor/bulk-intake-form";
+import { FormLayout, PageAside } from "@/components/cms/cms-layouts";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -89,14 +91,29 @@ export default async function BulkImportPage() {
             {principal.role === "TENANT_ADMIN" ? (
               <div>
                 <Button asChild className="min-h-11" variant="outline">
-                  <Link href="/app/pengaturan">Buka pengaturan outlet</Link>
+                  <Link href="/app/pengaturan/outlet">Buka pengaturan outlet</Link>
                 </Button>
               </div>
             ) : null}
           </AlertDescription>
         </Alert>
       ) : (
-        <BulkIntakeForm initialPreview={auditPreview} outlets={configuredOutlets} />
+        <FormLayout
+          aside={(
+            <PageAside label="Bantuan impor massal">
+              <Card>
+                <CardHeader><CardTitle>Yang perlu disiapkan</CardTitle></CardHeader>
+                <CardContent className="grid gap-2 text-sm text-muted-foreground">
+                  <p>Judul kolom CSV harus sama persis dengan template.</p>
+                  <p>Lokasi tujuan harus mengarah ke satu hasil Mengantar yang tidak ambigu.</p>
+                  <p>Belum ada data tersimpan sampai draf terpilih dikonfirmasi.</p>
+                </CardContent>
+              </Card>
+            </PageAside>
+          )}
+        >
+          <BulkIntakeForm initialPreview={auditPreview} outlets={configuredOutlets} />
+        </FormLayout>
       )}
     </PageContainer>
   );

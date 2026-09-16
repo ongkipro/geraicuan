@@ -27,6 +27,7 @@ import {
   OrderRateLimitedError,
   enforceOrderRateLimit,
 } from "@/lib/order-rate-limit";
+import { toBillableWeightKg } from "@/lib/shipment-draft";
 import {
   createShipmentCorrelationId,
   emitShipmentLifecycleEvent,
@@ -50,6 +51,13 @@ export type MengantarOrderRequest = {
   goods_value: number;
   is_cod: boolean;
   cod_amount: number;
+  // PR-47 field parity with Mengantar's own order form. These key spellings are
+  // provisional until T-153 reconciles the request against the provider's
+  // current documentation; they are grouped here so that reconciliation is a
+  // single edit.
+  shipping_instruction: string | null;
+  receiver_landmark: string | null;
+  is_hazardous: boolean;
 };
 
 export type MengantarOrderTransport = {
@@ -99,6 +107,13 @@ export type FixtureOrderOrchestrationResult = {
     created: boolean;
     submitted: boolean;
     status: "SUBMISSION_QUEUED" | "SUBMISSION_UNKNOWN" | "COMPLETED";
+    /**
+     * Set when `buildMengantarOrderPayload` refused an order in this batch
+     * before anything was claimed or sent. The batch stays queued and
+     * resumable (see `submitPreparedBatch`); the caller surfaces this code to
+     * the operator instead of crashing the confirmation.
+     */
+    payloadRejectionCode?: string;
   }>;
 };
 
@@ -173,27 +188,62 @@ function validateTransportBinding(
   return binding as ValidatedTransportBinding;
 }
 
+export class MengantarOrderPayloadError extends Error {
+  readonly safeCode: string;
+
+  constructor(safeCode: string) {
+    super("Mengantar order payload is not submittable.");
+    this.safeCode = safeCode;
+  }
+}
+
 export function buildMengantarOrderPayload(
   orders: readonly ProviderOrderSource[],
 ): MengantarOrderRequest[] {
-  return orders.map((order) => ({
-    pickup_address_id: order.pickupAddressId,
-    sender_name: order.senderName,
-    sender_phone: order.senderPhone,
-    sender_address: order.senderAddress,
-    receiver_name: order.recipientName,
-    receiver_phone: order.recipientPhone,
-    receiver_address: order.recipientAddress,
-    destination_id: order.destinationAreaId,
-    courier: order.courier,
-    service: order.providerService,
-    weight: order.weightGrams / 1_000,
-    quantity: order.quantity,
-    item_name: order.packageContent,
-    goods_value: order.declaredValueIdr,
-    is_cod: order.isCod,
-    cod_amount: order.providerCodAmountIdr ?? 0,
-  }));
+  return orders.map((order) => {
+    // A COD order with no COD total would ship goods and collect nothing. The
+    // old `?? 0` turned exactly that into a silently valid submission.
+    if (
+      order.isCod
+      && (order.providerCodAmountIdr === null || order.providerCodAmountIdr <= 0)
+    ) {
+      throw new MengantarOrderPayloadError("ORDER_COD_AMOUNT_MISSING");
+    }
+    // A stored area id is a provider identifier that can be renamed or retired
+    // between saving a contact and issuing its shipment.
+    if (!order.destinationAreaVerifiedAt) {
+      throw new MengantarOrderPayloadError("ORDER_DESTINATION_AREA_UNVERIFIED");
+    }
+
+    let weight: number;
+    try {
+      weight = toBillableWeightKg(order.weightGrams);
+    } catch {
+      throw new MengantarOrderPayloadError("ORDER_WEIGHT_UNCONVERTIBLE");
+    }
+
+    return {
+      pickup_address_id: order.pickupAddressId,
+      sender_name: order.senderName,
+      sender_phone: order.senderPhone,
+      sender_address: order.senderAddress,
+      receiver_name: order.recipientName,
+      receiver_phone: order.recipientPhone,
+      receiver_address: order.recipientAddress,
+      destination_id: order.destinationAreaId,
+      courier: order.courier,
+      service: order.providerService,
+      weight,
+      quantity: order.quantity,
+      item_name: order.packageContent,
+      goods_value: order.declaredValueIdr,
+      is_cod: order.isCod,
+      cod_amount: order.isCod ? order.providerCodAmountIdr! : 0,
+      shipping_instruction: order.shippingInstruction,
+      receiver_landmark: order.recipientAddressLandmark,
+      is_hazardous: order.isHazardous,
+    };
+  });
 }
 
 type ProviderResponseItem = {
@@ -322,6 +372,31 @@ async function submitPreparedBatch(
   batch: PreparedProviderBatch,
   transport: MengantarOrderTransport,
 ) {
+  // Build every payload before claiming the batch. A payload guard rejecting an
+  // order means nothing was sent, so the batch must stay queued and resumable
+  // rather than land in SUBMISSION_UNKNOWN, which would block reconciliation.
+  // This must not throw past the caller: one unsubmittable batch (e.g. an
+  // old draft whose destination was never re-verified) must not abort the
+  // batches that follow it in the same confirmation run.
+  let payloads: { order: PreparedProviderBatch["orders"][number]; payload: MengantarOrderRequest[] }[];
+  try {
+    payloads = batch.orders.map((order) => ({
+      order,
+      payload: buildMengantarOrderPayload([order]),
+    }));
+  } catch (error) {
+    if (error instanceof MengantarOrderPayloadError) {
+      return {
+        id: batch.id,
+        created: batch.created,
+        submitted: false,
+        status: "SUBMISSION_QUEUED",
+        payloadRejectionCode: error.safeCode,
+      } as const;
+    }
+    throw error;
+  }
+
   const claimed = await withTenantContext(
     input.db,
     input.principalId,
@@ -342,8 +417,7 @@ async function submitPreparedBatch(
   }
 
   try {
-    for (const order of batch.orders) {
-      const payload = buildMengantarOrderPayload([order]);
+    for (const { order, payload } of payloads) {
       const submit = () => transport.submit(payload);
       const response = requiresProviderAccountSerialization(batch.courier)
         ? await withProviderAccountSerialization(
@@ -483,11 +557,13 @@ export async function orchestrateFixtureBackedMengantarOrders(
     batches.push(result);
     emitShipmentLifecycleEvent({
       operation: "order",
-      outcome: result.status === "COMPLETED"
-        ? result.submitted ? "success" : "idempotent"
-        : result.status === "SUBMISSION_UNKNOWN"
-          ? "unknown"
-          : "idempotent",
+      outcome: result.payloadRejectionCode
+        ? "failure"
+        : result.status === "COMPLETED"
+          ? result.submitted ? "success" : "idempotent"
+          : result.status === "SUBMISSION_UNKNOWN"
+            ? "unknown"
+            : "idempotent",
       tenantId: verifiedContext.tenantId,
       actorId: verifiedContext.actorId,
       correlationId,
@@ -495,11 +571,13 @@ export async function orchestrateFixtureBackedMengantarOrders(
       outletId: batch.outletId,
       credentialSource: batch.credentialSource,
       courier: batch.courier,
-      safeProviderStatus: result.status,
-      retryResult: "accepted",
-      queueResult: result.submitted
-        ? requiresProviderAccountSerialization(batch.courier) ? "serialized" : "queued"
-        : "reused",
+      safeProviderStatus: result.payloadRejectionCode ? "NOT_CALLED" : result.status,
+      retryResult: result.payloadRejectionCode ? "rejected" : "accepted",
+      queueResult: result.payloadRejectionCode
+        ? "not_applicable"
+        : result.submitted
+          ? requiresProviderAccountSerialization(batch.courier) ? "serialized" : "queued"
+          : "reused",
     }, input.telemetrySink);
   }
   return { batches };

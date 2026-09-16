@@ -100,13 +100,17 @@ describe("authorized operational phone display", () => {
   it("renders the complete phone in the contact directory", () => {
     const html = renderToStaticMarkup(createElement(ContactDirectoryBrowser, {
       initialRows: [{
+        address: null,
+        addressCount: 0,
         archived: false,
+        destinationAreaLabel: null,
         id: fixture.contactId,
         isRecipient: true,
         isSender: false,
         name: "Operational fixture recipient",
         phone: fixture.phone,
       }],
+      peran: "semua",
       status: "active",
     }));
     const visible = html.replace(/<[^>]+>/g, " ");

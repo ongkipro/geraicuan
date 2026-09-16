@@ -154,3 +154,31 @@ export function ReversalActionPanel({ action, amountLabel, context, entryId, ent
     </AlertDialog>
   </div>;
 }
+
+export function ProviderSettlementPullPanel({ action, context, outlets, periodLabel }: {
+  action: FinanceStateAction;
+  context: CommonHiddenFields;
+  outlets: readonly { id: string; name: string }[];
+  periodLabel: string;
+}) {
+  const [state, formAction, pending] = useActionState(action, { nextAttemptId: context.attemptId });
+  const [outletId, setOutletId] = useState(context.outletFilter ?? outlets[0]?.id ?? "");
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (state.status) resultRef.current?.focus();
+  }, [state]);
+  const attemptId = state.nextAttemptId ?? context.attemptId;
+  return <form action={formAction} className="grid gap-4">
+    <ActionResult resultRef={resultRef} state={state} />
+    <HiddenContext attemptId={attemptId} context={context} />
+    <label className="grid max-w-lg gap-2 text-sm font-medium" htmlFor="settlement-outlet">
+      Outlet dan akun Mengantar
+      <select className="min-h-11 rounded-lg border border-input bg-background px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={pending} id="settlement-outlet" name="outletId" onChange={(event) => setOutletId(event.target.value)} value={outletId}>
+        {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
+      </select>
+    </label>
+    <p className="max-w-2xl text-sm text-muted-foreground">Periode: {periodLabel}. Hanya membaca invoice dan status order dari Mengantar; tidak membuat order dan tidak mengubah ledger.</p>
+    <Button aria-describedby={pending ? "settlement-pending" : undefined} className="min-h-11 w-fit" disabled={pending || !outletId} type="submit">{pending ? "Menarik data…" : "Tarik data Mengantar"}</Button>
+    {pending ? <p className="text-sm text-muted-foreground" id="settlement-pending" role="status">Mengambil invoice dan status order dari Mengantar. Ini bisa memakan beberapa detik.</p> : null}
+  </form>;
+}

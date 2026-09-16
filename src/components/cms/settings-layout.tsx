@@ -1,15 +1,26 @@
-import type { LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/cms/page-header";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 export type SettingsNavItem = {
   href: string;
   label: string;
-  icon?: LucideIcon;
+  /** One line, sentence case: what the page is for. Shown on the mobile index rows. */
+  description: string;
+  icon: LucideIcon;
 };
 
 type SettingsHeading =
@@ -41,15 +52,21 @@ export type SettingsLayoutProps = SettingsHeading & {
    * `aria-current="page"` for this route, and screening flagged two.
    */
   currentHref: string;
+  /**
+   * The settings index. Below `lg` it decides the two shapes PR-46 names: on
+   * the index the whole menu is the page (tappable rows with a chevron), on
+   * every other settings page the menu collapses to one back link.
+   */
+  indexHref: string;
   /** Navigation landmark name; defaults to "Menu pengaturan". */
   navLabel?: string;
   children?: ReactNode;
 };
 
 /**
- * shadcn-admin settings frame: heading, separator, a left nav on large
- * screens (a wrapping row of links below lg, no client JS) and the content.
- * Server component.
+ * PR-46 settings frame: heading, separator, the settings menu (a left rail from
+ * `lg`, the page itself below `lg` on the index, one back link below `lg`
+ * everywhere else) and the content column. Server component, no client JS.
  */
 export function SettingsLayout({
   children,
@@ -57,32 +74,48 @@ export function SettingsLayout({
   description,
   eyebrow,
   header,
+  indexHref,
   items,
   navLabel = "Menu pengaturan",
   title,
 }: SettingsLayoutProps) {
+  const onIndex = currentHref === indexHref;
   return (
     <div className="grid min-w-0 gap-4">
       {header ?? <PageHeader description={description} eyebrow={eyebrow} title={title} />}
       <Separator />
-      <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:gap-12">
-        <aside className="min-w-0 lg:w-1/5 lg:shrink-0">
+      <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:gap-10">
+        <aside
+          className={cn(
+            "min-w-0 lg:w-44 lg:shrink-0 xl:w-56",
+            onIndex ? null : "max-lg:hidden",
+          )}
+        >
           <nav aria-label={navLabel}>
-            <ul className="flex flex-wrap gap-1 lg:flex-col">
-              {items.map(({ href, icon: Icon, label }) => {
+            <ul className="grid gap-1">
+              {items.map(({ description: itemDescription, href, icon: Icon, label }) => {
                 const current = href === currentHref;
                 return (
                   <li key={href}>
                     <Link
                       aria-current={current ? "true" : undefined}
                       className={cn(
-                        "flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors hover:bg-muted hover:text-foreground md:min-h-9",
+                        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground lg:min-h-9 lg:py-1.5",
                         current ? "bg-muted text-foreground" : "text-muted-foreground",
                       )}
                       href={href}
                     >
-                      {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0" /> : null}
-                      {label}
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span className="grid min-w-0 flex-1 gap-0.5">
+                        <span className="truncate font-medium">{label}</span>
+                        <span className="text-xs leading-5 text-muted-foreground lg:hidden">
+                          {itemDescription}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-muted-foreground lg:hidden"
+                      />
                     </Link>
                   </li>
                 );
@@ -90,9 +123,68 @@ export function SettingsLayout({
             </ul>
           </nav>
         </aside>
-        <div className="min-w-0 flex-1">{children}</div>
+        <div className="min-w-0 flex-1 lg:max-w-[47.5rem]">
+          {onIndex ? null : (
+            <Link
+              aria-label="Kembali ke Pengaturan"
+              className="mb-4 inline-flex min-h-11 items-center gap-1 rounded-lg pr-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:hidden"
+              href={indexHref}
+            >
+              <ChevronLeft aria-hidden="true" className="size-4 shrink-0" />
+              Pengaturan
+            </Link>
+          )}
+          {children}
+        </div>
       </div>
     </div>
+  );
+}
+
+export type SettingsCardProps = {
+  title: ReactNode;
+  description?: ReactNode;
+  /** Status badge, rendered beside the title. */
+  badge?: ReactNode;
+  /** Heading id, for aria-labelledby and hash focus targets. */
+  id?: string;
+  /** Footer actions: right-aligned from `md`, full width below it. */
+  footer?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+};
+
+/**
+ * PR-46 card anatomy: title and description, body, divider, footer actions
+ * right-aligned (full width below `md`), status badge beside the title.
+ */
+export function SettingsCard({
+  badge,
+  children,
+  className,
+  description,
+  footer,
+  id,
+  title,
+}: SettingsCardProps) {
+  return (
+    <section aria-labelledby={id} className={cn("min-w-0", className)}>
+      <Card>
+        <CardHeader>
+          {/* `tabIndex={-1}` makes the heading a valid `#hash` focus target, which
+            is how the outlet selector moves focus into the card it just changed. */}
+        <CardTitle id={id} tabIndex={id ? -1 : undefined}>{title}</CardTitle>
+          {badge ? <CardAction>{badge}</CardAction> : null}
+          {description ? <CardDescription>{description}</CardDescription> : null}
+        </CardHeader>
+        <CardContent className="min-w-0">{children}</CardContent>
+        {footer ? (
+          <CardFooter className="flex-wrap justify-end gap-2 max-md:flex-col max-md:items-stretch [&>*]:min-h-11 md:[&>*]:min-h-9">
+            {footer}
+          </CardFooter>
+        ) : null}
+      </Card>
+    </section>
   );
 }
 

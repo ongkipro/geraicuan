@@ -37,6 +37,7 @@ export const LEDGER_RECONCILIATION_SOURCE_TYPES = [
   "COD_PRINCIPAL_COLLECTABLE",
   "MENGANTAR_SHIPPING_COST",
   "MENGANTAR_INSURANCE_COST",
+  "MENGANTAR_COD_FEE_COST",
   "GERAICUAN_COD_SERVICE_FEE_REVENUE",
   "COD_SERVICE_FEE_VAT_PAYABLE",
   "NON_COD_UPSTREAM_PAYMENT",
@@ -230,6 +231,7 @@ export async function appendLedgerForIssuedProviderOrder(
       isCod: providerOrderSnapshots.isCod,
       isPaid: providerOrderSnapshots.isPaid,
       shippingAmountIdr: providerOrderSnapshots.shippingAmountIdr,
+      providerChargedShippingIdr: providerOrderSnapshots.providerChargedShippingIdr,
       insuranceAmountIdr: providerOrderSnapshots.insuranceAmountIdr,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       resolvedAt: providerOrderSnapshots.resolvedAt,
@@ -279,11 +281,19 @@ export async function appendLedgerForIssuedProviderOrder(
     throw new LedgerUnavailableError();
   }
 
+  // T-146: the ledger's shipping cost is what Mengantar actually deducts at
+  // settlement (`providerChargedShippingIdr`), not `shippingAmountIdr`
+  // (`price`, the buyer's basis — unchanged by this correction). NULL only for
+  // snapshots issued before this column existed, which keep the pre-fix
+  // basis by falling back to `shippingAmountIdr` here rather than throwing.
+  const providerCostIdr = requireWholeIdr(
+    source.providerChargedShippingIdr ?? source.shippingAmountIdr,
+  );
   const entries: TransitionEntry[] = [
     {
       entryType: "MENGANTAR_SHIPPING_COST",
       financialClass: "EXPENSE",
-      amountIdr: requireWholeIdr(source.shippingAmountIdr),
+      amountIdr: providerCostIdr,
     },
   ];
   if (source.insuranceAmountIdr !== null) {
@@ -309,10 +319,14 @@ export async function appendLedgerForIssuedProviderOrder(
       financialClass: "LIABILITY",
       amountIdr: requireWholeIdr(source.codGoodsValueIdr),
     });
+    // T-178: the COD fee is Mengantar's — it deducts it at settlement and
+    // GeraiCUAN never receives it — so it is a provider cost, not revenue.
+    // Entries posted before this change keep GERAICUAN_COD_SERVICE_FEE_REVENUE
+    // (append-only); nothing here rewrites them.
     entries.push(
       {
-        entryType: "GERAICUAN_COD_SERVICE_FEE_REVENUE",
-        financialClass: "REVENUE",
+        entryType: "MENGANTAR_COD_FEE_COST",
+        financialClass: "EXPENSE",
         amountIdr: requireWholeIdr(source.codServiceFeeIdr),
       },
       {
@@ -353,6 +367,7 @@ export async function appendLedgerForCompletedUnpaidRecovery(
       providerBatchId: providerOrderSnapshots.batchId,
       providerOrderSnapshotId: providerOrderSnapshots.id,
       shippingAmountIdr: providerOrderSnapshots.shippingAmountIdr,
+      providerChargedShippingIdr: providerOrderSnapshots.providerChargedShippingIdr,
       insuranceAmountIdr: providerOrderSnapshots.insuranceAmountIdr,
       orderStatus: providerOrderSnapshots.status,
       shipmentStatus: shipments.status,
@@ -408,7 +423,10 @@ export async function appendLedgerForCompletedUnpaidRecovery(
     throw new LedgerUnavailableError();
   }
 
-  const shippingAmountIdr = requireWholeIdr(source.shippingAmountIdr);
+  // T-146: same provider-charged basis as the issuance path above.
+  const providerCostIdr = requireWholeIdr(
+    source.providerChargedShippingIdr ?? source.shippingAmountIdr,
+  );
   const insuranceAmountIdr = source.insuranceAmountIdr === null
     ? null
     : requireWholeIdr(source.insuranceAmountIdr);
@@ -416,7 +434,7 @@ export async function appendLedgerForCompletedUnpaidRecovery(
     {
       entryType: "MENGANTAR_SHIPPING_COST",
       financialClass: "EXPENSE",
-      amountIdr: shippingAmountIdr,
+      amountIdr: providerCostIdr,
     },
   ];
   if (insuranceAmountIdr !== null) {
@@ -429,7 +447,7 @@ export async function appendLedgerForCompletedUnpaidRecovery(
   entries.push({
     entryType: "NON_COD_UPSTREAM_PAYMENT",
     financialClass: "MEMO",
-    amountIdr: requireWholeIdr(shippingAmountIdr + (insuranceAmountIdr ?? 0)),
+    amountIdr: requireWholeIdr(providerCostIdr + (insuranceAmountIdr ?? 0)),
   });
 
   return insertTransitionEntries(
@@ -1026,12 +1044,14 @@ async function captureLedgerReconciliationTotals(
     source_cod_principal: number;
     source_shipping: number;
     source_insurance: number;
+    source_cod_fee_cost: number;
     source_cod_revenue: number;
     source_cod_vat: number;
     source_upstream_payment: number;
     ledger_cod_principal: number;
     ledger_shipping: number;
     ledger_insurance: number;
+    ledger_cod_fee_cost: number;
     ledger_cod_revenue: number;
     ledger_cod_vat: number;
     ledger_upstream_payment: number;
@@ -1040,10 +1060,22 @@ async function captureLedgerReconciliationTotals(
       SELECT
         coalesce(sum(CASE WHEN provider_order.is_cod
           THEN cod_total.goods_value_idr ELSE 0 END), 0) AS cod_principal,
-        coalesce(sum(provider_order.shipping_amount_idr), 0) AS shipping,
+        -- T-146: source of truth mirrors what the ledger now records: the
+        -- provider-charged amount, not the buyer's price. See appendLedgerForIssuedProviderOrder.
+        coalesce(sum(coalesce(
+          provider_order.provider_charged_shipping_idr,
+          provider_order.shipping_amount_idr
+        )), 0) AS shipping,
         coalesce(sum(coalesce(provider_order.insurance_amount_idr, 0)), 0) AS insurance,
-        coalesce(sum(CASE WHEN provider_order.is_cod
+        -- T-178: the same stored fee, classified by how its issuance was
+        -- ledgered. An issuance that already carries the retired revenue
+        -- entry was posted before the change and is expected there; every
+        -- other COD issuance is expected as MENGANTAR_COD_FEE_COST, so a
+        -- missing entry still surfaces as a variance on the current type.
+        coalesce(sum(CASE WHEN provider_order.is_cod AND legacy_fee.id IS NOT NULL
           THEN cod_total.service_fee_idr ELSE 0 END), 0) AS cod_revenue,
+        coalesce(sum(CASE WHEN provider_order.is_cod AND legacy_fee.id IS NULL
+          THEN cod_total.service_fee_idr ELSE 0 END), 0) AS cod_fee_cost,
         coalesce(sum(CASE WHEN provider_order.is_cod
           THEN cod_total.vat_amount_idr ELSE 0 END), 0) AS cod_vat
       FROM provider_order_snapshots provider_order
@@ -1053,6 +1085,11 @@ async function captureLedgerReconciliationTotals(
       LEFT JOIN shipment_cod_totals cod_total
         ON cod_total.shipment_id = provider_order.shipment_id
         AND cod_total.tenant_id = provider_order.tenant_id
+      LEFT JOIN ledger_entries legacy_fee
+        ON legacy_fee.tenant_id = provider_order.tenant_id
+        AND legacy_fee.source_event = 'PROVIDER_ORDER_ISSUED'
+        AND legacy_fee.source_event_id = provider_order.id::text
+        AND legacy_fee.entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE'
       WHERE provider_order.tenant_id = ${context.tenantId}
         AND batch.outlet_id = ${input.outletId}
         AND provider_order.status = 'ISSUED'
@@ -1060,7 +1097,7 @@ async function captureLedgerReconciliationTotals(
         AND provider_order.resolved_at < ${input.periodEnd}
     ), recovery_source AS (
       SELECT coalesce(sum(
-        provider_order.shipping_amount_idr
+        coalesce(provider_order.provider_charged_shipping_idr, provider_order.shipping_amount_idr)
           + coalesce(provider_order.insurance_amount_idr, 0)
       ), 0) AS upstream_payment
       FROM provider_unpaid_recoveries recovery
@@ -1097,6 +1134,11 @@ async function captureLedgerReconciliationTotals(
               AND original.entry_type = 'MENGANTAR_INSURANCE_COST')
           THEN entry.amount_idr ELSE 0 END), 0) AS insurance,
         coalesce(sum(CASE
+          WHEN entry.entry_type = 'MENGANTAR_COD_FEE_COST'
+            OR (entry.entry_type = 'ADJUSTMENT'
+              AND original.entry_type = 'MENGANTAR_COD_FEE_COST')
+          THEN entry.amount_idr ELSE 0 END), 0) AS cod_fee_cost,
+        coalesce(sum(CASE
           WHEN entry.entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE'
             OR (entry.entry_type = 'ADJUSTMENT'
               AND original.entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE')
@@ -1124,12 +1166,14 @@ async function captureLedgerReconciliationTotals(
       issued_source.cod_principal AS source_cod_principal,
       issued_source.shipping AS source_shipping,
       issued_source.insurance AS source_insurance,
+      issued_source.cod_fee_cost AS source_cod_fee_cost,
       issued_source.cod_revenue AS source_cod_revenue,
       issued_source.cod_vat AS source_cod_vat,
       recovery_source.upstream_payment AS source_upstream_payment,
       ledger_snapshot.cod_principal AS ledger_cod_principal,
       ledger_snapshot.shipping AS ledger_shipping,
       ledger_snapshot.insurance AS ledger_insurance,
+      ledger_snapshot.cod_fee_cost AS ledger_cod_fee_cost,
       ledger_snapshot.cod_revenue AS ledger_cod_revenue,
       ledger_snapshot.cod_vat AS ledger_cod_vat,
       ledger_snapshot.upstream_payment AS ledger_upstream_payment
@@ -1145,6 +1189,7 @@ async function captureLedgerReconciliationTotals(
       COD_PRINCIPAL_COLLECTABLE: requireWholeIdr(Number(row.source_cod_principal)),
       MENGANTAR_SHIPPING_COST: requireWholeIdr(Number(row.source_shipping)),
       MENGANTAR_INSURANCE_COST: requireWholeIdr(Number(row.source_insurance)),
+      MENGANTAR_COD_FEE_COST: requireWholeIdr(Number(row.source_cod_fee_cost)),
       GERAICUAN_COD_SERVICE_FEE_REVENUE: requireWholeIdr(Number(row.source_cod_revenue)),
       COD_SERVICE_FEE_VAT_PAYABLE: requireWholeIdr(Number(row.source_cod_vat)),
       NON_COD_UPSTREAM_PAYMENT: requireWholeIdr(Number(row.source_upstream_payment)),
@@ -1153,6 +1198,7 @@ async function captureLedgerReconciliationTotals(
       COD_PRINCIPAL_COLLECTABLE: requireWholeIdr(Number(row.ledger_cod_principal), true),
       MENGANTAR_SHIPPING_COST: requireWholeIdr(Number(row.ledger_shipping), true),
       MENGANTAR_INSURANCE_COST: requireWholeIdr(Number(row.ledger_insurance), true),
+      MENGANTAR_COD_FEE_COST: requireWholeIdr(Number(row.ledger_cod_fee_cost), true),
       GERAICUAN_COD_SERVICE_FEE_REVENUE: requireWholeIdr(Number(row.ledger_cod_revenue), true),
       COD_SERVICE_FEE_VAT_PAYABLE: requireWholeIdr(Number(row.ledger_cod_vat), true),
       NON_COD_UPSTREAM_PAYMENT: requireWholeIdr(Number(row.ledger_upstream_payment), true),

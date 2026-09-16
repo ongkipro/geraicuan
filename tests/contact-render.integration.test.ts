@@ -63,7 +63,33 @@ vi.mock("@/db/tenant-context", () => ({
 vi.mock("@/db/contact-repository", () => ({
   getContact: vi.fn(async () => mocks.currentContact),
   listContactAddresses: vi.fn(async () => mocks.addresses),
-  listContacts: vi.fn(async () => mocks.contacts),
+  listContactDirectory: vi.fn(async (_tx: unknown, _context: unknown, input: { role: "all" | "recipient" | "sender" }) =>
+    mocks.contacts.filter((contact) =>
+      input.role === "all"
+      || (input.role === "sender" && contact.isSender)
+      || (input.role === "recipient" && contact.isRecipient),
+    ),
+  ),
+  loadContactDirectoryPage: vi.fn(async (_tx: unknown, _context: unknown, input: { role: "all" | "recipient" | "sender"; status: "all" | "active" | "archived" }) => {
+    const inRole = mocks.contacts.filter((contact) =>
+      input.role === "all"
+      || (input.role === "sender" && contact.isSender)
+      || (input.role === "recipient" && contact.isRecipient),
+    );
+    const archived = inRole.filter((contact) => Boolean(contact.archivedAt));
+    return {
+      rows: input.status === "all"
+        ? inRole
+        : input.status === "archived"
+          ? archived
+          : inRole.filter((contact) => !contact.archivedAt),
+      summary: {
+        "CON-ACTIVE": inRole.length - archived.length,
+        "CON-ALL": inRole.length,
+        "CON-ARCHIVED": archived.length,
+      },
+    };
+  }),
 }));
 
 vi.mock("@/db/outlet-readiness-repository", () => ({
@@ -77,7 +103,10 @@ vi.mock("@/lib/cms-auth", () => ({
 
 function activeContact(overrides: Record<string, unknown> = {}) {
   return {
+    address: "Jl. Aman No. 5",
+    addressCount: 1,
     archivedAt: null,
+    destinationAreaLabel: "Gambir, Jakarta Pusat, DKI Jakarta, 10110",
     id: CONTACT_ID,
     isRecipient: true,
     isSender: true,
@@ -100,10 +129,11 @@ function activeAddress(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function renderDirectory(status?: string) {
-  const element = await ContactDirectoryPage({
-    searchParams: Promise.resolve(status === undefined ? {} : { status }),
-  });
+async function renderDirectory(status?: string, peran?: string) {
+  const params: Record<string, string> = {};
+  if (status !== undefined) params.status = status;
+  if (peran !== undefined) params.peran = peran;
+  const element = await ContactDirectoryPage({ searchParams: Promise.resolve(params) });
   return renderToStaticMarkup(element);
 }
 
@@ -133,23 +163,90 @@ describe("contact route render contracts", () => {
     expect(populated).not.toContain("0812••••890");
     expect(populated).not.toContain("••••");
     expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru"/);
+    // The row: street address, district/city, postal code (all derived from
+    // the same stored destination_area_label), and a WhatsApp affordance
+    // built from the canonical phone.
+    expect(populated).toContain("Jl. Aman No. 5");
+    expect(populated).toContain("Gambir, Jakarta Pusat");
+    expect(populated).toContain("10110");
+    expect(populated).toContain('href="https://wa.me/6281234567890"');
 
-    // The status filter exposes its selection programmatically, not by button
-    // variant alone: exactly one link is current, and it is the requested one.
-    const statusNav = (html: string) => html.match(/<nav[^>]*aria-label="Status kontak"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? "";
-    for (const [requested, href] of [[undefined, "/app/kontak?status=active"], ["archived", "/app/kontak?status=archived"]] as const) {
-      const nav = statusNav(requested === undefined ? populated : await renderDirectory(requested));
-      const current = nav.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? [];
-      expect(current, String(requested)).toHaveLength(1);
-      expect(current[0]).toContain(`href="${href}"`);
-      expect(nav).not.toContain('aria-current="page"');
-      expect(nav.match(/<svg/g) ?? [], "check glyph only on the selected link").toHaveLength(1);
-      expect(nav.match(/<a[^>]*class="[^"]*min-h-11/g) ?? []).toHaveLength(2);
+    // T-162: the status filter is the shared PR-52 state panel. It exposes its
+    // selection programmatically, not by button variant alone: exactly one
+    // entry is pressed, and it is the requested one.
+    const statusPanel = (html: string) =>
+      html.match(/<form[^>]*data-slot="state-summary-panel"[^>]*>[\s\S]*?<\/form>/)?.[0] ?? "";
+    for (const [requested, value] of [[undefined, "active"], ["archived", "archived"], ["all", "all"]] as const) {
+      const panel = statusPanel(requested === undefined ? populated : await renderDirectory(requested));
+      expect(panel, String(requested)).toMatch(/<ul[^>]*aria-label="Ringkasan status kontak"/);
+      const pressed = panel.match(/<button[^>]*aria-pressed="true"[^>]*>/g) ?? [];
+      expect(pressed, String(requested)).toHaveLength(1);
+      expect(pressed[0]).toContain(`value="${value}"`);
+      expect(pressed[0]).toContain('name="status"');
+      expect(panel).not.toContain("aria-current");
+      expect(panel.match(/<svg/g) ?? [], "check glyph only on the pressed entry").toHaveLength(1);
+      // Three entries, each a 44 px submit target carrying the page's own
+      // `status` parameter.
+      expect(panel.match(/<button[^>]*aria-pressed="(?:true|false)"[^>]*>/g) ?? []).toHaveLength(3);
+      expect(panel.match(/<button[^>]*class="[^"]*min-h-11/g) ?? []).toHaveLength(3);
     }
 
     const invalid = await renderDirectory("unknown");
     expect(invalid).toContain("Filter status disesuaikan");
     expect(invalid).toContain("Status tidak dikenali; kontak aktif ditampilkan.");
+  });
+
+  it("splits the directory into peran views, recovers from an invalid peran, and states missing address data explicitly", async () => {
+    mocks.contacts.push(
+      activeContact({ id: "00000000-0000-4000-8000-000000000661", isRecipient: false, isSender: true, name: "T167 Pengirim Saja" }),
+      activeContact({
+        address: null,
+        addressCount: 0,
+        destinationAreaLabel: null,
+        id: "00000000-0000-4000-8000-000000000662",
+        isRecipient: true,
+        isSender: false,
+        name: "T167 Penerima Tanpa Alamat",
+      }),
+      activeContact({
+        addressCount: 3,
+        destinationAreaLabel: null,
+        id: "00000000-0000-4000-8000-000000000663",
+        isRecipient: true,
+        isSender: true,
+        name: "T167 Dua Peran Area Belum Dipilih",
+      }),
+    );
+
+    // The peran nav mirrors the status nav's programmatic-selection contract.
+    const peranNav = (html: string) => html.match(/<nav[^>]*aria-label="Peran kontak"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? "";
+    const semua = peranNav(await renderDirectory(undefined, "semua"));
+    expect(semua.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? []).toHaveLength(1);
+    expect(semua).toContain('href="/app/kontak?status=active&amp;peran=semua"');
+
+    const pengirim = await renderDirectory(undefined, "pengirim");
+    expect(pengirim).toContain("T167 Pengirim Saja");
+    expect(pengirim).toContain("T167 Dua Peran Area Belum Dipilih");
+    expect(pengirim).not.toContain("T167 Penerima Tanpa Alamat");
+
+    const penerima = await renderDirectory(undefined, "penerima");
+    expect(penerima).toContain("T167 Penerima Tanpa Alamat");
+    expect(penerima).toContain("T167 Dua Peran Area Belum Dipilih");
+    expect(penerima).not.toContain("T167 Pengirim Saja");
+    // A dual-role contact appears in both role-specific views.
+    expect(pengirim).toContain("T167 Dua Peran Area Belum Dipilih");
+
+    // Zero addresses and an address predating area selection are both stated
+    // explicitly, never left as a blank cell; "+N alamat" is addresses beyond
+    // the one shown, linking to the contact detail's address list.
+    const all = await renderDirectory(undefined, "semua");
+    expect(all).toContain("Belum ada alamat");
+    expect(all).toContain("Area belum dipilih");
+    expect(all).toMatch(/href="\/app\/kontak\/00000000-0000-4000-8000-000000000663#alamat"[^>]*>\s*\+2 alamat/);
+
+    const invalidPeran = await renderDirectory(undefined, "unknown");
+    expect(invalidPeran).toContain("Filter peran disesuaikan");
+    expect(invalidPeran).toContain("Peran tidak dikenali; semua kontak ditampilkan.");
   });
 
   it("renders contact creation with truthful outlet readiness", async () => {

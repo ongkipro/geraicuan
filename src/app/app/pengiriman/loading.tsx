@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ShipmentQueueLoading() {
   return (
-    <PageContainer aria-busy="true" width="data">
+    <PageContainer aria-busy="true">
       <PageHeader eyebrow="Operasional kiriman" title="Pengiriman" />
       <div aria-label="Memuat filter dan antrean kiriman" className="grid gap-4" role="status">
         <div className="flex flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">

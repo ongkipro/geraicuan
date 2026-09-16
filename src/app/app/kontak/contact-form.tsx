@@ -10,6 +10,7 @@ import { DestinationAreaSelector, type DestinationAreaOutlet } from "@/app/app/d
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fieldWidth, FieldRow } from "@/components/cms/cms-layouts";
 import {
   Field,
   FieldDescription,
@@ -81,16 +82,18 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         </CardHeader>
         <CardContent className="min-w-0">
           <FieldGroup>
-            <Field data-invalid={Boolean(errors.contactName)}>
-              <FieldLabel htmlFor="contactName">Nama</FieldLabel>
-              <Input aria-describedby={describedBy("contactName")} aria-invalid={Boolean(errors.contactName)} autoFocus={!state.errors} className="min-h-11" defaultValue={values.contactName} id="contactName" name="contactName" required />
-              <FieldError id="contactName-error">{errors.contactName}</FieldError>
-            </Field>
-            <Field data-invalid={Boolean(errors.contactPhone)}>
-              <FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel>
-              <Input aria-describedby={describedBy("contactPhone")} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values.contactPhone} id="contactPhone" name="contactPhone" required type="tel" />
-              <FieldError id="contactPhone-error">{errors.contactPhone}</FieldError>
-            </Field>
+            <FieldRow>
+              <Field className={fieldWidth.lg} data-invalid={Boolean(errors.contactName)}>
+                <FieldLabel htmlFor="contactName">Nama</FieldLabel>
+                <Input aria-describedby={describedBy("contactName")} aria-invalid={Boolean(errors.contactName)} autoFocus={!state.errors} className="min-h-11" defaultValue={values.contactName} id="contactName" name="contactName" required />
+                <FieldError id="contactName-error">{errors.contactName}</FieldError>
+              </Field>
+              <Field className={fieldWidth.md} data-invalid={Boolean(errors.contactPhone)}>
+                <FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel>
+                <Input aria-describedby={describedBy("contactPhone")} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values.contactPhone} id="contactPhone" name="contactPhone" required type="tel" />
+                <FieldError id="contactPhone-error">{errors.contactPhone}</FieldError>
+              </Field>
+            </FieldRow>
             <FieldSet aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} data-invalid={Boolean(errors.roles)} id="roles" tabIndex={-1}>
               <FieldLegend>Peran kontak</FieldLegend>
               <FieldGroup className="gap-3">
@@ -110,13 +113,13 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         </CardHeader>
         <CardContent className="min-w-0">
           <FieldGroup>
-            <Field data-invalid={Boolean(errors.addressLabel)}>
+            <Field className={fieldWidth.lg} data-invalid={Boolean(errors.addressLabel)}>
               <FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel>
               <Input aria-describedby={describedBy("addressLabel")} aria-invalid={Boolean(errors.addressLabel)} className="min-h-11" defaultValue={values.addressLabel} id="addressLabel" name="addressLabel" required />
               <FieldDescription>Contoh: Gudang Bandung, Rumah, atau Toko Pusat.</FieldDescription>
               <FieldError id="addressLabel-error">{errors.addressLabel}</FieldError>
             </Field>
-            <Field data-invalid={Boolean(errors.addressText)}>
+            <Field className={fieldWidth.full} data-invalid={Boolean(errors.addressText)}>
               <FieldLabel htmlFor="addressText">Alamat</FieldLabel>
               <Textarea aria-describedby={describedBy("addressText")} aria-invalid={Boolean(errors.addressText)} className="min-h-24" defaultValue={values.addressText} id="addressText" name="addressText" required rows={3} />
               <FieldError id="addressText-error">{errors.addressText}</FieldError>

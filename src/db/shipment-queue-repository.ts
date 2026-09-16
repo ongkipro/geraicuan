@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
 import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
@@ -16,12 +16,23 @@ import {
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { PersistedEstimateService } from "@/db/estimate-repository";
+import type { AnalyticsRange } from "@/lib/analytics-range";
+import { SHIPMENT_QUEUE_SUMMARY_ENTRIES } from "@/lib/shipment-queue";
 import type {
   ShipmentQueueStatusFilter,
+  ShipmentQueueSummary,
   ShipmentStatus,
 } from "@/lib/shipment-queue";
 
 const MAX_PAGE_SIZE = 100;
+
+/**
+ * Spec 19 QUE-ATTENTION. Read off the panel entry so the queue this filter
+ * returns and the count the panel prints cannot describe different cohorts.
+ */
+const NEEDS_ATTENTION_STATUSES = SHIPMENT_QUEUE_SUMMARY_ENTRIES.find(
+  (entry) => entry.value === "NEEDS_ATTENTION",
+)!.statuses as readonly ShipmentStatus[];
 
 export type ShipmentQueueRow = {
   awb: string | null;
@@ -33,6 +44,7 @@ export type ShipmentQueueRow = {
   packageWeightGrams: number;
   providerService: string | null;
   recipientName: string;
+  recipientPhone: string;
   shipmentId: string;
   publicReference: string;
   status: ShipmentStatus;
@@ -45,6 +57,8 @@ export type ShipmentQueuePage = {
   pageSize: number;
   rows: ShipmentQueueRow[];
   status: ShipmentQueueStatusFilter;
+  /** PR-52 panel counts, one per metric ID, in the same scope as `rows`. */
+  summary: ShipmentQueueSummary;
   totalCount: number;
   totalPages: number;
 };
@@ -103,9 +117,24 @@ export type ShipmentDetail = {
   updatedAt: Date;
 };
 
+/**
+ * PR-53 created basis. `undefined` applies no date predicate: the page always
+ * passes a range, and the callers that do not are asking about the whole
+ * lifetime of the tenant on purpose.
+ */
+function createdWithin(range: AnalyticsRange | undefined) {
+  return range
+    ? and(
+        gte(shipments.createdAt, range.startInclusive),
+        lt(shipments.createdAt, range.endExclusive),
+      )
+    : undefined;
+}
+
 function shipmentFilter(
   context: TenantContext,
   status: ShipmentQueueStatusFilter,
+  range: AnalyticsRange | undefined,
 ) {
   let statusPredicate;
   switch (status) {
@@ -120,6 +149,9 @@ function shipmentFilter(
         "FAILED",
       ]);
       break;
+    case "NEEDS_ATTENTION":
+      statusPredicate = inArray(shipments.status, [...NEEDS_ATTENTION_STATUSES]);
+      break;
     case "READY_TO_PROGRESS":
       statusPredicate = inArray(shipments.status, ["DRAFT", "ESTIMATED"]);
       break;
@@ -132,6 +164,7 @@ function shipmentFilter(
 
   return and(
     eq(shipments.tenantId, context.tenantId),
+    createdWithin(range),
     statusPredicate,
   );
 }
@@ -154,12 +187,63 @@ export async function loadShipmentQueuePage(
   input: {
     page: number;
     pageSize: number;
+    /** PR-53 created-basis window; omitted means the tenant's whole lifetime. */
+    range?: AnalyticsRange;
     status: ShipmentQueueStatusFilter;
   },
 ): Promise<ShipmentQueuePage> {
   validatePagination(input.page, input.pageSize);
 
-  const where = shipmentFilter(context, input.status);
+  const where = shipmentFilter(context, input.status, input.range);
+
+  // PR-52: the panel counts come from the same tenant-scoped pass as the list
+  // and over the same cohort (the same joins), so an entry's number always
+  // equals the number of rows its own filter returns. The predicate is the
+  // table's own `tenant_id`, not row-level security alone.
+  const summaryRows = await tx
+    .select({
+      status: shipments.status,
+      count: sql<number>`count(*)::int`.mapWith(Number),
+    })
+    .from(shipments)
+    .leftJoin(
+      providerOrderSnapshots,
+      and(
+        eq(providerOrderSnapshots.shipmentId, shipments.id),
+        eq(providerOrderSnapshots.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      shipmentDrafts,
+      and(
+        eq(shipmentDrafts.shipmentId, shipments.id),
+        eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      shipmentParties,
+      and(
+        eq(shipmentParties.shipmentId, shipments.id),
+        eq(shipmentParties.tenantId, shipments.tenantId),
+        eq(shipmentParties.role, "RECIPIENT"),
+      ),
+    )
+    .where(and(eq(shipments.tenantId, context.tenantId), createdWithin(input.range)))
+    .groupBy(shipments.status);
+
+  const countByStatus = new Map(summaryRows.map((row) => [row.status, row.count]));
+  const summary = Object.fromEntries(
+    SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => [
+      entry.metricId,
+      entry.statuses === null
+        ? summaryRows.reduce((total, row) => total + row.count, 0)
+        : entry.statuses.reduce(
+            (total, status) => total + (countByStatus.get(status) ?? 0),
+            0,
+          ),
+    ]),
+  ) as ShipmentQueueSummary;
+
   const [countRow] = await tx
     .select({
       generatedAt: sql<Date>`statement_timestamp()`.mapWith(
@@ -203,6 +287,7 @@ export async function loadShipmentQueuePage(
       pageSize: input.pageSize,
       rows: [],
       status: input.status,
+      summary,
       totalCount,
       totalPages,
     };
@@ -221,6 +306,7 @@ export async function loadShipmentQueuePage(
       packageWeightGrams: shipmentDrafts.packageWeightGrams,
       isCod: shipmentDrafts.isCod,
       recipientName: shipmentParties.name,
+      recipientPhone: shipmentParties.phone,
       providerService: providerOrderSnapshots.providerService,
       awb: providerOrderSnapshots.cnoteNo,
     })
@@ -265,6 +351,7 @@ export async function loadShipmentQueuePage(
     pageSize: input.pageSize,
     rows,
     status: input.status,
+    summary,
     totalCount,
     totalPages,
   };

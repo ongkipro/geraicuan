@@ -14,23 +14,29 @@ type OutletNavigationItem = {
 
 export function OutletSettingsWorkspace({
   activeOutletId,
+  basePath = "/app/pengaturan/outlet",
   children,
+  focusTargetId = "outlet-detail-title",
   outlets,
 }: {
   activeOutletId: string;
+  /** The settings page this selector stays on; `?outlet=` is its URL state. */
+  basePath?: string;
   children: ReactNode;
+  /** Heading the selector moves focus to after a switch. */
+  focusTargetId?: string;
   outlets: readonly OutletNavigationItem[];
 }) {
   const [open, setOpen] = useState(false);
   const activeOutlet = outlets.find(({ id }) => id === activeOutletId) ?? outlets[0];
 
   useEffect(() => {
-    if (window.location.hash !== "#outlet-detail-title") return;
+    if (window.location.hash !== `#${focusTargetId}`) return;
     const frame = requestAnimationFrame(() => {
-      document.getElementById("outlet-detail-title")?.focus();
+      document.getElementById(focusTargetId)?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeOutletId]);
+  }, [activeOutletId, focusTargetId]);
 
   if (!activeOutlet) return null;
 
@@ -76,7 +82,7 @@ export function OutletSettingsWorkspace({
                   <Link
                     aria-current={active ? "true" : undefined}
                     className={`flex min-h-11 items-start gap-2 rounded-md px-3 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-                    href={`/app/pengaturan?outlet=${encodeURIComponent(outlet.id)}#outlet-detail-title`}
+                    href={`${basePath}?outlet=${encodeURIComponent(outlet.id)}#${focusTargetId}`}
                     onClick={() => setOpen(false)}
                   >
                     <span className="grid min-w-0 flex-1 gap-1">

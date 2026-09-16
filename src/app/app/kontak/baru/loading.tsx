@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function NewContactLoading() {
   return (
-    <PageContainer aria-busy="true" width="form">
+    <PageContainer aria-busy="true">
       <PageHeader
         description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya."
         eyebrow="Data"
@@ -17,10 +17,10 @@ export default function NewContactLoading() {
             <Skeleton className="h-5 w-32" />
             <Skeleton className="h-4 w-64 max-w-full" />
           </CardHeader>
-          <CardContent className="grid gap-5 sm:grid-cols-2">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full sm:col-span-2" />
+          <CardContent className="flex flex-wrap items-start gap-x-6 gap-y-5">
+            <Skeleton className="h-16 w-full sm:w-80" />
+            <Skeleton className="h-16 w-full sm:w-48" />
+            <Skeleton className="h-16 w-full max-w-[42rem]" />
           </CardContent>
         </Card>
         <Card className="shadow-none">

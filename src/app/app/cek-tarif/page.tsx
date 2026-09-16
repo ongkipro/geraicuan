@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import type { ShippingRateActionState } from "@/app/app/cek-tarif/actions";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 import { QuickRateForm } from "@/app/app/cek-tarif/quick-rate-form";
+import { FormLayout, PageAside } from "@/components/cms/cms-layouts";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -39,7 +41,24 @@ export default async function QuickRatePage() {
   return (
     <PageContainer>
       <PageHeader title="Cek Tarif" description="Bandingkan estimasi ongkir dari outlet ke area tujuan sebelum membuat kiriman." />
-      <QuickRateForm initialState={initialState} initialStale={scenario === "quick-rate-stale"} canManageSettings={principal.role === "TENANT_ADMIN"} outlets={outlets} />
+      <FormLayout
+        aside={(
+          <PageAside label="Bantuan cek tarif">
+            <Card>
+              <CardHeader>
+                <CardTitle>Perlu diingat</CardTitle>
+                <CardDescription>Estimasi ini belum membuat kiriman apa pun.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-2 text-sm text-muted-foreground">
+                <p>Area asal mengikuti pickup Mengantar yang tersimpan pada outlet.</p>
+                <p>Biaya akhir dapat berbeda mengikuti detail kiriman dan layanan yang dipilih saat membuat draf.</p>
+              </CardContent>
+            </Card>
+          </PageAside>
+        )}
+      >
+        <QuickRateForm initialState={initialState} initialStale={scenario === "quick-rate-stale"} canManageSettings={principal.role === "TENANT_ADMIN"} outlets={outlets} />
+      </FormLayout>
     </PageContainer>
   );
 }

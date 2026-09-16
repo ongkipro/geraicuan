@@ -38,3 +38,14 @@ Rate-limit address search, estimates, imports, order submission, and recovery by
 
 ## Privacy
 Logs use allowlisted fields, server-side redaction, and short operational retention pending PRIV-1 decision. Provider credential-bearing URLs are prohibited from logs and traces.
+
+## RATE-2 — Provider settlement pull (PR-43)
+
+- One pull per Tenant Admin per 60 seconds: the `settlement-pull` row in `shipment_rate_limits` is claimed atomically and committed before any provider request, so failed or timed-out pulls and parallel tabs cannot fan out against a shared provider key.
+- At most 62 days per pull, 50 records per page and 40 pages per invoice type and for orders; larger results fail with an explicit "choose a shorter period" message.
+- Errors shown to users are fixed Indonesian messages; provider URLs, credential-bearing paths and raw provider errors are never logged, rendered or rethrown.
+- Evidence of each pull is the `provider_settlement_pulls` row itself (actor, period, counts), shown as "Tarikan terakhir" in Keuangan.
+
+### Pre-claim payload rejection (T-152 follow-up, 2026-09-16)
+
+When `buildMengantarOrderPayload` refuses a batch (missing COD total, unverified destination area, unconvertible weight), the batch is **not** claimed and nothing reaches the provider. The orchestrator emits the same lifecycle event shape as other failures with `outcome: "failure"`, `safeProviderStatus: "NOT_CALLED"`, `retryResult: "rejected"`, `queueResult: "not_applicable"` and the `payloadRejectionCode`, so a rejection is visible in telemetry instead of surfacing as an unhandled Server Action error. Sibling batches in the same run are still attempted; the refused batch stays `SUBMISSION_QUEUED` and resumable.

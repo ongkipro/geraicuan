@@ -16,7 +16,6 @@ export default function AnalyticsLoading() {
       aria-busy="true"
       aria-label="Memuat analitik"
       role="status"
-      width="wide"
     >
       <PageHeader eyebrow="Wawasan"
         description="Menyiapkan ringkasan, perbandingan periode, tren, dan daftar kiriman."

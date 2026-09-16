@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -25,7 +26,9 @@ describe("tenant CMS shell contract", () => {
       (item) => item.label,
     );
 
-    expect(operatorLabels).toEqual(["Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Kontak"]);
+    expect(operatorLabels).toEqual([
+      "Dasbor", "Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Kontak", "Cek resi", "Cek tarif",
+    ]);
     expect(operatorLabels).not.toContain("Analitik");
     expect(operatorLabels).not.toContain("Pengaturan");
     expect(operatorLabels).not.toContain("Anggota & akses");
@@ -36,19 +39,21 @@ describe("tenant CMS shell contract", () => {
 
   it.each([
     ["/app", "Dasbor"],
-    ["/app/impor", "Histori kiriman"],
+    ["/app/impor", "Impor CSV"],
     ["/app/pengiriman", "Histori kiriman"],
     ["/app/pengiriman/baru", "Buat kiriman"],
     ["/app/pengiriman/3b4f", "Histori kiriman"],
     ["/app/pengiriman/rts", "Retur (RTS)"],
-    ["/app/label", "Histori kiriman"],
-    ["/app/label/3b4f", "Histori kiriman"],
+    ["/app/label", "Cetak resi"],
+    ["/app/label/3b4f", "Cetak resi"],
     ["/app/analitik", "Analitik"],
     ["/app/kontak", "Kontak"],
     ["/app/kontak/baru", "Kontak"],
     ["/app/kontak/3b4f", "Kontak"],
     ["/app/pengaturan", "Pengaturan"],
     ["/app/anggota", "Pengaturan"],
+    ["/app/cek-resi", "Cek resi"],
+    ["/app/cek-tarif", "Cek tarif"],
   ])("marks exactly one current destination for %s", (pathname, label) => {
     const items = itemsFor("TENANT_ADMIN", pathname);
     const current = items.filter((item) => item.current);
@@ -57,13 +62,84 @@ describe("tenant CMS shell contract", () => {
     expect(current[0]?.label).toBe(label);
   });
 
-  it("uses the accepted navigation groups in task order", () => {
+  /**
+   * T-164 review: the resolver used to fall back to the dashboard key, so a page
+   * added to the app but never mapped into the menu would quietly mark Dasbor
+   * current while the operator stood somewhere else. The fallback is gone, which
+   * only helps if something enumerates the pages that actually exist.
+   */
+  it("resolves exactly one current destination for every /app page on disk", () => {
+    const routes: string[] = [];
+    const walk = (dir: string, url: string) => {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      if (entries.some((entry) => entry.isFile() && entry.name === "page.tsx")) routes.push(url);
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
+        // A route group `(name)` adds no URL segment, so walk through it rather
+        // than past it — skipping would hide every page inside one. A dynamic
+        // segment stands in for one real id; the menu resolves it by prefix.
+        const segment = entry.name.startsWith("(")
+          ? ""
+          : `/${entry.name.startsWith("[") ? "3b4f" : entry.name}`;
+        walk(join(dir, entry.name), url + segment);
+      }
+    };
+    walk(join(process.cwd(), "src/app/app"), "/app");
+
+    expect(routes.length, "pages found under src/app/app").toBeGreaterThan(10);
+    for (const route of routes) {
+      const current = itemsFor("TENANT_ADMIN", route).filter((item) => item.current);
+      expect(current.map((item) => item.label), `current rows for ${route}`).toHaveLength(1);
+    }
+  });
+
+  it("uses the accepted navigation groups in task order (PR-54)", () => {
     expect(
       tenantCmsNavigation("TENANT_ADMIN", "/app").map((group) => group.label),
-    ).toEqual(["Utama", "Pengiriman", "Pengelolaan"]);
+    ).toEqual(["Utama", "Pengiriman", "Data", "Cek", "Laporan", "Pengelolaan"]);
     expect(
       tenantCmsNavigation("OPERATOR", "/app").map((group) => group.label),
-    ).toEqual(["Utama", "Pengiriman"]);
+    ).toEqual(["Utama", "Pengiriman", "Data", "Cek"]);
+  });
+
+  it("promotes Impor CSV and Cetak resi into the Pengiriman group (PR-54)", () => {
+    const group = tenantCmsNavigation("TENANT_ADMIN", "/app").find(({ label }) => label === "Pengiriman");
+    expect(group?.items.map((item) => [item.key, item.label, item.href])).toEqual([
+      ["shipment-new", "Buat kiriman", "/app/pengiriman/baru"],
+      ["import", "Impor CSV", "/app/impor"],
+      ["shipments", "Histori kiriman", "/app/pengiriman"],
+      ["rts", "Retur (RTS)", "/app/pengiriman/rts"],
+      ["print-label", "Cetak resi", "/app/label"],
+    ]);
+  });
+
+  it("moves Kontak into its own Data group and gathers the three reports under Laporan (PR-54, PR-55)", () => {
+    const groups = tenantCmsNavigation("TENANT_ADMIN", "/app");
+    expect(groups.find(({ label }) => label === "Data")?.items.map((item) => item.label)).toEqual(["Kontak"]);
+    // T-165 and T-166 joined Analitik here; every one of the three is a Tenant
+    // Admin record, so an operator sees no Laporan group at all.
+    expect(groups.find(({ label }) => label === "Laporan")?.items.map((item) => [item.key, item.label, item.href])).toEqual([
+      ["analytics", "Analitik", "/app/analitik"],
+      ["shipment-report", "Laporan pengiriman", "/app/laporan/pengiriman"],
+      ["print-history-report", "Riwayat cetak resi", "/app/laporan/cetak-resi"],
+    ]);
+    expect(
+      tenantCmsNavigation("OPERATOR", "/app").map((group) => group.label),
+    ).not.toContain("Laporan");
+
+    const navigationLibSource = readFileSync("src/lib/cms-shell-navigation.ts", "utf8");
+    expect(navigationLibSource).toContain("T-165");
+    expect(navigationLibSource).toContain("T-166");
+  });
+
+  it("keeps the Cek group available to both roles with its lookup destinations (PR-51)", () => {
+    for (const role of ["TENANT_ADMIN", "OPERATOR"] as const) {
+      const group = tenantCmsNavigation(role, "/app").find(({ label }) => label === "Cek");
+      expect(group?.items.map((item) => [item.key, item.label, item.href])).toEqual([
+        ["tracking-lookup", "Cek resi", "/app/cek-resi"],
+        ["quick-rate", "Cek tarif", "/app/cek-tarif"],
+      ]);
+    }
   });
 
   it.each(["/app/analitik", "/app/keuangan", "/app/pengaturan", "/app/anggota"])(
@@ -75,13 +151,14 @@ describe("tenant CMS shell contract", () => {
     },
   );
 
-  it("falls back to one discoverable current destination for an unknown nested route", () => {
-    const current = itemsFor("OPERATOR", "/app/belum-dikenal").filter(
-      (item) => item.current,
-    );
-
-    expect(current).toHaveLength(1);
-    expect(current[0]?.label).toBe("Dasbor");
+  // Superseded by the on-disk sweep above. `aria-current="page"` on Dasbor while
+  // the operator stands on an unmapped route is a wrong answer, not a graceful
+  // one, and it is the same wrong answer this file already rejects for a route
+  // the role may not see. Nothing current is the honest state.
+  it("marks nothing current on a route the menu does not own", () => {
+    expect(
+      itemsFor("OPERATOR", "/app/belum-dikenal").filter((item) => item.current),
+    ).toEqual([]);
   });
 });
 
@@ -193,6 +270,48 @@ describe("responsive CMS navigation presentation", () => {
     expect(navigationSource).toContain("tooltip={railTooltip(item.label)}");
     expect(navigationSource).toContain('state === "collapsed" && !isMobile ? label : undefined');
     expect(navigationSource).toContain('className="max-md:min-h-11"');
+  });
+
+  it("gives every non-Utama group its own label glyph and drops the Cek Tarif header button (PR-51, PR-54)", () => {
+    const headerToolsSource = readFileSync(
+      "src/app/_components/cms-header-tools.tsx",
+      "utf8",
+    );
+    expect(navigationSource).toContain("Pengiriman: Package,");
+    expect(navigationSource).toContain("Data: ContactRound,");
+    expect(navigationSource).toContain("Cek: ScanSearch,");
+    expect(navigationSource).toContain("Laporan: BarChart3,");
+    expect(navigationSource).toContain("Pengelolaan: Settings2,");
+    expect(navigationSource).toContain('"tracking-lookup": PackageSearch');
+    expect(navigationSource).toContain('"quick-rate": Calculator');
+    expect(navigationSource).toContain("const GroupIcon = navigationGroupIcons[group.label] ?? FileText;");
+    // The header keeps only the command palette; Cek tarif is reached from the sidebar group.
+    expect(headerToolsSource).not.toContain("CmsQuickRateLink");
+    expect(headerToolsSource).not.toContain("/app/cek-tarif");
+    expect(shellSource).not.toContain("CmsQuickRateLink");
+    // The palette lists the same destinations as the sidebar, so Cek resi and Cek tarif are searchable.
+    expect(headerToolsSource).toContain("tenantCmsNavigation(props.role, pathname)");
+  });
+
+  it("splits the collapsible group disclosure row: a plain heading label plus a separate chevron button (PR-54)", () => {
+    // The item <a> keeps its own shape untouched — this is what keeps
+    // "no data-state on a nav link" true even once groups collapse.
+    expect(navigationSource).toContain('aria-current={item.current ? "page" : undefined}');
+    expect(navigationSource).toContain("<CollapsibleTrigger asChild>");
+    expect(navigationSource).toContain("aria-expanded={open}");
+    expect(navigationSource).toContain("aria-controls={contentId}");
+    // The group's own text label is a separate, non-interactive span — the
+    // chevron button never wraps it.
+    expect(navigationSource).toContain("<span className=\"flex-1 truncate\">{group.label}</span>");
+  });
+
+  it("persists group open/closed state in localStorage, forces the current-route group open, and falls back to a DropdownMenu flyout on the icon rail (PR-54)", () => {
+    expect(navigationSource).toContain("GROUP_STATE_STORAGE_KEY");
+    expect(navigationSource).toContain("window.localStorage.getItem(GROUP_STATE_STORAGE_KEY)");
+    expect(navigationSource).toContain("window.localStorage.setItem(GROUP_STATE_STORAGE_KEY");
+    expect(navigationSource).toContain("groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? false)");
+    expect(navigationSource).toContain("const isRail = state === \"collapsed\" && !isMobile;");
+    expect(navigationSource).toContain("<DropdownMenu>");
   });
 
   it("keeps account and sign-out controls at least 44px tall", () => {

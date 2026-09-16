@@ -14,7 +14,7 @@ const input: ShipmentDraftInput = {
   declaredValueIdr: 150_000,
   destinationAreaId: "3171010",
   destinationAreaLabel: "Gambir, Jakarta Pusat",
-  isCod: false, cogsAmountIdr: null,
+  isCod: false,
   outletId: "00000000-0000-4000-8000-000000000111",
   packageContent: "Paket fixture",
   packageHeightCm: null,
@@ -22,6 +22,11 @@ const input: ShipmentDraftInput = {
   packageQuantity: 1,
   packageWeightGrams: 500,
   packageWidthCm: null,
+  pickupAddressId: null,
+  destinationAreaVerified: true,
+  isHazardous: false,
+  recipientAddressLandmark: null,
+  shippingInstruction: null,
   recipientAddress: "Alamat penerima fixture",
   recipientName: "Penerima fixture",
   recipientPhone: "081234567890",
@@ -84,7 +89,11 @@ describe("bulk import confirmation envelope", () => {
   it("rejects tampering, expiry, and missing signing configuration", () => {
     const token = createBulkImportEnvelope(context, submissionId, 2, input, "Gambir Jakarta Pusat", 1_000);
     const parts = token.split(".");
-    parts[2] = `${parts[2]!.slice(0, -1)}${parts[2]!.endsWith("A") ? "B" : "A"}`;
+    // The last base64url character of a 32-byte signature carries two padding
+    // bits, so swapping it can decode to the same bytes and leave the envelope
+    // valid — this guard passed by luck about fifteen runs in sixteen. Tamper
+    // the first character instead, where every bit is significant.
+    parts[2] = `${parts[2]!.startsWith("A") ? "B" : "A"}${parts[2]!.slice(1)}`;
     expect(() => verifyBulkImportEnvelope(parts.join("."), context, 2_000))
       .toThrow(BulkImportEnvelopeError);
     expect(() => verifyBulkImportEnvelope(token, context, 1_000 + 15 * 60 * 1_000 + 1))

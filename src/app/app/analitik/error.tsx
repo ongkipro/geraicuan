@@ -21,7 +21,7 @@ export default function AnalyticsError({ reset }: AnalyticsErrorProps) {
   useFocusTargetOnMount(HEADING_ID);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader eyebrow="Wawasan"
         description="Pantau aktivitas kiriman, performa kurir, dan rincian biaya."
         focusTargetId={HEADING_ID}

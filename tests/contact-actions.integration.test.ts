@@ -33,14 +33,17 @@ const mocks = vi.hoisted(() => ({
   },
   revalidated: [] as string[],
   searchRows: [] as Array<{
+    address: string | null;
+    addressCount: number;
     archivedAt: Date | null;
+    destinationAreaLabel: string | null;
     id: string;
     isRecipient: boolean;
     isSender: boolean;
     name: string;
     phone: string;
   }>,
-  searches: [] as Array<{ query: string; status: string }>,
+  searches: [] as Array<{ query: string; role: string; status: string }>,
   updateFailure: "" as "" | "unavailable",
   updated: [] as Array<{ contactId: string; input: unknown }>,
 }));
@@ -133,8 +136,8 @@ vi.mock("@/db/contact-repository", () => ({
   hasActiveContactAddressMutationTarget: vi.fn(async (_tx, _context, contactId) => (
     contactId !== mocks.crossTenantContactId
   )),
-  listContacts: vi.fn(async (_tx, _context, query, status) => {
-    mocks.searches.push({ query, status });
+  listContactDirectory: vi.fn(async (_tx, _context, input) => {
+    mocks.searches.push(input);
     return mocks.searchRows;
   }),
   updateContact: vi.fn(async (_tx, _context, contactId, input) => {
@@ -338,7 +341,10 @@ describe("contact Server Actions", () => {
   it("returns complete phones to an authorized tenant contact search", async () => {
     const rawPhone = "081234567890";
     mocks.searchRows.push({
+      address: "Jl. Arsip 1",
+      addressCount: 1,
       archivedAt: new Date("2026-09-01T00:00:00.000Z"),
+      destinationAreaLabel: "Gambir, Jakarta Pusat",
       id: CONTACT_ID,
       isRecipient: true,
       isSender: false,
@@ -349,11 +355,15 @@ describe("contact Server Actions", () => {
     const form = new FormData();
     form.set("q", "  Arsip  ");
     form.set("status", "archived");
+    form.set("peran", "penerima");
 
     const state = await searchContacts({ rows: [], searched: false }, form);
     expect(state).toEqual({
       rows: [{
+        address: "Jl. Arsip 1",
+        addressCount: 1,
         archived: true,
+        destinationAreaLabel: "Gambir, Jakarta Pusat",
         id: CONTACT_ID,
         isRecipient: true,
         isSender: false,
@@ -363,7 +373,7 @@ describe("contact Server Actions", () => {
       searched: true,
     });
     expect(JSON.stringify(state)).toContain(rawPhone);
-    expect(mocks.searches).toEqual([{ query: "Arsip", status: "archived" }]);
+    expect(mocks.searches).toEqual([{ query: "Arsip", role: "recipient", status: "archived" }]);
 
     const invalid = new FormData();
     invalid.set("q", "x");

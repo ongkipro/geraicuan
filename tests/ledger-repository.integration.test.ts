@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   appendLedgerAdjustment,
   listLedgerEntriesForShipment,
+  reconcileLedgerPeriod,
   recordLedgerReconciliation,
   summarizeLedger,
 } from "@/db/ledger-repository";
@@ -202,7 +203,7 @@ afterAll(async () => {
 });
 
 describe("immutable tenant operational ledger", () => {
-  it("appends issued COD components and keeps principal liability out of revenue", async () => {
+  it("appends issued COD components, books Mengantar's COD fee as its cost and keeps principal liability out of revenue", async () => {
     const order = await seedQueuedOrder(1, {
       isCod: true,
       shippingAmountIdr: 10000,
@@ -222,17 +223,21 @@ describe("immutable tenant operational ledger", () => {
       ["COD_PRINCIPAL_COLLECTABLE", "LIABILITY", 100000],
       ["MENGANTAR_SHIPPING_COST", "EXPENSE", 10000],
       ["MENGANTAR_INSURANCE_COST", "EXPENSE", 500],
-      ["GERAICUAN_COD_SERVICE_FEE_REVENUE", "REVENUE", 3300],
+      ["MENGANTAR_COD_FEE_COST", "EXPENSE", 3300],
       ["COD_SERVICE_FEE_VAT_PAYABLE", "LIABILITY", 363],
     ]));
     expect(entries).toHaveLength(5);
+    // T-178: Mengantar keeps the fee at settlement, so no issuance after the
+    // change books it — or anything else — as GeraiCUAN revenue.
+    expect(entries.filter((entry) =>
+      entry.entryType === "GERAICUAN_COD_SERVICE_FEE_REVENUE" || entry.financialClass === "REVENUE")).toEqual([]);
 
     const summary = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
       summarizeLedger(tx, context, { ...range, outletId: outletA }));
     expect(summary).toEqual({
       codPrincipalLiabilityIdr: 100000,
-      providerCostIdr: 10500,
-      revenueIdr: 3300,
+      providerCostIdr: 13800,
+      revenueIdr: 0,
       vatPayableIdr: 363,
       upstreamRecoveryPaymentIdr: 0,
     });
@@ -409,14 +414,14 @@ describe("immutable tenant operational ledger", () => {
         context,
         order.shipmentId,
       );
-      const revenue = shipmentEntries.find(
-        (entry) => entry.entryType === "GERAICUAN_COD_SERVICE_FEE_REVENUE",
+      const fee = shipmentEntries.find(
+        (entry) => entry.entryType === "MENGANTAR_COD_FEE_COST",
       );
-      if (!revenue) throw new Error("Expected fixture revenue entry.");
+      if (!fee) throw new Error("Expected fixture COD fee entry.");
       const adjustment = await appendLedgerAdjustment(
         tx,
         context,
-        revenue.id,
+        fee.id,
         randomUUID(),
       );
       const summary = await summarizeLedger(tx, context, {
@@ -439,10 +444,11 @@ describe("immutable tenant operational ledger", () => {
     });
     expect(result.adjustment).toMatchObject({
       entryType: "ADJUSTMENT",
-      financialClass: "REVENUE",
+      financialClass: "EXPENSE",
       amountIdr: -3300,
     });
     expect(result.summary.revenueIdr).toBe(0);
+    expect(result.summary.providerCostIdr).toBe(10000);
     expect(result.summary.codPrincipalLiabilityIdr).toBe(100000);
 
     const storedRun = await adminDb
@@ -458,5 +464,85 @@ describe("immutable tenant operational ledger", () => {
         ),
       );
     expect(storedRun).toHaveLength(1);
+  });
+  it("leaves a pre-change revenue entry untouched and reconciles both fee classifications exactly", async () => {
+    // A COD issuance ledgered before T-178: the shape every production entry
+    // posted before migration 0049 has. The application no longer writes it,
+    // so the historical row is written directly, as it once was.
+    const legacy = await seedQueuedOrder(5, { isCod: true, shippingAmountIdr: 10000, insuranceAmountIdr: null });
+    const resolvedAt = new Date("2099-03-10T02:00:00.000Z");
+    await adminPool.query(
+      "UPDATE provider_order_snapshots SET status = 'ISSUED', cnote_no = 'AWB-LEGACY', is_paid = true, resolved_at = $2 WHERE id = $1",
+      [legacy.orderId, resolvedAt],
+    );
+    await adminPool.query("UPDATE shipments SET status = 'ISSUED' WHERE id = $1", [legacy.shipmentId]);
+    const legacyEntries: [string, string, number][] = [
+      ["COD_PRINCIPAL_COLLECTABLE", "LIABILITY", 100000],
+      ["MENGANTAR_SHIPPING_COST", "EXPENSE", 10000],
+      ["GERAICUAN_COD_SERVICE_FEE_REVENUE", "REVENUE", 3300],
+      ["COD_SERVICE_FEE_VAT_PAYABLE", "LIABILITY", 363],
+    ];
+    for (const [entryType, financialClass, amountIdr] of legacyEntries) {
+      await adminPool.query(
+        `INSERT INTO ledger_entries (
+          tenant_id, outlet_id, shipment_id, provider_batch_id, provider_order_snapshot_id,
+          entry_type, financial_class, amount_idr, currency, effective_at,
+          source_event, source_event_id, actor_type, actor_user_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'IDR', $9, 'PROVIDER_ORDER_ISSUED', $11, 'USER', $10)`,
+        [tenantA, outletA, legacy.shipmentId, legacy.batchId, legacy.orderId, entryType, financialClass, amountIdr, resolvedAt, userA, legacy.orderId],
+      );
+    }
+    const snapshotLegacy = async () => (await adminPool.query(
+      "SELECT row_to_json(entry)::text AS row FROM ledger_entries entry WHERE entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE' ORDER BY id",
+    )).rows.map((row: { row: string }) => row.row);
+    const legacyBefore = await snapshotLegacy();
+    expect(legacyBefore).toHaveLength(1);
+
+    // A COD issuance after the change, in the same period, through the real path.
+    const current = await seedQueuedOrder(6, { isCod: true, shippingAmountIdr: 10000, insuranceAmountIdr: null });
+    await issueOrder(current);
+    const periodStart = new Date("2000-01-01T00:00:00.000Z");
+    const periodEnd = new Date("2100-01-01T00:00:00.000Z");
+
+    const reconciled = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
+      reconcileLedgerPeriod(tx, context, {
+        outletId: outletA,
+        cadence: "MONTHLY",
+        periodStart,
+        periodEnd,
+        attemptId: randomUUID(),
+      }));
+    const byType = new Map(reconciled.reconciliations.map(({ run }) => [run.reconciledEntryType, run]));
+    expect(byType.get("GERAICUAN_COD_SERVICE_FEE_REVENUE")).toMatchObject({
+      sourceTotalIdr: 3300, ledgerTotalIdr: 3300, varianceIdr: 0, status: "MATCHED",
+    });
+    expect(byType.get("MENGANTAR_COD_FEE_COST")).toMatchObject({
+      sourceTotalIdr: 3300, ledgerTotalIdr: 3300, varianceIdr: 0, status: "MATCHED",
+    });
+    expect(byType.get("COD_SERVICE_FEE_VAT_PAYABLE")).toMatchObject({ sourceTotalIdr: 726, ledgerTotalIdr: 726, status: "MATCHED" });
+
+    const summary = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
+      summarizeLedger(tx, context, { ...range, outletId: outletA }));
+    // The historical fee stays where it was booked; the new one is a provider cost. Neither is lost or counted twice.
+    expect(summary).toMatchObject({ revenueIdr: 3300, providerCostIdr: 10000 + 10000 + 3300 });
+
+    // The historical row is byte-for-byte what was written, and the append-only
+    // guarantee still refuses to change or remove it — for the owner and the runtime role.
+    expect(await snapshotLegacy()).toEqual(legacyBefore);
+    const [legacyRow] = await adminDb.select().from(schema.ledgerEntries)
+      .where(eq(schema.ledgerEntries.entryType, "GERAICUAN_COD_SERVICE_FEE_REVENUE"));
+    await expect(adminPool.query(
+      "UPDATE ledger_entries SET entry_type = 'MENGANTAR_COD_FEE_COST', financial_class = 'EXPENSE' WHERE id = $1",
+      [legacyRow.id],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(adminPool.query("DELETE FROM ledger_entries WHERE id = $1", [legacyRow.id]))
+      .rejects.toMatchObject({ code: "55000" });
+    await expect(withTenantContext(appDb, userA, tenantA, (tx) =>
+      tx.update(schema.ledgerEntries).set({ amountIdr: 0 }).where(eq(schema.ledgerEntries.id, legacyRow.id))))
+      .rejects.toMatchObject({ cause: { code: "42501" } });
+    await expect(withTenantContext(appDb, userA, tenantA, (tx) =>
+      tx.delete(schema.ledgerEntries).where(eq(schema.ledgerEntries.id, legacyRow.id))))
+      .rejects.toMatchObject({ cause: { code: "42501" } });
+    expect(await snapshotLegacy()).toEqual(legacyBefore);
   });
 });

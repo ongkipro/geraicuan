@@ -1,0 +1,26 @@
+{
+  "contract": "GET /api/public/{key}/order — COD construction and settlement identities, as counts of orders each holds for. No amount, no identity, no credential.",
+  "capturedAt": "2026-09-16",
+  "host": "api-public.mengantar.com",
+  "codOrdersInspected": 100,
+  "holds": {
+    "codFeeIsExactly333BasisPointsOfCodAmount": 100,
+    "storedEstimatedPriceIsPricePlusCodFee": 100,
+    "codAmountEqualsGoodsAmount": 100,
+    "codAmountEqualsGoodsPlusPrice": 0
+  },
+  "settlement": {
+    "reconciliationInvoices": 600,
+    "codSubItems": 2866,
+    "settledAmountIsCodMinusSpecialPrice": 2866,
+    "settledAmountIsCodMinusSpecialPriceMinusFee": 0,
+    "codFeeIsExactly333BasisPointsOfCodAmount": 2866,
+    "joinedToAnOrder": 1643,
+    "specialPriceMinusFeeWithinZeroAndNormalPrice": 1642,
+    "specialPriceBelowItsOwnFee": 1,
+    "specialPriceEqualsPlainNormalPrice": 0,
+    "subItemsWithFractionalAmount": 1016,
+    "invoicesThePullCannotParse": 202
+  },
+  "estimateEndpointCodFee": "GET /order/estimate returns codFee: 0 for every service at cod_amount 0, 100000, 500000 and 1000000 (2026-09-16), so the fee is only observable on a stored order."
+}

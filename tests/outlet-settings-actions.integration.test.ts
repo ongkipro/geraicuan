@@ -16,10 +16,12 @@ const errors = vi.hoisted(() => ({
     class ManagedMengantarSecretUnavailableError extends Error {},
   MengantarConfigurationError: class MengantarConfigurationError extends Error {},
   MengantarLocationError: class MengantarLocationError extends Error {},
-  OutletConnectionModeUnavailableError:
-    class OutletConnectionModeUnavailableError extends Error {},
-  OutletSettingsDeniedError: class OutletSettingsDeniedError extends Error {},
-  OutletSettingsInvalidError: class OutletSettingsInvalidError extends Error {},
+  PickupPointDefaultRequiredError: class PickupPointDefaultRequiredError extends Error {},
+  PickupPointDeniedError: class PickupPointDeniedError extends Error {},
+  PickupPointInUseError: class PickupPointInUseError extends Error {},
+  PickupPointInvalidError: class PickupPointInvalidError extends Error {},
+  PickupPointUnavailableError: class PickupPointUnavailableError extends Error {},
+  TenantContextDeniedError: class TenantContextDeniedError extends Error {},
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -29,7 +31,8 @@ const mocks = vi.hoisted(() => ({
   credentialReads: 0,
   credentialWrites: 0,
   contextCalls: 0,
-  failure: "" as "" | "connection" | "denied" | "generic" | "invalid",
+  pickupPointFailure: "" as "" | "default-required" | "denied" | "generic" | "invalid" | "unavailable",
+  pickupPointWrites: [] as Array<Record<string, unknown>>,
   platformDefaultIncomplete: false,
   pickupFailure: "" as "" | "configuration" | "generic" | "provider",
   pickupOptions: [{
@@ -46,7 +49,6 @@ const mocks = vi.hoisted(() => ({
   },
   revalidated: [] as string[],
   switches: 0,
-  updates: [] as Array<Record<string, string>>,
 }));
 
 vi.mock("next/cache", () => ({
@@ -66,6 +68,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/db/client", () => ({ db: {} }));
 
 vi.mock("@/db/tenant-context", () => ({
+  TenantContextDeniedError: errors.TenantContextDeniedError,
   withTenantContext: vi.fn(async (_db, userId, tenantId, callback) => {
     mocks.contextCalls += 1;
     return callback({}, { role: mocks.principal.role, tenantId, userId });
@@ -80,20 +83,37 @@ vi.mock("@/lib/cms-auth", () => ({
   }),
 }));
 
-vi.mock("@/db/outlet-readiness-repository", () => ({
-  OutletConnectionModeUnavailableError: errors.OutletConnectionModeUnavailableError,
-  OutletSettingsDeniedError: errors.OutletSettingsDeniedError,
-  OutletSettingsInvalidError: errors.OutletSettingsInvalidError,
-  updateOutletReadiness: vi.fn(async (_tx, _context, input) => {
-    mocks.updates.push(input);
-    if (mocks.failure === "connection") {
-      throw new errors.OutletConnectionModeUnavailableError();
-    }
-    if (mocks.failure === "denied") throw new errors.OutletSettingsDeniedError();
-    if (mocks.failure === "invalid") throw new errors.OutletSettingsInvalidError();
-    if (mocks.failure === "generic") {
-      throw new Error(`database failure ${SECRET_SENTINEL}`);
-    }
+function throwPickupPointFailure() {
+  if (mocks.pickupPointFailure === "unavailable") {
+    throw new errors.PickupPointUnavailableError();
+  }
+  if (mocks.pickupPointFailure === "default-required") {
+    throw new errors.PickupPointDefaultRequiredError();
+  }
+  if (mocks.pickupPointFailure === "denied") throw new errors.PickupPointDeniedError();
+  if (mocks.pickupPointFailure === "invalid") throw new errors.PickupPointInvalidError();
+  if (mocks.pickupPointFailure === "generic") {
+    throw new Error(`database failure ${SECRET_SENTINEL}`);
+  }
+}
+
+vi.mock("@/db/outlet-pickup-point-repository", () => ({
+  PickupPointDefaultRequiredError: errors.PickupPointDefaultRequiredError,
+  PickupPointDeniedError: errors.PickupPointDeniedError,
+  PickupPointInUseError: errors.PickupPointInUseError,
+  PickupPointInvalidError: errors.PickupPointInvalidError,
+  PickupPointUnavailableError: errors.PickupPointUnavailableError,
+  addOutletPickupPoint: vi.fn(async (_tx, _context, input) => {
+    throwPickupPointFailure();
+    mocks.pickupPointWrites.push({ op: "add", ...input });
+  }),
+  setDefaultOutletPickupPoint: vi.fn(async (_tx, _context, outletId, pickupAddressId) => {
+    throwPickupPointFailure();
+    mocks.pickupPointWrites.push({ op: "default", outletId, pickupAddressId });
+  }),
+  removeOutletPickupPoint: vi.fn(async (_tx, _context, outletId, pickupAddressId) => {
+    throwPickupPointFailure();
+    mocks.pickupPointWrites.push({ op: "remove", outletId, pickupAddressId });
   }),
 }));
 
@@ -188,11 +208,10 @@ vi.mock("@/lib/mengantar-locations", () => ({
   }),
 }));
 
-function validForm() {
+function pickupForm() {
   const form = new FormData();
   form.set("outletId", OUTLET_ID);
-  form.set("defaultPickupAddressId", "pickup-safe-preserved");
-  form.set("connectionMode", "platform_default");
+  form.set("pickupAddressId", "pickup-safe-preserved");
   return form;
 }
 
@@ -203,7 +222,8 @@ beforeEach(() => {
   mocks.credentialReads = 0;
   mocks.credentialWrites = 0;
   mocks.contextCalls = 0;
-  mocks.failure = "";
+  mocks.pickupPointFailure = "";
+  mocks.pickupPointWrites.length = 0;
   mocks.platformDefaultIncomplete = false;
   mocks.pickupFailure = "";
   mocks.pickupOptions = [{
@@ -220,10 +240,9 @@ beforeEach(() => {
   };
   mocks.revalidated.length = 0;
   mocks.switches = 0;
-  mocks.updates.length = 0;
 });
 
-describe("Outlet settings Server Action", () => {
+describe("PR-46/PR-47 pickup point Server Actions", () => {
   it("authenticates before reading FormData or entering tenant context", async () => {
     mocks.authorizationDenied = true;
     const unreadable = {
@@ -231,175 +250,161 @@ describe("Outlet settings Server Action", () => {
         throw new Error("FORM_READ_BEFORE_AUTHORIZATION");
       }),
     } as unknown as FormData;
-    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
+    const { addOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
 
-    await expect(saveOutletSettings({}, unreadable)).rejects.toThrow(
-      "REDIRECT:/login/tenant",
-    );
-    expect(unreadable.get).not.toHaveBeenCalled();
+    await expect(addOutletPickupPoint({}, unreadable)).rejects.toThrow("REDIRECT:/login/tenant");
     expect(mocks.contextCalls).toBe(0);
+    expect(mocks.pickupPointWrites).toEqual([]);
   });
 
   it.each([
     ["OPERATOR", "tenant", "/app"],
     ["TENANT_ADMIN", "platform", "/login/tenant"],
-  ] as const)(
-    "redirects a %s/%s principal before reading settings input",
-    async (role, scope, destination) => {
-      mocks.principal.role = role;
-      mocks.principal.scope = scope;
-      const unreadable = {
-        get: vi.fn(() => {
-          throw new Error("FORM_READ_BEFORE_ROLE_CHECK");
-        }),
-      } as unknown as FormData;
-      const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
+  ] as const)("redirects a %s/%s principal before writing", async (role, scope, destination) => {
+    mocks.principal.role = role;
+    mocks.principal.scope = scope;
+    const { addOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
 
-      await expect(saveOutletSettings({}, unreadable)).rejects.toThrow(
-        `REDIRECT:${destination}`,
-      );
-      expect(unreadable.get).not.toHaveBeenCalled();
-      expect(mocks.contextCalls).toBe(0);
-    },
-  );
-
-  it("returns field errors and preserves only the safe submitted values before data access", async () => {
-    const form = validForm();
-    form.set("defaultPickupAddressId", "   ");
-    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
-
-    const state = await saveOutletSettings({}, form);
-
-    expect(state).toMatchObject({
-      errors: { defaultPickupAddressId: expect.any(String) },
-      values: {
-        connectionMode: "platform_default",
-        defaultPickupAddressId: "",
-      },
-    });
-    expect(state).toHaveProperty("resultToken", expect.any(String));
-    expect(JSON.stringify(state)).not.toContain(SECRET_SENTINEL);
-    expect(mocks.contextCalls).toBe(0);
-    expect(mocks.updates).toEqual([]);
+    await expect(addOutletPickupPoint({}, pickupForm())).rejects.toThrow(`REDIRECT:${destination}`);
+    expect(mocks.pickupPointWrites).toEqual([]);
   });
 
-  it("rejects a pickup that is not in the current account response", async () => {
-    const form = validForm();
-    form.set("defaultPickupAddressId", "pickup-forged");
-    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
+  it("stores the provider's own label and origin area, never the browser's", async () => {
+    const { addOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+    const form = pickupForm();
+    // A forged label/origin in the submission must not survive: only the id is read.
+    form.set("pickupAddressLabel", "Gudang Palsu");
+    form.set("originAreaLabel", "Area Palsu");
 
-    const state = await saveOutletSettings({}, form);
-
-    expect(state).toMatchObject({
-      errors: { defaultPickupAddressId: expect.any(String) },
-    });
-    expect(state).not.toHaveProperty("success", true);
-    expect(mocks.updates).toEqual([]);
-    expect(mocks.revalidated).toEqual([]);
-  });
-
-  it.each(["configuration", "provider", "generic"] as const)(
-    "keeps the stored location unchanged on a %s pickup lookup failure",
-    async (failure) => {
-      mocks.pickupFailure = failure;
-      const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
-
-      const state = await saveOutletSettings({}, validForm());
-
-      expect(state).toMatchObject({ message: expect.any(String) });
-      expect(state).not.toHaveProperty("success", true);
-      expect(JSON.stringify(state)).not.toContain(SECRET_SENTINEL);
-      expect(mocks.updates).toEqual([]);
-      expect(mocks.revalidated).toEqual([]);
-    },
-  );
-
-  it.each([
-    ["outletId", "not-a-uuid"],
-    ["defaultPickupAddressId", "x".repeat(161)],
-    ["connectionMode", "browser-forged-mode"],
-  ])("rejects invalid %s without entering tenant context", async (field, value) => {
-    const form = validForm();
-    form.set(field, value);
-    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
-
-    const state = await saveOutletSettings({}, form);
-
-    expect(state.errors).toHaveProperty(field);
-    expect(mocks.contextCalls).toBe(0);
-    expect(mocks.updates).toEqual([]);
-  });
-
-  it("returns the connection error with preserved safe values and no revalidation", async () => {
-    mocks.failure = "connection";
-    const form = validForm();
-    form.set("connectionMode", "private");
-    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
-
-    const state = await saveOutletSettings({}, form);
-
-    expect(state).toMatchObject({
-      errors: { connectionMode: expect.any(String) },
-      values: {
-        connectionMode: "private",
-        defaultPickupAddressId: "pickup-safe-preserved",
-      },
-    });
-    expect(state).toHaveProperty("resultToken", expect.any(String));
-    expect(mocks.revalidated).toEqual([]);
-  });
-
-  it.each(["denied", "invalid", "generic"] as const)(
-    "maps a %s repository failure to one sanitized retryable state",
-    async (failure) => {
-      mocks.failure = failure;
-      const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
-
-      const state = await saveOutletSettings({}, validForm());
-      const serialized = JSON.stringify(state);
-
-      expect(state).toMatchObject({ message: expect.any(String) });
-      expect(state).not.toHaveProperty("success", true);
-      expect(state).toHaveProperty("resultToken", expect.any(String));
-      expect(state).toHaveProperty("values.defaultPickupAddressId", "pickup-safe-preserved");
-      expect(serialized).not.toContain(SECRET_SENTINEL);
-      expect(serialized).not.toContain("database failure");
-      expect(mocks.revalidated).toEqual([]);
-    },
-  );
-
-  it("saves normalized input and revalidates settings plus dashboard readiness", async () => {
-    const form = validForm();
-    mocks.pickupOptions = [{
-      originAreaId: "origin-canonical",
-      originLabel: "Coblong, Kota Bandung, Jawa Barat",
-      pickupAddressId: "pickup-normalized",
-      pickupLabel: "Gudang canonical, Jalan Contoh 2",
-    }];
-    form.set("defaultPickupAddressId", " pickup-normalized ");
-    form.set("defaultOriginAreaId", "browser-forged-origin");
-    const { saveOutletSettings } = await import("@/app/app/pengaturan/actions");
-
-    const state = await saveOutletSettings({}, form);
+    const state = await addOutletPickupPoint({}, form);
 
     expect(state).toMatchObject({ success: true, message: expect.any(String) });
-    expect(mocks.updates).toEqual([{
-      connectionMode: "platform_default",
-      defaultOriginAreaId: "origin-canonical",
-      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
-      defaultPickupAddressId: "pickup-normalized",
-      defaultPickupAddressLabel: "Gudang canonical, Jalan Contoh 2",
-      expectedConnectionUpdatedAt: null,
+    expect(mocks.pickupPointWrites).toEqual([{
+      op: "add",
       outletId: OUTLET_ID,
+      originAreaId: "origin-safe-canonical",
+      originAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
+      pickupAddressId: "pickup-safe-preserved",
+      pickupAddressLabel: "Gudang utama, Jalan Contoh 1",
     }]);
     expect(mocks.revalidated).toEqual([
-      "/app/pengaturan",
+      "/app/pengaturan/outlet",
+      "/app/pengaturan/pickup",
+      "/app/pengaturan/koneksi",
       "/app",
       "/app/pengiriman/baru",
       "/app/impor",
+      "/app/cek-tarif",
     ]);
   });
+
+  it("refuses an address the provider no longer lists, and writes nothing", async () => {
+    mocks.pickupOptions = [{
+      originAreaId: "origin-other",
+      originLabel: "Sukajadi, Kota Bandung, Jawa Barat",
+      pickupAddressId: "pickup-other",
+      pickupLabel: "Gudang lain, Jalan Contoh 9",
+    }];
+    const { addOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+
+    const state = await addOutletPickupPoint({}, pickupForm());
+
+    expect(state.success).toBeUndefined();
+    expect(state.errors?.pickupAddressId).toMatch(/Pilihan sudah berubah di Mengantar/);
+    expect(mocks.pickupPointWrites).toEqual([]);
+    expect(mocks.revalidated).toEqual([]);
+  });
+
+  it.each([
+    ["configuration", /belum dapat diverifikasi ke Mengantar/],
+    ["provider", /belum dapat diverifikasi ke Mengantar/],
+    ["generic", /belum dapat diverifikasi\. Coba lagi/],
+  ] as const)("keeps the saved list unchanged when the provider check fails (%s)", async (failure, message) => {
+    mocks.pickupFailure = failure;
+    const { addOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+
+    const state = await addOutletPickupPoint({}, pickupForm());
+
+    expect(state.message).toMatch(message);
+    expect(JSON.stringify(state)).not.toContain(SECRET_SENTINEL);
+    expect(mocks.pickupPointWrites).toEqual([]);
+    expect(mocks.revalidated).toEqual([]);
+  });
+
+  it("rejects a malformed outlet or a missing address before any provider call", async () => {
+    const { addOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+    const form = new FormData();
+    form.set("outletId", "not-a-uuid");
+    form.set("pickupAddressId", "");
+
+    const state = await addOutletPickupPoint({}, form);
+
+    expect(state.errors).toMatchObject({
+      outletId: expect.any(String),
+      pickupAddressId: expect.any(String),
+    });
+    expect(mocks.contextCalls).toBe(0);
+    expect(mocks.pickupPointWrites).toEqual([]);
+  });
+
+  it("promotes another pickup point as the outlet default", async () => {
+    const { setDefaultOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+
+    const state = await setDefaultOutletPickupPoint({}, pickupForm());
+
+    expect(state).toMatchObject({ success: true });
+    expect(mocks.pickupPointWrites).toEqual([
+      { op: "default", outletId: OUTLET_ID, pickupAddressId: "pickup-safe-preserved" },
+    ]);
+    expect(mocks.revalidated).toContain("/app/pengiriman/baru");
+  });
+
+  it("removes a pickup point only behind its confirmation", async () => {
+    const { removeOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+
+    const unconfirmed = await removeOutletPickupPoint({}, pickupForm());
+    expect(unconfirmed.errors?.confirmation).toEqual(expect.any(String));
+    expect(mocks.pickupPointWrites).toEqual([]);
+
+    const form = pickupForm();
+    form.set("confirmation", "remove-pickup-point");
+    const confirmed = await removeOutletPickupPoint({}, form);
+
+    expect(confirmed).toMatchObject({ success: true });
+    expect(mocks.pickupPointWrites).toEqual([
+      { op: "remove", outletId: OUTLET_ID, pickupAddressId: "pickup-safe-preserved" },
+    ]);
+  });
+
+  it("explains a refused removal of the default without leaking the error", async () => {
+    mocks.pickupPointFailure = "default-required";
+    const { removeOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+    const form = pickupForm();
+    form.set("confirmation", "remove-pickup-point");
+
+    const state = await removeOutletPickupPoint({}, form);
+
+    expect(state.success).toBeUndefined();
+    expect(state.message).toMatch(/Tetapkan titik pickup lain sebagai utama/);
+    expect(mocks.revalidated).toEqual([]);
+  });
+
+  it.each([
+    ["unavailable", /bukan milik outlet ini/],
+    ["denied", /tidak dapat diubah/],
+    ["generic", /belum dapat diubah\. Coba lagi/],
+  ] as const)("maps a %s repository refusal to safe copy", async (failure, message) => {
+    mocks.pickupPointFailure = failure;
+    const { setDefaultOutletPickupPoint } = await import("@/app/app/pengaturan/actions");
+
+    const state = await setDefaultOutletPickupPoint({}, pickupForm());
+
+    expect(state.message).toMatch(message);
+    expect(JSON.stringify(state)).not.toContain(SECRET_SENTINEL);
+    expect(mocks.revalidated).toEqual([]);
+  });
 });
+
 
 describe("Mengantar pickup option Server Action", () => {
   it("authenticates before resolving provider account data", async () => {
@@ -533,10 +538,13 @@ describe("Mengantar credential Server Actions", () => {
     expect(mocks.authorizationCalls).toBe(1);
     expect(mocks.contextCalls).toBe(2);
     expect(mocks.revalidated).toEqual([
-      "/app/pengaturan",
+      "/app/pengaturan/outlet",
+      "/app/pengaturan/pickup",
+      "/app/pengaturan/koneksi",
       "/app",
       "/app/pengiriman/baru",
       "/app/impor",
+      "/app/cek-tarif",
     ]);
   });
 
@@ -613,10 +621,13 @@ describe("Mengantar credential Server Actions", () => {
     expect(success).toMatchObject({ success: true, message: expect.any(String) });
     expect(mocks.switches).toBe(1);
     expect(mocks.revalidated).toEqual([
-      "/app/pengaturan",
+      "/app/pengaturan/outlet",
+      "/app/pengaturan/pickup",
+      "/app/pengaturan/koneksi",
       "/app",
       "/app/pengiriman/baru",
       "/app/impor",
+      "/app/cek-tarif",
     ]);
   });
 });

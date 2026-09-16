@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { platformCmsNavigation, tenantCmsSearchNavigation, type TenantCmsRole } from "@/lib/cms-shell-navigation";
+import { platformCmsNavigation, tenantCmsNavigation, type TenantCmsRole } from "@/lib/cms-shell-navigation";
 
 type SearchProps = { scope: "tenant"; role: TenantCmsRole } | { scope: "platform" };
 
@@ -20,7 +20,7 @@ export function CmsHeaderSearch(props: SearchProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const groups = props.scope === "platform"
     ? platformCmsNavigation(pathname)
-    : tenantCmsSearchNavigation(props.role, pathname);
+    : tenantCmsNavigation(props.role, pathname);
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -101,10 +101,4 @@ export function CmsHeaderClock({ compact = false }: { compact?: boolean }) {
       <span className="font-medium">{now ? timeFormatter.format(now) : "--:--:--"} <span className="font-normal text-muted-foreground">GMT+7</span></span>
     </time>
   );
-}
-
-
-export function CmsQuickRateLink() {
-  const current = usePathname() === "/app/cek-tarif";
-  return <Button asChild className="min-h-11 shrink-0" variant={current ? "secondary" : "outline"}><Link aria-current={current ? "page" : undefined} href="/app/cek-tarif" prefetch={false}><Calculator aria-hidden="true" />Cek Tarif</Link></Button>;
 }

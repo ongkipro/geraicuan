@@ -19,6 +19,9 @@ type NavigationDefinition = Omit<CmsNavigationItem, "current"> & {
   roles?: readonly TenantCmsRole[];
 };
 
+// PR-54: the accepted CMS navigation groups (2026-09-16). Every authenticated
+// destination is reachable from one grouped menu, so nothing is reachable
+// only from a header button or another page's link.
 const navigationGroups: readonly {
   label: string;
   items: readonly NavigationDefinition[];
@@ -44,6 +47,12 @@ const navigationGroups: readonly {
         shortLabel: "BK",
       },
       {
+        href: "/app/impor",
+        key: "import",
+        label: "Impor CSV",
+        shortLabel: "IM",
+      },
+      {
         href: "/app/pengiriman",
         key: "shipments",
         label: "Histori kiriman",
@@ -56,6 +65,17 @@ const navigationGroups: readonly {
         shortLabel: "RT",
       },
       {
+        href: "/app/label",
+        key: "print-label",
+        label: "Cetak resi",
+        shortLabel: "CL",
+      },
+    ],
+  },
+  {
+    label: "Data",
+    items: [
+      {
         href: "/app/kontak",
         key: "contacts",
         label: "Kontak",
@@ -64,7 +84,24 @@ const navigationGroups: readonly {
     ],
   },
   {
-    label: "Pengelolaan",
+    label: "Cek",
+    items: [
+      {
+        href: "/app/cek-resi",
+        key: "tracking-lookup",
+        label: "Cek resi",
+        shortLabel: "CR",
+      },
+      {
+        href: "/app/cek-tarif",
+        key: "quick-rate",
+        label: "Cek tarif",
+        shortLabel: "CT",
+      },
+    ],
+  },
+  {
+    label: "Laporan",
     items: [
       {
         href: "/app/analitik",
@@ -73,6 +110,27 @@ const navigationGroups: readonly {
         roles: ["TENANT_ADMIN"],
         shortLabel: "AN",
       },
+      // T-165 and T-166 (PR-55): both reports are a Tenant Admin record, so
+      // they carry the same role restriction Analitik already has.
+      {
+        href: "/app/laporan/pengiriman",
+        key: "shipment-report",
+        label: "Laporan pengiriman",
+        roles: ["TENANT_ADMIN"],
+        shortLabel: "LP",
+      },
+      {
+        href: "/app/laporan/cetak-resi",
+        key: "print-history-report",
+        label: "Riwayat cetak resi",
+        roles: ["TENANT_ADMIN"],
+        shortLabel: "RC",
+      },
+    ],
+  },
+  {
+    label: "Pengelolaan",
+    items: [
       {
         href: "/app/keuangan",
         key: "finance",
@@ -155,11 +213,8 @@ export function tenantCmsNavigation(
     }))
     .filter((group) => group.items.length > 0);
 
-  const contextualShipmentRoute =
-    pathname === "/app/impor" ||
-    pathname.startsWith("/app/impor/") ||
-    pathname === "/app/label" ||
-    pathname.startsWith("/app/label/");
+  // /app/anggota (member management) is reached from Pengaturan, not its own
+  // menu entry, so it resolves the Pengaturan destination as current.
   const navigationPath = pathname === "/app/anggota" || pathname.startsWith("/app/anggota/")
     ? "/app/pengaturan"
     : pathname;
@@ -167,11 +222,10 @@ export function tenantCmsNavigation(
     .flatMap((group) => group.items)
     .sort((a, b) => b.href.length - a.href.length)
     .find((item) => routeMatches(navigationPath, item.href));
-  const currentKey = pathname === "/app/cek-tarif" ? "quick-rate" : contextualShipmentRoute
-    ? "shipments"
-    : matchedDefinition?.key ?? "dashboard";
-
-  return resolveNavigation(visibleGroups, currentKey);
+  // No fallback destination: a route that is missing from the menu must resolve
+  // zero current rows so the route-by-route test names it, rather than quietly
+  // marking Dasbor current while the operator is somewhere else.
+  return resolveNavigation(visibleGroups, matchedDefinition?.key ?? "");
 }
 
 export function platformCmsNavigation(pathname: string): CmsNavigationGroup[] {
@@ -181,13 +235,4 @@ export function platformCmsNavigation(pathname: string): CmsNavigationGroup[] {
     "platform-overview";
 
   return resolveNavigation(platformNavigationGroups, currentKey);
-}
-
-
-/** Header-only tools share role navigation search without adding sidebar clutter. */
-export function tenantCmsSearchNavigation(role: TenantCmsRole, pathname: string): CmsNavigationGroup[] {
-  return [...tenantCmsNavigation(role, pathname), {
-    label: "Alat",
-    items: [{ current: pathname === "/app/cek-tarif", href: "/app/cek-tarif", key: "quick-rate", label: "Cek Tarif", shortLabel: "CT" }],
-  }];
 }

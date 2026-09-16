@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 export default function PlatformTenantNotFound() {
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader
         description="Tenant mungkin sudah dihapus, diarsipkan, atau tidak tersedia pada lingkup platform ini."
         eyebrow="Detail tenant"

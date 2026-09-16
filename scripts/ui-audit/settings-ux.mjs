@@ -12,6 +12,7 @@ mkdirSync(output, {recursive:true});
 const target = await open('about:blank'), s = await Session.attach(target.webSocketDebuggerUrl);
 const pause = ms => new Promise(resolve => setTimeout(resolve,ms));
 const results = [];
+const MENU_PROBE = `JSON.stringify((()=>{const nav=document.querySelector('nav[aria-label="Menu pengaturan"]');const visible=e=>{if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0};const rows=[...nav.querySelectorAll('a')];const back=[...document.querySelectorAll('a[aria-label="Kembali ke Pengaturan"]')].filter(visible);return {navVisible:visible(nav),labels:rows.map(a=>a.querySelectorAll('span span')[0]?.textContent),descriptionsVisible:rows.map(a=>visible(a.querySelectorAll('span span')[1])),chevronsVisible:rows.map(a=>visible(a.querySelector('svg.lucide-chevron-right'))),current:rows.filter(a=>a.getAttribute('aria-current')==='true').map(a=>a.getAttribute('href')),backLinks:back.length,rowHeights:rows.map(a=>a.getBoundingClientRect().height)}})())`;
 const keyboard = {};
 async function waitFor(expression) {
   for(let i=0;i<100;i++) { if(await s.evaluate(expression).catch(()=>false)) return; await pause(150); }
@@ -48,9 +49,11 @@ try {
   await s.evaluate(`(()=>{for(const[id,value]of[['email','tenant@geraicuan.com'],['password','admin123']]){const e=document.getElementById(id);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event('input',{bubbles:true}))}})()`);
   await pause(250);await s.evaluate(`document.querySelector('.auth-submit').click()`);await waitFor(`location.pathname==='/app'`);
   if(!process.argv.includes('--interactions-only')) for(const [name,scenario,route] of [
-    ['outlet-ready','settings-many','/app/pengaturan?outlet='+readyOutlet],
-    ['outlet-incomplete','settings-many','/app/pengaturan'],
-    ['outlet-provider-error','settings-provider-error','/app/pengaturan'],
+    ['outlet-ready','settings-many','/app/pengaturan/outlet?outlet='+readyOutlet],
+    ['outlet-incomplete','settings-many','/app/pengaturan/outlet'],
+    ['outlet-provider-error','settings-provider-error','/app/pengaturan/outlet'],
+    ['koneksi-ready','settings-connection-many','/app/pengaturan/koneksi?outlet='+readyOutlet],
+    ['koneksi-attention','settings-private-attention','/app/pengaturan/koneksi'],
     ['members','members-populated','/app/anggota'],
     ['members-inactive','members-inactive','/app/anggota'],
     ['members-last-admin','members-single-admin','/app/anggota'],
@@ -58,7 +61,8 @@ try {
     for(const width of [1440,768,390]) {
       await visit(scenario,route,width);
       const probe=JSON.parse(await s.evaluate(PROBE));
-      assert.equal(probe.overflow,0,`${name}/${width} overflow`);
+      // <= 0: a short settings page leaves `scrollbar-gutter: stable` room.
+      assert(probe.overflow<=0,`${name}/${width} overflow ${probe.overflow}`);
       assert.equal(probe.contrastFails,0,`${name}/${width} contrast`);
       assert.equal(probe.weakFocusRing,0,`${name}/${width} focus`);
       await s.evaluate(`window.scrollTo({top:0,behavior:'instant'})`);
@@ -66,35 +70,70 @@ try {
       results.push({name,width,probe});
     }
   }
-  await visit('settings-many','/app/pengaturan?outlet='+readyOutlet,390);
-  await s.evaluate(`document.getElementById('pickup-${readyOutlet}').click()`);
-  await waitFor(`document.querySelectorAll('[role=option]').length===12`);
-  // Record native key delivery separately from programmatic selection/focus.
-  const beforeOption=await s.evaluate(`document.querySelector('[role=option][data-selected=true]')?.id`);
+  // T-156: the PR-46 settings menu — full rows on the Profil toko index below
+  // lg, one back link on every other settings page, the left rail from lg.
+  for(const width of [1440,1024,390]) {
+    const railWidth = width>=1024;
+    await s.send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<768});
+    await s.send('Network.setExtraHTTPHeaders',{headers:{}});
+    await s.goto(origin+'/app/pengaturan');
+    await waitFor(`document.readyState==='complete' && !!document.getElementById('shipment-prefix-title') && !document.querySelector('[data-slot=skeleton]')`);
+    await pause(300);
+    const index=JSON.parse(await s.evaluate(MENU_PROBE));
+    assert(index.navVisible,`menu hidden on the settings index at ${width}`);
+    assert.deepEqual(index.current,['/app/pengaturan'],`index current ${width}`);
+    assert.equal(index.backLinks,0,`the index must not offer a back link (${width})`);
+    assert.equal(index.descriptionsVisible.every(Boolean),!railWidth,`index descriptions ${width}`);
+    assert.equal(index.chevronsVisible.every(Boolean),!railWidth,`index chevrons ${width}`);
+    if(!railWidth) assert(index.rowHeights.every(h=>h>=44),`index rows below 44px: ${JSON.stringify(index.rowHeights)}`);
+    const indexProbe=JSON.parse(await s.evaluate(PROBE));
+    // <= 0: Profil toko is short enough that `scrollbar-gutter: stable` leaves
+    // the document narrower than the viewport. Only a positive value is overflow.
+    assert(indexProbe.overflow<=0,`profil-toko/${width} overflow ${indexProbe.overflow}`);
+    assert.equal(indexProbe.contrastFails,0,`profil-toko/${width} contrast`);
+    assert.equal(indexProbe.weakFocusRing,0,`profil-toko/${width} focus`);
+    await s.evaluate(`window.scrollTo({top:0,behavior:'instant'})`);
+    await screenshot(`profil-toko-${width}`);
+    results.push({name:'profil-toko',width,probe:indexProbe,menu:index});
+
+    await visit('settings-many','/app/pengaturan/outlet',width);
+    const sub=JSON.parse(await s.evaluate(MENU_PROBE));
+    assert.equal(sub.navVisible,railWidth,`subpage menu visibility ${width}`);
+    assert.equal(sub.backLinks,railWidth?0:1,`subpage back link ${width}`);
+    assert.deepEqual(sub.current,['/app/pengaturan/outlet'],`subpage current ${width}`);
+    const subProbe=JSON.parse(await s.evaluate(PROBE));
+    assert(subProbe.overflow<=0,`settings-subpage/${width} overflow ${subProbe.overflow}`);
+    assert.equal(subProbe.contrastFails,0,`settings-subpage/${width} contrast`);
+    assert.equal(subProbe.weakFocusRing,0,`settings-subpage/${width} focus`);
+    results.push({name:'settings-subpage',width,probe:subProbe,menu:sub});
+  }
+  await visit('settings-connection-many','/app/pengaturan/koneksi?outlet='+readyOutlet,390);
+  // Record native key delivery on a control this page owns.
+  await s.evaluate(`document.getElementById('connection-private-${readyOutlet}').focus()`);
+  const beforeRadio=await s.evaluate(`document.activeElement?.id`);
   await s.send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
   await s.send('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
-  keyboard.nativeArrowMoved=await s.evaluate(`document.querySelector('[role=option][data-selected=true]')?.id`)!==beforeOption;
-  await s.evaluate(`document.querySelectorAll('[role=option]')[1].click()`);
-  await waitFor(`document.querySelector('output').textContent.includes('Kecamatan Audit 2')`);
-  assert.equal(await s.evaluate(`document.querySelector('output').getAttribute('for')`),'pickup-'+readyOutlet);
+  keyboard.nativeArrowMoved=await s.evaluate(`document.activeElement?.id`)!==beforeRadio;
   await s.evaluate(`document.querySelector('[role=radio][value=private]').click()`);
   await waitFor(`!!document.querySelector('input[name=apiKey]')`);
   assert.equal(await s.evaluate(`document.querySelector('input[name=apiKey]').value`),'');
-  assert(await s.evaluate(`document.querySelector('input[name=connectionMode]').value==='platform_default'`));
+  // The persisted source stays marked "Digunakan" while the radio shows a draft
+  // choice. (The `connectionMode` hidden input went with T-157's location form.)
   assert(await s.evaluate(`document.querySelector('label[for="connection-platform-${readyOutlet}"]').textContent.includes('Digunakan')`),'Persisted source must remain distinct from draft choice');
   await screenshot('outlet-private-draft-mobile');
-  await visit('settings-many','/app/pengaturan?outlet='+privateOutlet,390);
+  await visit('settings-connection-many','/app/pengaturan/koneksi?outlet='+privateOutlet,390);
   await s.evaluate(`document.querySelector('[role=radio][value=platform_default]').click()`);
   await clickText('Gunakan Default GeraiCUAN');
   await waitFor(`!!document.querySelector('[role=alertdialog]')`);
   await screenshot('outlet-confirm-mobile');
   await clickText('Batal');
   await waitFor(`!document.querySelector('[role=alertdialog]') && document.activeElement?.id==='connection-private-${privateOutlet}'`);
-  await visit('settings-provider-error','/app/pengaturan',390);
-  await s.evaluate(`document.querySelector('[role=combobox]').click()`);
-  await waitFor(`document.body.textContent.includes('Daftar pickup Mengantar belum dapat dimuat')`);
-  await screenshot('outlet-pickup-error-mobile');
-  // Never click retry: that would contact the provider for this synthetic outlet.
+  // T-157 moved the pickup picker (and its provider-error state) to
+  // /app/pengaturan/pickup, where scripts/ui-audit/pickup-selector.mjs owns it.
+  await visit('settings-provider-error','/app/pengaturan/outlet',390);
+  assert.equal(await s.evaluate(`document.querySelectorAll('[role=combobox]').length`),0,'the Outlet page carries no picker');
+  assert(await s.evaluate(`!!document.querySelector('a[href^="/app/pengaturan/pickup?outlet="]')`),'the Outlet page links to the page that owns pickup');
+  await screenshot('outlet-location-summary-mobile');
   await visit('members-populated','/app/anggota',390);
   await s.evaluate(`[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Undang anggota').click()`);
   await waitFor(`document.activeElement?.id==='member-invite-email'`);
@@ -135,9 +174,9 @@ try {
   assert(await s.evaluate(`document.body.textContent.includes('Tenant Admin aktif terakhir')`));
   // Confirm the real local saved outlet still renders; never capture its PII.
   await s.send('Network.setExtraHTTPHeaders',{headers:{}});
-  await s.goto(origin+'/app/pengaturan');
-  await waitFor(`!!document.querySelector('output') && !!document.querySelector('input[name=defaultPickupAddressId]')`);
-  assert(await s.evaluate(`document.querySelector('input[name=defaultPickupAddressId]').value.length>0 && document.querySelector('output').textContent.trim().length>0`));
+  await s.goto(origin+'/app/pengaturan/outlet');
+  await waitFor(`!!document.getElementById('outlet-detail-title')`);
+  assert(await s.evaluate(`document.getElementById('outlet-location-title')!==null && document.querySelector('[id^=origin-]').textContent.trim().length>0`),'the real outlet still states its location pair');
   assert.equal(s.events().filter(e=>e.method==='Runtime.exceptionThrown').length,0);
   assert(!s.events().some(e=>e.method==='Network.requestWillBeSent'&&e.params.request.url.includes('/api/public/')));
   writeFileSync(new URL(process.argv.includes('--interactions-only')?'interactions-report.json':'report.json',output),JSON.stringify({observations:results,interactions:'PASS',keyboard,providerWrites:0,membershipWrites:0},null,2));

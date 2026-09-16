@@ -1,24 +1,20 @@
-import {
-  ArrowRight,
-  Check,
-  CirclePlus,
-  PackageSearch,
-} from "lucide-react";
+import { ArrowRight, PackageSearch } from "lucide-react";
+import { RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { DataTablePagination } from "@/components/cms/data-table-pagination";
-import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { RangeFilterForm } from "@/components/cms/range-filter-form";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
+import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -35,13 +31,14 @@ import {
 } from "@/db/rts-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatIdr, formatWeight, formatWibDateTime } from "@/lib/label-format";
+import { providerDeliveryBasisSentence } from "@/lib/provider-delivery-status";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
   parseUiAuditScenarioForRoute,
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
-import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Retur (RTS) | GeraiCUAN",
@@ -50,7 +47,7 @@ export const metadata: Metadata = {
 
 type SearchValue = string | string[] | undefined;
 type RtsPageProps = {
-  searchParams: Promise<{ page?: SearchValue; status?: SearchValue }>;
+  searchParams: Promise<Record<string, SearchValue>>;
 };
 
 async function requireTenantPrincipal() {
@@ -100,8 +97,11 @@ function parseRtsQuery(input: { page?: SearchValue; status?: SearchValue }): Rts
 
 const RTS_PAGE_SIZE = 20;
 
-function rtsHref(status: RtsFilterStatus, page: number): string {
-  const params = new URLSearchParams();
+/** `carry` is the PR-53 range URL state, kept across a status change or a page turn. */
+function rtsHref(status: RtsFilterStatus, page: number, carry?: Readonly<Record<string, string>>): string {
+  const params = new URLSearchParams(carry ?? {});
+  params.delete("status");
+  params.delete("page");
   if (status !== "ALL") params.set("status", status);
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
@@ -116,7 +116,11 @@ function delayResult<T>(promise: Promise<T>, delayMs: number) {
 
 export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
   const principal = await requireTenantPrincipal();
-  const query = parseRtsQuery(await searchParams);
+  const params = await searchParams;
+  const query = parseRtsQuery(params);
+  const now = new Date();
+  const range = parseAnalyticsRange(params, now);
+  const carry = Object.fromEntries(serializeAnalyticsRange(range));
   const auditScenario = process.env.NODE_ENV === "development"
     ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/pengiriman/rts")
     : null;
@@ -136,6 +140,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
       loadRtsShipmentsPage(tx, context, {
         page: query.page,
         pageSize,
+        range,
         status: statusFilter,
       }),
   );
@@ -158,46 +163,56 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
   // Labels come from the shared lifecycle presentation, not a second copy: the
   // status badge in this same table reads from there, and two vocabularies for
   // one status is what this page used to show.
+  //
+  // PR-52 names four entries; the provider-problem cohort stays as a fifth
+  // because the repository already returns those rows inside "Semua retur" and
+  // dropping the entry would leave that cohort visible but unfilterable.
   const filterTabs: {
     key: RtsFilterStatus;
     label: string;
     count: number;
     description: string;
+    metricId: string;
   }[] = [
     {
       key: "ALL",
       label: "Semua retur",
       count: data.summary.totalRtsCount,
       description: "Seluruh kiriman retur dan bermasalah",
+      metricId: "RTS-ALL",
     },
     {
       key: "RTS_QUEUED",
       label: SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.label,
       count: data.summary.queuedCount,
       description: SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.guidance,
+      metricId: "RTS-QUEUED",
     },
     {
       key: "RTS_IN_TRANSIT",
       label: SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.label,
       count: data.summary.inTransitCount,
       description: SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.guidance,
+      metricId: "RTS-IN-TRANSIT",
     },
     {
       key: "RTS_RECEIVED",
       label: SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.label,
       count: data.summary.receivedCount,
       description: SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.guidance,
+      metricId: "RTS-RECEIVED",
     },
     {
       key: "PROBLEM",
       label: SHIPMENT_STATUS_PRESENTATION.PROBLEM.label,
       count: data.summary.problemCount,
       description: SHIPMENT_STATUS_PRESENTATION.PROBLEM.guidance,
+      metricId: "RTS-PROBLEM",
     },
   ];
 
   return (
-    <PageContainer width="data">
+    <PageContainer>
       <PageHeader
         actions={
           <Button asChild variant="outline">
@@ -230,41 +245,36 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
           <p>Pilih status untuk menindaklanjuti paket.</p>
         </div>
 
+        <RangeFilterForm action="/app/pengiriman/rts" idPrefix="rts" now={now} preserved={{ status: statusFilter === "ALL" ? undefined : statusFilter }} range={range} />
+
+        {/* PR-57: these states are Mengantar's report, applied when a Tenant
+            Admin pulls provider data, so the queue says what feeds it and how
+            far behind it may be rather than reading as live courier truth. */}
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {providerDeliveryBasisSentence({
+            formattedObservedAt: data.basis.lastObservedAt ? formatWibDateTime(data.basis.lastObservedAt) : null,
+            observationVisible: data.basis.observationVisible,
+            subject: "Status retur",
+          })}
+        </p>
+
         {/* No Reset link: "Semua retur" is the clear, and a second control for
-            it would be a duplicate action. */}
-        <DataTableToolbar>
-          {/* Each chip navigates, so this is a filter navigation rather than a
-              tablist: there are no tab panels and no roving focus. The selected
-              chip is `aria-current="true"`, not `"page"` — the shell already
-              owns the one truthful current page, and this is a filter on it.
-              Each count is printed once, inside the chip that acts on it. */}
-          <nav aria-label="Filter status retur" className="flex flex-wrap items-center gap-2">
-            {filterTabs.map((tab) => {
-              const active = statusFilter === tab.key;
-              return (
-                <Button
-                  key={tab.key}
-                  asChild
-                  className={cn("h-8 max-md:min-h-11", active ? "border border-transparent" : "border-dashed")}
-                  size="sm"
-                  variant={active ? "secondary" : "outline"}
-                >
-                  <Link aria-current={active ? "true" : undefined} href={rtsHref(tab.key, 1)}>
-                    {active ? <Check aria-hidden="true" /> : <CirclePlus aria-hidden="true" />}
-                    {tab.label}
-                    <Separator className="mx-0.5 h-4" orientation="vertical" />
-                    <Badge
-                      className="rounded-sm px-1 font-mono font-normal tabular-nums"
-                      variant={active ? "outline" : "secondary"}
-                    >
-                      {tab.count}
-                    </Badge>
-                  </Link>
-                </Button>
-              );
-            })}
-          </nav>
-        </DataTableToolbar>
+            it would be a duplicate action. Each count is printed once, inside
+            the entry that applies it. */}
+        <StateSummaryPanel
+          action="/app/pengiriman/rts"
+          entries={filterTabs.map((tab) => ({
+            count: tab.count,
+            description: tab.description,
+            label: tab.label,
+            metricId: tab.metricId,
+            value: tab.key,
+          }))}
+          label="Ringkasan status retur"
+          param="status"
+          preserved={carry}
+          selected={statusFilter}
+        />
 
         {data.rows.length === 0 ? (
           <EmptyState
@@ -296,7 +306,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                     content does not read through — the same treatment the
                     shipment queue gives its reference column. */}
                 <TableHead className="sticky left-0 z-10 min-w-[140px] bg-card">Resi</TableHead>
-                <TableHead className="min-w-[150px]">Penerima & Tujuan</TableHead>
+                <TableHead className="min-w-[150px]">Penerima</TableHead>
                 <TableHead className="min-w-[120px]">Outlet & Kurir</TableHead>
                 <TableHead className="min-w-[120px]">Nilai & Berat</TableHead>
                 {/* Status and its update time share a column so the table fits 1440 without scrolling. */}
@@ -316,10 +326,10 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
 
                 return (
                   <TableRow key={row.shipmentId} className="group">
-                    <TableCell className="sticky left-0 z-10 max-w-40 whitespace-normal bg-card font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                    <TableCell className="sticky left-0 z-10 max-w-40 whitespace-normal bg-inherit font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                       <Link
                         className="flex min-h-11 max-w-40 items-center break-all font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
-                        href={`/app/pengiriman/${row.shipmentId}`}
+                        href={shipmentDetailHref(row.publicReference)}
                       >
                         {row.awb ? row.awb : row.publicReference}
                       </Link>
@@ -327,15 +337,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                     </TableCell>
                     {/* Names and outlets wrap within a ceiling so the table fits 1440 without scrolling. */}
                     <TableCell className="max-w-48 whitespace-normal">
-                      <div className="font-medium text-xs sm:text-sm">
-                        {row.recipientName}
-                      </div>
-                      <div className="wrap-anywhere text-xs tabular-nums text-muted-foreground">
-                        {row.recipientPhone}
-                      </div>
-                      <div className="wrap-anywhere text-xs text-muted-foreground">
-                        {row.destinationAreaLabel}
-                      </div>
+                      <RecipientStack areaLabel={row.destinationAreaLabel} name={row.recipientName} phone={row.recipientPhone} />
                     </TableCell>
                     <TableCell className="max-w-48 whitespace-normal">
                       <div className="text-xs">{row.outletName}</div>
@@ -358,8 +360,8 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                         label={statusMeta.label}
                         tone={statusMeta.tone}
                       />
-                      <div className="mt-1 text-xs tabular-nums text-muted-foreground">
-                        {formatWibDateTime(row.updatedAt)}
+                      <div className="mt-1 text-xs">
+                        <StackedDateTime value={row.updatedAt} />
                       </div>
                     </TableCell>
                     {/* TableCell is nowrap; a clamped note must wrap or it
@@ -377,7 +379,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs max-md:min-h-11">
-                        <Link href={`/app/pengiriman/${row.shipmentId}`}>
+                        <Link href={shipmentDetailHref(row.publicReference)}>
                           Detail
                           <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
                         </Link>
@@ -392,7 +394,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
 
         {data.totalPages > 1 ? (
           <DataTablePagination
-            hrefForPage={(page) => rtsHref(statusFilter, page)}
+            hrefForPage={(page) => rtsHref(statusFilter, page, carry)}
             label="Paginasi daftar retur"
             page={data.page}
             summary={<span className="tabular-nums">{data.totalCount} kiriman</span>}

@@ -50,6 +50,10 @@ describe("Mengantar estimate normalization", () => {
       insuranceSourceField: null,
       deliveryEstimate: "2 - 3 days",
       codEligible: false,
+      normalPriceIdr: 8_000,
+      specialPriceIdr: 5_600,
+      codFeeIdr: 0,
+      discountIdr: 2_400,
     });
     expect(services).toContainEqual(expect.objectContaining({
       providerService: "SAP",

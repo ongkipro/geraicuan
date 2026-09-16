@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupportedEstimateService } from "@/db/estimate-repository";
 import type { MengantarCredentials } from "@/lib/mengantar-credentials";
+import { toBillableWeightKg } from "@/lib/shipment-draft";
 
 const MAX_RESPONSE_BYTES = 512_000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -16,13 +17,34 @@ type DraftEstimateRequest = {
 };
 
 type ProviderService = {
+  codFee?: unknown;
   currency?: unknown;
+  discount?: unknown;
   estimate_delivery?: unknown;
   estimatedDate?: unknown;
+  estimatedPrice?: unknown;
+  estimatedSpecialPrice?: unknown;
   price?: unknown;
   unsupported?: unknown;
   unsupported_cod?: unknown;
 };
+
+const MALFORMED_AMOUNT = Symbol("malformed provider amount");
+
+/**
+ * An amount the provider may omit. Absent stays `null`; present but not a whole
+ * non-negative rupiah integer in range is malformed, and the caller drops the
+ * whole service rather than persisting a guessed number.
+ */
+function readOptionalIdr(value: unknown): number | null | typeof MALFORMED_AMOUNT {
+  if (value === undefined || value === null) return null;
+  return typeof value === "number"
+    && Number.isSafeInteger(value)
+    && value >= 0
+    && value <= MAX_IDR_AMOUNT
+    ? value
+    : MALFORMED_AMOUNT;
+}
 
 export class MengantarEstimateError extends Error {
   constructor() {
@@ -89,15 +111,38 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
       continue;
     }
 
+    const normalPriceIdr = readOptionalIdr(service.estimatedPrice);
+    const specialPriceIdr = readOptionalIdr(service.estimatedSpecialPrice);
+    const codFeeIdr = readOptionalIdr(service.codFee);
+    // `discount` is display-only: nothing downstream prices the shipment or
+    // computes the seller payout from it, so a malformed value degrades to
+    // null instead of dropping a courier that is otherwise priced correctly.
+    const rawDiscountIdr = readOptionalIdr(service.discount);
+    const discountIdr = rawDiscountIdr === MALFORMED_AMOUNT ? null : rawDiscountIdr;
+    if (
+      normalPriceIdr === MALFORMED_AMOUNT
+      || specialPriceIdr === MALFORMED_AMOUNT
+      || codFeeIdr === MALFORMED_AMOUNT
+      // A special price above the normal price is not a discount; it means the
+      // two keys do not mean what we think, so the service fails closed.
+      || (normalPriceIdr !== null && specialPriceIdr !== null && specialPriceIdr > normalPriceIdr)
+    ) {
+      continue;
+    }
+
     services.push({
       codEligible: service.unsupported_cod === false,
+      codFeeIdr,
       currency: "IDR",
       deliveryEstimate,
+      discountIdr,
       insuranceAmountIdr: null,
       insuranceSourceField: null,
+      normalPriceIdr,
       providerService,
       shippingAmountIdr: price,
       shippingSourceField: "price",
+      specialPriceIdr,
     });
   }
 
@@ -144,7 +189,15 @@ export async function fetchMengantarEstimate(
   endpoint.searchParams.set("origin_id", request.originAreaId);
   endpoint.searchParams.set("destination_id", request.destinationAreaId);
   endpoint.searchParams.set("courier", "all");
-  endpoint.searchParams.set("weight", String(request.weightGrams / 1_000));
+  // One weight rule for the estimate and the order: a quote priced at a weight
+  // the order does not repeat is not a quote for that order.
+  let billableWeightKg: number;
+  try {
+    billableWeightKg = toBillableWeightKg(request.weightGrams);
+  } catch {
+    throw new MengantarEstimateError();
+  }
+  endpoint.searchParams.set("weight", String(billableWeightKg));
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

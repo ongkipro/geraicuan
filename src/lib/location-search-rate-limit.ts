@@ -5,7 +5,17 @@ import type { Pool } from "pg";
 
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 
-const MAX_LOCATION_SEARCH_ATTEMPTS = 20;
+// PR-48 (T-154): destination-area search now auto-fires on a debounced pause
+// (>=350ms) instead of only on an explicit "Cari area" click, so refining one
+// query (e.g. "Dag" -> "Dago" -> "Dago Band") can burn several attempts where
+// the old click-gated flow spent one. The per-session cache and empty-prefix
+// suppression in `use-typeahead-search.ts` absorb most of that growth, but a
+// deliberate multi-refinement search session can still roughly double the old
+// attempt count within one 5-minute window — raised 20 -> 40 to cover that
+// without materially loosening the budget (still resets every 5 minutes, per
+// tenant+actor). Re-tune with real usage evidence if this proves too tight
+// or too loose.
+const MAX_LOCATION_SEARCH_ATTEMPTS = 40;
 const WINDOW_MS = 5 * 60 * 1000;
 
 export class LocationSearchRateLimitedError extends Error {

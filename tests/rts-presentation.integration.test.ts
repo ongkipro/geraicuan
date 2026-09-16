@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { formatWibDateTime } from "@/lib/label-format";
 
 
 /**
@@ -21,6 +23,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fixture = {
   auditHeader: null as string | null,
   page: {
+    // PR-57: the queue states where these return states came from and how far
+    // behind they may be, so the fixture carries that basis like the page does.
+    basis: {
+      lastObservedAt: new Date("2026-09-08T09:45:00.000Z") as Date | null,
+      observationVisible: true,
+    },
     generatedAt: new Date("2026-09-09T03:00:00.000Z"),
     page: 1,
     pageSize: 20,
@@ -41,7 +49,7 @@ const fixture = {
     rows: [
       {
         shipmentId: "72000000-0000-4000-8000-000000000003",
-        publicReference: "95758-260901-003",
+        publicReference: "GC-10003",
         status: "RTS_QUEUED",
         createdAt: new Date("2026-09-01T02:00:00.000Z"),
         updatedAt: new Date("2026-09-02T02:00:00.000Z"),
@@ -62,7 +70,7 @@ const fixture = {
         // No AWB: the row where the internal reference legitimately appears,
         // because it is then the only identifier the row has.
         shipmentId: "72000009-0000-4000-8000-000000000009",
-        publicReference: "95758-260901-009",
+        publicReference: "GC-10009",
         status: "PROBLEM",
         createdAt: new Date("2026-09-01T02:00:00.000Z"),
         updatedAt: new Date("2026-09-03T02:00:00.000Z"),
@@ -131,6 +139,20 @@ const occurrences = (haystack: string, needle: string | RegExp) =>
 
 describe("return queue presentation", () => {
   let html = "";
+  // The page states its resolved date range in text ("19 Agu 2026 – 17 Sep
+  // 2026"), and this file proves each filter count is printed once by giving
+  // the counts distinctive values (37, 23, 11, 17, 88) and counting them in the
+  // whole document. On a real clock the range carries today's day of the month,
+  // so the suite failed on the 11th, 17th and 23rd and passed on every other day
+  // — a date collision, not a restated count. Pin the clock to a day whose
+  // range label shares no number with the counts.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-05T03:00:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   beforeEach(async () => {
     fixture.auditHeader = null;
     fixture.page.rows[0].awb = "SANITIZED-CNOTE-0003";
@@ -154,7 +176,10 @@ describe("return queue presentation", () => {
     expect(awb).toContain("max-w-40");
     expect(awb).toContain("whitespace-normal");
     expect(awb).toContain("sticky left-0");
-    expect(awb).toContain("bg-card");
+    // T-172: the pinned cell takes the row's own opaque fill so the zebra stripe
+    // reaches it. jsdom computes no cascade, so the rendered proof that this is
+    // opaque and matches its row is the pinned-column pass in admin-programme.mjs.
+    expect(awb).toContain("bg-inherit");
     expect(awb).toMatch(new RegExp(`<a[^>]*class="[^"]*break-all[^"]*"[^>]*>${fixture.page.rows[0].awb}</a>`));
     for (const value of ["Joko Santoso", "Local Development Outlet"]) {
       expect(cells.find(cell => cell.includes(value))).toMatch(/class="[^"]*max-w-48[^"]*whitespace-normal/);
@@ -192,25 +217,44 @@ describe("return queue presentation", () => {
     expect(cardsIn(rtsSource)).toBe(cardsIn(queueSource));
   });
 
-  it("renders the status filter as a navigation landmark, not as a tablist", () => {
-    // The chips are links that navigate. There is no tab panel and no roving
-    // focus, so `role="tablist"` promised keyboard semantics it never had.
+  it("renders the status filter as the shared PR-52 state panel, not as a tablist", () => {
+    // The entries act on this page's own `status` URL state. There is no tab
+    // panel and no roving focus, so `role="tablist"` promised keyboard
+    // semantics it never had.
     expect(occurrences(html, /role="tablist"/)).toBe(0);
 
-    // The label has to be on the landmark. `<div aria-label>` announces nothing.
-    expect(html).toMatch(/<nav[^>]*aria-label="Filter status retur"/);
+    // T-162: the chips became the shared panel. Its entries are real submit
+    // buttons — that is what makes `aria-pressed` legal ARIA and gives Enter
+    // and Space without a key handler. A link cannot carry `aria-pressed`.
+    const panel = html.match(/<form[^>]*data-slot="state-summary-panel"[^>]*>[\s\S]*?<\/form>/)?.[0];
+    expect(panel, "state summary panel").toBeDefined();
+    expect(panel!).toContain('method="get"');
+    expect(panel!).toContain('action="/app/pengiriman/rts"');
+    expect(panel!).toMatch(/<ul[^>]*aria-label="Ringkasan status retur"/);
 
-    // The shell owns the one truthful current page; a filter on that page is
-    // `aria-current="true"`, and exactly one chip is active. Scoped to the
-    // filter landmark: pagination legitimately marks its current page (and
-    // page size) elsewhere in the document.
-    const filterNav = html.match(/<nav[^>]*aria-label="Filter status retur"[^>]*>[\s\S]*?<\/nav>/)?.[0];
-    expect(filterNav, "filter nav").toBeDefined();
-    expect(occurrences(filterNav!, 'aria-current="page"')).toBe(0);
-    expect(occurrences(filterNav!, 'aria-current="true"')).toBe(1);
-    // Bound to the chip the unfiltered fixture selects, not to any chip.
-    const activeChip = filterNav!.match(/<a[^>]*aria-current="true"[^>]*>/)?.[0];
-    expect(activeChip).toContain('href="/app/pengiriman/rts"');
+    const entries = panel!.match(/<button[^>]*aria-pressed="(?:true|false)"[^>]*>/g) ?? [];
+    expect(entries, "one entry per filter").toHaveLength(5);
+    for (const entry of entries) {
+      expect(entry, entry).toContain('type="submit"');
+      expect(entry, entry).toContain('name="status"');
+      // 44 px touch target below md, and our single full-alpha 2px focus ring.
+      expect(entry, entry).toContain("min-h-11");
+      expect(entry, entry).toContain("focus-visible:ring-2");
+      expect(entry, entry).toContain("focus-visible:ring-ring");
+      expect(entry, entry).not.toMatch(/ring-ring\/\d+|ring-3/);
+    }
+
+    // Exactly one entry is pressed, and it is the one the unfiltered fixture
+    // selects. The shell keeps the one truthful current page, so no filter
+    // claims `aria-current` at all any more.
+    const pressed = panel!.match(/<button[^>]*aria-pressed="true"[^>]*>/g) ?? [];
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0]).toContain('value="ALL"');
+    expect(occurrences(panel!, "aria-current")).toBe(0);
+
+    // The active entry is marked without relying on colour: one check glyph,
+    // in the pressed entry only.
+    expect(panel!.match(/<svg/g) ?? [], "check glyph only on the pressed entry").toHaveLength(1);
   });
 
   it("scrolls the wide table inside a labelled, keyboard-reachable region", () => {
@@ -264,5 +308,32 @@ describe("return queue presentation", () => {
     expect(noteOpening).toMatch(/\bwhitespace-normal\b/);
     expect(noteOpening).toMatch(/\bmax-w-/);
     expect(noteCell).toMatch(/\bline-clamp-2\b/);
+  });
+});
+
+// T-169 / PR-57. Until this task, every state in this queue came from the demo
+// seed: no code path ever wrote a delivery state. Now that the settlement pull
+// writes them, the page has to say the outcome is Mengantar's report and how
+// far behind it may be, or an operator reads a stale queue as live truth.
+describe("return queue states its provider basis", () => {
+  it("names Mengantar and the last pull for a reader who may see the provider evidence", async () => {
+    fixture.auditHeader = null;
+    fixture.page.basis = { lastObservedAt: new Date("2026-09-08T09:45:00.000Z"), observationVisible: true };
+
+    const text = (await render()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+    expect(text).toContain("dilaporkan Mengantar");
+    expect(text).toContain(formatWibDateTime(new Date("2026-09-08T09:45:00.000Z")));
+  });
+
+  it("states the mechanism, not an invented time, for a reader who may not", async () => {
+    fixture.auditHeader = null;
+    fixture.page.basis = { lastObservedAt: null, observationVisible: false };
+
+    const text = (await render()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+    expect(text).toContain("dilaporkan Mengantar");
+    expect(text).toContain("menarik data Mengantar di Keuangan");
+    expect(text).not.toMatch(/tarikan terakhir/);
   });
 });

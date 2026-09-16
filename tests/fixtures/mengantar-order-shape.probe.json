@@ -1,0 +1,186 @@
+{
+  "contract": "POST /api/public/{key}/order — which body shape the provider accepts. Redacted: no credential, no identifiers, no customer data.",
+  "capturedAt": "2026-09-16",
+  "host": "api-public.mengantar.com",
+  "isCod": false,
+  "route": {
+    "originIsAccountDefault": true,
+    "destinationKeyword": "Kelapa Gading",
+    "destinationCity": "JAKARTA UTARA",
+    "destinationDistrict": "KELAPA GADING"
+  },
+  "supportedServices": [
+    "JNE",
+    "JNECargo",
+    "SiCepat",
+    "SiCepatCargo",
+    "SAP",
+    "SAPLite",
+    "SapCargo",
+    "iDexpress",
+    "JT",
+    "lion",
+    "iDexpressCargo",
+    "anteraja",
+    "spx",
+    "Ninja",
+    "pos"
+  ],
+  "attempts": [
+    {
+      "id": "service-JNE",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "service-JNECargo",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "service-SiCepat",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "service-SiCepatCargo",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "A-lower-array",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "B-lower-object",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "C-lower-orders-array",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "D-lower-data-array",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "E-upper-array",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "F-upper-object",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "G-lower-array-woo",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "H-lower-array-pickup-date",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "I-lower-array-int-weight-grams",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    },
+    {
+      "id": "J-lower-array-no-service",
+      "status": 400,
+      "success": false,
+      "message": "Undefined error",
+      "keys": [
+        "success",
+        "message",
+        "courier"
+      ]
+    }
+  ],
+  "accepted": null
+}

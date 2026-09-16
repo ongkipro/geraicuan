@@ -652,22 +652,18 @@ describe("tenant dashboard read model", () => {
 
     expect(result.summary.current).toEqual({
       codCount: 1,
-      codDeclaredValueIdr: 125_000,
       createdCount: 2,
       issuedCount: 1,
       nonCodCount: 1,
-      nonCodDeclaredValueIdr: 75_000,
     });
     expect(result.summary.previous).toEqual({
       codCount: 1,
-      codDeclaredValueIdr: 50_000,
       createdCount: 1,
       issuedCount: 0,
       nonCodCount: 0,
-      nonCodDeclaredValueIdr: 0,
     });
     expect(result.foreignOutletSummary.current.createdCount).toBe(0);
-    expect(result.foreignOutletSummary.current.codDeclaredValueIdr).toBe(0);
+    expect(result.foreignOutletSummary.current.codCount).toBe(0);
     expect(result.trend).toEqual([
       { codCount: 1, key: "2026-08-20", nonCodCount: 1 },
     ]);

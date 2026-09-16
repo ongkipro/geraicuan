@@ -36,7 +36,7 @@
 - Filters, status, empty, loading, error, table, and pager surfaces retain semantic labels and never cause horizontal page overflow. Wide table regions scroll locally rather than expanding the document.
 - At every viewport, the selected WIB/IANA timezone, range, active filter count, and generated-at time remain visible without opening a chart tooltip.
 - Loading skeletons mirror the final region, system-empty explains the next setup action, filtered-empty offers filter reset, and a region error retains successful sibling regions with a local retry.
-- On mobile, compact count summaries use two columns; detailed current-work, full-IDR and margin cards remain stacked to keep complete labels and amounts. Skeletons mirror those choices. Legends/annotations remain readable, primary filters stay visible and advanced dimensions use a labelled disclosure. T-134 delivers these mobile count grids and platform primary filters. Generic platform loading mirrors count-column choices, not every route-specific filter placeholder or pre-hydration shell geometry.
+- On mobile, compact count summaries use two columns; detailed current-work and full-IDR cards remain stacked to keep complete labels and amounts. Skeletons mirror those choices. Legends/annotations remain readable, primary filters stay visible and advanced dimensions use a labelled disclosure. T-134 delivers these mobile count grids and platform primary filters. Generic platform loading mirrors count-column choices, not every route-specific filter placeholder or pre-hydration shell geometry.
 
 ## Historical Tokophi reference and blue palette — 2026-09-13
 
@@ -150,17 +150,18 @@ Routes: `/app/pengiriman/[shipmentId]`, `/app/kontak/[contactId]`, `/app/label/[
 - The platform scope-context banner names the tenant being viewed, states that customer data is redacted, and states that actions are audited.
 - The activity timeline renders human-readable Indonesian sentences derived from audit and lifecycle events; raw event enums such as `PLATFORM_MONITORING_VIEWED` never reach the page.
 - Destructive lifecycle actions sit in a separated danger zone at the bottom with an outline destructive button.
-- `/app/label/[shipmentId]` applies the breadcrumb, header, and action rules to its toolbar and history; the 100 × 150 mm label sheet keeps its custom print markup (UX-5 Label preview).
+- `/app/label/[shipmentId]` applies the breadcrumb, header, and action rules to its toolbar and history; the thermal label sheet keeps its custom print markup (UX-5 Label preview; sizes and legibility in § T-176 below).
 
 ### Pattern 4 — Settings
 
-Routes: `/app/pengaturan`, `/app/anggota`. References: [Shopify layout](https://shopify.dev/docs/apps/design/layout), [Stripe communicating state](https://docs.stripe.com/stripe-apps/patterns/communicating-state.md).
+Routes: `/app/pengaturan`, `/app/pengaturan/pickup`, `/app/pengaturan/outlet`, `/app/pengaturan/koneksi`, `/app/anggota`. References: [Shopify layout](https://shopify.dev/docs/apps/design/layout), [Stripe communicating state](https://docs.stripe.com/stripe-apps/patterns/communicating-state.md).
 
 - Each section is two columns at 1024px and above — context (title, status badge, description) left, controls right — and one column below. Each section saves independently from its own footer.
 - A readiness strip precedes the sections when the object can be not-ready. Its badge and its checklist derive from the same server readiness result, so they cannot disagree.
 - Leaving a section with unsaved changes asks for confirmation. On mobile the save action sticks to the viewport bottom only while changes are unsaved.
 - `/app/pengaturan` may show a "Tampil di label" preview built only from the selected pickup's provider labels. UX-10 remains authoritative for credentials and location authority.
-- `/app/anggota` uses status tabs instead of summary count cards, a member table, and one header invite action that opens a `Dialog`. The last active Tenant Admin is marked with an amber lock icon and tooltip, and its row menu is disabled.
+- `/app/anggota` is one of the menu's pages, not a page of its own shape (T-159): a stack of three `SettingsCard`s — Ringkasan akses (the four counts), Daftar anggota (the ordered member list, its per-member *Kelola akses* disclosure and its confirmations), Undang anggota (the invite form, its submit in the card footer). No status tabs and no invite `Dialog`: the header *Undang anggota* button moves focus into the always-visible invite card. The last active Tenant Admin keeps its lock badge on the row **and** on the Daftar anggota card title, and its controls stay replaced by the protection sentence.
+- The focus ring is one full-alpha 2px `--ring` on every variant. The upstream shadcn preset rings the destructive button with `ring-destructive/20`; measured on the contact detail page that is 1.41:1 against the card, so the override is removed rather than carried (T-159).
 
 ### Pattern 5 — Flow
 
@@ -186,7 +187,7 @@ Routes: `/app/analitik`, `/app/keuangan`. References: [Stripe chart layout](http
 | `/app` | 1 Command center |
 | `/app/pengiriman`, `/app/pengiriman/rts`, `/app/kontak`, `/app/label` | 2 Queue |
 | `/app/pengiriman/[shipmentId]`, `/app/kontak/[contactId]`, `/app/label/[shipmentId]` | 3 Detail |
-| `/app/pengaturan`, `/app/anggota` | 4 Settings |
+| `/app/pengaturan`, `/app/pengaturan/pickup`, `/app/pengaturan/outlet`, `/app/pengaturan/koneksi`, `/app/anggota` | 4 Settings |
 | `/app/pengiriman/baru`, `/app/impor`, `/app/kontak/baru` | 5 Flow |
 | `/app/analitik`, `/app/keuangan` | 6 Analysis workspace |
 | `/platform` | 1 Command center |
@@ -274,7 +275,7 @@ Chosen direction: a quieter sidebar, a clear workspace header, aligned title/act
 
 Historical T-118 accepted black-and-white visuals and superseded the T-112 blue primary. Before T-132, `globals.css` carried the shadcn neutral palette on `:root` and `.dark`: primary `oklch(0.205 0 0)` with near-white text on light and `oklch(0.922 0 0)` with near-black text on dark, neutral secondary/accent/sidebar tokens, and a neutral ring. The T-112 contrast diagnostics are resolved by fixing tokens, not thresholds, and the departures from stock neutral are recorded here rather than made silently: light muted text `oklch(0.53 0 0)`, ring and sidebar-ring `oklch(0.556 0 0)`, light destructive `oklch(0.505 0.19 27.5)` so its `/10` and `/20` tints hold 4.5:1, dark destructive `oklch(0.78 0.13 22)` for its `/20` and `/30` tints, and explicit `--primary-hover` on both palettes. Semantic `--ok`, `--warn`, `--danger` status tokens and the colour-blind-safe chart ramp stay. The chart ramp is the Okabe-Ito categorical set (`--chart-1` `#0072b2`, `--chart-2` `#009e73`, `--chart-3` `#e69f00`, `--chart-4` `#cc79a7`, `--chart-5` `#d55e00`) on both palettes, restoring it after the shadcn preset's single-hue blue ramp (series differing only by lightness) re-entered with the palette swap. The essential trend strokes `--chart-4` and `--chart-2` measure at least 3:1 on the light and dark card; `--chart-3` (2.25:1 on white) is never an unmarked line stroke. `tests/design-token-contrast` also measures hue spread so a lightness-only ramp fails, and fails if any dark activation route is wired (a `prefers-color-scheme` rule, a `[data-theme]` selector, `color-scheme: dark`, a rebound `dark` custom variant, or source that applies the `dark` class or installs a theme provider); the `.dark` token block itself stays dormant. `tests/design-token-contrast` measures both palettes.
 
-Page composition follows the MIT satnaing/shadcn-admin patterns through shared primitives in `src/components/cms`: `PageHeader` (muted eyebrow, `text-2xl font-bold tracking-tight` title, muted description, right-aligned actions), `StatCard` (KPI card), `DataTableToolbar` with `DataTableFacetFilter`, `DataTablePagination`, `DataTableShell`, and `SettingsLayout`/`ContentSection`. Server-paginated tables keep filters, search, and page in the URL: the toolbar and pager navigate by links and GET forms, never by client table state. Status still never relies on colour alone.
+Page composition follows the MIT satnaing/shadcn-admin patterns through shared primitives in `src/components/cms`: `PageHeader` (muted eyebrow, `text-2xl font-bold tracking-tight` title, muted description, right-aligned actions), `StatCard` (KPI card), `DataTableToolbar` with `DataTableFacetFilter`, `DataTablePagination`, `DataTableShell`, and `SettingsLayout`/`SettingsCard` (`ContentSection` remains for the panels that have not moved to cards). Server-paginated tables keep filters, search, and page in the URL: the toolbar and pager navigate by links and GET forms, never by client table state. Status still never relies on colour alone.
 
 
 ### Shared blue interaction palette — T-132, 2026-09-14
@@ -298,3 +299,72 @@ Acceptance requires the existing light/dark token contrast checks, action/sideba
 A field has a1px neutral resting border and exactly one2px contrasting focus indicator. Global native fallback focus belongs to the base layer so shadcn's owned focus is not doubled. Input, Textarea, SelectTrigger and explicit native select consumers use the same focus weight. InputGroup owns focus around the whole search field, while its inner input has no separate edge. Error text/border and disabled styling remain distinct. Full labels, minimum touch targets, blue palette and tenant data rules are preserved.
 
 PR-42 (2026-09-15) supersedes earlier always-open analytics table guidance: keep charts visible, make full supporting tables and four secondary cost cards available on demand, and retain the paginated shipment table as the visible drill-down target. Reconciliation is a compact alert immediately after operational KPIs; color follows variance count, not the signed total.
+
+## PR-44 — Tenant shipment number prefix
+
+The shipment number prefix is a tenant identity element printed on the 100×150 mm label and shown wherever a shipment is identified (`TKP-10013`). It is 2–5 uppercase letters or digits, suggested from the tenant name's initials, set once by the Tenant Admin in Pengaturan and then locked; the default is `GC`. Labels must fit a 5-character prefix with a 6-digit number.
+
+## T-148 — Stacked shipment table cells
+
+Long admin shipment tables stack related facts in one cell instead of spreading them across columns (`src/components/cms/shipment-table-cells.tsx`): a timestamp is a `<time>` with the date on one line and a muted `HH.MM WIB` line below; courier/service sits above a monospace AWB (or "Belum ada resi"); a recipient is name, phone, then district–city (the two parts before the province of a Mengantar area label, after any postal code). The full address appears only on shipment detail and the printed label. Shipment numbers never wrap; AWBs and names may wrap.
+
+## T-155 — Layered, not flat (supersedes the flat/hairline rule)
+
+Owner steering 2026-09-16: the CMS read as one white sheet, and status was legible only to someone who already knew where to look. The earlier rule in this document — "presentation is flat and hairline-led… no decorative shadows" (§13, restated at §85) — is **rewritten here**, not quietly broken:
+
+- **Ground and surface.** The CMS content area sits on `--surface-sunken` (the existing muted token, already contrast-asserted against `--ink` and `--ink-muted`), and cards stay `--card` white. The tonal step, not a border, is what makes a card read as a card.
+- **One resting elevation.** `--elevation-resting` (light and dark) is exposed as `shadow-resting` and applied to `Card`. It is a single restrained step, paired with the existing hairline ring. Overlays keep their stronger shadow. Gradients, backdrop blur, nested cards and decorative shadows on non-card surfaces remain forbidden.
+- **Card headline band.** A card's headline sits on `bg-muted/40` with a bottom hairline (`cardBandClassName` in `src/components/cms/cms-layouts.tsx`), so the title reads as a header rather than as body text.
+- **One tone vocabulary.** `toneClass`/`toneIcon` in `src/components/cms/shipment-status-badge.tsx` is the single source for lifecycle, severity and finance tone. Severity maps Normal → ok, Perhatian → **warn** (it was a colourless outline chip while the amber token went unused), Kritis → danger, Nonaktif → neutral. Red stays reserved for Kritis, failure and destructive actions.
+- **Status still never depends on colour alone.** Every tone carries an icon, and a coloured number keeps its sign: reconciliation variance is amber with an explicit `+`/`−`, and an exact zero reads neutral instead of printing `+Rp 0`.
+- **Section markers.** Operational form sections carry a lucide marker beside the headline (`Warehouse`, `UserRound`, `MapPinHouse`, `Package`, `ClipboardList`, `Wallet`), always `aria-hidden` — decoration for scanning, never the only carrier of meaning.
+- **Legibility for the audience.** Sidebar navigation labels step to 15px and sidebar group labels to 13px, with touch targets unchanged; helper text never drops below 13px.
+
+Unchanged and still test-pinned: `--primary` `#2e47ba`, every AA text pair, the single 2px focus ring at 3:1, the Okabe-Ito chart ramp and its hue spread, and dark tokens that exist without any activation route.
+
+### T-172 — table and control surfaces (extends the T-155 section)
+
+Screenshot review showed the T-155 tokens had not reached the places an operator actually reads:
+
+- **Table header** is `bg-muted` with a border-coloured bottom rule. The previous `bg-muted/40` over a white card computed to roughly `oklch(0.988)` — present in the class list, invisible on screen.
+- **Rows alternate** (`bg-card` / `--table-stripe`), with hover and selection using `--accent` so state still reads stronger than the stripe. A pinned first column uses `bg-inherit`, never `bg-card`: painting the card colour over the row hid the stripe entirely.
+- **Every fill a table row can take is opaque**, and `--table-stripe` exists for exactly that reason. `background-color: inherit` copies the parent's value verbatim, so a pinned column set to `bg-inherit` over a translucent stripe (`bg-muted/40`) becomes translucent itself — and a pinned column exists precisely because the rest of the row scrolls underneath it, so the scrolled text showed through on every second row. An alpha fill on `TableRow`, or a stripe equal to the card, fails `design-token-contrast`; the rendered pinned cell is measured on every route that pins a column by `scripts/ui-audit/admin-programme.mjs`.
+- **Filter rows** sit on a card surface with the resting elevation instead of floating between two hairlines.
+- **KPI change** is a tinted pill (`--ok-surface` / `--danger-surface` / muted), not loose coloured text, and a table's outcome total carries its tone while the row label and its icon keep the meaning without colour.
+- **Page-level section headings** (headings that sit directly on the page ground, not inside a card) carry a 3px `--primary` rule via `sectionHeadingClassName`; cards keep the muted band instead.
+
+### T-162 — state summary panel (PR-52)
+
+- **One component, four pages.** `StateSummaryPanel` is the only shape a list-page state filter takes. Entries are cards on `--card` with a dashed border at rest and a solid `--primary` border plus `--muted` fill when pressed; the count is monospaced and tabular so a column of numbers aligns.
+- **Focus.** The single 2px full-alpha `--ring` (`focus-visible:ring-2 focus-visible:ring-ring`). A half-alpha or 3px ring on this component fails `design-token-contrast`'s ring rule and the panel's own markup test.
+- **State without colour.** The pressed entry carries a check glyph and a border-style change beside `aria-pressed`, so the selection survives a monochrome screen.
+- **Targets.** `min-h-11` on every entry at every width, satisfying the 44 px rule below `md` without a second layout.
+
+### T-163 — the date-range control and the calendar (PR-53)
+
+Adapted from the owner's reference with four departures, three accepted in the task and the fourth forced by the fallback it asks for:
+
+- **Focus.** The reference paints a 3px ring at half alpha. Ours is the single 2px full-alpha `--ring` (`focus-visible:ring-2 focus-visible:ring-ring`) everywhere in this control, including every day cell; a half-alpha ring is what `design-token-contrast` forbids.
+- **Targets.** The reference's 28 px day cells become 44 px below `md` (`size-11 md:size-8`), and the trigger, the preset rows and both date inputs are 44 px below `md` too.
+- **Locale.** `id-ID` weekday and month names from `Intl.DateTimeFormat`, and the week starts on Monday — the same day `minggu-ini` counts back to, so the highlighted week and the applied week are the same week.
+- **Disclosure.** A native `<details>` panel rather than a Radix popover, because the named range controls must stay in the page's one GET form whether it is open or shut. `.cms-range-filter` and `.cms-range-popover` in `globals.css` give it the popover position from `md` and the bottom sheet below it.
+- **Range colours.** The range's first and last day sit on `--primary`; the band between them is `--muted`. The accent stays the one accepted blue — the calendar introduces no second accent.
+
+
+### T-156 — the settings menu and the settings card (PR-46)
+
+- **`SettingsLayout`** takes `items` (icon, label, one-line description, href), `currentHref` and `indexHref`. From `lg` the menu is a left rail — `lg:w-44`, `xl:w-56` — beside a content column capped at `lg:max-w-[47.5rem]`. Below `lg` it has two shapes and only two: on the index the rail is the page (rows at `min-h-11`, description and `ChevronRight` visible), and on every other settings page the rail is `max-lg:hidden` and a single `lg:hidden` back link takes its place. The current item carries `aria-current="true"` and the `bg-muted` fill — never `aria-current="page"`, which the shell sidebar owns.
+- **`SettingsCard`** is the PR-46 card anatomy over the shadcn `Card`: a `<section aria-labelledby>` wrapping title (`h2`, focusable by id so a hash can land on it), optional status badge in `CardAction` beside the title, description, body, and an optional footer separated by `CardFooter`'s divider — actions right-aligned from `md`, full width and `min-h-11` below it. A card with no actions renders no footer and therefore no divider.
+- **Why cards, not bare panels.** Settings content on the `--surface-sunken` page ground put muted helper text at 4.46:1 against that ground. The white card restores the ground the tokens were measured against; `design-token-contrast` and the browser probe agree at 0 findings afterwards.
+
+### T-176 — the thermal label (10 × 15 cm with a sender stub, and 10 × 10 cm)
+
+The label is the product's core artefact, so it is designed for a 203 dpi thermal head (8 dots per mm, one dot = 0.125 mm) rather than for a screen.
+
+- **Two sizes, one default.** **10 × 15 cm** is the default: one sheet in two parts. The upper **10 × 10 cm** is the package label and the lower **10 × 5 cm** is the sender's handover stub, separated by a cut line at exactly 100 mm. **10 × 10 cm** prints the package label alone — the stub and the cut line are not rendered at all, not merely hidden. `@page label-100x150` and `@page label-100x100` (margin 0) follow the choice through the sheet's `page` property; nothing else prints.
+- **Cut line.** A dashed rule 2 CSS px thick (0.53 mm, four dots) across the sheet's width with a scissors mark and "potong di sini" at its centre, centred on 100 mm. The package label keeps 3 mm of padding above it and the stub 3 mm below it, so nothing but the line comes within **2 mm** of the cut on either side.
+- **Package label (10 × 10).** Rows, top to bottom: courier (15 pt, 800) and service; Code 128 barcode of the AWB with the AWB in text beneath (12 pt monospaced, 700); recipient — name and phone on one line, then the destination area in bold, then the street address; sender on one clamped two-line row; COD box (2 px border, amount 13 pt 800) with its Mengantar breakdown, or the NON-COD instruction and Mengantar shipping; package facts (content, weight and colli, dimensions, declared value, Mengantar insurance); shipment number and issue time in WIB. The recipient row takes the remaining height and its type steps down with the existing `recipientDensity` tier — name/phone/area/address 12/11/9.5/9 pt compact, 10.5/10/8.5/8 long, 10/9.5/8/7.25 dense, 9.5/9/8/7 ultra — so a short address prints large for a courier at arm's length and a 480-character one still fits. The area line precedes the street address so any clipping past the over-capacity warning loses street detail, never the area a courier sorts by.
+- **Sender stub (10 × 5).** "Bukti serah terima · untuk pengirim" with the outlet name; courier and service; COD amount when the shipment is COD, "NON-COD" otherwise; the AWB barcode (9 mm bars) and text; nomor kiriman, destination as district and city only, and "Diserahkan" — the recorded print request's time in WIB, or the current WIB minute until a print is recorded. **Never** on the stub: recipient name, street address or phone, the full area label (subdistrict, province, postal code), sender phone or address, package contents or value, or the COD breakdown. It leaves the building with the sender.
+- **Legibility numbers.** Text floor **7 pt** (≈2.47 mm em, ≈20 dots). Bold (700 or heavier) for courier, AWB text, recipient name and phone, destination area, the COD box, the stub's COD amount and its facts. Code 128 subset B, narrow module **0.25 mm (2 dots)**, quiet zone **10 modules (2.5 mm)** each side drawn inside the SVG box, which no other element may enter; bars 10 mm high on the package label and 9 mm on the stub. An AWB too long to fit 94 mm at that module (more than 29 characters) prints as text only, and the page warns before printing. Rules are whole CSS px because Chrome snaps borders to them: 1 px (0.26 mm, two dots) between rows, 2 px for the COD box and the cut line.
+- **Pure black on white.** Every element's ink is `#000`; backgrounds are transparent or white; no greys, tints, opacity, shadows, filters or background images — a thermal head renders them as noise and browsers drop backgrounds from print anyway. The screen preview frames the sheet with a 1 px outline that takes no space and is removed in print.
+- **Preview equals print.** The preview is the sheet itself at its millimetre size; the audit compares every box's position and size between screen and print media.

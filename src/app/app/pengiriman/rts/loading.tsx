@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function RtsDashboardLoading() {
   return (
-    <PageContainer aria-busy="true" width="data">
+    <PageContainer aria-busy="true">
       <PageHeader description="Navigasi dan lingkup tenant tetap tersedia saat daftar retur dimuat." eyebrow="Operasional kiriman" title="Retur (RTS)" />
       <div aria-label="Memuat ringkasan dan daftar kiriman retur" className="grid gap-4" role="status">
         <div className="flex flex-wrap gap-2">{Array.from({ length: 5 }, (_, index) => <Skeleton className="h-11 w-32 md:h-8" key={index} />)}</div>

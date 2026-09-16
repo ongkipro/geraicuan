@@ -1,0 +1,74 @@
+{
+  "contract": "Mengantar GET /order list sanitized fixture",
+  "evidence": "Top-level keys and order fields from a read-only production capture on 2026-09-15; statuses seen in list responses: DELIVERED, DELIVERY PROBLEM, PENDING PICKUP, RTS. All identifiers and PII are synthetic.",
+  "list": {
+    "success": true,
+    "data": [
+      {
+        "_id": "SANITIZEDORDER0005",
+        "ORDER_ID": "SANITIZED-ORDER-0005",
+        "cnote_no": "SANITIZED-CNOTE-0005",
+        "status": "DELIVERED",
+        "isPaid": true,
+        "isDeleted": false,
+        "COD_AMOUNT": 113663,
+        "courier": "JNE",
+        "createdAt": "2026-09-09T03:00:00.000Z",
+        "lastStatusChange": "2026-09-11T03:00:00.000Z",
+        "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME",
+        "RECEIVER_PHONE": "SENTINEL-RECEIVER-PHONE",
+        "RECEIVER_ADDR1": "SENTINEL-RECEIVER-ADDRESS"
+      },
+      {
+        "_id": "SANITIZEDORDER0003",
+        "ORDER_ID": "SANITIZED-ORDER-0003",
+        "cnote_no": "SANITIZED-CNOTE-0003",
+        "status": "RTS",
+        "isPaid": true,
+        "isDeleted": false,
+        "COD_AMOUNT": 113663,
+        "courier": "JNE",
+        "createdAt": "2026-09-08T03:00:00.000Z",
+        "lastStatusChange": "2026-09-12T03:00:00.000Z",
+        "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME",
+        "RECEIVER_PHONE": "SENTINEL-RECEIVER-PHONE"
+      },
+      {
+        "_id": "SANITIZEDORDER0006",
+        "ORDER_ID": "SANITIZED-ORDER-0006",
+        "cnote_no": "SANITIZED-CNOTE-0006",
+        "status": "UNDELIVERED",
+        "isPaid": true,
+        "isDeleted": false,
+        "COD_AMOUNT": 113663,
+        "courier": "JNE",
+        "createdAt": "2026-09-09T05:00:00.000Z",
+        "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME"
+      },
+      {
+        "_id": "SANITIZEDORDER0007",
+        "ORDER_ID": "SANITIZED-ORDER-0007",
+        "cnote_no": null,
+        "status": "PENDING PICKUP",
+        "isPaid": false,
+        "isDeleted": false,
+        "COD_AMOUNT": 0,
+        "courier": "JNE",
+        "createdAt": "2026-09-09T06:00:00.000Z"
+      },
+      {
+        "_id": "SANITIZEDORDER0008",
+        "ORDER_ID": "SANITIZED-ORDER-0008",
+        "cnote_no": "SANITIZED-CNOTE-DELETED-0008",
+        "status": "DELIVERED",
+        "isPaid": true,
+        "isDeleted": true,
+        "COD_AMOUNT": 1000,
+        "courier": "JNE",
+        "createdAt": "2026-09-09T07:00:00.000Z"
+      }
+    ],
+    "count": 5,
+    "total": 5
+  }
+}

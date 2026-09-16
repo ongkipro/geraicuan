@@ -1,6 +1,7 @@
 import {
+  CourierRecapSkeleton,
   dashboardOverviewGridClassName,
-  MetricsSkeleton,
+  OutcomeSkeleton,
   PeriodSummarySkeleton,
   PeriodTrendSkeleton,
   ReadinessSkeleton,
@@ -16,7 +17,6 @@ export default function TenantLoading() {
       aria-busy="true"
       aria-label="Memuat ringkasan operasional tenant"
       role="status"
-      width="wide"
     >
       <PageHeader eyebrow="Operasional tenant"
         title="Ringkasan"
@@ -29,11 +29,12 @@ export default function TenantLoading() {
         </div>
         <PeriodSummarySkeleton />
       </div>
+      <OutcomeSkeleton />
       <div className={dashboardOverviewGridClassName}>
         <PeriodTrendSkeleton />
         <RecentSkeleton />
       </div>
-      <MetricsSkeleton />
+      <CourierRecapSkeleton />
     </PageContainer>
   );
 }

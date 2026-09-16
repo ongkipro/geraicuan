@@ -18,6 +18,7 @@ const repositoryRoot = process.cwd();
 const forbiddenLegacyClass = /\b(?:sales|ship|ops|an|bulk)-(?:[a-z0-9_-]+)?/gi;
 
 const expectedStatesByRoute = {
+  "/app/cek-resi": ["healthy-empty", "loading", "populated", "route-error", "invalid-query", "not-found", "partial-error", "pending", "unauthorized"],
   "/app/cek-tarif": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/app": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/analitik": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
@@ -33,8 +34,14 @@ const expectedStatesByRoute = {
   "/app/kontak/[contactId]": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
   "/app/label": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/label/[shipmentId]": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
+  "/app/laporan/pengiriman": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
+  "/app/laporan/pengiriman/export.csv": ["invalid-query", "primary-success", "route-error", "unauthorized"],
+  "/app/laporan/cetak-resi": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/keuangan": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
-  "/app/pengaturan": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
+  "/app/pengaturan": ["loading", "populated", "route-error", "pending", "primary-success", "unauthorized"],
+  "/app/pengaturan/pickup": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
+  "/app/pengaturan/outlet": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
+  "/app/pengaturan/koneksi": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
   "/app/anggota": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
   "/platform": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "stale", "unauthorized"],
   "/platform/tenant": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "partial-error", "pending", "primary-success", "unauthorized"],
@@ -43,6 +50,7 @@ const expectedStatesByRoute = {
 } as const;
 
 const expectedOwnerByRoute = {
+  "/app/cek-resi": "T-161",
   "/app/cek-tarif": "T-143",
   "/app": "T-38",
   "/app/analitik": "T-38",
@@ -58,8 +66,14 @@ const expectedOwnerByRoute = {
   "/app/kontak/[contactId]": "T-42",
   "/app/label": "T-43",
   "/app/label/[shipmentId]": "T-43",
+  "/app/laporan/pengiriman": "T-165",
+  "/app/laporan/pengiriman/export.csv": "T-165",
+  "/app/laporan/cetak-resi": "T-166",
   "/app/keuangan": "T-44",
-  "/app/pengaturan": "T-45",
+  "/app/pengaturan": "T-156",
+  "/app/pengaturan/pickup": "T-157",
+  "/app/pengaturan/outlet": "T-45",
+  "/app/pengaturan/koneksi": "T-158",
   "/app/anggota": "T-46",
   "/platform": "T-47",
   "/platform/tenant": "T-47",
@@ -83,9 +97,11 @@ const expectedT66Actions = [
   "src/app/app/anggota/actions.ts:inviteMemberAction",
   "src/app/app/keuangan/actions.ts:reverseLedgerEntry",
   "src/app/app/keuangan/actions.ts:runLedgerReconciliation",
+  "src/app/app/pengaturan/actions.ts:addOutletPickupPoint",
   "src/app/app/pengaturan/actions.ts:loadMengantarPickupOptions",
-  "src/app/app/pengaturan/actions.ts:saveOutletSettings",
+  "src/app/app/pengaturan/actions.ts:removeOutletPickupPoint",
   "src/app/app/pengaturan/actions.ts:savePrivateMengantarCredential",
+  "src/app/app/pengaturan/actions.ts:setDefaultOutletPickupPoint",
   "src/app/app/pengaturan/actions.ts:switchMengantarToPlatformDefault",
 ] as const;
 
@@ -369,7 +385,7 @@ describe("CMS UI audit inventory", () => {
     expect(routes.sort()).toEqual(Object.keys(expectedStatesByRoute).sort());
 
     for (const contract of CMS_UI_AUDIT_ROUTE_CONTRACTS) {
-      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72|143)$/);
+      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72|143|15[6-8]|161|16[56])$/);
       expect(contract.ownerTask).toBe(expectedOwnerByRoute[contract.route]);
       expect(contract.roles.length).toBeGreaterThan(0);
       expect(contract.states.length).toBeGreaterThan(0);
@@ -387,9 +403,9 @@ describe("CMS UI audit inventory", () => {
     }
 
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "page"))
-      .toHaveLength(20);
+      .toHaveLength(26);
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "endpoint"))
-      .toHaveLength(2);
+      .toHaveLength(3);
 
     const registeredPageSources = CMS_UI_AUDIT_ROUTE_CONTRACTS
       .filter(({ kind }) => kind === "page")
@@ -593,6 +609,17 @@ describe("CMS UI audit inventory", () => {
         files: ["src/app/app/label/page.tsx"],
         route: "/app/label",
       },
+      // T-165/T-166 (PR-55): both report pages own one GET filter form each,
+      // added here in the same change that created them rather than left for a
+      // later round to discover.
+      {
+        files: ["src/app/app/laporan/pengiriman/report-filters.tsx"],
+        route: "/app/laporan/pengiriman",
+      },
+      {
+        files: ["src/app/app/laporan/cetak-resi/print-history-filters.tsx"],
+        route: "/app/laporan/cetak-resi",
+      },
       // T-77 round 22 found the same drift again: monitoring-view.tsx's
       // single FilterPanel form serves all four /platform* routes with the
       // identical shape, and none of them were ever added to this list.
@@ -735,37 +762,54 @@ describe("CMS UI audit inventory", () => {
 
   it("keeps Mengantar error audit states development-only and non-mutating", () => {
     const expectedSettingsScenarios = {
-      "settings-empty": "healthy-empty",
-      "settings-error": "route-error",
-      "settings-first-run": "first-run",
-      "settings-many": "populated",
-      "settings-private-auth-error": "partial-error",
-      "settings-private-attention": "partial-error",
-      "settings-provider-error": "partial-error",
-      "settings-twenty": "populated",
-      "settings-stream": "loading",
+      "settings-empty": ["/app/pengaturan/outlet", "healthy-empty"],
+      "settings-error": ["/app/pengaturan", "route-error"],
+      "settings-first-run": ["/app/pengaturan/outlet", "first-run"],
+      "settings-many": ["/app/pengaturan/outlet", "populated"],
+      "settings-outlet-error": ["/app/pengaturan/outlet", "route-error"],
+      "settings-outlet-stream": ["/app/pengaturan/outlet", "loading"],
+      "settings-pickup-empty": ["/app/pengaturan/pickup", "healthy-empty"],
+      "settings-pickup-error": ["/app/pengaturan/pickup", "route-error"],
+      "settings-pickup-list": ["/app/pengaturan/pickup", "populated"],
+      "settings-pickup-provider-error": ["/app/pengaturan/pickup", "partial-error"],
+      "settings-pickup-stream": ["/app/pengaturan/pickup", "loading"],
+      "settings-private-auth-error": ["/app/pengaturan/koneksi", "partial-error"],
+      "settings-private-attention": ["/app/pengaturan/koneksi", "partial-error"],
+      "settings-connection-empty": ["/app/pengaturan/koneksi", "healthy-empty"],
+      "settings-connection-many": ["/app/pengaturan/koneksi", "populated"],
+      "settings-koneksi-error": ["/app/pengaturan/koneksi", "route-error"],
+      "settings-koneksi-stream": ["/app/pengaturan/koneksi", "loading"],
+      "settings-provider-error": ["/app/pengaturan/outlet", "partial-error"],
+      "settings-twenty": ["/app/pengaturan/outlet", "populated"],
+      "settings-stream": ["/app/pengaturan", "loading"],
     } as const;
     const settingsScenarios = Object.fromEntries(
       Object.entries(UI_AUDIT_SCENARIO_CONTRACTS)
         .filter(([scenario]) => scenario.startsWith("settings-"))
-        .map(([scenario, contract]) => [scenario, contract.state]),
+        .map(([scenario, contract]) => [scenario, [contract.route, contract.state]]),
     );
 
     expect(settingsScenarios).toEqual(expectedSettingsScenarios);
-    for (const scenario of Object.keys(expectedSettingsScenarios)) {
+    for (const [scenario, [route]] of Object.entries(expectedSettingsScenarios)) {
       const contract = UI_AUDIT_SCENARIO_CONTRACTS[
         scenario as keyof typeof UI_AUDIT_SCENARIO_CONTRACTS
       ];
       expect(contract.mode).toBe("read-only");
-      expect(parseUiAuditScenarioForRoute(scenario, "/app/pengaturan", "development"))
+      expect(parseUiAuditScenarioForRoute(scenario, route, "development"))
         .toBe(scenario);
-      expect(parseUiAuditScenarioForRoute(scenario, "/app/pengaturan", "production"))
+      expect(parseUiAuditScenarioForRoute(scenario, route, "production"))
+        .toBeNull();
+      // T-156 split the settings menu into its own pages: a scenario that
+      // belongs to one settings page must not render on another.
+      const otherRoute = route === "/app/pengaturan" ? "/app/pengaturan/outlet" : "/app/pengaturan";
+      expect(parseUiAuditScenarioForRoute(scenario, otherRoute, "development"))
         .toBeNull();
     }
   });
 
   it("limits every audit-contract import to its route-bound read-only page consumers", () => {
     const allowedImporters = new Set([
+      "src/app/app/cek-resi/page.tsx",
       "src/app/app/cek-tarif/page.tsx",
       "src/app/app/analitik/page.tsx",
       "src/app/app/anggota/page.tsx",
@@ -777,8 +821,13 @@ describe("CMS UI audit inventory", () => {
       "src/app/app/kontak/[contactId]/page.tsx",
       "src/app/app/location-actions.ts",
       "src/app/app/pengaturan/page.tsx",
+      "src/app/app/pengaturan/outlet/page.tsx",
+      "src/app/app/pengaturan/pickup/page.tsx",
+      "src/app/app/pengaturan/koneksi/page.tsx",
       "src/app/app/label/page.tsx",
       "src/app/app/label/[shipmentId]/page.tsx",
+      "src/app/app/laporan/cetak-resi/page.tsx",
+      "src/app/app/laporan/pengiriman/page.tsx",
       "src/app/app/pengiriman/page.tsx",
       "src/app/app/pengiriman/baru/page.tsx",
       "src/app/app/pengiriman/[shipmentId]/page.tsx",
@@ -844,8 +893,13 @@ describe("CMS UI audit inventory", () => {
       ["src/app/app/keuangan/page.tsx", "/app/keuangan"],
       ["src/app/app/kontak/page.tsx", "/app/kontak"],
       ["src/app/app/pengaturan/page.tsx", "/app/pengaturan"],
+      ["src/app/app/pengaturan/outlet/page.tsx", "/app/pengaturan/outlet"],
+      ["src/app/app/pengaturan/pickup/page.tsx", "/app/pengaturan/pickup"],
+      ["src/app/app/pengaturan/koneksi/page.tsx", "/app/pengaturan/koneksi"],
       ["src/app/app/label/page.tsx", "/app/label"],
       ["src/app/app/label/[shipmentId]/page.tsx", "/app/label/[shipmentId]"],
+      ["src/app/app/laporan/pengiriman/page.tsx", "/app/laporan/pengiriman"],
+      ["src/app/app/laporan/cetak-resi/page.tsx", "/app/laporan/cetak-resi"],
       ["src/app/app/pengiriman/page.tsx", "/app/pengiriman"],
       ["src/app/app/pengiriman/baru/page.tsx", "/app/pengiriman/baru"],
       ["src/app/app/pengiriman/[shipmentId]/page.tsx", "/app/pengiriman/[shipmentId]"],

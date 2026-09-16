@@ -12,13 +12,34 @@ import {
   shipments,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import {
+  BASIS_POINTS,
+  MENGANTAR_COD_FEE_BASIS_POINTS,
+} from "@/lib/mengantar-cod-fee";
 
 const ZERO = BigInt("0");
-const SERVICE_FEE_NUMERATOR = BigInt("3");
-const VAT_NUMERATOR = BigInt("11");
-const HALF_PERCENT_DENOMINATOR = BigInt("50");
-const PERCENT_DENOMINATOR = BigInt("100");
+const ONE = BigInt("1");
 const POSTGRES_INTEGER_MAX = BigInt("2147483647");
+const COD_SCALE = BigInt(BASIS_POINTS);
+const COD_NET_OF_FEE = BigInt(BASIS_POINTS - MENGANTAR_COD_FEE_BASIS_POINTS);
+// VAT is 11% of the fee, so the fee is 100/111 of fee + VAT.
+const FEE_SHARE_NUMERATOR = BigInt("100");
+const FEE_SHARE_DENOMINATOR = BigInt("111");
+const FEE_SHARE_HALF = BigInt("55");
+
+/**
+ * Which formula a `shipment_cod_totals` row was written with. Every row records
+ * what was actually submitted to Mengantar, so a row is never recomputed under a
+ * newer formula; the database checks each version's own arithmetic
+ * (`drizzle/0048_cod_amount_gross_up.sql`).
+ *
+ * - 1 (until T-175): additive — fee = round(3% × (goods + shipping)),
+ *   VAT = round(11% × fee), COD = goods + shipping + fee + VAT. Mengantar then
+ *   keeps 3.33% of that COD, so the seller came up 0.111% of (goods + shipping)
+ *   short on every COD shipment.
+ * - 2 (T-175): grossed up — see `calculateCodAmounts`.
+ */
+export const COD_FORMULA_VERSION = 2;
 
 export type CodEstimateSelection = {
   shipmentId: string;
@@ -43,6 +64,7 @@ export type PersistedCodTotals = {
   serviceFeeIdr: number;
   vatAmountIdr: number;
   providerCodAmountIdr: number;
+  codFormulaVersion: number;
   createdAt: Date;
 };
 
@@ -67,6 +89,20 @@ function wholeIdr(value: bigint): number {
   return Number(value);
 }
 
+/**
+ * COD formula version 2 (T-175). The buyer pays goods plus shipping, and
+ * Mengantar keeps `specialShipping + 0.0333 × COD` of what the buyer paid, so
+ * COD is grossed up to the smallest whole rupiah whose net of Mengantar's fee
+ * still covers goods plus shipping:
+ *
+ *   COD = ceil((goods + shipping) × 10000 / 9667)
+ *
+ * The markup `M = COD − goods − shipping` is split so the two stored columns
+ * keep summing to it: `serviceFee = round_half_up(M × 100 / 111)` and
+ * `vat = M − serviceFee`. `M × 100 / 111` never lands on exactly .5 (200M is
+ * even, an odd multiple of 111 is odd), so the rounding has no tie to break.
+ * Integer arithmetic only; the same rule is a CHECK in the database.
+ */
 export function calculateCodAmounts(goodsValueIdr: number, shippingAmountIdr: number) {
   if (
     !Number.isSafeInteger(goodsValueIdr) ||
@@ -79,15 +115,15 @@ export function calculateCodAmounts(goodsValueIdr: number, shippingAmountIdr: nu
 
   const goods = BigInt(goodsValueIdr);
   const shipping = BigInt(shippingAmountIdr);
+  const providerCod =
+    ((goods + shipping) * COD_SCALE + COD_NET_OF_FEE - ONE) / COD_NET_OF_FEE;
+  const markup = providerCod - goods - shipping;
   const serviceFee =
-    ((goods + shipping) * SERVICE_FEE_NUMERATOR + HALF_PERCENT_DENOMINATOR) /
-    PERCENT_DENOMINATOR;
-  const vat =
-    (serviceFee * VAT_NUMERATOR + HALF_PERCENT_DENOMINATOR) /
-    PERCENT_DENOMINATOR;
-  const providerCod = goods + shipping + serviceFee + vat;
+    (markup * FEE_SHARE_NUMERATOR + FEE_SHARE_HALF) / FEE_SHARE_DENOMINATOR;
+  const vat = markup - serviceFee;
 
   return {
+    codFormulaVersion: COD_FORMULA_VERSION,
     goodsValueIdr: wholeIdr(goods),
     shippingAmountIdr: wholeIdr(shipping),
     serviceFeeIdr: wholeIdr(serviceFee),
@@ -125,6 +161,7 @@ async function loadCodTotalsForSelection(
       serviceFeeIdr: shipmentCodTotals.serviceFeeIdr,
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+      codFormulaVersion: shipmentCodTotals.codFormulaVersion,
       createdAt: shipmentCodTotals.createdAt,
     })
     .from(shipmentCodTotals)
@@ -193,12 +230,19 @@ async function loadConfirmationEstimate(
     INNER JOIN ${outlets}
       ON ${outlets.id} = ${shipments.outletId}
       AND ${outlets.tenantId} = ${shipments.tenantId}
+    -- T-157: the origin the estimate was taken at is the draft's own pickup
+    -- point, falling back to the outlet default only for a draft that has none.
+    -- Matching the outlet default alone made every COD shipment from a
+    -- non-default pickup point fail confirmation with CodTotalsUnavailableError.
     INNER JOIN ${shipmentEstimateSnapshots}
       ON ${shipmentEstimateSnapshots.id} = ${selection.estimateSnapshotId}
       AND ${shipmentEstimateSnapshots.shipmentId} = ${shipments.id}
       AND ${shipmentEstimateSnapshots.outletId} = ${shipments.outletId}
       AND ${shipmentEstimateSnapshots.tenantId} = ${shipments.tenantId}
-      AND ${shipmentEstimateSnapshots.originAreaId} = ${outlets.defaultOriginAreaId}
+      AND ${shipmentEstimateSnapshots.originAreaId} = coalesce(
+        ${shipmentDrafts.originAreaId},
+        ${outlets.defaultOriginAreaId}
+      )
       AND ${shipmentEstimateSnapshots.destinationAreaId} = ${shipmentDrafts.destinationAreaId}
       AND ${shipmentEstimateSnapshots.destinationAreaLabel} = ${shipmentDrafts.destinationAreaLabel}
       AND ${shipmentEstimateSnapshots.weightGrams} = ${shipmentDrafts.packageWeightGrams}
@@ -285,6 +329,7 @@ export async function ensureCodTotalsForConfirmation(
       serviceFeeIdr: shipmentCodTotals.serviceFeeIdr,
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+      codFormulaVersion: shipmentCodTotals.codFormulaVersion,
       createdAt: shipmentCodTotals.createdAt,
     });
   const totals =
@@ -296,7 +341,8 @@ export async function ensureCodTotalsForConfirmation(
     totals.shippingAmountIdr !== amounts.shippingAmountIdr ||
     totals.serviceFeeIdr !== amounts.serviceFeeIdr ||
     totals.vatAmountIdr !== amounts.vatAmountIdr ||
-    totals.providerCodAmountIdr !== amounts.providerCodAmountIdr
+    totals.providerCodAmountIdr !== amounts.providerCodAmountIdr ||
+    totals.codFormulaVersion !== amounts.codFormulaVersion
   ) {
     throw new CodTotalsUnavailableError();
   }
@@ -335,7 +381,10 @@ async function loadSelectedEstimate(
       AND ${shipmentDrafts.isCod} = true
       AND ${shipmentEstimateSnapshots.id} = ${selection.snapshotId}
       AND ${shipmentEstimateSnapshots.isCodRequested} = true
-      AND ${shipmentEstimateSnapshots.originAreaId} = ${outlets.defaultOriginAreaId}
+      AND ${shipmentEstimateSnapshots.originAreaId} = coalesce(
+        ${shipmentDrafts.originAreaId},
+        ${outlets.defaultOriginAreaId}
+      )
       AND ${shipmentEstimateSnapshots.destinationAreaId} = ${shipmentDrafts.destinationAreaId}
       AND ${shipmentEstimateSnapshots.destinationAreaLabel} = ${shipmentDrafts.destinationAreaLabel}
       AND ${shipmentEstimateSnapshots.weightGrams} = ${shipmentDrafts.packageWeightGrams}
@@ -392,6 +441,7 @@ export async function persistCodTotalsForEstimate(
       serviceFeeIdr: shipmentCodTotals.serviceFeeIdr,
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+      codFormulaVersion: shipmentCodTotals.codFormulaVersion,
       createdAt: shipmentCodTotals.createdAt,
     });
 
@@ -420,6 +470,7 @@ export async function loadCodTotalsForShipment(
       serviceFeeIdr: shipmentCodTotals.serviceFeeIdr,
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+      codFormulaVersion: shipmentCodTotals.codFormulaVersion,
       createdAt: shipmentCodTotals.createdAt,
     })
     .from(shipmentCodTotals)

@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function NewShipmentLoading() {
   return (
-    <PageContainer width="form">
+    <PageContainer>
       {/* The heading is real, not a skeleton: fourteen of the sixteen loading
           states already render one, and without it the page has no h1 at all
           while it streams. */}

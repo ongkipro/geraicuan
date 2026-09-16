@@ -177,7 +177,8 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({
       error: expect.stringContaining("Jangan konfirmasi ulang"),
     });
-    expect(revalidatePath).toHaveBeenCalledWith(`/app/pengiriman/${shipmentId}`);
+    // PR-44: the canonical detail URL is the number, so the dynamic route page is revalidated.
+    expect(revalidatePath).toHaveBeenCalledWith("/app/pengiriman/[shipmentId]", "page");
     expect(revalidatePath).toHaveBeenCalledWith("/app/pengiriman");
   });
 

@@ -3,11 +3,11 @@ import {
   boolean,
   bigint,
   check,
-  date,
   foreignKey,
   index,
   jsonb,
   integer,
+  numeric,
   pgTable,
   text,
   primaryKey,
@@ -18,6 +18,9 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { membershipRoles, shipmentStatuses } from "@/lib/domain-enums";
+// Type-only: the column's vocabulary is enforced by its check constraint below,
+// so the schema needs no runtime value from the lib layer for it.
+import type { ProviderDeliveryTransitionOutcome } from "@/lib/provider-delivery-status";
 
 // Re-exported so server modules may keep importing them from the schema.
 export { membershipRoles, shipmentStatuses };
@@ -42,6 +45,8 @@ export const auditEventActions = [
   "MENGANTAR_CREDENTIAL_CREATED",
   "MENGANTAR_CREDENTIAL_REPLACED",
   "MENGANTAR_PLATFORM_DEFAULT_RESTORED",
+  "SHIPMENT_PREFIX_LOCKED",
+  "SHIPMENT_PREFIX_UNLOCKED",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
@@ -57,6 +62,7 @@ export const shipmentRateLimitOperations = [
   "location-search",
   "order-submit",
   "bulk-import",
+  "settlement-pull",
 ] as const;
 
 export const estimateCredentialSources = ["private", "platform_default"] as const;
@@ -88,12 +94,19 @@ export const ledgerEntryTypes = [
   "COD_PRINCIPAL_COLLECTABLE",
   "MENGANTAR_SHIPPING_COST",
   "MENGANTAR_INSURANCE_COST",
+  /**
+   * Retired for new entries by T-178 (migration 0049): the fee it recorded is
+   * Mengantar's, not GeraiCUAN's. Kept valid because the ledger is append-only
+   * and entries posted before the change keep their type.
+   */
   "GERAICUAN_COD_SERVICE_FEE_REVENUE",
   "COD_SERVICE_FEE_VAT_PAYABLE",
   "NON_COD_UPSTREAM_PAYMENT",
   "COD_REMITTANCE",
   "ADJUSTMENT",
   "RECONCILIATION",
+  /** T-178: the COD fee Mengantar keeps at settlement, a provider cost. */
+  "MENGANTAR_COD_FEE_COST",
 ] as const;
 
 export const ledgerFinancialClasses = [
@@ -263,7 +276,7 @@ export const shipmentRateLimits = pgTable(
     }),
     check(
       "shipment_rate_limits_operation_valid",
-      sql`operation IN ('estimate', 'location-search', 'order-submit', 'bulk-import')`,
+      sql`operation IN ('estimate', 'location-search', 'order-submit', 'bulk-import', 'settlement-pull')`,
     ),
     check("shipment_rate_limits_count_positive", sql`count > 0`),
   ],
@@ -309,6 +322,64 @@ export const outlets = pgTable(
     check(
       "outlets_location_labels_complete",
       sql`(default_pickup_address_label IS NULL) = (default_origin_area_label IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * T-157 (PR-46/PR-47): an outlet's Mengantar pickup addresses as a list. One
+ * row per provider `pickup_address_id`, each carrying the origin area Mengantar
+ * derives from it, and exactly one row per outlet flagged `is_default`.
+ * `outlets.default_pickup_address_id` and friends stay as the denormalized
+ * mirror of that default row, so readiness, estimates and order submission keep
+ * reading one authoritative pair.
+ */
+export const outletPickupPoints = pgTable(
+  "outlet_pickup_points",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    pickupAddressId: text("pickup_address_id").notNull(),
+    pickupAddressLabel: text("pickup_address_label").notNull(),
+    originAreaId: text("origin_area_id").notNull(),
+    originAreaLabel: text("origin_area_label").notNull(),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "outlet_pickup_points_outlet_tenant_fkey",
+      columns: [table.outletId, table.tenantId],
+      foreignColumns: [outlets.id, outlets.tenantId],
+    }).onDelete("restrict"),
+    unique("outlet_pickup_points_outlet_address_key").on(
+      table.tenantId,
+      table.outletId,
+      table.pickupAddressId,
+    ),
+    index("outlet_pickup_points_tenant_outlet_idx").on(table.tenantId, table.outletId),
+    // At most one default per outlet, enforced by the database rather than by
+    // the repository remembering to clear the previous default first.
+    uniqueIndex("outlet_pickup_points_one_default_per_outlet")
+      .on(table.tenantId, table.outletId)
+      .where(sql`is_default`),
+    check(
+      "outlet_pickup_points_pickup_address_id_valid",
+      sql`char_length(btrim(pickup_address_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "outlet_pickup_points_origin_area_id_valid",
+      sql`char_length(btrim(origin_area_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "outlet_pickup_points_pickup_label_valid",
+      sql`char_length(btrim(pickup_address_label)) BETWEEN 1 AND 320`,
+    ),
+    check(
+      "outlet_pickup_points_origin_label_valid",
+      sql`char_length(btrim(origin_area_label)) BETWEEN 1 AND 320`,
     ),
   ],
 );
@@ -465,14 +536,17 @@ export const mengantarCredentialRateLimits = pgTable(
   ],
 );
 // Global identity allocation metadata; application roles have no direct access.
-export const shipmentReferenceCounters = pgTable("shipment_reference_counters", {
-  referenceUserNumber: integer("reference_user_number").notNull(),
-  referenceDate: date("reference_date").notNull(),
-  lastSequence: integer("last_sequence").notNull(),
-}, (table) => [
-  primaryKey({ columns: [table.referenceUserNumber, table.referenceDate] }),
-  check("shipment_reference_counters_owner_valid", sql`reference_user_number = 0 OR reference_user_number >= 10000`),
-  check("shipment_reference_counters_sequence_positive", sql`last_sequence > 0`),
+// PR-44 numbering state. Kept off `tenants` (FORCE RLS) so owner-run SECURITY DEFINER
+// functions work without superuser; the runtime role has no privilege here at all.
+export const tenantShipmentCounters = pgTable("tenant_shipment_counters", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  // NULL until the first number is allocated (a prefix may be saved before any shipment).
+  lastNumber: integer("last_number"),
+  shipmentPrefix: text("shipment_prefix").notNull().default("GC"),
+  shipmentPrefixLockedAt: timestamp("shipment_prefix_locked_at", { withTimezone: true }),
+}, () => [
+  check("tenant_shipment_counters_last_number_valid", sql`last_number IS NULL OR last_number >= 10000`),
+  check("tenant_shipment_counters_prefix_valid", sql`shipment_prefix ~ '^[A-Z0-9]{2,5}$'`),
 ]);
 
 export const shipments = pgTable(
@@ -482,10 +556,9 @@ export const shipments = pgTable(
     createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "restrict" }),
     // Before-insert trigger fills these; NULL defaults make ORM inserts optional
     // while NOT NULL fails closed if the allocator trigger is absent.
+    // publicReference is the displayed `PREFIX-number` (PR-44); tenantNumber addresses routes.
     publicReference: text("public_reference").notNull().default(sql`NULL`),
-    referenceUserNumber: integer("reference_user_number").notNull().default(sql`NULL`),
-    referenceDate: date("reference_date").notNull().default(sql`NULL`),
-    dailySequence: integer("daily_sequence").notNull().default(sql`NULL`),
+    tenantNumber: integer("tenant_number").notNull().default(sql`NULL`),
     tenantId: uuid("tenant_id").notNull(),
     outletId: uuid("outlet_id").notNull(),
     status: text("status", { enum: shipmentStatuses }).notNull().default("DRAFT"),
@@ -498,10 +571,9 @@ export const shipments = pgTable(
       .defaultNow(),
   },
   (table) => [
-    unique("shipments_public_reference_key").on(table.publicReference),
-    unique("shipments_reference_owner_date_sequence_key").on(table.referenceUserNumber, table.referenceDate, table.dailySequence),
-    check("shipments_reference_owner_valid", sql`(created_by_user_id IS NULL AND reference_user_number = 0) OR (created_by_user_id IS NOT NULL AND reference_user_number >= 10000)`),
-    check("shipments_daily_sequence_positive", sql`daily_sequence > 0`),
+    unique("shipments_tenant_number_key").on(table.tenantId, table.tenantNumber),
+    check("shipments_tenant_number_valid", sql`tenant_number >= 10000`),
+    check("shipments_public_reference_format", sql`public_reference ~ '^[A-Z0-9]{2,5}-[0-9]{5,}$' AND split_part(public_reference, '-', 2) = tenant_number::text`),
     foreignKey({
       name: "shipments_outlet_tenant_fkey",
       columns: [table.outletId, table.tenantId],
@@ -575,6 +647,20 @@ export const shipmentDrafts = pgTable(
     declaredValueIdr: integer("declared_value_idr").notNull(),
     isCod: boolean("is_cod").notNull().default(false),
     cogsAmountIdr: integer("cogs_amount_idr"),
+    // PR-47 field parity with Mengantar's own order form.
+    shippingInstruction: text("shipping_instruction"),
+    isHazardous: boolean("is_hazardous").notNull().default(false),
+    recipientAddressLandmark: text("recipient_address_landmark"),
+    // NULL means the destination area was never re-checked against the
+    // outlet's Mengantar account; order submission refuses such a draft.
+    destinationAreaVerifiedAt: timestamp("destination_area_verified_at", {
+      withTimezone: true,
+    }),
+    // T-157: the pickup point chosen for THIS shipment, snapshotted like the
+    // destination area. NULL is a pre-T-157 draft, which falls back to the
+    // outlet's default pair at estimate and submission time.
+    pickupAddressId: text("pickup_address_id"),
+    originAreaId: text("origin_area_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -614,6 +700,30 @@ export const shipmentDrafts = pgTable(
     check(
       "shipment_drafts_cod_declared_value_positive",
       sql`NOT is_cod OR declared_value_idr > 0`,
+    ),
+    check(
+      "shipment_drafts_shipping_instruction_valid",
+      sql`shipping_instruction IS NULL
+        OR char_length(btrim(shipping_instruction)) BETWEEN 1 AND 500`,
+    ),
+    check(
+      "shipment_drafts_recipient_address_landmark_valid",
+      sql`recipient_address_landmark IS NULL
+        OR char_length(btrim(recipient_address_landmark)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "shipment_drafts_pickup_point_complete",
+      sql`(pickup_address_id IS NULL) = (origin_area_id IS NULL)`,
+    ),
+    check(
+      "shipment_drafts_pickup_address_id_valid",
+      sql`pickup_address_id IS NULL
+        OR char_length(btrim(pickup_address_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "shipment_drafts_origin_area_id_valid",
+      sql`origin_area_id IS NULL
+        OR char_length(btrim(origin_area_id)) BETWEEN 1 AND 160`,
     ),
   ],
 );
@@ -698,6 +808,12 @@ export const shipmentEstimateServices = pgTable(
     insuranceSourceField: text("insurance_source_field"),
     deliveryEstimate: text("delivery_estimate").notNull(),
     codEligible: boolean("cod_eligible").notNull(),
+    // PR-47 money facts the estimate response already carries. NULL means the
+    // provider omitted the key for this service, never "zero".
+    normalPriceIdr: integer("normal_price_idr"),
+    specialPriceIdr: integer("special_price_idr"),
+    codFeeIdr: integer("cod_fee_idr"),
+    discountIdr: integer("discount_idr"),
   },
   (table) => [
     foreignKey({
@@ -743,6 +859,19 @@ export const shipmentEstimateServices = pgTable(
       "shipment_estimate_services_delivery_estimate_valid",
       sql`char_length(btrim(delivery_estimate)) BETWEEN 1 AND 160`,
     ),
+    check(
+      "shipment_estimate_services_provider_money_nonnegative",
+      sql`(normal_price_idr IS NULL OR normal_price_idr >= 0)
+        AND (special_price_idr IS NULL OR special_price_idr >= 0)
+        AND (cod_fee_idr IS NULL OR cod_fee_idr >= 0)
+        AND (discount_idr IS NULL OR discount_idr >= 0)`,
+    ),
+    check(
+      "shipment_estimate_services_special_not_above_normal",
+      sql`special_price_idr IS NULL
+        OR normal_price_idr IS NULL
+        OR special_price_idr <= normal_price_idr`,
+    ),
   ],
 );
 
@@ -760,6 +889,13 @@ export const shipmentCodTotals = pgTable(
     serviceFeeIdr: integer("service_fee_idr").notNull(),
     vatAmountIdr: integer("vat_amount_idr").notNull(),
     providerCodAmountIdr: integer("provider_cod_amount_idr").notNull(),
+    /**
+     * T-175: the formula the row was written with (`COD_FORMULA_VERSION` in
+     * `cod-totals-repository.ts`). Rows before migration 0048 are version 1 and
+     * stay valid under version 1's checks; the default keeps them, and any
+     * writer that does not name a version, on the additive rule.
+     */
+    codFormulaVersion: integer("cod_formula_version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -817,14 +953,20 @@ export const shipmentCodTotals = pgTable(
       sql`provider_cod_amount_idr > 0`,
     ),
     check(
+      "shipment_cod_totals_formula_version_known",
+      sql`cod_formula_version IN (1, 2)`,
+    ),
+    // Version 1 (additive), unchanged from 0011 but scoped to its own rows.
+    check(
       "shipment_cod_totals_service_fee_exact",
-      sql`service_fee_idr::bigint =
+      sql`cod_formula_version <> 1 OR service_fee_idr::bigint =
         (((goods_value_idr::bigint + shipping_amount_idr::bigint) * 3 + 50) / 100)`,
     ),
     check(
       "shipment_cod_totals_vat_exact",
-      sql`vat_amount_idr::bigint = ((service_fee_idr::bigint * 11 + 50) / 100)`,
+      sql`cod_formula_version <> 1 OR vat_amount_idr::bigint = ((service_fee_idr::bigint * 11 + 50) / 100)`,
     ),
+    // Both versions: the COD amount is goods + shipping + fee + VAT.
     check(
       "shipment_cod_totals_provider_cod_amount_exact",
       sql`provider_cod_amount_idr::bigint =
@@ -832,6 +974,18 @@ export const shipmentCodTotals = pgTable(
         + shipping_amount_idr::bigint
         + service_fee_idr::bigint
         + vat_amount_idr::bigint`,
+    ),
+    // Version 2 (T-175): COD = ceil((goods + shipping) × 10000 / 9667), and the
+    // markup splits fee = round_half_up(markup × 100 / 111), VAT = the rest.
+    check(
+      "shipment_cod_totals_provider_cod_amount_gross_up_v2",
+      sql`cod_formula_version <> 2 OR provider_cod_amount_idr::bigint =
+        (((goods_value_idr::bigint + shipping_amount_idr::bigint) * 10000 + 9666) / 9667)`,
+    ),
+    check(
+      "shipment_cod_totals_service_fee_split_v2",
+      sql`cod_formula_version <> 2 OR service_fee_idr::bigint =
+        (((provider_cod_amount_idr::bigint - goods_value_idr::bigint - shipping_amount_idr::bigint) * 100 + 55) / 111)`,
     ),
   ],
 );
@@ -946,7 +1100,19 @@ export const providerOrderSnapshots = pgTable(
     destinationAreaId: text("destination_area_id").notNull(),
     destinationAreaLabel: text("destination_area_label").notNull(),
     currency: text("currency", { enum: ["IDR"] }).notNull(),
+    // `price` — what the buyer's COD amount is built from (see
+    // shipment_cod_totals) and what the app displays as "ongkir". Never the
+    // provider's cost; see providerChargedShippingIdr below.
     shippingAmountIdr: integer("shipping_amount_idr").notNull(),
+    // T-146 correction (2026-09-16): the amount Mengantar actually deducts at
+    // settlement — `estimatedSpecialPrice` when the account has one, else
+    // `estimatedPrice`, else `price` (the same COALESCE order the draft
+    // estimate uses for COD-SELLER-PAYOUT-IDR). NULL only for snapshots
+    // created before this column existed; those orders were already ledgered
+    // under the old (overstated) basis and are not rewritten — ledger history
+    // stays append-only. Every snapshot created from this change onward
+    // populates it.
+    providerChargedShippingIdr: integer("provider_charged_shipping_idr"),
     insuranceAmountIdr: integer("insurance_amount_idr"),
     isCod: boolean("is_cod").notNull(),
     providerCodAmountIdr: integer("provider_cod_amount_idr"),
@@ -1025,6 +1191,10 @@ export const providerOrderSnapshots = pgTable(
     check(
       "provider_order_snapshots_shipping_amount_nonnegative",
       sql`shipping_amount_idr >= 0`,
+    ),
+    check(
+      "provider_order_snapshots_provider_charged_shipping_nonnegative",
+      sql`provider_charged_shipping_idr IS NULL OR provider_charged_shipping_idr >= 0`,
     ),
     check(
       "provider_order_snapshots_insurance_amount_nonnegative",
@@ -1261,6 +1431,7 @@ export const reconciliationRuns = pgTable(
         'COD_PRINCIPAL_COLLECTABLE',
         'MENGANTAR_SHIPPING_COST',
         'MENGANTAR_INSURANCE_COST',
+        'MENGANTAR_COD_FEE_COST',
         'GERAICUAN_COD_SERVICE_FEE_REVENUE',
         'COD_SERVICE_FEE_VAT_PAYABLE',
         'NON_COD_UPSTREAM_PAYMENT',
@@ -1388,6 +1559,7 @@ export const ledgerEntries = pgTable(
         'COD_PRINCIPAL_COLLECTABLE',
         'MENGANTAR_SHIPPING_COST',
         'MENGANTAR_INSURANCE_COST',
+        'MENGANTAR_COD_FEE_COST',
         'GERAICUAN_COD_SERVICE_FEE_REVENUE',
         'COD_SERVICE_FEE_VAT_PAYABLE',
         'NON_COD_UPSTREAM_PAYMENT',
@@ -1409,7 +1581,8 @@ export const ledgerEntries = pgTable(
         ) AND financial_class = 'LIABILITY')
         OR (entry_type IN (
           'MENGANTAR_SHIPPING_COST',
-          'MENGANTAR_INSURANCE_COST'
+          'MENGANTAR_INSURANCE_COST',
+          'MENGANTAR_COD_FEE_COST'
         ) AND financial_class = 'EXPENSE')
         OR (
           entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE'
@@ -1435,6 +1608,7 @@ export const ledgerEntries = pgTable(
             'COD_PRINCIPAL_COLLECTABLE',
             'MENGANTAR_SHIPPING_COST',
             'MENGANTAR_INSURANCE_COST',
+            'MENGANTAR_COD_FEE_COST',
             'GERAICUAN_COD_SERVICE_FEE_REVENUE',
             'COD_SERVICE_FEE_VAT_PAYABLE'
           )
@@ -1613,9 +1787,153 @@ export const auditEvents = pgTable(
         'OUTLET_SETTINGS_CHANGED',
         'MENGANTAR_CREDENTIAL_CREATED',
         'MENGANTAR_CREDENTIAL_REPLACED',
-        'MENGANTAR_PLATFORM_DEFAULT_RESTORED'
+        'MENGANTAR_PLATFORM_DEFAULT_RESTORED',
+        'SHIPMENT_PREFIX_LOCKED',
+        'SHIPMENT_PREFIX_UNLOCKED'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),
+  ],
+);
+
+export const providerSettlementItemTypes = ["SETTLEMENT", "CHARGE", "REFUND"] as const;
+
+// T-146: provider-authored settlement evidence. Append-only; only rows matched to
+// this tenant's own provider orders are stored, and no receiver PII is kept.
+export const providerSettlementPulls = pgTable(
+  "provider_settlement_pulls",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    credentialSource: text("credential_source", { enum: estimateCredentialSources }).notNull(),
+    providerAccountKey: text("provider_account_key").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    // Account-wide totals; NULL for a shared platform account (other tenants' volume).
+    invoiceCount: integer("invoice_count"),
+    orderCount: integer("order_count"),
+    matchedItemCount: integer("matched_item_count").notNull(),
+    matchedStatusCount: integer("matched_status_count").notNull(),
+    unmatchedAwbCount: integer("unmatched_awb_count"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "provider_settlement_pulls_outlet_tenant_fkey",
+      columns: [table.outletId, table.tenantId],
+      foreignColumns: [outlets.id, outlets.tenantId],
+    }).onDelete("restrict"),
+    unique("provider_settlement_pulls_id_tenant_key").on(table.id, table.tenantId),
+    index("provider_settlement_pulls_tenant_outlet_created_idx").on(table.tenantId, table.outletId, table.createdAt),
+    check("provider_settlement_pulls_credential_source_valid", sql`credential_source IN ('private', 'platform_default')`),
+    check("provider_settlement_pulls_account_key_valid", sql`provider_account_key ~ '^[0-9a-f]{64}$'`),
+    check("provider_settlement_pulls_period_valid", sql`period_end > period_start`),
+    check(
+      "provider_settlement_pulls_counts_valid",
+      sql`(invoice_count IS NULL OR invoice_count >= 0) AND (order_count IS NULL OR order_count >= 0) AND matched_item_count >= 0 AND matched_status_count >= 0 AND (unmatched_awb_count IS NULL OR unmatched_awb_count >= 0)`,
+    ),
+    check(
+      "provider_settlement_pulls_shared_account_count_hidden",
+      sql`credential_source = 'private' OR (invoice_count IS NULL AND order_count IS NULL AND unmatched_awb_count IS NULL)`,
+    ),
+  ],
+);
+
+export const providerSettlementItems = pgTable(
+  "provider_settlement_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    pullId: uuid("pull_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    itemType: text("item_type", { enum: providerSettlementItemTypes }).notNull(),
+    providerInvoiceId: text("provider_invoice_id").notNull(),
+    invoiceNumber: text("invoice_number").notNull(),
+    invoiceStatus: text("invoice_status").notNull(),
+    invoiceCreatedAt: timestamp("invoice_created_at", { withTimezone: true }).notNull(),
+    cnoteNo: text("cnote_no").notNull(),
+    // T-178 (0049): Mengantar's amounts carry its unrounded 3.33% COD fee, exact at four decimals.
+    amountIdr: numeric("amount_idr", { precision: 18, scale: 4 }).notNull(),
+    codAmountIdr: bigint("cod_amount_idr", { mode: "number" }),
+    codFeeIdr: numeric("cod_fee_idr", { precision: 18, scale: 4 }),
+    shippingAmountIdr: numeric("shipping_amount_idr", { precision: 18, scale: 4 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "provider_settlement_items_pull_tenant_fkey",
+      columns: [table.pullId, table.tenantId],
+      foreignColumns: [providerSettlementPulls.id, providerSettlementPulls.tenantId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "provider_settlement_items_shipment_outlet_tenant_fkey",
+      columns: [table.shipmentId, table.outletId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.outletId, shipments.tenantId],
+    }).onDelete("restrict"),
+    // A changed status or amount on the same invoice is a new observation; the review reads the latest.
+    unique("provider_settlement_items_observation_key").on(
+      table.tenantId,
+      table.providerInvoiceId,
+      table.itemType,
+      table.cnoteNo,
+      table.invoiceStatus,
+      table.amountIdr,
+    ),
+    index("provider_settlement_items_tenant_shipment_idx").on(table.tenantId, table.shipmentId),
+    check("provider_settlement_items_type_valid", sql`item_type IN ('SETTLEMENT', 'CHARGE', 'REFUND')`),
+    check(
+      "provider_settlement_items_amounts_valid",
+      sql`(cod_amount_idr IS NULL OR cod_amount_idr >= 0) AND (cod_fee_idr IS NULL OR cod_fee_idr >= 0) AND (shipping_amount_idr IS NULL OR shipping_amount_idr >= 0)`,
+    ),
+  ],
+);
+
+export const providerOrderStatusObservations = pgTable(
+  "provider_order_status_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    pullId: uuid("pull_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    cnoteNo: text("cnote_no").notNull(),
+    providerStatus: text("provider_status").notNull(),
+    // T-169: the lifecycle decision taken on this observation, written with the
+    // observation itself so the transition is auditable from the evidence that
+    // caused it. All three are NULL on rows recorded before migration 0047,
+    // when the pull stored provider evidence and transitioned nothing.
+    fromStatus: text("from_status", { enum: shipmentStatuses }),
+    mappedStatus: text("mapped_status", { enum: shipmentStatuses }),
+    transitionOutcome: text("transition_outcome").$type<ProviderDeliveryTransitionOutcome>(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "provider_order_status_observations_pull_tenant_fkey",
+      columns: [table.pullId, table.tenantId],
+      foreignColumns: [providerSettlementPulls.id, providerSettlementPulls.tenantId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "provider_order_status_observations_shipment_outlet_tenant_fkey",
+      columns: [table.shipmentId, table.outletId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.outletId, shipments.tenantId],
+    }).onDelete("restrict"),
+    unique("provider_order_status_observations_pull_shipment_key").on(table.pullId, table.shipmentId),
+    index("provider_order_status_observations_tenant_shipment_idx").on(table.tenantId, table.shipmentId, table.observedAt),
+    // A row may not claim a transition it cannot evidence: an applied or
+    // refused decision names both the state it started from and the state it
+    // mapped to, and only the two "nothing to write" outcomes carry no mapping.
+    check(
+      "provider_order_status_observations_transition_valid",
+      sql`(transition_outcome IS NULL AND from_status IS NULL AND mapped_status IS NULL)
+        OR (
+          transition_outcome IN ('APPLIED', 'UNCHANGED', 'REFUSED', 'NO_LIFECYCLE_STATE', 'UNRECOGNISED')
+          AND from_status IS NOT NULL
+          AND (mapped_status IS NULL) = (transition_outcome IN ('NO_LIFECYCLE_STATE', 'UNRECOGNISED'))
+        )`,
+    ),
   ],
 );

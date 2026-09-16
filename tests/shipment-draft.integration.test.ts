@@ -8,12 +8,13 @@ import { Pool } from "pg";
 import {
   createShipmentDraft,
   DraftSubmissionConflictError,
+  loadShipmentDraftDestinationForVerification,
   OutletUnavailableError,
+  stampShipmentDraftDestinationVerified,
 } from "@/db/shipment-draft-repository";
+import { checkDuplicateShipment } from "@/db/shipment-draft-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import * as schema from "@/db/schema";
-import { loadShipmentKpis } from "@/db/analytics-repository";
-import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
 import { deriveBulkRowSubmissionId, previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
@@ -109,128 +110,13 @@ afterAll(async () => {
 });
 
 describe("tenant shipment drafts", () => {
-  it("parses an optional COGS amount and keeps empty distinct from zero", () => {
-    const withCogs = validateShipmentDraft(submission({ cogsAmount: "50.000" }));
-    expect(withCogs.ok).toBe(true);
-    if (withCogs.ok) expect(withCogs.input.cogsAmountIdr).toBe(50_000);
-
-    const zeroCogs = validateShipmentDraft(submission({ cogsAmount: "0" }));
-    expect(zeroCogs.ok).toBe(true);
-    if (zeroCogs.ok) expect(zeroCogs.input.cogsAmountIdr).toBe(0);
-
-    // An untouched field means "not recorded", which is not a recorded zero.
-    // Whitespace is trimmed away, so it means the same thing.
-    for (const blank of ["", "   "]) {
-      const noCogs = validateShipmentDraft(submission({ cogsAmount: blank }));
-      expect(noCogs.ok, JSON.stringify(blank)).toBe(true);
-      if (noCogs.ok) expect(noCogs.input.cogsAmountIdr, JSON.stringify(blank)).toBeNull();
-    }
-
-    // Both separator forms readRupiah accepts, and the exact upper bound.
-    for (const [input, expected] of [
-      ["50 000", 50_000],
-      ["2.147.483.647", 2_147_483_647],
-    ] as const) {
-      const result = validateShipmentDraft(submission({ cogsAmount: input }));
-      expect(result.ok, input).toBe(true);
-      if (result.ok) expect(result.input.cogsAmountIdr, input).toBe(expected);
-    }
-  });
-
-  it("rejects a malformed or out-of-range COGS instead of dropping it", () => {
-    for (const value of ["abc", "-1", "12.34", "2147483648"]) {
-      const result = validateShipmentDraft(submission({ cogsAmount: value }));
-      expect(result.ok, value).toBe(false);
-      if (!result.ok) expect(result.errors.cogsAmount, value).toBeTruthy();
-    }
-  });
-
-  it("treats a corrected COGS as a conflicting replay rather than silently keeping the old one", async () => {
-    // The replay guard compares every persisted draft field. If COGS were left
-    // out, an operator who fixed a mistyped Modal HPP and resubmitted with the
-    // same submission id would be redirected as though the correction landed
-    // while the original figure stayed in the database.
-    const submissionId = "00000000-0000-4000-8000-00000000c065";
-    const original = validateShipmentDraft(submission({ cogsAmount: "40.000" }));
-    expect(original.ok).toBe(true);
-    if (!original.ok) return;
-
-    await expect(
-      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-        createShipmentDraft(tx, context, original.input, submissionId)),
-    ).resolves.toBe(submissionId);
-
-    const corrected = validateShipmentDraft(submission({ cogsAmount: "400.000" }));
-    expect(corrected.ok).toBe(true);
-    if (!corrected.ok) return;
-    await expect(
-      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-        createShipmentDraft(tx, context, corrected.input, submissionId)),
-    ).rejects.toBeInstanceOf(DraftSubmissionConflictError);
-
-    // Clearing a previously recorded COGS is a change too, not a no-op replay.
-    const cleared = validateShipmentDraft(submission({ cogsAmount: "" }));
-    expect(cleared.ok).toBe(true);
-    if (!cleared.ok) return;
-    await expect(
-      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-        createShipmentDraft(tx, context, cleared.input, submissionId)),
-    ).rejects.toBeInstanceOf(DraftSubmissionConflictError);
-
-    // An identical resubmission still replays instead of duplicating.
-    await expect(
-      withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-        createShipmentDraft(tx, context, original.input, submissionId)),
-    ).resolves.toBe(submissionId);
-
-    const [stored] = await adminDb
-      .select({ cogsAmountIdr: schema.shipmentDrafts.cogsAmountIdr })
-      .from(schema.shipmentDrafts)
-      .where(eq(schema.shipmentDrafts.shipmentId, submissionId));
-    expect(stored?.cogsAmountIdr).toBe(40_000);
-  });
-
-  it("leaves the analytics net margin unmoved by a COGS recorded on a draft with no ledger entry yet", async () => {
-    // netMarginIdr's other four terms (COD principal, shipping, service fee,
-    // VAT) are only ever recognized through a ledger entry, which a draft
-    // does not have until it is issued. COGS has to share that same
-    // ledger-effective cohort for the margin's five terms to describe the
-    // same shipments (T-81) — so a COGS recorded on a still-unissued draft
-    // must not move cogsIdr or netMarginIdr at all, even though
-    // `createdCount` (a created-cohort figure) does move.
-    const range = parseAnalyticsRange({ rentang: "30-hari", tz: "Asia/Jakarta" }, new Date());
-    const readKpis = () =>
-      withTenantContext(appDb, "draft-admin-a", tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, range),
-      );
-
-    // Sibling cases in this file leave their own drafts behind, so measure the
-    // delta this submission causes rather than an absolute total.
-    const before = await readKpis();
-
-    const validated = validateShipmentDraft(submission({ cogsAmount: "65.000" }));
-    expect(validated.ok).toBe(true);
-    if (!validated.ok) return;
-
-    await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-      createShipmentDraft(tx, context, validated.input),
-    );
-
-    const after = await readKpis();
-
-    expect(after.cogsIdr).toBe(before.cogsIdr);
-    expect(after.codPrincipalIdr).toBe(before.codPrincipalIdr);
-    expect(after.providerShippingIdr).toBe(before.providerShippingIdr);
-    expect(after.codServiceFeeIdr).toBe(before.codServiceFeeIdr);
-    expect(after.codVatIdr).toBe(before.codVatIdr);
-    expect(after.netMarginIdr).toBe(before.netMarginIdr);
-    expect(after.createdCount).toBe(before.createdCount + 1);
-  });
-
-  it("persists the submitted COGS on both the shipment and its draft", async () => {
+  it("neither accepts nor stores a COGS amount now that GeraiCUAN reports no merchandise margin (T-177)", async () => {
+    // A form that still posts the withdrawn field must not smuggle a goods
+    // cost back into the draft: the parser ignores it and nothing is written.
     const validated = validateShipmentDraft(submission({ cogsAmount: "75.000" }));
     expect(validated.ok).toBe(true);
     if (!validated.ok) return;
+    expect(Object.keys(validated.input)).not.toContain("cogsAmountIdr");
 
     const shipmentId = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
       createShipmentDraft(tx, context, validated.input),
@@ -245,8 +131,8 @@ describe("tenant shipment drafts", () => {
       .from(schema.shipmentDrafts)
       .where(eq(schema.shipmentDrafts.shipmentId, shipmentId));
 
-    expect(shipment?.cogsAmountIdr).toBe(75_000);
-    expect(draft?.cogsAmountIdr).toBe(75_000);
+    expect(shipment?.cogsAmountIdr).toBeNull();
+    expect(draft?.cogsAmountIdr).toBeNull();
   });
 
   it("persists a valid tenant-scoped draft and immutable parties", async () => {
@@ -291,7 +177,10 @@ describe("tenant shipment drafts", () => {
       {
         destinationAreaId: "3171010",
         destinationAreaLabel: "Gambir, Jakarta Pusat",
-        phone: "+6281234567890",
+        // `+62 812-3456-7890` is stored in the one Indonesian form, the same
+        // value `0812…` would produce, so the two spellings never split a
+        // duplicate check, a contact match or a provider payload.
+        phone: "081234567890",
         role: "RECIPIENT",
       },
     ]));
@@ -322,6 +211,41 @@ describe("tenant shipment drafts", () => {
       tx.select().from(schema.shipmentDrafts),
     );
     expect(otherTenantRows).toEqual([]);
+  });
+
+  it("persists the PR-47 operational fields and the destination verification stamp", async () => {
+    const validated = validateShipmentDraft(submission({
+      isHazardous: "true",
+      recipientAddressLandmark: "Seberang masjid",
+      shippingInstruction: "Titip ke satpam bila rumah kosong.",
+    }));
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+
+    const shipmentId = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, { ...validated.input, destinationAreaVerified: true }),
+    );
+    const [draft] = await adminDb
+      .select()
+      .from(schema.shipmentDrafts)
+      .where(eq(schema.shipmentDrafts.shipmentId, shipmentId));
+
+    expect(draft).toMatchObject({
+      isHazardous: true,
+      recipientAddressLandmark: "Seberang masjid",
+      shippingInstruction: "Titip ke satpam bila rumah kosong.",
+    });
+    expect(draft?.destinationAreaVerifiedAt).toBeInstanceOf(Date);
+
+    // A draft saved without provider verification stays explicitly unverified.
+    const unverifiedId = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, validated.input),
+    );
+    const [unverified] = await adminDb
+      .select({ destinationAreaVerifiedAt: schema.shipmentDrafts.destinationAreaVerifiedAt })
+      .from(schema.shipmentDrafts)
+      .where(eq(schema.shipmentDrafts.shipmentId, unverifiedId));
+    expect(unverified?.destinationAreaVerifiedAt).toBeNull();
   });
 
   it("replays one canonical submission without creating duplicate rows", async () => {
@@ -606,7 +530,14 @@ describe("tenant shipment drafts", () => {
     expect(validated.ok).toBe(true);
     if (!validated.ok) return;
     await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-      createShipmentDraft(tx, context, validated.input, submissionId),
+      // The action verifies the destination area before writing, so a replay
+      // of the same submission must be stored the same way to match.
+      createShipmentDraft(
+        tx,
+        context,
+        { ...validated.input, destinationAreaVerified: true },
+        submissionId,
+      ),
     );
     await expect(saveShipmentDraft({}, formData)).resolves.toBeUndefined();
     const replayRows = await adminDb
@@ -728,4 +659,127 @@ describe("tenant shipment drafts", () => {
     );
     expect(afterRejection.rows).toEqual([{ count: 5 }]);
   });
+});
+
+// B3: every draft written before drizzle/0041 has destination_area_verified_at
+// NULL forever, since 0035's column-scoped UPDATE grant predates that column.
+// drizzle/0042 extends the grant; these exercise the real geraicuan_app role
+// (via appDb/appPool), not just drizzle's schema layer, and tenant isolation.
+describe("B3 destination area re-verification recovery", () => {
+  async function seedUnverifiedDraft(shipmentId: string, tenantId: string, outletId: string) {
+    await adminPool.query(
+      "INSERT INTO shipments (id, tenant_id, outlet_id) VALUES ($1, $2, $3)",
+      [shipmentId, tenantId, outletId],
+    );
+    await adminPool.query(
+      `INSERT INTO shipment_drafts (
+         shipment_id, tenant_id, destination_area_id, destination_area_label,
+         package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod
+       ) VALUES ($1, $2, 'stored-area', 'Stored area label', 'Sanitized parcel', 1000, 1, 100000, false)`,
+      [shipmentId, tenantId],
+    );
+  }
+
+  it("loads and stamps only within the owning tenant, and the grant covers the real runtime role", async () => {
+    const shipmentId = randomUUID();
+    await seedUnverifiedDraft(shipmentId, tenantA, outletA);
+
+    const loadedByOwner = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      loadShipmentDraftDestinationForVerification(tx, context, shipmentId),
+    );
+    expect(loadedByOwner).toMatchObject({
+      outletId: outletA,
+      destinationAreaId: "stored-area",
+      destinationAreaLabel: "Stored area label",
+      destinationAreaVerifiedAt: null,
+    });
+
+    const loadedByOutsider = await withTenantContext(appDb, "draft-user-b", tenantB, (tx, context) =>
+      loadShipmentDraftDestinationForVerification(tx, context, shipmentId),
+    );
+    expect(loadedByOutsider).toBeNull();
+
+    // The real geraicuan_app role, not just Drizzle's typings, can write this
+    // column now — this is what drizzle/0042's GRANT exists to prove.
+    const stampedForOutsider = await withTenantContext(appDb, "draft-user-b", tenantB, (tx, context) =>
+      stampShipmentDraftDestinationVerified(tx, context, shipmentId, {
+        areaId: "stored-area",
+        areaLabel: "Stored area label",
+      }),
+    );
+    expect(stampedForOutsider).toBe(false);
+
+    const stampedForOwner = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      stampShipmentDraftDestinationVerified(tx, context, shipmentId, {
+        areaId: "stored-area",
+        areaLabel: "Stored area label",
+      }),
+    );
+    expect(stampedForOwner).toBe(true);
+
+    const [row] = (await adminPool.query(
+      "SELECT destination_area_verified_at FROM shipment_drafts WHERE shipment_id = $1",
+      [shipmentId],
+    )).rows;
+    expect(row.destination_area_verified_at).not.toBeNull();
+  });
+
+  it("refuses to stamp when the area no longer matches what is stored (never trusts the caller's word)", async () => {
+    const shipmentId = randomUUID();
+    await seedUnverifiedDraft(shipmentId, tenantA, outletA);
+
+    const stamped = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      stampShipmentDraftDestinationVerified(tx, context, shipmentId, {
+        areaId: "stored-area",
+        // A provider re-check that renamed the label must not silently
+        // confirm the draft's stale copy.
+        areaLabel: "Renamed area label",
+      }),
+    );
+    expect(stamped).toBe(false);
+
+    const [row] = (await adminPool.query(
+      "SELECT destination_area_verified_at FROM shipment_drafts WHERE shipment_id = $1",
+      [shipmentId],
+    )).rows;
+    expect(row.destination_area_verified_at).toBeNull();
+  });
+
+  it("does not surface a submitted shipment's draft for re-verification", async () => {
+    const shipmentId = randomUUID();
+    await seedUnverifiedDraft(shipmentId, tenantA, outletA);
+    await adminPool.query(
+      "UPDATE shipments SET status = 'ISSUED' WHERE id = $1",
+      [shipmentId],
+    );
+
+    const loaded = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      loadShipmentDraftDestinationForVerification(tx, context, shipmentId),
+    );
+    expect(loaded).toBeNull();
+  });
+  // Review SF2: phones written before the canonical `0`+NSN rule still read `+62…`, and
+  // party snapshots are immutable by contract, so duplicate detection must match across
+  // spellings instead of comparing raw strings.
+  it("recognises a repeat recipient whose stored snapshot uses the old +62 spelling", async () => {
+    const legacyShipment = randomUUID();
+    await adminPool.query(
+      `insert into shipments (id, tenant_id, outlet_id, status, tenant_number, public_reference, created_at, updated_at)
+       values ($1, $2, $3, 'DRAFT',
+         (select coalesce(max(tenant_number), 10000) + 1 from shipments where tenant_id = $2),
+         'GC-' || (select coalesce(max(tenant_number), 10000) + 1 from shipments where tenant_id = $2), now(), now())`,
+      [legacyShipment, tenantA, outletA],
+    );
+    await adminPool.query(
+      `insert into shipment_parties (id, tenant_id, shipment_id, role, name, phone, address)
+       values ($1, $2, $3, 'RECIPIENT', 'Pelanggan lama', '+6281299887766', 'Alamat lama')`,
+      [randomUUID(), tenantA, legacyShipment],
+    );
+
+    const duplicate = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      checkDuplicateShipment(tx, context, "081299887766"));
+
+    expect(duplicate).toBe(true);
+  });
+
 });

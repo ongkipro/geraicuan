@@ -1,14 +1,10 @@
 "use client";
 
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
+import { DateRangeFilter } from "@/components/cms/date-range-filter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  ANALYTICS_PRESETS,
-  type AnalyticsPresetId,
-} from "@/lib/analytics-range";
+import type { AnalyticsPresetId } from "@/lib/analytics-range";
 import { cn } from "@/lib/utils";
 
 export type DashboardPeriodFilterValues = {
@@ -20,7 +16,11 @@ export type DashboardPeriodFilterValues = {
 
 type DashboardPeriodFilterProps = {
   activeCount: number;
+  /** The span this period is compared against, named in the range panel. */
+  comparisonLabel: string;
   outlets: Array<{ id: string; name: string }>;
+  rangeLabel: string;
+  timezoneLabel: string;
   todayLocalDate: string;
   values: DashboardPeriodFilterValues;
 };
@@ -29,7 +29,10 @@ const selectClassName =
   "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function FilterFields({
+  comparisonLabel,
   outlets,
+  rangeLabel,
+  timezoneLabel,
   todayLocalDate,
   values,
 }: Omit<DashboardPeriodFilterProps, "activeCount">) {
@@ -38,39 +41,38 @@ function FilterFields({
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(2,minmax(0,14rem))]">      <label className={fieldClassName} htmlFor="dashboard-rentang">
-        Periode
-        <select className={cn(selectClassName, controlClassName)} defaultValue={values.presetId} id="dashboard-rentang" name="rentang" onChange={(event) => { if (event.target.value === "kustom") { const advanced = event.target.form?.querySelector<HTMLDetailsElement>("details[data-advanced]"); if (advanced) advanced.open = true; } }}>
-          {ANALYTICS_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-        </select>
-      </label>      <label className={fieldClassName} htmlFor="dashboard-outlet">
-        Outlet
-        <select className={cn(selectClassName, controlClassName)} defaultValue={values.outletId ?? ""} id="dashboard-outlet" name="outlet">
-          <option value="">Semua outlet</option>
-          {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
-        </select>
-      </label></div>
-      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={values.presetId === "kustom"}>
-        <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Tanggal khusus<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
-        <div className="grid gap-3 pt-3 sm:grid-cols-2">      <label className={fieldClassName} htmlFor="dashboard-dari">
-        Dari tanggal
-        <Input className={controlClassName} defaultValue={values.startDate} id="dashboard-dari" max={todayLocalDate} name="dari" type="date" />
-      </label>      <label className={fieldClassName} htmlFor="dashboard-sampai">
-        Sampai tanggal
-        <Input className={controlClassName} defaultValue={values.endDate} id="dashboard-sampai" max={todayLocalDate} name="sampai" type="date" />
-      </label></div>
-      </details>
+      {/* T-163: one date-range control replaces the period select and the
+          "Tanggal khusus" disclosure that used to sit beside it. */}
+      <div className="grid gap-3 md:grid-cols-[minmax(0,20rem)_minmax(0,14rem)]">
+        <div className={fieldClassName}>
+          <span id="dashboard-range-label">Periode</span>
+          <DateRangeFilter
+            comparisonLabel={comparisonLabel}
+            endDate={values.endDate}
+            idPrefix="dashboard"
+            presetId={values.presetId}
+            rangeLabel={rangeLabel}
+            startDate={values.startDate}
+            timezoneLabel={timezoneLabel}
+            todayLocalDate={todayLocalDate}
+          />
+        </div>
+        <label className={fieldClassName} htmlFor="dashboard-outlet">
+          Outlet
+          <select className={cn(selectClassName, controlClassName)} defaultValue={values.outletId ?? ""} id="dashboard-outlet" name="outlet">
+            <option value="">Semua outlet</option>
+            {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
+          </select>
+        </label>
+      </div>
     </div>
   );
 }
 
 export function DashboardPeriodFilter({
   activeCount,
-  outlets,
-  todayLocalDate,
-  values,
+  ...fields
 }: DashboardPeriodFilterProps) {
-  const fields = { outlets, todayLocalDate, values };
   return (
     <form action="/app#dashboard-page-heading" className="cms-filter-bar" method="get" id="dashboard-filter-fields">
       <FilterFields {...fields} />

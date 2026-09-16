@@ -8,6 +8,7 @@ export type ShipmentStatus = (typeof shipmentStatuses)[number];
 export type ShipmentQueueStatusFilter =
   | ShipmentStatus
   | "ACTION_REQUIRED"
+  | "NEEDS_ATTENTION"
   | "READY_TO_PROGRESS"
   | "ISSUED_TODAY"
   | "ALL";
@@ -27,6 +28,15 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     guidance: "Draf dan estimasi ini masih memerlukan langkah operator berikutnya.",
     label: "Siap dilanjutkan",
     tone: "neutral",
+  },
+  // Spec 19 QUE-ATTENTION. Wider than ACT-NEEDED on purpose (PR-52): it also
+  // gathers the provider-reported problem and the non-COD shipment waiting for
+  // upstream payment, so the panel entry covers every kiriman an operator has
+  // to look at rather than only the two ACT-NEEDED acts on.
+  NEEDS_ATTENTION: {
+    guidance: "Rekonsiliasi, kendala kurir, kegagalan, dan menunggu pelunasan dikumpulkan di sini.",
+    label: "Perlu perhatian",
+    tone: "danger",
   },
   ISSUED_TODAY: {
     guidance: "AWB diterbitkan pada hari operasional WIB saat ini.",
@@ -106,6 +116,7 @@ export const SHIPMENT_STATUS_OPTIONS: readonly {
 }[] = [
   { label: "Semua status", value: "ALL" },
   { label: "Perlu tindakan", value: "ACTION_REQUIRED" },
+  { label: SHIPMENT_STATUS_PRESENTATION.NEEDS_ATTENTION.label, value: "NEEDS_ATTENTION" },
   { label: "Siap dilanjutkan", value: "READY_TO_PROGRESS" },
   { label: "Resi terbit hari ini", value: "ISSUED_TODAY" },
   ...shipmentStatuses.map((status) => ({
@@ -113,6 +124,77 @@ export const SHIPMENT_STATUS_OPTIONS: readonly {
     value: status,
   })),
 ];
+
+/**
+ * PR-52 state summary panel on Histori kiriman.
+ *
+ * The grouping is the owner's ("Perlu dibuatkan resi", "Perlu pickup", …) but
+ * the label of every entry that names one lifecycle state is the shared
+ * presentation label, not a second word for the same status — the badge in the
+ * row below the panel says "Terkirim", so the entry above it must not say
+ * "Sampai tujuan". The operator-facing meaning lives in the entry's own line of
+ * description instead. `statuses: null` is the unfiltered total.
+ */
+export const SHIPMENT_QUEUE_SUMMARY_ENTRIES = [
+  {
+    description: "Seluruh kiriman tersimpan, apa pun tahap lifecycle-nya.",
+    label: "Semua kiriman",
+    metricId: "QUE-ALL",
+    statuses: null,
+    value: "ALL",
+  },
+  {
+    description: "Draf dan estimasi yang belum punya nomor resi.",
+    label: SHIPMENT_STATUS_PRESENTATION.READY_TO_PROGRESS.label,
+    metricId: "QUE-NEEDS-AWB",
+    statuses: ["DRAFT", "ESTIMATED"],
+    value: "READY_TO_PROGRESS",
+  },
+  {
+    description: "Resi sudah terbit dan paket belum tercatat bergerak.",
+    label: SHIPMENT_STATUS_PRESENTATION.ISSUED.label,
+    metricId: "QUE-AWAITING-PICKUP",
+    statuses: ["ISSUED"],
+    value: "ISSUED",
+  },
+  {
+    description: "Kurir sedang mengantar ke penerima.",
+    label: SHIPMENT_STATUS_PRESENTATION.IN_TRANSIT.label,
+    metricId: "QUE-IN-TRANSIT",
+    statuses: ["IN_TRANSIT"],
+    value: "IN_TRANSIT",
+  },
+  {
+    description: "Paket tercatat sampai dan lifecycle-nya selesai.",
+    label: SHIPMENT_STATUS_PRESENTATION.DELIVERED.label,
+    metricId: "QUE-DELIVERED",
+    statuses: ["DELIVERED"],
+    value: "DELIVERED",
+  },
+  {
+    description: SHIPMENT_STATUS_PRESENTATION.NEEDS_ATTENTION.guidance,
+    label: SHIPMENT_STATUS_PRESENTATION.NEEDS_ATTENTION.label,
+    metricId: "QUE-ATTENTION",
+    statuses: [
+      "SUBMISSION_UNKNOWN",
+      "PROBLEM",
+      "FAILED",
+      "AWAITING_UPSTREAM_PAYMENT",
+    ],
+    value: "NEEDS_ATTENTION",
+  },
+] as const satisfies readonly {
+  description: string;
+  label: string;
+  metricId: string;
+  statuses: readonly ShipmentStatus[] | null;
+  value: ShipmentQueueStatusFilter;
+}[];
+
+export type ShipmentQueueSummary = Record<
+  (typeof SHIPMENT_QUEUE_SUMMARY_ENTRIES)[number]["metricId"],
+  number
+>;
 
 type SearchValue = string | string[] | undefined;
 
@@ -137,6 +219,7 @@ export function parseShipmentQueueQuery(input: {
   if (requestedStatus && requestedStatus !== "ALL") {
     if (
       requestedStatus === "ACTION_REQUIRED" ||
+      requestedStatus === "NEEDS_ATTENTION" ||
       requestedStatus === "READY_TO_PROGRESS" ||
       requestedStatus === "ISSUED_TODAY" ||
       (shipmentStatuses as readonly string[]).includes(requestedStatus)
@@ -161,11 +244,19 @@ export function parseShipmentQueueQuery(input: {
   return { issues, page, status };
 }
 
+/**
+ * `carry` is the page's other URL state — since T-163 that is the PR-53 range
+ * (`rentang`, `dari`, `sampai`, `tz`). Every link this builds keeps it, or
+ * paginating or changing the status facet would silently reset the period.
+ */
 export function shipmentQueueHref(
   status: ShipmentQueueStatusFilter,
   page = 1,
+  carry?: Readonly<Record<string, string>>,
 ) {
-  const query = new URLSearchParams();
+  const query = new URLSearchParams(carry ?? {});
+  query.delete("status");
+  query.delete("page");
   if (status !== "ALL") query.set("status", status);
   if (page > 1) query.set("page", String(page));
   const suffix = query.toString();

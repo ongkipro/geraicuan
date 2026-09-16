@@ -194,10 +194,27 @@ export const PROBE = `JSON.stringify((() => {
   // target: the import form hides its file input that way and drives it from a
   // 44px button. Excluding by rendered size rather than by class so any
   // spelling of the pattern is covered.
+  // A <label> is part of its control's pointer target, because clicking it
+  // activates the control (T-174: the date-range presets are 16x16 radios in a
+  // 176x36 label). Only the labels HTML associates with this element count
+  // (el.labels, the labels whose control is this element): a label[for]
+  // pointing elsewhere, or the second control inside one label, keeps its own
+  // box, and an enclosing label is not assumed to activate what it contains.
+  const activatingLabelBox = (el) => {
+    let box = el.getBoundingClientRect();
+    for (const label of el.labels || []) {
+      if (!visible(label)) continue;
+      const r = label.getBoundingClientRect();
+      const left = Math.min(box.left, r.left), top = Math.min(box.top, r.top);
+      const right = Math.max(box.right, r.right), bottom = Math.max(box.bottom, r.bottom);
+      box = { left, top, right, bottom, width: right - left, height: bottom - top };
+    }
+    return box;
+  };
   const targets = [...document.querySelectorAll('a[href],button,input,select,[role="button"]')]
     .filter(visible)
-    .map(e => ({ el: e, box: e.getBoundingClientRect() }))
-    .filter(({ box }) => box.width > 2 && box.height > 2);
+    .filter((e) => { const own = e.getBoundingClientRect(); return own.width > 2 && own.height > 2; })
+    .map(e => ({ el: e, box: activatingLabelBox(e) }));
   const centre = ({ box }) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
   const smallTargets = targets
     .filter(t => t.box.height < 24 || t.box.width < 24)
@@ -522,7 +539,18 @@ export const PROBE = `JSON.stringify((() => {
   const weakFocusRing = [];
   let focusProbed = 0;
   const focusables = [...document.querySelectorAll('a[href], button, input, select, textarea, [tabindex="0"]')]
-    .filter(e => { const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4; });
+    .filter(e => { const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4; })
+    // Radix mirrors a custom Checkbox or RadioGroupItem with a bubble <input>
+    // that exists only to carry the value into a form submission:
+    // aria-hidden="true", tabindex="-1", opacity:0, pointer-events:none,
+    // translated off its own box. No keyboard can reach it and no assistive
+    // technology announces it, so an indicator on it is observable by nobody -
+    // three of these were being counted as findings on /app/pengiriman/baru
+    // (the hazardous checkbox and the two payment radios) and two more on the
+    // contact detail page. All three conditions must hold together: an
+    // aria-hidden control that is still visible, or still in the tab order, is
+    // a real defect and stays counted.
+    .filter(e => !(e.closest('[aria-hidden="true"]') && e.tabIndex < 0 && !visible(e)));
   for (const el of focusables) {
     // shadcn InputGroup owns its direct input's indicator. No arbitrary
     // ancestor or addon button may borrow a surrounding container's ring.

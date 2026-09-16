@@ -10,20 +10,16 @@ const fixture = vi.hoisted(() => ({
   periodSummary: vi.fn(async () => ({
     current: {
       codCount: 7,
-      codDeclaredValueIdr: 1_750_000,
       createdCount: 12,
       issuedCount: 8,
       nonCodCount: 5,
-      nonCodDeclaredValueIdr: 925_000,
     },
     generatedAt: new Date("2026-08-31T12:00:00.000Z"),
     previous: {
       codCount: 5,
-      codDeclaredValueIdr: 1_250_000,
       createdCount: 9,
       issuedCount: 6,
       nonCodCount: 4,
-      nonCodDeclaredValueIdr: 700_000,
     },
   })),
   periodSupport: vi.fn(async () => ({
@@ -32,7 +28,7 @@ const fixture = vi.hoisted(() => ({
       occurredAt: new Date("2026-08-31T08:00:00.000Z"),
       outletName: "Outlet dashboard",
       shipmentId: "00000000-0000-3602-0000-000000000001",
-      publicReference: "95758-260831-001",
+      publicReference: "GC-10001",
       status: "ISSUED" as const,
     }],
     totalCount: 1,
@@ -143,26 +139,36 @@ describe("analytics-led tenant dashboard", () => {
     const html = await renderDashboard();
 
     expect(html).toContain("Ringkasan periode");
-    expect(html).toContain('value="7-hari" selected=""');
+    // T-163: the period select became the one date-range control. The default
+    // travels as the always-present hidden `rentang`, the trigger names the
+    // resolved range, and the preset list marks the chosen one.
+    expect(html).toMatch(/<summary[^>]*aria-expanded="false"[^>]*id="dashboard-range-trigger"/);
+    expect(html).not.toMatch(/role="dialog"/);
+    expect(html).toMatch(/id="dashboard-range-trigger"[\s\S]*?25 Agu 2026 – 31 Agu 2026/);
+    // One checked native radio carries `rentang`; nothing mirrors it.
+    const radios = html.match(/<input[^>]*type="radio"[^>]*name="rentang"[^>]*>/g) ?? [];
+    expect(radios.filter((radio) => radio.includes('checked=""'))).toHaveLength(1);
+    expect(radios.find((radio) => radio.includes('checked=""'))).toContain('value="7-hari"');
     expect(html).toContain("WIB (UTC+07:00)");
     expect(html).not.toMatch(/name="tz"/);
     expect(html).not.toContain("Tanggal &amp; zona waktu");
     expect(html).toContain("Kiriman dibuat");
     expect(html).toContain("Kiriman COD");
     expect(html).toContain("Kiriman non-COD");
-    expect(html).toContain("bukan dana diterima atau pendapatan");
+    // T-177: no goods value, revenue or margin figure anywhere on the dashboard.
+    expect(html.replace(/<[^>]+>/g, " ")).not.toMatch(/margin|laba|profit|keuntungan|omset|omzet|cogs|\bhpp\b|pokok cod|nilai barang|pendapatan|revenue/i);
     expect(html).toContain("Resi terbit");
     expect(html).toContain("support=created");
     expect(html).toContain("support=cod");
     expect(html).toContain("support=non-cod");
     expect(html).toContain("support=issued");
     // Each KPI card is one drill-down link whose name keeps the value and the
-    // purpose, and whose description (the COD disclosure) stays announced.
+    // purpose, and whose description (the period comparison) stays announced.
     const codLink = html.match(/<a[^>]*aria-label="Kiriman COD: 7\. Lihat kiriman"[^>]*>/)?.[0];
     expect(codLink).toContain("support=cod");
     const describedBy = codLink?.match(/aria-describedby="([^"]+)"/)?.[1];
     expect(describedBy).toBeTruthy();
-    expect(html).toMatch(new RegExp(`id="${describedBy}"[^>]*>(?:(?!</a>).)*bukan dana diterima atau pendapatan`));
+    expect(html).toMatch(new RegExp(`id="${describedBy}"[^>]*>(?:(?!</a>).)*\\+2 \\(40%\\) vs 7 hari sebelumnya`));
     expect(html).toContain("Grafik kiriman");
     expect(fixture.periodTrend).toHaveBeenCalledWith(
       expect.anything(), expect.anything(),
@@ -298,7 +304,6 @@ describe("analytics-led tenant dashboard", () => {
 
     const html = await renderDashboard();
 
-    expect(html).toContain("1 status belum pasti · 1 gagal");
     expect(html).not.toContain("Menunggu pembayaran");
     expect(html).not.toContain("Selisih rekonsiliasi");
     expect(html).toContain("Tidak ada kiriman yang perlu ditindaklanjuti saat ini");
@@ -310,17 +315,17 @@ describe("analytics-led tenant dashboard", () => {
   };
   type ShipmentRow = Awaited<ReturnType<typeof fixture.shipments>>[number];
   const shipment = (suffix: string, recipientName: string, status: ShipmentRow["status"], updatedAt: string, awb: string | null = null): ShipmentRow => ({
-    awb, destinationAreaLabel: `Area ${recipientName}`, outletName: "Outlet dashboard", recipientName, shipmentId: `00000000-0000-3603-0000-${suffix.padStart(12, "0")}`, publicReference: `95758-260831-${parseInt(suffix, 16).toString().padStart(3, "0")}`, status, updatedAt: new Date(updatedAt),
+    awb, destinationAreaLabel: `Area ${recipientName}`, outletName: "Outlet dashboard", recipientName, shipmentId: `00000000-0000-3603-0000-${suffix.padStart(12, "0")}`, publicReference: `GC-${10000 + parseInt(suffix, 16)}`, status, updatedAt: new Date(updatedAt),
   });
 
   it("merges recent and actionable shipments into one compact card, each shipment once, actionable first", async () => {
     const payment = "00000000-0000-3603-0000-0000000000a1";
     const draft = "00000000-0000-3603-0000-0000000000b2";
     const issued = "00000000-0000-3603-0000-0000000000c3";
-    const paymentRow = { awb: null, destinationAreaLabel: "Bandung", outletName: "Outlet dashboard", recipientName: "Penerima Satu", shipmentId: payment, publicReference: "95758-260831-161", status: "AWAITING_UPSTREAM_PAYMENT" as const, updatedAt: new Date("2026-08-31T11:00:00.000Z") };
-    const draftRow = { awb: null, destinationAreaLabel: "Bogor", outletName: "Outlet dashboard", recipientName: "Penerima Dua", shipmentId: draft, publicReference: "95758-260831-178", status: "DRAFT" as const, updatedAt: new Date("2026-08-31T11:55:00.000Z") };
+    const paymentRow = { awb: null, destinationAreaLabel: "Bandung", outletName: "Outlet dashboard", recipientName: "Penerima Satu", shipmentId: payment, publicReference: "GC-10161", status: "AWAITING_UPSTREAM_PAYMENT" as const, updatedAt: new Date("2026-08-31T11:00:00.000Z") };
+    const draftRow = { awb: null, destinationAreaLabel: "Bogor", outletName: "Outlet dashboard", recipientName: "Penerima Dua", shipmentId: draft, publicReference: "GC-10178", status: "DRAFT" as const, updatedAt: new Date("2026-08-31T11:55:00.000Z") };
     // Newest overall, but not actionable: it must follow the actionable rows.
-    const issuedRow = { awb: "AWB-DASH-3603", destinationAreaLabel: "Cirebon", outletName: "Outlet dashboard", recipientName: "Penerima Tiga", shipmentId: issued, publicReference: "95758-260831-195", status: "ISSUED" as const, updatedAt: new Date("2026-08-31T11:58:00.000Z") };
+    const issuedRow = { awb: "AWB-DASH-3603", destinationAreaLabel: "Cirebon", outletName: "Outlet dashboard", recipientName: "Penerima Tiga", shipmentId: issued, publicReference: "GC-10195", status: "ISSUED" as const, updatedAt: new Date("2026-08-31T11:58:00.000Z") };
     fixture.shipments.mockImplementation(async (_tx, _context, input) =>
       input.mode === "actionable" ? [paymentRow, draftRow] : [issuedRow, draftRow, paymentRow]);
 
@@ -335,11 +340,11 @@ describe("analytics-led tenant dashboard", () => {
     for (const name of ["Penerima Satu", "Penerima Dua", "Penerima Tiga"]) expect(adminHtml.split(name).length - 1).toBe(1);
     // Exception, then draft, then the non-actionable recent outcome.
     expect(items.map((item) => ["Penerima Satu", "Penerima Dua", "Penerima Tiga"].find((name) => item.includes(name)))).toEqual(["Penerima Satu", "Penerima Dua", "Penerima Tiga"]);
-    expect(items[0]).toContain(`href="/app/pengiriman/${payment}#pemulihan-pembayaran"`);
+    expect(items[0]).toContain('href="/app/pengiriman/10161#pemulihan-pembayaran"');
     expect(items[0]).toContain("Pulihkan pembayaran");
     expect(items[1]).toContain(`href="/app/pengiriman/baru?draft=${draft}"`);
     expect(items[1]).toContain("Bogor");
-    expect(items[1].replace(/<[^>]+>/g, " ")).toContain("95758-260831-178");
+    expect(items[1].replace(/<[^>]+>/g, " ")).toContain("GC-10178");
     expect(items[1].replace(/<[^>]+>/g, " ")).not.toContain(draft);
     // Visible time is the short absolute WIB time; the full instant stays in dateTime.
     expect(items[1].replaceAll("<!-- -->", "")).toMatch(/<time[^>]*dateTime="2026-08-31T11:55:00.000Z"[^>]*>31 Agu, 18\.55<span class="sr-only"> WIB<\/span><\/time>/);
@@ -348,7 +353,7 @@ describe("analytics-led tenant dashboard", () => {
     expect(items[2]).toContain("AWB-DASH-3603");
     expect(items[2]).toContain('dateTime="2026-08-31T11:58:00.000Z"');
     expect(items[2].match(/<a\b/g)).toHaveLength(1);
-    expect(items[2]).toContain(`href="/app/pengiriman/${issued}"`);
+    expect(items[2]).toContain('href="/app/pengiriman/10195"');
     // AWB only where the provider issued one; the list carries no per-status guidance or relative activity phrase.
     expect(items.filter((item) => item.includes("AWB"))).toEqual([items[2]]);
     for (const status of ["AWAITING_UPSTREAM_PAYMENT", "DRAFT", "ISSUED"] as const) expect(adminHtml).not.toContain(SHIPMENT_STATUS_PRESENTATION[status].guidance);
@@ -381,7 +386,7 @@ describe("analytics-led tenant dashboard", () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toContain("Penerima Belum Pasti");
     expect(items[0]).toContain('data-actionable="true"');
-    expect(items[0]).toMatch(new RegExp(`href="/app/pengiriman/${unknown.shipmentId}"[^>]*>Lihat detail<`));
+    expect(items[0]).toMatch(new RegExp(`href="/app/pengiriman/${unknown.publicReference.slice(3)}"[^>]*>Lihat detail<`));
     expect(items[1]).not.toContain("data-actionable");
   });
 
@@ -401,18 +406,14 @@ describe("analytics-led tenant dashboard", () => {
     expect(awbSpan).not.toMatch(/\btruncate\b/);
   });
 
-  it("aligns every current-work card on one value and description line at xl", async () => {
-    const section = (await renderDashboard()).match(/<section[^>]*aria-labelledby="pulse-heading"[^>]*>(?:(?!<\/section>).)*<\/section>/)?.[0] ?? "";
-    const cards = section.match(/<div[^>]*data-slot="card"[^>]*>/g) ?? [];
-    expect(cards).toHaveLength(5);
-    for (const card of cards) {
-      // Titles reserve two lines from xl and the icon aligns to the first title line;
-      // without both, a one-line title lifts that card's value above its neighbours'.
-      expect(card).toContain("xl:[&amp;_[data-slot=card-title]]:min-h-10");
-      expect(card).toContain("[&amp;_[data-slot=card-header]]:items-start");
-    }
-    // Descriptions stay unclamped, so no guidance is cut off.
-    expect(section).not.toMatch(/line-clamp/);
+  // T-168 (owner 2026-09-16): the "Saat ini · Pekerjaan yang perlu diperhatikan" block
+  // left the dashboard. Its counts now filter the queue they link to (PR-52), so the
+  // dashboard must not resurrect a second, period-free copy of them.
+  it("no longer renders the snapshot attention block", async () => {
+    const html = await renderDashboard();
+    expect(html).not.toContain('aria-labelledby="pulse-heading"');
+    expect(html).not.toContain("Pekerjaan yang perlu diperhatikan");
+    expect(html).not.toContain("tidak mengikuti filter di atas");
   });
 
   it("caps the merged card at eight rows without dropping an actionable shipment", async () => {
@@ -444,9 +445,9 @@ describe("analytics-led tenant dashboard", () => {
     expect(html).toContain("33% lebih tinggi dari periode sebelumnya.");
 
     fixture.periodSummary.mockResolvedValueOnce({
-      current: { codCount: 5, codDeclaredValueIdr: 0, createdCount: 5, issuedCount: 0, nonCodCount: 0, nonCodDeclaredValueIdr: 0 },
+      current: { codCount: 5, createdCount: 5, issuedCount: 0, nonCodCount: 0 },
       generatedAt: new Date("2026-08-31T12:00:00.000Z"),
-      previous: { codCount: 5, codDeclaredValueIdr: 0, createdCount: 0, issuedCount: 4, nonCodCount: 0, nonCodDeclaredValueIdr: 0 },
+      previous: { codCount: 5, createdCount: 0, issuedCount: 4, nonCodCount: 0 },
     });
     const edgeHtml = await renderDashboard();
     expect(edgeHtml).toContain("+5 (naik dari 0) vs 7 hari sebelumnya");
@@ -460,11 +461,11 @@ describe("analytics-led tenant dashboard", () => {
     expect(disclosure).toContain("Dibandingkan dengan");
     expect(disclosure).toContain("COD/non-COD dihitung saat kiriman dibuat; resi dihitung saat diterbitkan Mengantar.");
     expect(disclosure).toContain("Data dianggap perlu diperbarui setelah 5 menit.");
-    // Period summary and current work each keep exactly one refresh control.
-    expect(html.match(/>Muat ulang</g)?.length).toBe(2);
+    // T-168: data refreshes itself while the tab is visible, so no region carries a button.
+    expect(html).not.toContain(">Muat ulang<");
+    expect(html).toMatch(/Data diperbarui otomatis setelah\s*(?:<!-- -->)?\s*5\s*(?:<!-- -->)?\s*menit/);
     // Compact clock (HH.mm) in the viewer's zone; the full instant stays in dateTime.
-    expect(html.match(/Diperbarui(?:<!-- -->)? <time dateTime="2026-08-31T12:00:00.000Z">19\.00<\/time>/g)?.length).toBe(2);
-    expect(html).toContain("tidak mengikuti filter di atas");
+    expect(html.match(/Diperbarui(?:<!-- -->)? <time dateTime="2026-08-31T12:00:00.000Z">19\.00<\/time>/g)?.length).toBeGreaterThanOrEqual(1);
   });
 
   it("offers scoped full analytics to Tenant Admin even when no trend card renders", async () => {

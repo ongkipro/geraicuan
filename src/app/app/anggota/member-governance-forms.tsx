@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { ChevronDown, UserPlus } from "lucide-react";
 
 import { changeMemberRoleAction, deactivateMemberAction, inviteMemberAction, type MemberActionState } from "@/app/app/anggota/actions";
+import { SettingsCard } from "@/components/cms/settings-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { TenantMemberRole } from "@/db/member-governance-repository";
+
+/** The invite card's footer button submits this form from outside it (PR-46 footer actions). */
+const INVITE_FORM_ID = "member-invite-form";
 
 const selectClassName = "min-h-11 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-destructive";
 
@@ -60,7 +64,17 @@ export function InviteMemberForm({ attemptId }: { attemptId: string }) {
   }, [emailError, roleError, state.resultToken]);
 
   return (
-    <form action={formAction} aria-busy={pending} className="grid gap-4" noValidate>
+    <SettingsCard
+      description="Berikan akses tenant kepada akun GeraiCUAN yang sudah aktif."
+      footer={
+        <Button className="min-h-11 md:min-h-9" disabled={pending} form={INVITE_FORM_ID} type="submit">
+          {pending ? "Memproses undangan…" : "Undang anggota"}
+        </Button>
+      }
+      id="invite-member-title"
+      title="Undang anggota"
+    >
+    <form action={formAction} aria-busy={pending} className="grid gap-4" id={INVITE_FORM_ID} noValidate>
       <input name="attemptId" type="hidden" value={state.nextAttemptId ?? attemptId} />
       <FieldSet disabled={pending}>
         <FieldGroup>
@@ -83,9 +97,9 @@ export function InviteMemberForm({ attemptId }: { attemptId: string }) {
           </Field>
         </FieldGroup>
       </FieldSet>
-      <div className="flex justify-end border-t pt-4"><Button className="min-h-11 max-sm:w-full" disabled={pending} type="submit">{pending ? "Memproses undangan…" : "Undang anggota"}</Button></div>
       <ActionMessage resultRef={resultRef} state={state} />
     </form>
+    </SettingsCard>
   );
 }
 

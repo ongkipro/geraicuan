@@ -1,10 +1,11 @@
 import "server-only";
 
-import { and, asc, count, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { contactAddresses, contacts } from "@/db/schema";
 import type { ContactDirectoryInput } from "@/lib/contact-directory";
+import type { ContactStatusFilter } from "@/lib/contact-role-filter";
 
 export class ContactUnavailableError extends Error {
   constructor() {
@@ -93,6 +94,119 @@ export async function listContacts(
       ),
     )
     .orderBy(asc(contacts.name), asc(contacts.createdAt));
+}
+
+export type ContactDirectoryRole = "all" | "recipient" | "sender";
+
+export type ContactDirectoryRow = {
+  address: string | null;
+  addressCount: number;
+  archivedAt: Date | null;
+  destinationAreaLabel: string | null;
+  id: string;
+  isRecipient: boolean;
+  isSender: boolean;
+  name: string;
+  phone: string;
+};
+
+/**
+ * T-167: the Kontak directory row, filtered by role (`contacts.is_sender` /
+ * `is_recipient` — a dual-role contact matches both `sender` and `recipient`)
+ * and carrying the contact's primary address, falling back to the newest
+ * active address when none is marked primary. `addressCount` is every active
+ * address so the caller can render "+N alamat" beyond the one shown here.
+ */
+function contactRoleFilter(role: ContactDirectoryRole) {
+  return role === "sender"
+    ? eq(contacts.isSender, true)
+    : role === "recipient"
+      ? eq(contacts.isRecipient, true)
+      : undefined;
+}
+
+/** One definition of the archived boundary, shared by the list and its counts. */
+function contactStatusFilter(status: ContactStatusFilter) {
+  if (status === "all") return undefined;
+  return status === "archived"
+    ? isNotNull(contacts.archivedAt)
+    : isNull(contacts.archivedAt);
+}
+
+export async function listContactDirectory(
+  tx: TenantTransaction,
+  context: TenantContext,
+  input: { query: string; role: ContactDirectoryRole; status: ContactStatusFilter },
+): Promise<ContactDirectoryRow[]> {
+  const roleFilter = contactRoleFilter(input.role);
+  const contactRows = await tx
+    .select({
+      archivedAt: contacts.archivedAt,
+      id: contacts.id,
+      isRecipient: contacts.isRecipient,
+      isSender: contacts.isSender,
+      name: contacts.name,
+      phone: contacts.phone,
+    })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.tenantId, context.tenantId),
+        contactStatusFilter(input.status),
+        roleFilter,
+        input.query
+          ? or(ilike(contacts.name, `%${input.query}%`), ilike(contacts.phone, `%${input.query}%`))
+          : undefined,
+      ),
+    )
+    .orderBy(asc(contacts.name), asc(contacts.createdAt));
+  if (contactRows.length === 0) return [];
+
+  const contactIds = contactRows.map((row) => row.id);
+  const [primaryAddressRows, addressCountRows] = await Promise.all([
+    tx
+      .selectDistinctOn([contactAddresses.contactId], {
+        address: contactAddresses.address,
+        contactId: contactAddresses.contactId,
+        destinationAreaLabel: contactAddresses.destinationAreaLabel,
+      })
+      .from(contactAddresses)
+      .where(
+        and(
+          eq(contactAddresses.tenantId, context.tenantId),
+          inArray(contactAddresses.contactId, contactIds),
+          isNull(contactAddresses.archivedAt),
+        ),
+      )
+      // DISTINCT ON keeps the first row per contact under this order: the
+      // primary address when one exists, else the newest active address. `id`
+      // breaks the tie a multi-row insert creates, because `now()` is one value
+      // per statement and leaves several addresses sharing `created_at`.
+      .orderBy(asc(contactAddresses.contactId), sql`${contactAddresses.isPrimary} DESC`, desc(contactAddresses.createdAt), asc(contactAddresses.id)),
+    tx
+      .select({ contactId: contactAddresses.contactId, total: count() })
+      .from(contactAddresses)
+      .where(
+        and(
+          eq(contactAddresses.tenantId, context.tenantId),
+          inArray(contactAddresses.contactId, contactIds),
+          isNull(contactAddresses.archivedAt),
+        ),
+      )
+      .groupBy(contactAddresses.contactId),
+  ]);
+  const addressByContact = new Map(primaryAddressRows.map((row) => [row.contactId, row]));
+  const countByContact = new Map(addressCountRows.map((row) => [row.contactId, row.total]));
+
+  return contactRows.map((row) => {
+    const primary = addressByContact.get(row.id);
+    return {
+      ...row,
+      address: primary?.address ?? null,
+      addressCount: countByContact.get(row.id) ?? 0,
+      destinationAreaLabel: primary?.destinationAreaLabel ?? null,
+    };
+  });
 }
 
 export async function countActiveContacts(
@@ -411,4 +525,51 @@ export async function archiveContact(
     )
     .returning({ id: contacts.id });
   if (updated.length !== 1) throw new ContactUnavailableError();
+}
+
+export type ContactDirectorySummary = {
+  "CON-ACTIVE": number;
+  "CON-ALL": number;
+  "CON-ARCHIVED": number;
+};
+
+/**
+ * PR-52: the Kontak directory and its state panel in one pass.
+ *
+ * The counts carry the same tenant, role and search scope as the rows, so an
+ * entry's number equals the number of rows choosing it returns. The tenant
+ * predicate is the table's own column, never row-level security alone.
+ */
+export async function loadContactDirectoryPage(
+  tx: TenantTransaction,
+  context: TenantContext,
+  input: { query: string; role: ContactDirectoryRole; status: ContactStatusFilter },
+): Promise<{ rows: ContactDirectoryRow[]; summary: ContactDirectorySummary }> {
+  const [summaryRow] = await tx
+    .select({
+      active: sql<number>`count(*) FILTER (WHERE ${contacts.archivedAt} IS NULL)::int`.mapWith(Number),
+      all: sql<number>`count(*)::int`.mapWith(Number),
+      archived: sql<number>`count(*) FILTER (WHERE ${contacts.archivedAt} IS NOT NULL)::int`.mapWith(Number),
+    })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.tenantId, context.tenantId),
+        contactRoleFilter(input.role),
+        input.query
+          ? or(ilike(contacts.name, `%${input.query}%`), ilike(contacts.phone, `%${input.query}%`))
+          : undefined,
+      ),
+    );
+
+  const rows = await listContactDirectory(tx, context, input);
+
+  return {
+    rows,
+    summary: {
+      "CON-ACTIVE": summaryRow?.active ?? 0,
+      "CON-ALL": summaryRow?.all ?? 0,
+      "CON-ARCHIVED": summaryRow?.archived ?? 0,
+    },
+  };
 }

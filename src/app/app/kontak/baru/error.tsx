@@ -22,7 +22,7 @@ export default function NewContactError({ reset }: { reset: () => void }) {
   };
 
   return (
-    <PageContainer width="form">
+    <PageContainer>
       <PageHeader eyebrow="Data" title="Buat kontak" />
       <Alert ref={alertRef} tabIndex={-1} variant="destructive">
         <CircleAlert aria-hidden="true" />

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 export default function ShipmentNotFound() {
   const headingId = "shipment-not-found-heading";
   return (
-    <PageContainer width="standard">
+    <PageContainer>
       <FocusHeadingOnMount id={headingId} />
       <PageHeader eyebrow="Detail pengiriman" focusTargetId={headingId} title="Detail kiriman" />
       <section role="status"><EmptyState action={<Button asChild><Link href="/app/pengiriman">Kembali ke antrean</Link></Button>} description="Kiriman mungkin tidak ada atau tidak termasuk dalam lingkup tenant aktif. Tidak ada data tenant lain yang ditampilkan." icon={PackageX} title="Detail kiriman tidak tersedia" /></section>

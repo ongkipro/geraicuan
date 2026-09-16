@@ -323,40 +323,12 @@
  ],
  "/app/pengaturan": [
   {
-   "scenario": "settings-empty",
-   "state": "healthy-empty"
-  },
-  {
    "scenario": "settings-error",
    "state": "route-error"
   },
   {
-   "scenario": "settings-first-run",
-   "state": "first-run"
-  },
-  {
-   "scenario": "settings-many",
-   "state": "populated"
-  },
-  {
-   "scenario": "settings-private-auth-error",
-   "state": "partial-error"
-  },
-  {
-   "scenario": "settings-private-attention",
-   "state": "partial-error"
-  },
-  {
-   "scenario": "settings-provider-error",
-   "state": "partial-error"
-  },
-  {
    "scenario": "settings-stream",
    "state": "loading"
-  },
-  {
-   "scenario": "settings-twenty",
-   "state": "populated"
   }
  ],
  "/app/pengiriman/[shipmentId]": [
@@ -393,6 +365,10 @@
   {
    "scenario": "shipment-draft-estimate-error",
    "state": "partial-error"
+  },
+  {
+   "scenario": "shipment-draft-pickup-choice",
+   "state": "populated"
   },
   {
    "scenario": "shipment-draft-saved",
@@ -463,6 +439,84 @@
   {
    "scenario": "contact-detail-route-error",
    "state": "route-error"
+  }
+ ],
+ "/app/pengaturan/outlet": [
+  {
+   "scenario": "settings-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "settings-first-run",
+   "state": "first-run"
+  },
+  {
+   "scenario": "settings-many",
+   "state": "populated"
+  },
+  {
+   "scenario": "settings-outlet-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "settings-outlet-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "settings-provider-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "settings-twenty",
+   "state": "populated"
+  }
+ ],
+ "/app/pengaturan/pickup": [
+  {
+   "scenario": "settings-pickup-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "settings-pickup-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "settings-pickup-list",
+   "state": "populated"
+  },
+  {
+   "scenario": "settings-pickup-provider-error",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "settings-pickup-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/pengaturan/koneksi": [
+  {
+   "scenario": "settings-connection-empty",
+   "state": "healthy-empty"
+  },
+  {
+   "scenario": "settings-connection-many",
+   "state": "populated"
+  },
+  {
+   "scenario": "settings-koneksi-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "settings-koneksi-stream",
+   "state": "loading"
+  },
+  {
+   "scenario": "settings-private-attention",
+   "state": "partial-error"
+  },
+  {
+   "scenario": "settings-private-auth-error",
+   "state": "partial-error"
   }
  ]
 }

@@ -9,6 +9,7 @@ export type AnalyticsPresetId =
   | "kemarin"
   | "minggu-ini"
   | "bulan-ini"
+  | "bulan-lalu"
   | "7-hari"
   | "30-hari"
   | "kustom";
@@ -39,6 +40,7 @@ export const ANALYTICS_PRESETS = [
   { id: "kemarin", label: "Kemarin" },
   { id: "minggu-ini", label: "Minggu ini" },
   { id: "bulan-ini", label: "Bulan ini" },
+  { id: "bulan-lalu", label: "Bulan lalu" },
   { id: "7-hari", label: "7 hari terakhir" },
   { id: "30-hari", label: "30 hari terakhir" },
   { id: "kustom", label: "Rentang khusus" },
@@ -222,6 +224,18 @@ function makePresetRange(
         tomorrow,
         issues,
       );
+    case "bulan-lalu": {
+      // A complete calendar month, so it ends where "Bulan ini" begins rather
+      // than 30 days back from today.
+      const firstOfThisMonth = { year: today.year, month: today.month, day: 1 };
+      return makeRange(
+        presetId,
+        timezone,
+        previousMonthStart(firstOfThisMonth),
+        firstOfThisMonth,
+        issues,
+      );
+    }
     case "7-hari":
       return makeRange(
         presetId,
@@ -239,6 +253,13 @@ function makePresetRange(
         issues,
       );
   }
+}
+
+/** The first day of the calendar month before `start`, which must be a first-of-month. */
+function previousMonthStart(start: CalendarDate): CalendarDate {
+  return start.month === 1
+    ? { year: start.year - 1, month: 12, day: 1 }
+    : { year: start.year, month: start.month - 1, day: 1 };
 }
 
 function defaultRange(
@@ -338,12 +359,36 @@ export function parseAnalyticsRange(
   );
 }
 
+/**
+ * The period a range is compared against.
+ *
+ * The default rule is an equal-length window ending where this one begins,
+ * which is also what makes a to-date preset ("Bulan ini", "Minggu ini",
+ * "Hari ini") comparable: an 8-day month-to-date is compared with the 8 days
+ * before it, not with a whole previous month whose extra days it has not lived
+ * through yet.
+ *
+ * "Bulan lalu" is the exception (T-163): it is already a complete calendar
+ * month, so its comparison is the complete calendar month before it. A span
+ * shift would compare a 31-day January with the 31 days ending 1 December —
+ * two-thirds of November and a slice of October.
+ */
 export function previousAnalyticsRange(
   range: AnalyticsRange,
 ): AnalyticsRange {
   const start = parseCalendarDate(range.startDate);
   if (!start) {
     throw new RangeError("Analytics range start date is invalid.");
+  }
+
+  if (range.presetId === "bulan-lalu") {
+    return makeRange(
+      "kustom",
+      resolvedTimezone(range.timezone),
+      previousMonthStart(start),
+      start,
+      [],
+    );
   }
 
   return makeRange(

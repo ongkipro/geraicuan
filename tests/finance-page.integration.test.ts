@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
   },
   reconciliations: [] as Array<Record<string, unknown>>,
   regularReconciliationCalls: 0,
+  settlement: { rows: [] as Array<Record<string, unknown>>, latestPull: null as Record<string, unknown> | null, limit: 100 },
+  settlementCalls: [] as Array<{ outletId?: string }>,
   summary: {
     codPrincipalLiabilityIdr: 0,
     providerCostIdr: 0,
@@ -87,7 +89,15 @@ vi.mock("@/db/ledger-repository", () => ({
   summarizeLedger: vi.fn(async () => mocks.summary),
 }));
 
+vi.mock("@/db/provider-settlement-repository", () => ({
+  listProviderSettlementReview: vi.fn(async (_tx, _context, filter) => {
+    mocks.settlementCalls.push(filter);
+    return mocks.settlement;
+  }),
+}));
+
 vi.mock("@/app/app/keuangan/actions", () => ({
+  pullMengantarSettlement: vi.fn(async () => ({})),
   reverseLedgerEntry: vi.fn(async () => ({})),
   runLedgerReconciliation: vi.fn(async () => ({})),
 }));
@@ -134,7 +144,7 @@ function populatedFixtures() {
       outletName: "Outlet Jakarta",
       reversesEntryId: null,
       shipmentId: SHIPMENT_ID,
-      publicReference: "95758-260820-431",
+      publicReference: "GC-10431",
       sourceEvent: "PROVIDER_ORDER_ISSUED",
       sourceEventId: "provider-order-fixture",
     }],
@@ -170,6 +180,8 @@ beforeEach(() => {
   };
   mocks.reconciliations.length = 0;
   mocks.regularReconciliationCalls = 0;
+  mocks.settlement = { rows: [], latestPull: null, limit: 100 };
+  mocks.settlementCalls.length = 0;
   mocks.summary = {
     codPrincipalLiabilityIdr: 0,
     providerCostIdr: 0,
@@ -209,18 +221,26 @@ describe("Finance page acceptance", () => {
     expect(html).toContain("Pokok COD — liabilitas");
     expect(html).toContain("Bukan pendapatan GeraiCUAN");
     expect(html).toContain("Biaya provider");
-    expect(html).toContain("Pendapatan jasa COD");
+    // T-178: new COD fees are Mengantar's cost; the revenue card holds only entries posted before the change, and says so.
+    expect(html).toContain("Pendapatan jasa COD (entri lama)");
+    expect(html).toContain("Biaya COD kini dicatat sebagai biaya provider karena dipotong Mengantar.");
     expect(html).toContain("PPN terutang");
     expect(html).toContain("Pemulihan non-COD");
     expect(html).toContain("Belum ada rekonsiliasi pada periode ini");
     expect(html).toContain("Tidak ada entri pada");
-    // Enter in a filter field clicks the form's first submit button; it must be the plain
-    // apply, not the khusus=1 custom-range button, or every Enter forces a custom range.
+    // T-163: the `khusus=1` custom-range button is gone — the one date-range
+    // control writes `rentang=kustom` with the dates directly, so no submit
+    // button in this form may force a custom range any more. `khusus` stays
+    // *parsed* for old links; the URL-contract test binds that.
     const filterForm = html.slice(html.indexOf('id="finance-filter-fields"'), html.indexOf("</form>"));
     const firstSubmit = filterForm.match(/<button[^>]*type="submit"[^>]*>/)?.[0] ?? "";
     expect(firstSubmit).not.toBe("");
-    expect(firstSubmit).not.toContain('name="khusus"');
-    expect(filterForm).toContain('name="khusus"');
+    expect(filterForm).not.toContain('name="khusus"');
+    // The range travels as the three canonical parameters, always present in
+    // the form whether the panel is open or shut.
+    expect(filterForm).toContain('name="rentang"');
+    expect(filterForm).toContain('name="dari"');
+    expect(filterForm).toContain('name="sampai"');
     expect(filterForm).not.toContain('name="tz"');
     expect(filterForm).not.toContain("Zona waktu");
     // Submit and reset return focus to this heading, so it must be visible, not sr-only.
@@ -240,7 +260,7 @@ describe("Finance page acceptance", () => {
   it("renders populated money and variance tables as local scrollers with sticky context", async () => {
     populatedFixtures();
     const html = await renderPage();
-    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260820-431");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("GC-10431");
     expect(html.replace(/<[^>]+>/g, " ")).not.toContain(SHIPMENT_ID);
     const scrollers = html.match(
       /<div[^>]*role="region"[^>]*tabindex="0"[^>]*>\s*<table/g,
@@ -297,5 +317,63 @@ describe("Finance page acceptance", () => {
     expect(html).not.toContain("SHOULD-NOT-RENDER-INVALID-STATUS");
     expect(mocks.latestVarianceCalls).toBe(0);
     expect(mocks.regularReconciliationCalls).toBe(0);
+  });
+  it("offers a read-only Mengantar pull and explains an account that has never been pulled", async () => {
+    const html = await renderPage();
+    const text = html.replace(/<[^>]+>/g, " ");
+    expect(mocks.settlementCalls).toEqual([{ outletId: OUTLET_ID }]);
+    expect(text).toContain("Pencairan Mengantar");
+    expect(text).toContain("Data Mengantar belum pernah ditarik.");
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Tarik data Mengantar<\/button>/);
+    expect(text).toContain("tidak membuat order dan tidak mengubah ledger");
+    expect(html).toMatch(/<select[^>]*name="outletId"/);
+  });
+
+  it("renders per-AWB settlement evidence with signed variance and hides shared-account volume", async () => {
+    mocks.settlement = {
+      limit: 100,
+      latestPull: {
+        createdAt: new Date("2026-09-15T03:00:00.000Z"), credentialSource: "platform_default", invoiceCount: null,
+        matchedItemCount: 2, matchedStatusCount: 1, orderCount: null, outletName: "Outlet Jakarta",
+        periodEnd: new Date("2026-09-30T17:00:00.000Z"), periodStart: new Date("2026-08-31T17:00:00.000Z"), unmatchedAwbCount: null,
+      },
+      rows: [
+        { shipmentId: SHIPMENT_ID, publicReference: "GC-10431", cnoteNo: "SANITIZED-CNOTE-0002", outletName: "Outlet Jakarta", isCod: true,
+          settledIdr: 97_878.0221, providerCodAmountIdr: 113_663, providerShippingIdr: 15_784.9779, chargeIdr: 0, refundIdr: 0,
+          latestProviderStatus: "DELIVERED", expectedPayoutIdr: 99_878.0221, varianceIdr: -2_000, settlementClass: "AMOUNT_MISMATCH" },
+        { shipmentId: "00000000-0000-4000-8000-000000000432", publicReference: "GC-10432", cnoteNo: "SANITIZED-CNOTE-0005", outletName: "Outlet Jakarta", isCod: true,
+          settledIdr: null, providerCodAmountIdr: null, providerShippingIdr: null, chargeIdr: 0, refundIdr: 0,
+          latestProviderStatus: "DELIVERED", expectedPayoutIdr: 103_663, varianceIdr: null, settlementClass: "DELIVERED_UNPAID" },
+      ],
+    };
+    const html = await renderPage();
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    const table = html.slice(html.indexOf('aria-label="Tabel pencairan Mengantar"'));
+    expect(table).toMatch(/<table/);
+    expect(text).toContain("Nominal beda");
+    expect(text).toContain("Terkirim, belum cair");
+    expect(text).toMatch(/−Rp\s?2\.000|-Rp\s?2\.000/);
+    // T-178: Mengantar settles in fractions of a rupiah; the table shows the sen instead of rounding them away.
+    expect(text).toMatch(/Rp\s?97\.878,02/);
+    expect(text).toMatch(/Rp\s?99\.878,02/);
+    expect(text).toMatch(/Rp\s?15\.784,98/);
+    expect(text).toContain("Potongan Mengantar (ongkir + biaya COD)");
+    expect(text).toContain("COD − ongkir ledger − biaya COD Mengantar 3,33% dari COD");
+    expect(text).toContain("SANITIZED-CNOTE-0002");
+    expect(text).toContain("akun platform bersama: total dan resi di luar tenant ini tidak ditampilkan");
+    expect(text).not.toMatch(/invoice, .* order diperiksa/);
+    expect(text).not.toMatch(/resi bukan dari GeraiCUAN diabaikan/);
+    expect(text).not.toContain(SHIPMENT_ID);
+    expect(html).toContain('href="/app/pengiriman/10431"');
+  });
+  it("degrades only the settlement section when its read fails", async () => {
+    populatedFixtures();
+    const { listProviderSettlementReview } = await import("@/db/provider-settlement-repository");
+    vi.mocked(listProviderSettlementReview).mockRejectedValueOnce(new Error("settlement read failed"));
+    const html = await renderPage();
+    const text = html.replace(/<[^>]+>/g, " ");
+    expect(text).toContain("Pencairan Mengantar tidak dapat dimuat");
+    expect(text).toContain("Buat pembalik");
+    expect(text).not.toContain("Data Mengantar belum pernah ditarik.");
   });
 });

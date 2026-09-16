@@ -21,7 +21,7 @@ export default function ShipmentQueueError({
   useFocusTargetOnMount(HEADING_ID);
 
   return (
-    <PageContainer width="data">
+    <PageContainer>
       <PageHeader eyebrow="Operasional kiriman" focusTargetId={HEADING_ID} title="Pengiriman" />
       <Alert role="alert" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Antrean tidak dapat dimuat</AlertTitle><AlertDescription className="space-y-4"><p>Terjadi gangguan saat membaca lifecycle kiriman. Lingkup tenant dan detail internal tetap terlindungi.</p><RetryRegionButton focusTargetId={HEADING_ID} onRetry={reset} /></AlertDescription></Alert>
     </PageContainer>

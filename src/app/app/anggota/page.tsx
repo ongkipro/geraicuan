@@ -7,10 +7,13 @@ import { redirect } from "next/navigation";
 
 import { InviteMemberForm, InviteMemberHeaderAction, MemberControls } from "@/app/app/anggota/member-governance-forms";
 import { EmptyState } from "@/components/cms/empty-state";
-import { administrationNavigation } from "@/app/app/pengaturan/settings-nav";
+import {
+  administrationNavigation,
+  SETTINGS_INDEX_HREF,
+} from "@/app/app/pengaturan/settings-nav";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
-import { ContentSection, SettingsLayout } from "@/components/cms/settings-layout";
+import { SettingsCard, SettingsLayout } from "@/components/cms/settings-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db/client";
@@ -111,7 +114,7 @@ export default async function TenantMembersPage() {
   });
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <SettingsLayout
         currentHref="/app/anggota"
         header={
@@ -122,10 +125,11 @@ export default async function TenantMembersPage() {
             title="Anggota & akses"
           />
         }
+        indexHref={SETTINGS_INDEX_HREF}
         items={administrationNavigation}
-        navLabel="Administrasi"
+        navLabel="Menu pengaturan"
       >
-        <div className="grid min-w-0 gap-8">
+        <div className="grid min-w-0 gap-6">
           {activeAdminCount === 1 ? (
             <Alert>
               <CircleAlert aria-hidden="true" />
@@ -134,7 +138,11 @@ export default async function TenantMembersPage() {
             </Alert>
           ) : null}
 
-          <section aria-label="Ringkasan anggota tenant">
+          <SettingsCard
+            description="Jumlah anggota tenant ini menurut status dan peran."
+            id="member-summary-title"
+            title="Ringkasan akses"
+          >
             <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4">
               {[
                 ["Total anggota", members.length],
@@ -148,12 +156,10 @@ export default async function TenantMembersPage() {
                 </div>
               ))}
             </dl>
-          </section>
+          </SettingsCard>
 
-          {/* The member list is a table-style list, wider than the lg:max-w-xl form cap. */}
-          <ContentSection
-            contentClassName="lg:max-w-none"
-            headingLevel={2}
+          <SettingsCard
+            badge={activeAdminCount === 1 ? <Badge variant="outline"><LockKeyhole aria-hidden="true" />Admin terakhir dilindungi</Badge> : undefined}
             description="Kelola peran dan akses setiap anggota. Anggota aktif ditampilkan lebih dulu."
             id="tenant-members-title"
             title="Daftar anggota"
@@ -202,16 +208,9 @@ export default async function TenantMembersPage() {
                 </ul>
               </div>
             )}
-          </ContentSection>
+          </SettingsCard>
 
-          <ContentSection
-            description="Berikan akses tenant kepada akun GeraiCUAN yang sudah aktif."
-            headingLevel={2}
-            id="invite-member-title"
-            title="Undang anggota"
-          >
-            <InviteMemberForm attemptId={randomUUID()} />
-          </ContentSection>
+          <InviteMemberForm attemptId={randomUUID()} />
         </div>
       </SettingsLayout>
     </PageContainer>

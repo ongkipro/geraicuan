@@ -55,7 +55,7 @@ export async function checkStaleShipmentOperation(
     }
     throw error;
   }
-  revalidatePath(`/app/pengiriman/${shipmentId}`);
+  revalidatePath("/app/pengiriman/[shipmentId]", "page");
   revalidatePath("/app/pengiriman");
   return result === "UPDATED"
     ? { message: "Status upaya tersendat sudah diamankan. Tinjau status terbaru." }

@@ -1,0 +1,684 @@
+{
+  "contract": "GET /api/public/{key}/order — stored order record shape. Key names kept, values reduced to type/scale/enum. No customer data, no credential.",
+  "capturedAt": "2026-09-16",
+  "httpStatus": 200,
+  "host": "api-public.mengantar.com",
+  "envelope": {
+    "success": true,
+    "count": 0,
+    "total": 0
+  },
+  "recordsInspected": 100,
+  "vocabularyScanned": 100,
+  "vocabulary": {
+    "status": {
+      "RTS": 96,
+      "DELIVERED": 2,
+      "DELIVERY PROBLEM": 1,
+      "PENDING PICKUP": 1
+    },
+    "pod_code": {
+      "101": 1,
+      "402": 96,
+      "D02": 1,
+      "KRK": 1,
+      "D01": 1
+    },
+    "lastUndeliveredCode": {
+      "REJECTED": 66,
+      "CONSIGNEE NOT AVAILABLE": 13,
+      "UNDELIVERED": 7,
+      "CLOSED OR NOT AT HOME": 2,
+      "NEED REDELIVERY": 2,
+      "U05": 1,
+      "BAD ADDRESS": 1
+    },
+    "courier": {
+      "JT": 97,
+      "JNE": 3
+    },
+    "TYPE": {
+      "PICKUP": 99,
+      "DROP": 1
+    },
+    "claimStatus": {
+      "statusDisapproved": 52,
+      "statusApproved": 42,
+      "statusPending": 1
+    },
+    "ticketStatus": {
+      "Closed": 61,
+      "none": 36,
+      "Replied": 3
+    }
+  },
+  "fields": {
+    "COD_AMOUNT": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "number(6 digits)"
+    },
+    "COD_FEE": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "number(4 digits, fractional)"
+    },
+    "DESTINATION_CODE": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "CGK10401"
+    },
+    "FULL_RECEIVER_ADDRESS": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(122 chars)"
+    },
+    "GOODS_AMOUNT": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "number(6 digits)"
+    },
+    "GOODS_DESC": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "carukesi 2 pcs"
+    },
+    "ORDER_ID": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(12 chars)"
+    },
+    "ORIGIN_CODE": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "TGR10000"
+    },
+    "RECEIVER_ADDR1": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(58 chars)"
+    },
+    "RECEIVER_ADDR2": {
+      "present": 4,
+      "nonEmpty": 1,
+      "shape": "string(9 chars)"
+    },
+    "RECEIVER_ADDR3": {
+      "present": 3,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "RECEIVER_CITY": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "JAKARTA UTARA"
+    },
+    "RECEIVER_DISTRICT": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "KELAPA GADING"
+    },
+    "RECEIVER_NAME": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(14 chars)"
+    },
+    "RECEIVER_PHONE": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(13 chars)"
+    },
+    "RECEIVER_REGION": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "DKI JAKARTA"
+    },
+    "RECEIVER_SUBDISTRICT": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "KELAPA GADING BARAT"
+    },
+    "SHIPPER_CONTACT": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "Feri"
+    },
+    "SHIPPER_NAME": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(8 chars)"
+    },
+    "SHIPPER_PHONE": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(13 chars)"
+    },
+    "TYPE": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "PICKUP"
+    },
+    "WEIGHT": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "number(1 digits)"
+    },
+    "_id": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(24 chars)"
+    },
+    "assignee": {
+      "present": 4,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "batch": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "260904105T3QKW"
+    },
+    "claimStatus": {
+      "present": 95,
+      "nonEmpty": 95,
+      "shape": "statusApproved"
+    },
+    "cnote_no": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(16 chars)"
+    },
+    "cnote_no_fwd": {
+      "present": 3,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "cnote_no_rts": {
+      "present": 3,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "courier": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "JNE"
+    },
+    "createdAt": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "2026-09-04T03:49:34.589Z"
+    },
+    "customProductOrderIds": {
+      "present": 4,
+      "nonEmpty": 4,
+      "shape": []
+    },
+    "customerService": {
+      "present": 3,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "deletedAt": {
+      "present": 4,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "destinationMark": {
+      "present": 100,
+      "nonEmpty": 1,
+      "shape": "INV-10018"
+    },
+    "estimate_delivery": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "2 Days"
+    },
+    "estimatedPrice": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "number(5 digits, fractional)"
+    },
+    "formulir_order_id": {
+      "present": 4,
+      "nonEmpty": 0,
+      "shape": "null"
+    },
+    "isArchived": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": false
+    },
+    "isBreach": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": false
+    },
+    "isDangerousGoods": {
+      "present": 1,
+      "nonEmpty": 1,
+      "shape": false
+    },
+    "isDeleted": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": false
+    },
+    "isFlat": {
+      "present": 3,
+      "nonEmpty": 3,
+      "shape": false
+    },
+    "isPaid": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": true
+    },
+    "isPremiumSeller": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": false
+    },
+    "isProductFromOrderHistory": {
+      "present": 4,
+      "nonEmpty": 4,
+      "shape": false
+    },
+    "isReconciliated": {
+      "present": 2,
+      "nonEmpty": 2,
+      "shape": true
+    },
+    "lastHistory": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": {
+        "date": "05-09-2026 16:16",
+        "desc": "string(68 chars)",
+        "code": "D02",
+        "location": "JAKARTA",
+        "photo1": "string(94 chars)",
+        "photo2": "null",
+        "photo3": "null",
+        "photo4": "null",
+        "photo5": "null",
+        "photo6": "null",
+        "photo7": "null",
+        "photo8": "null",
+        "type": {
+          "type": "delivered"
+        }
+      }
+    },
+    "lastStatusChange": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "2026-09-05T20:03:00.000Z"
+    },
+    "lastUndeliveredCode": {
+      "present": 92,
+      "nonEmpty": 92,
+      "shape": "U05"
+    },
+    "orderIndex": {
+      "present": 3,
+      "nonEmpty": 3,
+      "shape": "number"
+    },
+    "pickupDate": {
+      "present": 97,
+      "nonEmpty": 97,
+      "shape": "2026-09-01T15:31:00.000Z"
+    },
+    "pod_code": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "D02"
+    },
+    "price": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "number(5 digits)"
+    },
+    "printedDates": {
+      "present": 4,
+      "nonEmpty": 4,
+      "shape": [
+        "2026-09-04T03:50:14.406Z"
+      ]
+    },
+    "productOrders": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": []
+    },
+    "productOrdersManual": {
+      "present": 4,
+      "nonEmpty": 4,
+      "shape": []
+    },
+    "proofHistory": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": []
+    },
+    "receiverGl": {
+      "present": 4,
+      "nonEmpty": 4,
+      "shape": {
+        "phone": "string(11 chars)",
+        "rate": "number",
+        "data": {
+          "JNE": {
+            "total": 11,
+            "userIds": [
+              "string(24 chars)"
+            ],
+            "userData": {
+              "681328d59521870694f5adf6": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              },
+              "6833df467d7ae3fb999771f0": {
+                "delivered": "number",
+                "total": 4,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              },
+              "691148ddb69d2fce84f8d97e": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              },
+              "6999f3e3893a667b6bd8eded": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              },
+              "63bd86e6bf140c382f494a67": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              },
+              "68a6f8c07e8a6f1fa30ead0e": {
+                "delivered": "number",
+                "total": 2,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              },
+              "676fa2a0cd598dab74f4340b": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(1 digits)"
+              },
+              "694f2743c7e40dd52740571a": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(1 digits)"
+              },
+              "66e833c20636f260b9b8f5a5": {
+                "delivered": "number",
+                "total": 0,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(1 digits)"
+              }
+            },
+            "value": "number(7 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number"
+          },
+          "SiCepat": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          },
+          "Sap": {
+            "total": 1,
+            "userIds": [
+              "string(24 chars)"
+            ],
+            "userData": {
+              "64f02629319c3670218ec286": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(1 digits)"
+              }
+            },
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number"
+          },
+          "iDexpress": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          },
+          "JT": {
+            "total": 1,
+            "userIds": [
+              "string(24 chars)"
+            ],
+            "userData": {
+              "69059807dffa2ad14acf88f5": {
+                "delivered": "number",
+                "total": 1,
+                "rts": "number",
+                "undelivered": "number",
+                "rate": "number",
+                "inProgress": "number",
+                "value": "number(6 digits)"
+              }
+            },
+            "value": "number(6 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number"
+          },
+          "Ninja": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          },
+          "lion": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          },
+          "paxel": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          },
+          "anteraja": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          },
+          "pos": {
+            "total": 0,
+            "value": "number(1 digits)",
+            "inProgress": "number",
+            "delivered": "number",
+            "rts": "number",
+            "undelivered": "number",
+            "rate": "number",
+            "totalCalculation": {
+              "delivered": "number",
+              "rts": "number",
+              "undelivered": "number",
+              "rate": "number"
+            }
+          }
+        }
+      }
+    },
+    "receiverScore": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": {
+        "delivered": "number",
+        "rts": "number",
+        "undelivered": "number",
+        "rate": "number",
+        "totalCalculation": {
+          "delivered": "number",
+          "rts": "number",
+          "undelivered": "number",
+          "rate": "number"
+        }
+      }
+    },
+    "receiver_area": {
+      "present": 1,
+      "nonEmpty": 1,
+      "shape": "JKT008"
+    },
+    "receiver_id": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(24 chars)"
+    },
+    "sapData": {
+      "present": 1,
+      "nonEmpty": 1,
+      "shape": {
+        "desCode": "300-JKT39O-14E",
+        "etd": "3-4"
+      }
+    },
+    "shouldUseProductLookup": {
+      "present": 4,
+      "nonEmpty": 4,
+      "shape": false
+    },
+    "status": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "DELIVERED"
+    },
+    "ticketStatus": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "none"
+    },
+    "user": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": {
+        "email": "string(19 chars)",
+        "name": "string(5 chars)",
+        "isTaggedVerified": false
+      }
+    },
+    "user_id": {
+      "present": 100,
+      "nonEmpty": 100,
+      "shape": "string(24 chars)"
+    }
+  }
+}

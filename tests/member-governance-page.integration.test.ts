@@ -251,6 +251,70 @@ describe("Member governance page acceptance", () => {
   });
 });
 
+describe("Anggota & akses inside the PR-46 settings pattern", () => {
+  it("sits in the shared settings menu at its own URL, with Anggota & akses the marked item", async () => {
+    mocks.members = [member()];
+
+    const html = await renderPage();
+
+    // The menu is the same list every settings page renders, and the page it
+    // marks is the one it is on. `aria-current="true"` (not "page") because the
+    // shell sidebar owns the single "page" for this route.
+    expect(html).toContain('aria-label="Menu pengaturan"');
+    for (const label of ["Profil toko", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota &amp; akses"]) {
+      expect(html).toContain(label);
+    }
+    const marked = html.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? [];
+    expect(marked).toHaveLength(1);
+    expect(marked[0]).toContain('href="/app/anggota"');
+    // Below `lg` every non-index settings page collapses the menu to one back link.
+    expect(html).toContain('aria-label="Kembali ke Pengaturan"');
+    expect(html).toContain('href="/app/pengaturan"');
+  });
+
+  it("names each section with the card title its content points at", async () => {
+    mocks.members = [member()];
+
+    const html = await renderPage();
+
+    // Every section of the page is a card, and each card's title is the
+    // accessible name its body refers to. A title that loses its id leaves the
+    // list and the invite form with a dangling aria-labelledby.
+    expect(html.match(/data-slot="card"/g) ?? []).toHaveLength(3);
+    for (const id of ["member-summary-title", "tenant-members-title", "invite-member-title"]) {
+      expect(html).toMatch(new RegExp(`<h2[^>]*data-slot="card-title"[^>]*id="${id}"`));
+      expect(html).toContain(`aria-labelledby="${id}"`);
+    }
+    // One h1 for the page, and every section heading one level below it: no
+    // section title is a div, and no level is skipped.
+    expect(html.match(/<h1/g) ?? []).toHaveLength(1);
+    expect(html.match(/<h3/g) ?? []).toHaveLength(0);
+  });
+
+  it("puts the invite action in the card footer and keeps it wired to the invite form", async () => {
+    mocks.members = [member()];
+
+    const html = await renderPage();
+
+    const footer = html.match(/<div[^>]*data-slot="card-footer"[^>]*>([\s\S]*?)<\/div>/);
+    expect(footer).not.toBeNull();
+    const submit = footer![1].match(/<button[^>]*type="submit"[^>]*>/);
+    expect(submit).not.toBeNull();
+    // The button is outside the form it submits, so the association is the only
+    // thing that makes it work: the named form must exist and must be the one
+    // carrying the invite fields.
+    const formId = submit![0].match(/form="([^"]+)"/)?.[1];
+    expect(formId).toBeTruthy();
+    const form = html.match(new RegExp(`<form[^>]*id="${formId}"[^>]*>([\\s\\S]*?)</form>`));
+    expect(form).not.toBeNull();
+    expect(form![1]).toContain('id="member-invite-email"');
+    expect(form![1]).toContain('id="member-invite-role"');
+    expect(form![1]).toContain('name="attemptId"');
+    // And the form itself carries no second submit control that would bypass it.
+    expect(form![1]).not.toMatch(/<button[^>]*type="submit"/);
+  });
+});
+
 describe("Member governance interaction and route-boundary contracts", () => {
   it("keeps peer actions compact, confirms destructive writes in a dialog, and restores deterministic focus", () => {
     const source = readFileSync(

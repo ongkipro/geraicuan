@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ANALYTICS_PRESETS,
+  previousAnalyticsRange,
   ANALYTICS_TIMEZONES,
   analyticsIssueMessage,
   buildTrendBuckets,
@@ -54,6 +55,14 @@ const presetExpectations: Record<
     spanDays: 31,
     jakartaStart: "2026-07-31T17:00:00.000Z",
     jakartaEnd: "2026-08-31T17:00:00.000Z",
+  },
+  // T-163 / PR-53: a complete calendar month, ending where "Bulan ini" begins.
+  "bulan-lalu": {
+    startDate: "2026-07-01",
+    lastIncludedDate: "2026-07-31",
+    spanDays: 31,
+    jakartaStart: "2026-06-30T17:00:00.000Z",
+    jakartaEnd: "2026-07-31T17:00:00.000Z",
   },
   "7-hari": {
     startDate: "2026-08-25",
@@ -424,5 +433,61 @@ describe("analytics URL range contract", () => {
     expect(analyticsIssueMessage("halaman_tidak_valid")).toBe(
       "Nomor halaman tidak valid, menampilkan halaman pertama.",
     );
+  });
+});
+
+describe("T-163 — the comparison period each preset is measured against", () => {
+  const compared = (params: Record<string, string>, now = NOW) =>
+    previousAnalyticsRange(parseAnalyticsRange(params, now));
+
+  it("compares a complete month with the complete month before it", () => {
+    // A span shift would compare July (31 days) with the 31 days ending
+    // 1 July — most of June plus a slice of May. The rule for a preset that is
+    // already a whole calendar month is the whole calendar month before it.
+    expect(compared({ rentang: "bulan-lalu" })).toMatchObject({
+      startDate: "2026-06-01",
+      lastIncludedDate: "2026-06-30",
+      spanDays: 30,
+    });
+  });
+
+  it("crosses the year boundary without arithmetic on the month number", () => {
+    expect(
+      parseAnalyticsRange({ rentang: "bulan-lalu" }, new Date("2026-01-15T05:00:00.000Z")),
+    ).toMatchObject({ startDate: "2025-12-01", lastIncludedDate: "2025-12-31" });
+    expect(compared({ rentang: "bulan-lalu" }, new Date("2026-01-15T05:00:00.000Z"))).toMatchObject({
+      startDate: "2025-11-01",
+      lastIncludedDate: "2025-11-30",
+    });
+  });
+
+  it("keeps the to-date rule for every preset that is still running", () => {
+    // "Bulan ini" on 31 August covers 1-31 August, so its comparison is the
+    // 31 days before 1 August rather than the whole of July, which would be an
+    // equal span here but not on, say, the 8th.
+    expect(compared({ rentang: "bulan-ini" }, new Date("2026-08-08T05:00:00.000Z"))).toMatchObject({
+      startDate: "2026-07-24",
+      lastIncludedDate: "2026-07-31",
+      spanDays: 8,
+    });
+    expect(compared({ rentang: "hari-ini" })).toMatchObject({ startDate: "2026-08-30", spanDays: 1 });
+    expect(compared({ rentang: "7-hari" })).toMatchObject({ startDate: "2026-08-18", spanDays: 7 });
+    expect(compared({ rentang: "30-hari" })).toMatchObject({ startDate: "2026-07-03", spanDays: 30 });
+    expect(
+      compared({ rentang: "kustom", dari: "2026-08-10", sampai: "2026-08-15" }),
+    ).toMatchObject({ startDate: "2026-08-04", lastIncludedDate: "2026-08-09", spanDays: 6 });
+  });
+
+  it("offers Bulan lalu beside Bulan ini and nowhere else in the list", () => {
+    expect(ANALYTICS_PRESETS.map((preset) => preset.id)).toEqual([
+      "hari-ini",
+      "kemarin",
+      "minggu-ini",
+      "bulan-ini",
+      "bulan-lalu",
+      "7-hari",
+      "30-hari",
+      "kustom",
+    ]);
   });
 });

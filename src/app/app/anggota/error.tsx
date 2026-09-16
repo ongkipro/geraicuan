@@ -4,7 +4,10 @@ import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-import { administrationNavigation } from "@/app/app/pengaturan/settings-nav";
+import {
+  administrationNavigation,
+  SETTINGS_INDEX_HREF,
+} from "@/app/app/pengaturan/settings-nav";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { SettingsLayout } from "@/components/cms/settings-layout";
@@ -20,7 +23,7 @@ export default function TenantMembersError({ reset }: { reset: () => void }) {
   }, []);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <SettingsLayout
         currentHref="/app/anggota"
         header={
@@ -30,8 +33,9 @@ export default function TenantMembersError({ reset }: { reset: () => void }) {
             title="Anggota & akses"
           />
         }
+        indexHref={SETTINGS_INDEX_HREF}
         items={administrationNavigation}
-        navLabel="Administrasi"
+        navLabel="Menu pengaturan"
       >
         <Alert className="lg:max-w-xl" ref={alertRef} role="alert" tabIndex={-1} variant="destructive">
           <CircleAlert aria-hidden="true" />

@@ -9,7 +9,9 @@ import {
   type ShipmentEstimateActionState,
 } from "@/app/app/estimate-actions";
 import {
+  deriveDraftProviderMoneyLines,
   DraftCodBreakdown,
+  DRAFT_MONEY_METRIC_IDS,
   type DraftCodBreakdownValue,
 } from "@/app/app/shipment-draft-experience";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,9 +31,13 @@ import {
 type EstimateService = {
   codBreakdown: DraftCodBreakdownValue | null;
   codEligible: boolean;
+  codFeeIdr?: number | null;
   deliveryEstimate: string;
+  discountIdr?: number | null;
+  normalPriceIdr?: number | null;
   providerService: string;
   shippingAmountIdr: number;
+  specialPriceIdr?: number | null;
 };
 
 type EstimateSnapshot = {
@@ -86,11 +92,22 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
   const visibleError = auditState === "error" && auditRetryComplete ? undefined : state.error;
   const services = visibleSnapshot?.services ?? [];
   const codUnavailable = isCod && services.length > 0 && services.every((service) => !service.codEligible);
+  const moneyLinesFor = (service: EstimateService) => deriveDraftProviderMoneyLines(
+    {
+      codFeeIdr: service.codFeeIdr ?? null,
+      discountIdr: service.discountIdr ?? null,
+      normalPriceIdr: service.normalPriceIdr ?? null,
+      shippingAmountIdr: service.shippingAmountIdr,
+      specialPriceIdr: service.specialPriceIdr ?? null,
+    },
+    service.codBreakdown?.providerCodAmountIdr ?? null,
+  );
   const codBreakdowns = isCod
     ? services.flatMap((service) =>
         service.codBreakdown
           ? [{
               breakdown: service.codBreakdown,
+              money: moneyLinesFor(service),
               providerService: service.providerService,
             }]
           : [])
@@ -174,11 +191,14 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
                   <TableHead scope="col">Layanan</TableHead>
                   <TableHead scope="col">Estimasi tiba</TableHead>
                   <TableHead scope="col">COD</TableHead>
+                  <TableHead className="text-right" scope="col">Harga Mengantar</TableHead>
                   <TableHead className="text-right" scope="col">Ongkir</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>
-                {services.map((service) => (
+                {services.map((service) => {
+                  const money = moneyLinesFor(service);
+                  return (
                   <TableRow key={service.providerService}>
                     <TableCell className="font-medium"><span className="flex items-center gap-2"><Truck aria-hidden="true" className="size-4 text-muted-foreground" />{service.providerService}</span></TableCell>
                     <TableCell>{service.deliveryEstimate}</TableCell>
@@ -189,9 +209,25 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
                         <Badge aria-label={`COD tidak tersedia untuk ${service.providerService}`} variant="outline">Tidak tersedia</Badge>
                       )}
                     </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      <span className="grid justify-items-end gap-0.5">
+                        <span data-metric-id={DRAFT_MONEY_METRIC_IDS.normalPrice}>
+                          Normal {formatIdr(money.normalPriceIdr)}
+                        </span>
+                        {money.specialPriceIdr === null ? null : (
+                          <span
+                            className="text-xs text-muted-foreground"
+                            data-metric-id={DRAFT_MONEY_METRIC_IDS.specialPrice}
+                          >
+                            Spesial {formatIdr(money.specialPriceIdr)}
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           {codBreakdowns.length > 0 ? (
@@ -209,10 +245,11 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
                 </p>
               </header>
               <div className="grid gap-3 md:grid-cols-2">
-                {codBreakdowns.map(({ breakdown, providerService }) => (
+                {codBreakdowns.map(({ breakdown, money, providerService }) => (
                   <DraftCodBreakdown
                     breakdown={breakdown}
                     key={providerService}
+                    money={money}
                     providerService={providerService}
                   />
                 ))}

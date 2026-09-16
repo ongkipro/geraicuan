@@ -15,7 +15,7 @@ export default function PlatformError({ reset }: { error: Error & { digest?: str
   }, []);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader description="Pulihkan workspace tanpa menampilkan detail internal atau data terlindungi." eyebrow="Operasi platform" title="Workspace platform" />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />

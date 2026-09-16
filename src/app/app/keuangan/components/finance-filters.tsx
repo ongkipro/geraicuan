@@ -3,21 +3,23 @@
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
+import { DateRangeFilter } from "@/components/cms/date-range-filter";
 import { HashFocusTarget } from "@/components/cms/hash-focus-target";
 import { Button } from "@/components/ui/button";
+import type { AnalyticsPresetId } from "@/lib/analytics-range";
 
 const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium text-foreground";
 const controlClass = "h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9";
 
-type Option = { id: string; label: string };
-
 export type FinanceFiltersProps = {
   range: {
-    presetId: string;
+    presetId: AnalyticsPresetId;
     startDate: string;
     lastIncludedDate: string;
   };
-  presets: readonly Option[];
+  /** Resolved range in words, e.g. "20 Agu 2026 – 16 Sep 2026". */
+  rangeLabel: string;
+  timezoneLabel: string;
   outlets: readonly { id: string; name: string }[];
   outletId?: string;
   rawStatus?: string;
@@ -27,16 +29,24 @@ export type FinanceFiltersProps = {
 };
 
 function FilterFields({ props }: { props: FinanceFiltersProps }) {
-  const hintId = "finance-custom-hint";
+  const hintId = "finance-status-hint";
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className={fieldClass} htmlFor="finance-range">
-          Periode
-          <select className={controlClass} defaultValue={props.range.presetId} id="finance-range" name="rentang" onChange={(event) => { if (event.target.value === "kustom") { const advanced = event.target.form?.querySelector<HTMLDetailsElement>("details[data-advanced]"); if (advanced) advanced.open = true; } }}>
-            {props.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-          </select>
-        </label>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,20rem)_minmax(0,14rem)]">
+        {/* T-163: the one date-range control; the 62-day settlement ceiling and
+            its fallback message are unchanged and still enforced server-side. */}
+        <div className={fieldClass}>
+          <span id="finance-range-label">Periode</span>
+          <DateRangeFilter
+            endDate={props.range.lastIncludedDate}
+            idPrefix="finance"
+            presetId={props.range.presetId}
+            rangeLabel={props.rangeLabel}
+            startDate={props.range.startDate}
+            timezoneLabel={props.timezoneLabel}
+            todayLocalDate={props.todayLocalDate}
+          />
+        </div>
         <label className={fieldClass} htmlFor="finance-outlet">
           Outlet
           <select className={controlClass} defaultValue={props.outletId ?? ""} id="finance-outlet" name="outlet">
@@ -49,29 +59,18 @@ function FilterFields({ props }: { props: FinanceFiltersProps }) {
           Without this, that would be "Terapkan rentang khusus" below and every Enter would
           send khusus=1 and force a custom range; hidden, it applies the plain filter instead. */}
       <button aria-hidden="true" hidden tabIndex={-1} type="submit" />
-      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={props.range.presetId === "kustom" || Boolean(props.rawStatus)}>
-        <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Tanggal & status<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
+      <details className="cms-filter-advanced" data-advanced data-filter-disclosure open={Boolean(props.rawStatus)}>
+        <summary><SlidersHorizontal aria-hidden="true" className="size-4" />Status rekonsiliasi<ChevronDown aria-hidden="true" className="ml-auto size-4" /></summary>
         <div className="grid gap-3 pt-3 sm:grid-cols-2 xl:grid-cols-3">
-          <label className={fieldClass} htmlFor="finance-start">
-            Dari tanggal
-            <input aria-describedby={hintId} className={controlClass} defaultValue={props.range.startDate} id="finance-start" max={props.todayLocalDate} name="dari" type="date" />
-          </label>
-          <label className={fieldClass} htmlFor="finance-end">
-            Sampai tanggal
-            <input aria-describedby={hintId} className={controlClass} defaultValue={props.range.lastIncludedDate} id="finance-end" max={props.todayLocalDate} name="sampai" type="date" />
-            <span className="text-xs font-normal leading-5 text-muted-foreground" id={hintId}>Dipakai saat memilih Rentang khusus.</span>
-          </label>
           <label className={fieldClass} htmlFor="finance-status">
             Status rekonsiliasi
-            <select aria-invalid={Boolean(props.rawStatus && props.rawStatus !== "VARIANCE")} className={controlClass} defaultValue={props.rawStatus ?? ""} id="finance-status" name="status">
+            <select aria-describedby={hintId} aria-invalid={Boolean(props.rawStatus && props.rawStatus !== "VARIANCE")} className={controlClass} defaultValue={props.rawStatus ?? ""} id="finance-status" name="status">
               <option value="">Semua status</option>
               <option value="VARIANCE">Ada selisih</option>
               {props.rawStatus && props.rawStatus !== "VARIANCE" ? <option value={props.rawStatus}>Status tidak valid</option> : null}
             </select>
+            <span className="text-xs font-normal leading-5 text-muted-foreground" id={hintId}>Hanya menampilkan rekonsiliasi dengan selisih.</span>
           </label>
-        </div>
-        <div className="pt-3">
-          <Button className="min-h-11 md:h-9 md:min-h-9" name="khusus" type="submit" value="1" variant="outline">Terapkan rentang khusus</Button>
         </div>
       </details>
     </div>
@@ -97,7 +96,7 @@ export function FinanceFilters(props: FinanceFiltersProps) {
         <FilterFields props={props} />
         <FilterActions isNotDefault={props.isNotDefault} />
       </form>
-      <p className="text-xs leading-5 text-muted-foreground">{props.summary}</p>
+      <p className="max-w-2xl text-xs leading-5 text-muted-foreground">{props.summary}</p>
     </section>
   );
 }

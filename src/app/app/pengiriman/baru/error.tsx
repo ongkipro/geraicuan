@@ -12,7 +12,7 @@ const HEADING_ID = "shipment-draft-error-heading";
 export default function NewShipmentError({ reset }: { error: Error; reset: () => void }) {
   useFocusTargetOnMount(HEADING_ID);
   return (
-    <PageContainer width="form">
+    <PageContainer>
       <PageHeader eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Buat draf kiriman" />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />

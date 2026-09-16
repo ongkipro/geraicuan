@@ -1,8 +1,7 @@
 "use client";
 
-import { AlertTriangle, CircleAlert } from "lucide-react";
+import { AlertTriangle, CircleAlert, ClipboardList, MapPinHouse, Package as PackageIcon, UserRound, Wallet, Warehouse } from "lucide-react";
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
 
 import {
   saveShipmentDraft,
@@ -10,7 +9,7 @@ import {
   searchSenderShipmentContacts,
   selectShipmentContact,
   type ShipmentContactRole,
-  type ShipmentContactSearchActionState,
+  type ShipmentContactSearchResult,
   type ShipmentContactSelection,
   type ShipmentContactSelectionActionState,
   type ShipmentDraftActionState,
@@ -19,20 +18,25 @@ import {
   DestinationAreaSelector,
   type DestinationAreaSelection,
 } from "@/app/app/destination-area-selector";
-import {
-  invokeContactSearchFromKeyboard,
-  SelectedContactProvenance,
-} from "@/app/app/shipment-draft-experience";
-import { Button } from "@/components/ui/button";
+import { SelectedContactProvenance } from "@/app/app/shipment-draft-experience";
+import { SearchCombobox, type TypeaheadOutcome } from "@/components/cms/search-combobox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cardBandClassName, fieldWidth, FieldRow } from "@/components/cms/cms-layouts";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel, FieldSet, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-type Outlet = { id: string; name: string };
+type OutletPickupPoint = {
+  pickupAddressId: string;
+  pickupAddressLabel: string;
+  originAreaLabel: string;
+  isDefault: boolean;
+};
+
+type Outlet = { id: string; name: string; pickupPoints: OutletPickupPoint[] };
 
 type ShipmentDraftFormProps = {
   autoFocusFirstField: boolean;
@@ -44,15 +48,6 @@ type DestinationState =
   | { mode: "empty" }
   | { mode: "contact"; areaId: string; areaLabel: string }
   | ({ mode: "manual" } & DestinationAreaSelection);
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={pending} type="submit">
-      {pending ? "Menyimpan…" : "Simpan draf"}
-    </Button>
-  );
-}
 
 function FieldError({ error, id }: { error?: string; id: string }) {
   return error ? <p className="text-sm leading-5 text-destructive" id={id}>{error}</p> : null;
@@ -75,10 +70,6 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
   const searchServerAction = role === "SENDER"
     ? searchSenderShipmentContacts
     : searchRecipientShipmentContacts;
-  const [searchState, searchAction, searchPending] = useActionState<
-    ShipmentContactSearchActionState,
-    FormData
-  >(searchServerAction, {});
   const [selectionState, selectionAction, selectionPending] = useActionState<
     ShipmentContactSelectionActionState,
     FormData
@@ -90,10 +81,7 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
   } | null>(null);
   const prefix = role === "SENDER" ? "sender" : "recipient";
   const partyLabel = role === "SENDER" ? "pengirim" : "penerima";
-  const searchBelongsToPicker = searchState.role === undefined || searchState.role === role;
-  const results = searchState.role === role ? searchState.results ?? [] : [];
-  const searchError = searchBelongsToPicker ? searchState.error : undefined;
-  const searchMessage = searchBelongsToPicker ? searchState.message : undefined;
+  const queryField = `${prefix}ContactQuery`;
   const selection = selectionState.selection?.role === role
     ? selectionState.selection
     : undefined;
@@ -103,112 +91,71 @@ function ContactPicker({ onSelect, role, saveError }: ContactPickerProps) {
     ? chosenAddress.addressLabel
     : undefined;
   const searchHintId = `${prefix}-contact-search-hint`;
-  const searchErrorId = `${prefix}-contact-search-error`;
-  const resultsId = `${prefix}-contact-results`;
-
-  const runSearch = (form: HTMLFormElement | null) => {
-    if (!form || searchPending || selectionPending) return;
-    const formData = new FormData(form);
-    startTransition(() => searchAction(formData));
-  };
 
   useEffect(() => {
     if (selection) onSelect(selection);
   }, [onSelect, selection]);
 
+  async function searchContacts(query: string): Promise<TypeaheadOutcome<ShipmentContactSearchResult>> {
+    const formData = new FormData();
+    formData.set(queryField, query);
+    const result = await searchServerAction({}, formData);
+    return {
+      error: result.error,
+      items: result.results ?? [],
+      message: result.message,
+      success: !result.error,
+    };
+  }
+
   return (
     <div
-      aria-busy={searchPending || selectionPending}
+      aria-busy={selectionPending}
       aria-describedby={saveError ? `${prefix}ContactSelection-error` : undefined}
       className="grid min-w-0 gap-3 rounded-lg border border-dashed bg-muted/30 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       id={`${prefix}ContactSelection`}
       tabIndex={-1}
     >
-      <label className="text-sm font-medium" htmlFor={`${prefix}ContactQuery`}>Gunakan kontak tersimpan (opsional)</label>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <Input
-          aria-controls={resultsId}
-          aria-describedby={searchError ? `${searchHintId} ${searchErrorId}` : searchHintId}
-          aria-invalid={Boolean(searchError)}
-          autoComplete="off"
-          className="min-h-11"
-          id={`${prefix}ContactQuery`}
-          maxLength={80}
-          name={`${prefix}ContactQuery`}
-          onKeyDown={(event) => {
-            invokeContactSearchFromKeyboard(
-              {
-                isComposing: event.nativeEvent.isComposing,
-                key: event.key,
-                preventDefault: () => event.preventDefault(),
-              },
-              () => runSearch(event.currentTarget.form),
-            );
-          }}
-          placeholder={`Cari nama atau nomor ${partyLabel}`}
-          type="search"
-        />
-        <Button
-          aria-controls={resultsId}
-          className="min-h-11 w-full sm:w-auto"
-          disabled={searchPending || selectionPending}
-          onClick={(event) => runSearch(event.currentTarget.form)}
-          type="button"
-          variant="outline"
-        >
-          {searchPending ? "Mencari…" : "Cari kontak"}
-        </Button>
-      </div>
-      <p className="text-sm leading-5 text-muted-foreground" id={searchHintId}>
-        Masukkan minimal 2 karakter. Hasil hanya menampilkan kontak aktif untuk peran ini.
+      <label className="text-sm font-medium" htmlFor={queryField}>Gunakan kontak tersimpan (opsional)</label>
+      <SearchCombobox<ShipmentContactSearchResult>
+        ariaDescribedBy={searchHintId}
+        cacheScope={role}
+        checkedId={selection ? `${selection.contactId}:${selection.addressId}` : null}
+        disabled={selectionPending}
+        id={queryField}
+        itemId={(result) => `${result.contactId}:${result.addressId}`}
+        itemValue={(result) => `${result.name} ${result.phone} ${result.addressLabel}`}
+        listAriaLabel={`Cari kontak ${partyLabel}`}
+        minLength={3}
+        onSelect={(result) => {
+          const formData = new FormData();
+          formData.set("contactSelection", `${role}:${result.contactId}:${result.addressId}`);
+          setChosenAddress({
+            addressId: result.addressId,
+            addressLabel: result.addressLabel,
+            contactId: result.contactId,
+          });
+          startTransition(() => selectionAction(formData));
+        }}
+        placeholder={`Cari nama atau nomor ${partyLabel}`}
+        renderItem={(result) => (
+          <span className="grid min-w-0 flex-1 gap-0.5 wrap-anywhere">
+            <strong>{result.name}</strong>
+            <span className="text-xs font-normal tabular-nums text-muted-foreground">{result.phone}</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              {result.addressLabel}
+              {" · "}
+              {result.destinationAreaLabel ?? "Area belum disimpan"}
+            </span>
+          </span>
+        )}
+        search={searchContacts}
+        searchPlaceholder={`Cari nama atau nomor ${partyLabel}`}
+        triggerContent={selection ? <>Kontak terpilih: {selection.name}</> : null}
+      />
+      <p className="max-w-2xl text-sm leading-5 text-muted-foreground" id={searchHintId}>
+        Ketik minimal 3 karakter. Hasil hanya menampilkan kontak aktif untuk peran ini.
       </p>
-      {searchError ? (
-        <p className="text-sm leading-5 text-destructive" id={searchErrorId} role="alert">{searchError}</p>
-      ) : null}
-      {searchMessage ? <p className="text-sm leading-5 text-muted-foreground" role="status">{searchMessage}</p> : null}
-      {results.length > 0 ? (
-        <>
-          <p className="text-sm leading-5 text-muted-foreground" id={`${resultsId}-label`}>
-            Pilih alamat kontak untuk menyalin data ke isian {partyLabel}.
-          </p>
-          <ul
-            aria-labelledby={`${resultsId}-label`}
-            className="grid list-none gap-2 p-0"
-            id={resultsId}
-          >
-            {results.map((result) => (
-              <li key={`${result.contactId}:${result.addressId}`}>
-                <Button
-                  className="h-auto min-h-11 w-full min-w-0 flex-col items-stretch justify-start gap-1 whitespace-normal px-3 py-2 text-left sm:flex-row sm:items-center"
-                  disabled={searchPending || selectionPending}
-                  onClick={() => {
-                    const formData = new FormData();
-                    formData.set("contactSelection", `${role}:${result.contactId}:${result.addressId}`);
-                    setChosenAddress({
-                      addressId: result.addressId,
-                      addressLabel: result.addressLabel,
-                      contactId: result.contactId,
-                    });
-                    startTransition(() => selectionAction(formData));
-                  }}
-                  type="button"
-                  variant="outline"
-                >
-                  <span className="grid min-w-0 gap-0.5 wrap-anywhere">
-                    <strong>{result.name}</strong>
-                    <span className="text-xs font-normal tabular-nums text-muted-foreground">{result.phone}</span>
-                  </span>
-                  <span className="block text-sm font-normal leading-5 text-muted-foreground">
-                    {result.addressLabel}
-                    {" · "}
-                    {result.destinationAreaLabel ?? "Area belum disimpan"}
-                  </span>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
       {selectionState.error ? (
         <p className="text-sm leading-5 text-destructive" role="alert">{selectionState.error}</p>
       ) : null}
@@ -258,8 +205,15 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
   const [selectedOutletId, setSelectedOutletId] = useState(
     values.outletId ?? (outlets.length === 1 ? outlets[0].id : ""),
   );
+  const [pickupAddressId, setPickupAddressId] = useState<string>("");
   const [destination, setDestination] = useState<DestinationState>({ mode: "empty" });
   const [destinationRevision, setDestinationRevision] = useState(0);
+  const pickupPoints = outlets.find((outlet) => outlet.id === selectedOutletId)?.pickupPoints ?? [];
+  // The outlet default stands until the operator picks another point, and a
+  // stale choice from a previously selected outlet never survives.
+  const effectivePickup = pickupPoints.find((point) => point.pickupAddressId === pickupAddressId)
+    ?? pickupPoints.find((point) => point.isDefault)
+    ?? null;
   const [destinationEditedAfterSubmit, setDestinationEditedAfterSubmit] = useState(true);
   const [destinationResetMessage, setDestinationResetMessage] = useState("");
   const destinationRejected = Boolean(
@@ -387,12 +341,18 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
       ) : null}
 
       <Card>
+        <CardHeader className={cardBandClassName}>
+          <CardTitle id="draft-origin-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<Warehouse aria-hidden="true" className="size-4 text-muted-foreground" />Gudang asal</CardTitle>
+          <CardDescription>Titik pickup dan akun Mengantar yang dipakai untuk kiriman ini.</CardDescription>
+        </CardHeader>
         <CardContent>
-          <Field data-invalid={Boolean(fieldError("outletId"))}>
+          <Field className={fieldWidth.lg} data-invalid={Boolean(fieldError("outletId"))}>
             <FieldLabel htmlFor="outletId">Outlet asal</FieldLabel>
             <Select
               onValueChange={(value) => {
                 setSelectedOutletId(value);
+                // Another outlet has other pickup points; fall back to its default.
+                setPickupAddressId("");
                 setDestination({ mode: "empty" });
                 setDestinationRevision((revision) => revision + 1);
                 setDestinationEditedAfterSubmit(true);
@@ -421,12 +381,47 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               {destinationResetMessage}
             </p>
           </Field>
+          {pickupPoints.length > 1 ? (
+            <Field className={fieldWidth.lg} data-invalid={Boolean(fieldError("pickupAddressId"))}>
+              <FieldLabel htmlFor="pickupAddressId">Titik pickup</FieldLabel>
+              <Select onValueChange={setPickupAddressId} value={effectivePickup?.pickupAddressId ?? ""}>
+                <SelectTrigger
+                  aria-describedby={describedBy("pickupAddressId")}
+                  aria-invalid={Boolean(fieldError("pickupAddressId"))}
+                  className="min-h-11 w-full md:min-h-8"
+                  id="pickupAddressId"
+                >
+                  <SelectValue placeholder="Pilih titik pickup" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pickupPoints.map((point) => (
+                    <SelectItem key={point.pickupAddressId} value={point.pickupAddressId}>
+                      {point.isDefault ? `${point.pickupAddressLabel} · Utama` : point.pickupAddressLabel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <input name="pickupAddressId" type="hidden" value={effectivePickup?.pickupAddressId ?? ""} />
+              <FieldError error={fieldError("pickupAddressId")} id="pickupAddressId-error" />
+              <FieldDescription>
+                Titik utama outlet dipakai kecuali Anda memilih yang lain. Area asal:{" "}
+                {effectivePickup?.originAreaLabel ?? "—"}.
+              </FieldDescription>
+            </Field>
+          ) : effectivePickup ? (
+            <Field className={fieldWidth.lg}>
+              <FieldTitle>Titik pickup</FieldTitle>
+              <p className="text-sm leading-6 [overflow-wrap:anywhere]">{effectivePickup.pickupAddressLabel}</p>
+              <input name="pickupAddressId" type="hidden" value={effectivePickup.pickupAddressId} />
+              <FieldDescription>Area asal: {effectivePickup.originAreaLabel}.</FieldDescription>
+            </Field>
+          ) : null}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle id="draft-sender-heading">Pengirim</CardTitle>
+        <CardHeader className={cardBandClassName}>
+          <CardTitle id="draft-sender-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<UserRound aria-hidden="true" className="size-4 text-muted-foreground" />Pengirim</CardTitle>
           <CardDescription>Pilih kontak tersimpan atau isi data pengirim secara manual.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -436,18 +431,18 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               role="SENDER"
               saveError={fieldError("senderContactSelection")}
             />
-            <FieldGroup className="grid gap-5 sm:grid-cols-2">
-              {inputField("senderName", "Nama pengirim", { autoFocus: autoFocusFirstField && !state.errors, defaultValue: values.senderName, required: true })}
-              {inputField("senderPhone", "Nomor telepon", { defaultValue: values.senderPhone, required: true, type: "tel" })}
-            </FieldGroup>
+            <FieldRow>
+              {inputField("senderName", "Nama pengirim", { autoFocus: autoFocusFirstField && !state.errors, defaultValue: values.senderName, required: true }, { className: fieldWidth.lg })}
+              {inputField("senderPhone", "Nomor telepon", { defaultValue: values.senderPhone, required: true, type: "tel" }, { className: fieldWidth.md })}
+            </FieldRow>
             {addressField("senderAddress", "Alamat pengirim")}
           </FieldSet>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle id="draft-recipient-heading">Penerima</CardTitle>
+        <CardHeader className={cardBandClassName}>
+          <CardTitle id="draft-recipient-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<MapPinHouse aria-hidden="true" className="size-4 text-muted-foreground" />Penerima</CardTitle>
           <CardDescription>Pilih kontak tersimpan atau isi data penerima dan area tujuan secara manual.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -457,11 +452,17 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               role="RECIPIENT"
               saveError={fieldError("recipientContactSelection")}
             />
-            <FieldGroup className="grid gap-5 sm:grid-cols-2">
-              {inputField("recipientName", "Nama penerima", { defaultValue: values.recipientName, required: true })}
-              {inputField("recipientPhone", "Nomor telepon", { defaultValue: values.recipientPhone, required: true, type: "tel" })}
-            </FieldGroup>
+            <FieldRow>
+              {inputField("recipientName", "Nama penerima", { defaultValue: values.recipientName, required: true }, { className: fieldWidth.lg })}
+              {inputField("recipientPhone", "Nomor telepon", { defaultValue: values.recipientPhone, required: true, type: "tel" }, { className: fieldWidth.md })}
+            </FieldRow>
             {addressField("recipientAddress", "Alamat penerima")}
+            {inputField(
+              "recipientAddressLandmark",
+              <span>Patokan rumah <span className="font-normal text-muted-foreground">(Opsional)</span></span>,
+              { defaultValue: values.recipientAddressLandmark, maxLength: 160, placeholder: "Contoh: seberang masjid, pagar hijau" },
+              { className: fieldWidth.full, hint: "Membantu kurir menemukan alamat. Dicetak pada label bila diisi." },
+            )}
             {selectedOutletId ? (
               <DestinationAreaSelector
                 defaultArea={effectiveDestination.mode === "contact"
@@ -492,41 +493,69 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle id="draft-package-heading">Paket</CardTitle>
+        <CardHeader className={cardBandClassName}>
+          <CardTitle id="draft-package-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<PackageIcon aria-hidden="true" className="size-4 text-muted-foreground" />Paket</CardTitle>
           <CardDescription>Dimensi bersifat opsional; isi ketiganya bila digunakan.</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldSet aria-labelledby="draft-package-heading" className="min-w-0 gap-5">
-            {inputField("packageContent", "Isi paket", { defaultValue: values.packageContent, required: true })}
-            <FieldGroup className="grid gap-5 sm:grid-cols-2">
-              {inputField("packageWeightGrams", "Berat (gram)", { defaultValue: values.packageWeightGrams, inputMode: "numeric", required: true, type: "text" })}
-              {inputField("packageQuantity", "Jumlah paket", { defaultValue: values.packageQuantity ?? "1", min: "1", required: true, type: "number" })}
-            </FieldGroup>
-            <FieldGroup className="grid gap-5 sm:grid-cols-3">
-              {inputField("packageLengthCm", "Panjang (cm)", { defaultValue: values.packageLengthCm, inputMode: "numeric", type: "text" })}
-              {inputField("packageWidthCm", "Lebar (cm)", { defaultValue: values.packageWidthCm, inputMode: "numeric", type: "text" })}
-              {inputField("packageHeightCm", "Tinggi (cm)", { defaultValue: values.packageHeightCm, inputMode: "numeric", type: "text" })}
-            </FieldGroup>
+            {inputField("packageContent", "Isi paket", { defaultValue: values.packageContent, required: true }, { className: fieldWidth.lg })}
+            <FieldRow>
+              {inputField("packageWeightGrams", "Berat (gram)", { defaultValue: values.packageWeightGrams, inputMode: "numeric", required: true, type: "text" }, { className: fieldWidth.sm })}
+              {inputField("packageQuantity", "Jumlah paket", { defaultValue: values.packageQuantity ?? "1", min: "1", required: true, type: "number" }, { className: fieldWidth.xs })}
+            </FieldRow>
+            <fieldset className="contents">
+              <legend className="sr-only">Dimensi paket</legend>
+              <FieldRow>
+                {inputField("packageLengthCm", "Panjang (cm)", { defaultValue: values.packageLengthCm, inputMode: "numeric", type: "text" }, { className: fieldWidth.xs })}
+                {inputField("packageWidthCm", "Lebar (cm)", { defaultValue: values.packageWidthCm, inputMode: "numeric", type: "text" }, { className: fieldWidth.xs })}
+                {inputField("packageHeightCm", "Tinggi (cm)", { defaultValue: values.packageHeightCm, inputMode: "numeric", type: "text" }, { className: fieldWidth.xs })}
+              </FieldRow>
+            </fieldset>
           </FieldSet>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle id="draft-payment-heading">Nilai dan pembayaran</CardTitle>
+        <CardHeader className={cardBandClassName}>
+          <CardTitle id="draft-handling-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<ClipboardList aria-hidden="true" className="size-4 text-muted-foreground" />Instruksi dan penanganan</CardTitle>
+          <CardDescription>Isian operasional yang juga diminta formulir pesanan Mengantar.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldSet aria-labelledby="draft-handling-heading" className="min-w-0 gap-5">
+            <Field data-invalid={Boolean(fieldError("shippingInstruction"))}>
+              <FieldLabel htmlFor="shippingInstruction">
+                Instruksi pengiriman <span className="font-normal text-muted-foreground">(Opsional)</span>
+              </FieldLabel>
+              <Textarea
+                aria-describedby={fieldError("shippingInstruction")
+                  ? "shippingInstruction-hint shippingInstruction-error"
+                  : "shippingInstruction-hint"}
+                aria-invalid={Boolean(fieldError("shippingInstruction"))}
+                defaultValue={values.shippingInstruction}
+                id="shippingInstruction"
+                maxLength={500}
+                name="shippingInstruction"
+                rows={2}
+              />
+              <FieldDescription id="shippingInstruction-hint">
+                Catatan untuk kurir, maksimal 500 karakter.
+              </FieldDescription>
+              <FieldError error={fieldError("shippingInstruction")} id="shippingInstruction-error" />
+            </Field>
+
+            <HazardousDeclaration defaultChecked={values.isHazardous === "true"} invalid={Boolean(fieldError("isHazardous"))} />
+
+          </FieldSet>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className={cardBandClassName}>
+          <CardTitle id="draft-payment-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<Wallet aria-hidden="true" className="size-4 text-muted-foreground" />Nilai dan pembayaran</CardTitle>
         </CardHeader>
         <CardContent>
           <FieldSet aria-labelledby="draft-payment-heading" className="min-w-0 gap-5">
-            <FieldGroup className="grid gap-5 sm:grid-cols-2">
-              {inputField("declaredValue", "Nilai barang (Rp)", { defaultValue: values.declaredValue, inputMode: "numeric", required: true, type: "text" })}
-              {inputField(
-                "cogsAmount",
-                <span>Modal HPP / COGS (Rp) <span className="font-normal text-muted-foreground">(Opsional)</span></span>,
-                { defaultValue: values.cogsAmount, inputMode: "numeric", placeholder: "Contoh: 50.000", type: "text" },
-                { hint: "Digunakan untuk kalkulasi estimasi laba bersih (Net Margin) di menu Analitik." },
-              )}
-            </FieldGroup>
             <fieldset
               aria-describedby={describedBy("paymentType")}
               aria-invalid={Boolean(fieldError("paymentType"))}
@@ -535,20 +564,69 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               tabIndex={-1}
             >
               <legend className="mb-1 text-sm font-medium">Metode pembayaran</legend>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                COD berarti pembeli membayar ke kurir saat paket tiba; nilai tagihannya dihitung
+                setelah layanan dipilih. Non-COD berarti pembeli sudah membayar ke Paduka.
+              </p>
               <RadioGroup className="grid gap-3 sm:grid-cols-2" defaultValue={values.paymentType === "COD" ? "COD" : "NON_COD"} name="paymentType" required>
                 <FieldLabel className="min-h-11 w-full cursor-pointer items-center rounded-lg border px-4 py-2 font-normal" htmlFor="paymentType-non-cod"><RadioGroupItem id="paymentType-non-cod" value="NON_COD" />Non-COD (Ongkir dibayar pengirim)</FieldLabel>
                 <FieldLabel className="min-h-11 w-full cursor-pointer items-center rounded-lg border px-4 py-2 font-normal" htmlFor="paymentType-cod"><RadioGroupItem id="paymentType-cod" value="COD" />COD (Bayar di tempat oleh penerima)</FieldLabel>
               </RadioGroup>
               <FieldError error={fieldError("paymentType")} id="paymentType-error" />
             </fieldset>
+            <FieldRow>
+              {inputField("declaredValue", "Nilai barang (Rp)", { defaultValue: values.declaredValue, inputMode: "numeric", required: true, type: "text" }, { className: fieldWidth.money })}
+            </FieldRow>
           </FieldSet>
         </CardContent>
       </Card>
 
-      <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">Menyimpan draf belum membuat pesanan ke penyedia.</p>
-        <SubmitButton />
-      </div>
     </form>
+  );
+}
+
+/**
+ * The hazardous declaration and the consequence of making it. Extracted so the ticked
+ * state — the part an operator actually has to read — can be rendered in a test instead
+ * of living only inside a form whose state a server render can never reach.
+ */
+export function HazardousDeclaration({ defaultChecked = false, invalid = false }: { defaultChecked?: boolean; invalid?: boolean }) {
+  const [isHazardous, setIsHazardous] = useState(defaultChecked);
+  return (
+    <>
+            <Field className="items-start" data-invalid={invalid} orientation="horizontal">
+        <Checkbox
+          aria-describedby="isHazardous-hint"
+          checked={isHazardous}
+          className="mt-0.5"
+          id="isHazardous"
+          name="isHazardous"
+          onCheckedChange={(checked) => setIsHazardous(checked === true)}
+          value="true"
+        />
+        <div className="grid gap-1">
+          <FieldLabel className="leading-5" htmlFor="isHazardous">
+            Barang berbahaya (hazardous)
+          </FieldLabel>
+          <FieldDescription id="isHazardous-hint">
+            Baterai lithium, aerosol, cairan mudah terbakar, atau bahan kimia. Wajib
+            dinyatakan: salah menyatakan bisa membuat paket ditahan atau ditolak kurir.
+          </FieldDescription>
+        </div>
+      </Field>
+      {isHazardous ? (
+        <p
+          aria-live="polite"
+          className="flex items-start gap-2 rounded-lg border border-[var(--warn)]/40 bg-[var(--warn-surface)] p-3 text-sm text-[var(--warn)]"
+          role="status"
+        >
+          <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <span>
+            Sebagian layanan menolak barang berbahaya. Periksa hasil estimasi: layanan yang
+            tidak menerimanya tidak boleh dipilih untuk kiriman ini.
+          </span>
+        </p>
+      ) : null}
+    </>
   );
 }

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { CourierAwbStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { shipmentLabelHref } from "@/lib/shipment-number";
 import { Check, CircleAlert, Printer, Search } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -9,6 +11,8 @@ import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { RangeFilterForm } from "@/components/cms/range-filter-form";
+import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,25 +27,47 @@ import {
 } from "@/components/ui/table";
 
 import { db } from "@/db/client";
-import { listPrintableShipments } from "@/db/label-print-repository";
+import { loadLabelIndexPage, type LabelPrintStateFilter } from "@/db/label-print-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { formatIdr, formatWibDateTime } from "@/lib/label-format";
+import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { formatIdr } from "@/lib/label-format";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
 type SearchValue = string | string[] | undefined;
 type LabelIndexPageProps = {
-  searchParams: Promise<{ q?: SearchValue; status?: SearchValue }>;
+  searchParams: Promise<Record<string, SearchValue>>;
 };
+
+/** PR-52 print-state entries; the label of each is the vocabulary the table column already uses. */
+const PRINT_STATE_ENTRIES = [
+  { description: "Seluruh kiriman pada tampilan status ini.", label: "Semua resi", metricId: "LBL-ALL", value: "semua" },
+  { description: "Belum pernah tercatat dicetak sekali pun.", label: "Belum dicetak", metricId: "LBL-UNPRINTED", value: "belum" },
+  { description: "Sudah punya minimal satu permintaan cetak berhasil.", label: "Sudah dicetak", metricId: "LBL-PRINTED", value: "sudah" },
+] as const satisfies readonly { description: string; label: string; metricId: string; value: LabelPrintStateFilter }[];
+
+function parsePrintState(value: string | undefined): LabelPrintStateFilter {
+  return value === "belum" || value === "sudah" ? value : "semua";
+}
 
 const AWB_SUFFIX_PATTERN = /^[a-z0-9]{3,24}$/i;
 
-function labelIndexHref(status: "issued" | "unpaid", awbSuffix: string) {
-  const params = new URLSearchParams();
+function labelIndexHref(
+  status: "issued" | "unpaid",
+  awbSuffix: string,
+  printState: LabelPrintStateFilter = "semua",
+  /** The PR-53 range URL state, kept across a facet change. */
+  carry?: Readonly<Record<string, string>>,
+) {
+  const params = new URLSearchParams(carry ?? {});
+  params.delete("status");
+  params.delete("q");
+  params.delete("cetak");
   if (status === "unpaid") params.set("status", "unpaid");
   if (awbSuffix) params.set("q", awbSuffix);
+  if (printState !== "semua") params.set("cetak", printState);
   const query = params.toString();
   return query ? `/app/label?${query}` : "/app/label";
 }
@@ -75,26 +101,37 @@ export default async function LabelIndexPage({
   const query = await searchParams;
   const status = firstQueryValue(query.status) === "unpaid" ? "unpaid" : "issued";
   const awbSuffix = (firstQueryValue(query.q) ?? "").trim();
+  const printState = parsePrintState(firstQueryValue(query.cetak));
+  const now = new Date();
+  const range = parseAnalyticsRange(query, now);
+  const carry = Object.fromEntries(serializeAnalyticsRange(range));
   const queryError = awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix)
     ? "Masukkan 3–24 huruf atau angka terakhir dari nomor resi."
     : null;
 
-  let rowsPromise = withTenantContext(
+  const emptyPage = { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0 } };
+  let pagePromise = withTenantContext(
     db,
     principal.userId,
     principal.tenantId,
     (tx, context) => queryError
-      ? Promise.resolve([])
-      : listPrintableShipments(tx, context, {
+      ? Promise.resolve(emptyPage)
+      : loadLabelIndexPage(tx, context, {
           status,
           awbSuffix: awbSuffix || undefined,
+          printState,
+          range,
         }),
   );
   if (auditScenario === "label-index-stream") {
-    rowsPromise = rowsPromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
+    pagePromise = pagePromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
   }
-  const loadedRows = await rowsPromise;
-  const rows = auditScenario === "label-index-empty" ? [] : loadedRows;
+  const loadedPage = await pagePromise;
+  const page = auditScenario === "label-index-empty" ? emptyPage : loadedPage;
+  const rows = page.rows;
+  const selectedCount = page.summary[
+    PRINT_STATE_ENTRIES.find((entry) => entry.value === printState)!.metricId
+  ];
 
   return (
     <PageContainer>
@@ -102,10 +139,20 @@ export default async function LabelIndexPage({
 
       {/* One GET form (search) owned by this page; the status facet is a
           DataTableFacetFilter whose options keep the current suffix. */}
+      <RangeFilterForm
+        action="/app/label"
+        idPrefix="label-index"
+        now={now}
+        preserved={{ cetak: printState === "semua" ? undefined : printState, q: awbSuffix || undefined, status: status === "unpaid" ? "unpaid" : undefined }}
+        range={range}
+      />
+
       <div className="grid gap-2">
-        <DataTableToolbar isFiltered={Boolean(awbSuffix) || status !== "issued"} resetHref="/app/label">
+        <DataTableToolbar isFiltered={Boolean(awbSuffix) || status !== "issued" || printState !== "semua"} resetHref={labelIndexHref("issued", "", "semua", carry)}>
           <form className="relative flex items-center" method="get" role="search">
             {status === "unpaid" ? <input name="status" type="hidden" value="unpaid" /> : null}
+            {printState !== "semua" ? <input name="cetak" type="hidden" value={printState} /> : null}
+            {Object.entries(carry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
             <label className="sr-only" htmlFor="q-label">Akhiran nomor resi</label>
             <Search aria-hidden="true" className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
             <Input
@@ -126,10 +173,10 @@ export default async function LabelIndexPage({
             <button className="sr-only" tabIndex={-1} type="submit">Terapkan filter</button>
           </form>
           <DataTableFacetFilter
-            clearHref={status !== "issued" ? labelIndexHref("issued", awbSuffix) : undefined}
+            clearHref={status !== "issued" ? labelIndexHref("issued", awbSuffix, printState, carry) : undefined}
             options={[
-              { href: labelIndexHref("issued", awbSuffix), label: "Resi sudah terbit", selected: status === "issued" },
-              { href: labelIndexHref("unpaid", awbSuffix), label: "Menunggu pelunasan", selected: status === "unpaid" },
+              { href: labelIndexHref("issued", awbSuffix, printState, carry), label: "Resi sudah terbit", selected: status === "issued" },
+              { href: labelIndexHref("unpaid", awbSuffix, printState, carry), label: "Menunggu pelunasan", selected: status === "unpaid" },
             ]}
             title="Status kiriman"
           />
@@ -140,7 +187,7 @@ export default async function LabelIndexPage({
           <nav aria-label="Status kiriman" className="flex flex-wrap items-center gap-2">
             {([["issued", "Resi sudah terbit"], ["unpaid", "Menunggu pelunasan"]] as const).map(([value, label]) => (
               <Button asChild className="h-8 max-md:min-h-11" key={value} size="sm" variant={status === value ? "secondary" : "outline"}>
-                <Link aria-current={status === value ? "true" : undefined} href={labelIndexHref(value, awbSuffix)} prefetch={false}>
+                <Link aria-current={status === value ? "true" : undefined} href={labelIndexHref(value, awbSuffix, printState, carry)} prefetch={false}>
                   {status === value ? <Check aria-hidden="true" /> : null}
                   {label}
                 </Link>
@@ -159,6 +206,30 @@ export default async function LabelIndexPage({
 
     <section aria-labelledby="hasil-label-title" className="grid min-w-0 gap-3 overflow-hidden" id="hasil-label">
       <h2 className="sr-only" id="hasil-label-title">Hasil label</h2>
+      {/* PR-52: the print state is this page's own `cetak` URL state; the counts
+          keep the status facet and the AWB suffix already applied. */}
+      <StateSummaryPanel
+        action="/app/label"
+        entries={PRINT_STATE_ENTRIES.map((entry) => ({
+          count: page.summary[entry.metricId],
+          description: entry.description,
+          label: entry.label,
+          metricId: entry.metricId,
+          value: entry.value,
+        }))}
+        label="Ringkasan status cetak resi"
+        param="cetak"
+        preserved={{ ...carry, q: awbSuffix || undefined, status: status === "unpaid" ? "unpaid" : undefined }}
+        selected={printState}
+      />
+      {/* The list is capped at 100 newest rows and has no pagination, so the
+          panel's count can legitimately exceed what is listed. Say so rather
+          than letting the two numbers disagree silently. */}
+      {selectedCount > rows.length ? (
+        <p className="text-xs tabular-nums text-muted-foreground">
+          Menampilkan {rows.length} dari {selectedCount} kiriman terbaru. Persempit dengan akhiran nomor resi untuk melihat sisanya.
+        </p>
+      ) : null}
       {rows.length === 0 ? (
         <EmptyState
           description={awbSuffix
@@ -188,10 +259,9 @@ export default async function LabelIndexPage({
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-20 bg-background">Nomor resi</TableHead>
-                <TableHead>Kurir</TableHead>
+                <TableHead className="sticky left-0 z-20 bg-background">Ekspedisi / Resi</TableHead>
+                <TableHead>Terbit</TableHead>
                 <TableHead>Penerima</TableHead>
-                <TableHead>Tujuan</TableHead>
                 <TableHead>Pembayaran</TableHead>
                 <TableHead className="text-right">Permintaan cetak</TableHead>
                 <TableHead>Tindakan</TableHead>
@@ -200,29 +270,15 @@ export default async function LabelIndexPage({
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.shipmentId}>
-                  <TableCell className="sticky left-0 z-10 max-w-64 whitespace-normal bg-background">
-                    <strong>{row.awb ?? "Belum terbit"}</strong>
-                    {row.issuedAt ? (
-                      <span className="text-xs text-muted-foreground">
-                        <br />
-                        {formatWibDateTime(row.issuedAt)}
-                      </span>
-                    ) : null}
+                  <TableCell className="sticky left-0 z-10 max-w-56 whitespace-normal bg-inherit">
+                    <CourierAwbStack awb={row.awb} courier={row.courier} service={row.providerService} />
                   </TableCell>
                   <TableCell>
-                    {row.courier}
-                    <span className="text-xs text-muted-foreground">
-                      <br />
-                      {row.providerService}
-                    </span>
+                    <StackedDateTime value={row.issuedAt} />
                   </TableCell>
-                  <TableCell className="max-w-56 whitespace-normal wrap-anywhere">
-                    {row.recipientName}
-                    <span className="block text-xs tabular-nums text-muted-foreground">
-                      {row.recipientPhone}
-                    </span>
+                  <TableCell className="max-w-56 whitespace-normal">
+                    <RecipientStack areaLabel={row.destinationAreaLabel} name={row.recipientName} phone={row.recipientPhone} />
                   </TableCell>
-                  <TableCell className="min-w-48 max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell>
                   <TableCell>
                     {row.isCod && row.providerCodAmountIdr !== null
                       ? `COD ${formatIdr(row.providerCodAmountIdr)}`
@@ -231,7 +287,7 @@ export default async function LabelIndexPage({
                   <TableCell className="text-right tabular-nums">{row.printCount}×</TableCell>
                   <TableCell>
                     <Button asChild className="min-h-11" variant="ghost">
-                      <Link href={`/app/label/${row.shipmentId}`}>
+                      <Link href={shipmentLabelHref(row.publicReference)}>
                       {row.status === "ISSUED" ? "Buka label" : "Lihat status"}
                       </Link>
                     </Button>

@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function PlatformLoading() {
   return (
-    <PageContainer aria-busy="true" aria-label="Memuat data pemantauan" width="wide">
+    <PageContainer aria-busy="true" aria-label="Memuat data pemantauan">
       {/* The heading is real, not a skeleton. No platform route has its own
           loading file, so this one covers all four — overview, tenant list,
           tenant detail and audit — and without it four routes stream with no

@@ -6,7 +6,7 @@ vi.mock("@/app/app/cek-tarif/actions", () => ({ checkShippingRates: vi.fn() }));
 vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: vi.fn() }));
 import { QuickRateForm, QuickRateResults } from "@/app/app/cek-tarif/quick-rate-form";
 import type { ShippingRateActionState } from "@/app/app/cek-tarif/actions";
-import { tenantCmsNavigation, tenantCmsSearchNavigation } from "@/lib/cms-shell-navigation";
+import { tenantCmsNavigation } from "@/lib/cms-shell-navigation";
 
 const quote: NonNullable<ShippingRateActionState["quote"]> = {
   outletId: "79000000-0000-4000-8000-000000000004",
@@ -35,7 +35,7 @@ describe("quick-rate presentation", () => {
   it.each([true, false])("keeps unconfigured-outlet next action role appropriate: admin=%s", (canManageSettings) => {
     const html = renderToStaticMarkup(createElement(QuickRateForm, { outlets: [], canManageSettings }));
     expect(html).toContain("Siapkan outlet");
-    expect(html.includes('href="/app/pengaturan"')).toBe(canManageSettings);
+    expect(html.includes('href="/app/pengaturan/outlet"')).toBe(canManageSettings);
     expect(html).not.toContain('type="submit"');
   });
   it("collects route and weight without recipient details or duplicate outlet context", () => {
@@ -45,10 +45,13 @@ describe("quick-rate presentation", () => {
     expect(html).not.toContain("Sumber pencarian:");
     expect(html).not.toMatch(/recipientPhone|recipientName|draf kiriman/);
   });
-  it.each(["TENANT_ADMIN", "OPERATOR"] as const)("exposes header search but no sidebar item for %s", (role) => {
-    const sidebar = tenantCmsNavigation(role, "/app/cek-tarif").flatMap((group) => group.items);
-    expect(sidebar.some((item) => item.href === "/app/cek-tarif" || item.current)).toBe(false);
-    const tools = tenantCmsSearchNavigation(role, "/app/cek-tarif").flatMap((group) => group.items);
-    expect(tools.filter((item) => item.current).map((item) => item.href)).toEqual(["/app/cek-tarif"]);
+  // PR-51: Cek tarif left the header button for the sidebar "Cek" group, keeping its URL.
+  it.each(["TENANT_ADMIN", "OPERATOR"] as const)("sits in the sidebar Cek group and is current there for %s", (role) => {
+    const groups = tenantCmsNavigation(role, "/app/cek-tarif");
+    const cek = groups.find((group) => group.label === "Cek");
+
+    expect(cek?.items.map((item) => item.href)).toEqual(["/app/cek-resi", "/app/cek-tarif"]);
+    expect(groups.flatMap((group) => group.items).filter((item) => item.current).map((item) => item.href))
+      .toEqual(["/app/cek-tarif"]);
   });
 });

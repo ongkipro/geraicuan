@@ -1,38 +1,34 @@
 import {
   ArrowRight,
   Banknote,
-  BookOpenText,
   ChevronDown,
   CircleAlert,
-  ClipboardList,
-  FilePenLine,
+  Minus,
   Package,
   PackageSearch,
+  Plus,
   ReceiptText,
   Settings2,
-  Plus,
+  TrendingDown,
+  TrendingUp,
   Upload,
   Wallet,
 } from "lucide-react";
+import { shipmentDetailHref } from "@/lib/shipment-number";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { DashboardPeriodChart } from "@/app/app/dashboard-period-chart";
+import { cardBandClassName } from "@/components/cms/cms-layouts";
 import { DataFreshnessControl } from "@/components/cms/data-freshness-control";
 import { DataTableShell } from "@/components/cms/data-table-shell";
 import { EmptyState } from "@/components/cms/empty-state";
 import { RetryRegionButton } from "@/components/cms/retry-region-button";
-import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
+import { ShipmentStatusBadge, toneIcon } from "@/components/cms/shipment-status-badge";
 import { StatCard } from "@/components/cms/stat-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -44,7 +40,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
+  TenantDashboardCourierRecap,
   TenantDashboardMetrics,
+  TenantDashboardOutcomeSummary,
   TenantDashboardPeriodSummary,
   TenantDashboardPeriodSupport,
   TenantDashboardPeriodSupportKind,
@@ -52,13 +50,13 @@ import type {
   TenantDashboardRecentShipment,
 } from "@/db/tenant-dashboard-repository";
 import { formatAnalyticsComparison } from "@/lib/analytics-decision-context";
+import { courierDisplayName, courierRecapOrder } from "@/lib/mengantar-couriers";
 import { buildTrendBuckets, formatInZone, previousAnalyticsRange, type AnalyticsRange } from "@/lib/analytics-range";
 import { DATA_STALE_AFTER_MS, isDataStale } from "@/lib/data-freshness";
-import { reconciliationVarianceHref } from "@/lib/finance-exception-filter";
 import { formatWibDateTime } from "@/lib/label-format";
+import { providerDeliveryBasisSentence } from "@/lib/provider-delivery-status";
 import {
   SHIPMENT_STATUS_PRESENTATION,
-  shipmentQueueHref,
   type TenantShipmentRole,
 } from "@/lib/shipment-queue";
 import { cn } from "@/lib/utils";
@@ -103,7 +101,17 @@ function formatClock(instant: Date, timezone: string) {
  * dramatic ("+13 (217%)" instead of "217% lebih tinggi"). The percentage and its
  * sentence come unchanged from the shared analytics comparison.
  */
-function DashboardComparison({ current, previous, previousLabel }: { current: number; previous: number; previousLabel: string }) {
+function DashboardComparison({ current, direction = "up-is-good", previous, previousLabel }: {
+  current: number;
+  /**
+   * Whether a rise is good news. More shipments is growth; more failures is not, so the
+   * colour follows meaning, never the arithmetic sign. `neutral` keeps the muted tone
+   * for figures where neither direction is inherently better.
+   */
+  direction?: "up-is-good" | "up-is-bad" | "neutral";
+  previous: number;
+  previousLabel: string;
+}) {
   const comparison = formatAnalyticsComparison(current, previous);
   const delta = current - previous;
   const percentage = comparison.text.match(/^(\d+)%/)?.[1];
@@ -111,9 +119,18 @@ function DashboardComparison({ current, previous, previousLabel }: { current: nu
   const visible = delta === 0
     ? `Tidak berubah vs ${previousLabel}`
     : `${delta > 0 ? "+" : "−"}${magnitude} (${percentage ? `${percentage}%` : "naik dari 0"}) vs ${previousLabel}`;
+  const good = delta === 0 || direction === "neutral" ? null : (delta > 0) === (direction === "up-is-good");
+  const Trend = delta === 0 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
+  // The arrow and the signed number carry the direction; colour only reinforces it.
+  const toneClassName = good === null
+    ? "bg-muted text-muted-foreground"
+    : good
+      ? "bg-[var(--ok-surface)] text-[var(--ok)]"
+      : "bg-[var(--danger-surface)] text-[var(--danger)]";
   return (
-    <span className="text-xs leading-5">
-      <span aria-hidden="true">{comparison.cue} {visible}</span>
+    <span className={cn("inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs leading-5 font-medium", toneClassName)}>
+      <Trend aria-hidden="true" className="size-3.5 shrink-0" />
+      <span aria-hidden="true">{visible}</span>
       <span className="sr-only">{delta === 0 ? "" : `${delta > 0 ? "Naik" : "Turun"} ${magnitude} kiriman, dari ${countFormatter.format(previous)} menjadi ${countFormatter.format(current)}. `}{comparison.text}</span>
     </span>
   );
@@ -121,7 +138,20 @@ function DashboardComparison({ current, previous, previousLabel }: { current: nu
 
 /** Focus ring for region containers that receive programmatic focus. */
 const focusTargetClassName = "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+/** Icon colour per tone; the label beside it carries the meaning without the colour. */
+const toneTextClass = {
+  danger: "text-[var(--danger)]",
+  neutral: "text-muted-foreground",
+  ok: "text-[var(--ok)]",
+  warn: "text-[var(--warn)]",
+} as const;
 const cardHeadingClassName = cn("text-base font-semibold leading-snug", focusTargetClassName);
+/**
+ * Owner steering 2026-09-16: a card's headline sits on a muted band so the eye finds
+ * the section title before the numbers. The band spans the card because Card owns the
+ * vertical padding; `border-b` makes CardHeader add its own bottom padding.
+ */
+
 /**
  * Column spans of the chart + recent row (shadcn-admin 4/3 split). When the chart
  * renders nothing (single-day range) the recent card takes the full row instead of
@@ -142,7 +172,7 @@ const exceptionStatuses: ReadonlySet<TenantDashboardRecentShipment["status"]> = 
 
 /** Role-specific next step, or null when the shipment needs no follow-up (the reference link still opens it). */
 function nextAction(row: TenantDashboardRecentShipment, role: TenantShipmentRole) {
-  const detailHref = `/app/pengiriman/${encodeURIComponent(row.shipmentId)}`;
+  const detailHref = shipmentDetailHref(row.publicReference);
   switch (row.status) {
     case "DRAFT":
       return { href: `/app/pengiriman/baru?draft=${encodeURIComponent(row.shipmentId)}`, label: "Lanjutkan draf" };
@@ -171,11 +201,11 @@ async function settle<T>(promise: Promise<T>) {
   }
 }
 
-function ShipmentReferenceLink({ className, shipmentId, publicReference }: { className?: string; shipmentId: string; publicReference: string }) {
+function ShipmentReferenceLink({ className, publicReference }: { className?: string; publicReference: string }) {
   return (
     <Link
       className={cn("inline-flex min-h-11 max-w-40 items-center whitespace-normal wrap-anywhere rounded-sm font-mono text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8", className)}
-      href={`/app/pengiriman/${encodeURIComponent(shipmentId)}`}
+      href={shipmentDetailHref(publicReference)}
     >
       {publicReference}
     </Link>
@@ -194,7 +224,7 @@ export async function OutletReadinessRegion({ promise, role }: { promise: Promis
       <AlertTitle>Kesiapan outlet perlu diperiksa</AlertTitle>
       <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p>{rows.length === 0 ? "Belum ada outlet pada tenant ini. Pembuatan kiriman belum dapat dilanjutkan." : `${readyCount} dari ${rows.length} outlet siap dipakai untuk pickup dan estimasi.`}</p>
-        {role === "TENANT_ADMIN" ? <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="outline"><Link href="/app/pengaturan">Siapkan outlet</Link></Button> : <span className="text-sm font-medium">Hubungi Tenant Admin untuk melengkapi outlet.</span>}
+        {role === "TENANT_ADMIN" ? <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="outline"><Link href="/app/pengaturan/outlet">Siapkan outlet</Link></Button> : <span className="text-sm font-medium">Hubungi Tenant Admin untuk melengkapi outlet.</span>}
       </AlertDescription>
     </Alert>
   );
@@ -205,7 +235,7 @@ export async function DashboardHeaderActions({ promise, role }: { promise: Promi
   if (!result.ok) return null;
   const ready = result.value.some((outlet) => outlet.ready);
   if (!ready) {
-    return role === "TENANT_ADMIN" ? <Button asChild className="max-sm:flex-1" variant="outline"><Link href="/app/pengaturan"><Settings2 aria-hidden="true" />Siapkan outlet</Link></Button> : null;
+    return role === "TENANT_ADMIN" ? <Button asChild className="max-sm:flex-1" variant="outline"><Link href="/app/pengaturan/outlet"><Settings2 aria-hidden="true" />Siapkan outlet</Link></Button> : null;
   }
   return <><Button asChild className="max-sm:flex-1" variant="outline"><Link href="/app/impor"><Upload aria-hidden="true" />Impor CSV</Link></Button><Button asChild className="max-sm:flex-1"><Link href="/app/pengiriman/baru"><Plus aria-hidden="true" />Buat kiriman</Link></Button></>;
 }
@@ -242,9 +272,9 @@ export async function DashboardPeriodSummaryRegion({
   const previousLabel = context.range.presetId === "7-hari" ? "7 hari sebelumnya" : "periode sebelumnya";
   const metrics = [
     { current: current.createdCount, href: supportingLinks.created, icon: Package, label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(current.createdCount) },
-    { context: `Nilai barang ${idrFormatter.format(current.codDeclaredValueIdr)} · bukan dana diterima atau pendapatan.`, current: current.codCount, href: supportingLinks.cod, icon: Banknote, label: "Kiriman COD", previous: previous.codCount, value: countFormatter.format(current.codCount) },
-    { context: `Nilai barang ${idrFormatter.format(current.nonCodDeclaredValueIdr)}.`, current: current.nonCodCount, href: supportingLinks["non-cod"], icon: Wallet, label: "Kiriman non-COD", previous: previous.nonCodCount, value: countFormatter.format(current.nonCodCount) },
-    { context: "Berdasarkan waktu resi diterbitkan Mengantar.", current: current.issuedCount, href: supportingLinks.issued, icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(current.issuedCount) },
+    { current: current.codCount, href: supportingLinks.cod, icon: Banknote, label: "Kiriman COD", previous: previous.codCount, value: countFormatter.format(current.codCount) },
+    { current: current.nonCodCount, href: supportingLinks["non-cod"], icon: Wallet, label: "Kiriman non-COD", previous: previous.nonCodCount, value: countFormatter.format(current.nonCodCount) },
+    { context: "Berdasarkan waktu resi diterbitkan Mengantar.", current: current.issuedCount, direction: "up-is-good" as const, href: supportingLinks.issued, icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(current.issuedCount) },
   ];
 
   return (
@@ -252,7 +282,7 @@ export async function DashboardPeriodSummaryRegion({
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 [&_[data-slot=card-title]]:min-h-10">
         {metrics.map((metric) => (
           <StatCard
-            description={<><span className="block text-foreground"><DashboardComparison current={metric.current} previous={metric.previous} previousLabel={previousLabel} /></span>{metric.context ? <span className="mt-1 block leading-5">{metric.context}</span> : null}</>}
+            description={<><span className="block text-foreground"><DashboardComparison current={metric.current} direction={metric.direction ?? "up-is-good"} previous={metric.previous} previousLabel={previousLabel} /></span>{metric.context ? <span className="mt-1 block leading-5">{metric.context}</span> : null}</>}
             href={metric.href}
             icon={metric.icon}
             key={metric.label}
@@ -300,7 +330,7 @@ export async function DashboardPeriodSupportRegion({
   const support = result.value;
   return (
     <Card className={focusTargetClassName} id="dashboard-period-support" tabIndex={-1}>
-      <CardHeader>
+      <CardHeader className={cardBandClassName}>
         <h3 className="text-base font-semibold leading-snug">Rincian kiriman: {supportLabels[kind]}</h3>
         <CardDescription>Data mengikuti periode, zona waktu, outlet, dan jenis aktivitas pada ringkasan di atas.</CardDescription>
       </CardHeader>
@@ -308,15 +338,181 @@ export async function DashboardPeriodSupportRegion({
         <DataTableShell className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_[data-slot=table-container]]:overflow-visible" label="Tabel rincian kiriman">
           <Table className="min-w-[46rem]">
             <TableCaption className="px-3 pb-3 text-left">Menampilkan {countFormatter.format(support.rows.length)} dari {countFormatter.format(support.totalCount)} kiriman pada {context.periodLabel} / {context.timezoneLabel}.</TableCaption>
-            <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card">Kiriman</TableHead><TableHead>Waktu aktivitas</TableHead><TableHead>Outlet</TableHead><TableHead>Pembayaran</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Kiriman</TableHead><TableHead>Waktu aktivitas</TableHead><TableHead>Outlet</TableHead><TableHead>Pembayaran</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>{support.rows.map((row) => {
               const status = SHIPMENT_STATUS_PRESENTATION[row.status];
-              return <TableRow key={row.shipmentId}><TableCell className="sticky left-0 z-10 bg-card"><ShipmentReferenceLink shipmentId={row.shipmentId} publicReference={row.publicReference} /></TableCell><TableCell>{formatInZone(row.occurredAt, context.range.timezone)}</TableCell><TableCell>{row.outletName}</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell></TableRow>;
+              return <TableRow key={row.shipmentId}><TableCell className="sticky left-0 z-10 bg-inherit"><ShipmentReferenceLink publicReference={row.publicReference} /></TableCell><TableCell>{formatInZone(row.occurredAt, context.range.timezone)}</TableCell><TableCell>{row.outletName}</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell></TableRow>;
             })}</TableBody>
           </Table>
         </DataTableShell>
       </CardContent>
     </Card>
+  );
+}
+
+/** Column spans of the outcome + courier row inside `dashboardOverviewGridClassName`. */
+
+/**
+ * Spec 19 SHP-OUTCOME-DELIVERED / -RETURNED / -FAILED. Reads as a cohort: the
+ * shipments created in the selected period, where they stand now. The caption
+ * carries that basis so the numbers are never read as period events.
+ */
+export async function DashboardOutcomeRegion({
+  context,
+  promise,
+}: {
+  context: DashboardPeriodContext;
+  promise: Promise<TenantDashboardOutcomeSummary>;
+}) {
+  const result = await settle(promise);
+  const heading = <h2 className={cardHeadingClassName} id="dashboard-outcome-heading" tabIndex={-1}>Hasil pengiriman</h2>;
+  if (!result.ok) {
+    return (
+      <section aria-labelledby="dashboard-outcome-heading" className="flex min-w-0 flex-col">
+        <Card className="min-w-0 flex-1">
+          <CardHeader className={cardBandClassName}>{heading}</CardHeader>
+          <CardContent><RegionFailure description="Ringkasan periode dan rekap kurir tetap tersedia." focusTargetId="dashboard-outcome-heading" title="Hasil pengiriman tidak dapat dimuat" /></CardContent>
+        </Card>
+      </section>
+    );
+  }
+  const outcome = result.value;
+  const rows = [
+    { key: "delivered", label: SHIPMENT_STATUS_PRESENTATION.DELIVERED.label, tone: "ok" as const, value: outcome.delivered },
+    { key: "returned", label: "Retur", tone: "warn" as const, value: outcome.returned },
+    { key: "failed", label: SHIPMENT_STATUS_PRESENTATION.FAILED.label, tone: "danger" as const, value: outcome.failed },
+    // Without this row the three settled outcomes read as the whole cohort.
+    { key: "in-progress", label: "Masih berjalan", tone: "neutral" as const, value: outcome.inProgress },
+  ];
+
+  return (
+    <section aria-labelledby="dashboard-outcome-heading" className="flex min-w-0 flex-col">
+      <Card className={cn("min-w-0 flex-1", outcome.cohortCount > 0 ? "gap-4" : "pb-0")}>
+        <CardHeader className={cardBandClassName}>
+          {heading}
+          <CardDescription className="mt-1">{context.periodLabel} · {context.timezoneLabel}</CardDescription>
+        </CardHeader>
+        {outcome.cohortCount === 0 ? (
+          <EmptyState description="Belum ada kiriman yang dibuat pada periode ini, jadi belum ada hasil pengiriman yang bisa diringkas." icon={PackageSearch} title="Belum ada hasil pada periode ini" />
+        ) : (
+          <CardContent className="grid min-w-0 gap-3">
+            <DataTableShell className="[&_[data-slot=table-container]]:overflow-visible" label="Tabel hasil pengiriman">
+              {/* Four short columns fit a 390px card without scrolling; no min-width. */}
+              <Table>
+                <TableCaption className="px-3 pb-3 text-left">Status terkini dari {countFormatter.format(outcome.cohortCount)} kiriman yang dibuat pada {context.periodLabel}. Retur mencakup {SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.label.toLowerCase()}, {SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.label.toLowerCase()}, dan {SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.label.toLowerCase()}. COD mengikuti penanda COD saat kiriman dibuat. {providerDeliveryBasisSentence({
+                  formattedObservedAt: outcome.basis.lastObservedAt ? formatWibDateTime(outcome.basis.lastObservedAt) : null,
+                  observationVisible: outcome.basis.observationVisible,
+                  subject: "Terkirim, retur, dan gagal",
+                })}</TableCaption>
+                <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Hasil</TableHead><TableHead className="text-right">COD</TableHead><TableHead className="text-right">Non-COD</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+                <TableBody>{rows.map((row) => (
+                  <TableRow key={row.key}>
+                    <TableCell className="sticky left-0 z-10 bg-inherit font-medium">
+                      <span className="flex items-center gap-2">
+                        {(() => { const Icon = toneIcon[row.tone]; return <Icon aria-hidden="true" className={cn("size-4", toneTextClass[row.tone])} />; })()}
+                        {row.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{countFormatter.format(row.value.codCount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{countFormatter.format(row.value.nonCodCount)}</TableCell>
+                    <TableCell className={cn("text-right font-semibold tabular-nums", row.value.totalCount > 0 ? toneTextClass[row.tone] : undefined)}>{countFormatter.format(row.value.totalCount)}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            </DataTableShell>
+            <DataFreshnessControl formattedGeneratedAt={formatClock(outcome.generatedAt, context.range.timezone)} generatedAtIso={outcome.generatedAt.toISOString()} initiallyStale={isDataStale(outcome.generatedAt, new Date())} />
+          </CardContent>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * Spec 19 CRR-SHIPMENTS / CRR-DELIVERED / CRR-RETURNED / CRR-SHIPPING-IDR.
+ * Couriers are named in text — we license no courier artwork.
+ */
+export async function DashboardCourierRecapRegion({
+  context,
+  promise,
+}: {
+  context: DashboardPeriodContext;
+  promise: Promise<TenantDashboardCourierRecap>;
+}) {
+  const result = await settle(promise);
+  const heading = <h2 className={cardHeadingClassName} id="dashboard-courier-heading" tabIndex={-1}>Rekap per kurir</h2>;
+  if (!result.ok) {
+    return (
+      <section aria-labelledby="dashboard-courier-heading" className="flex min-w-0 flex-col">
+        <Card className="min-w-0 flex-1">
+          <CardHeader className={cardBandClassName}>{heading}</CardHeader>
+          <CardContent><RegionFailure description="Ringkasan periode dan hasil pengiriman tetap tersedia." focusTargetId="dashboard-courier-heading" title="Rekap per kurir tidak dapat dimuat" /></CardContent>
+        </Card>
+      </section>
+    );
+  }
+  const recap = result.value;
+  const showCost = recap.shippingCostVisible;
+  const byCourier = new Map(recap.rows.map((row) => [row.courier, row]));
+  // Every Mengantar courier gets its own table, including the ones with no shipment in
+  // the period: "belum dipakai" is an answer the operator came for.
+  const couriers = courierRecapOrder(recap.rows.map((row) => row.courier));
+  const totals = recap.rows.reduce(
+    (sum, row) => ({
+      deliveredCount: sum.deliveredCount + row.deliveredCount,
+      returnedCount: sum.returnedCount + row.returnedCount,
+      shipmentCount: sum.shipmentCount + row.shipmentCount,
+      shippingCostIdr: sum.shippingCostIdr + (row.shippingCostIdr ?? 0),
+    }),
+    { deliveredCount: 0, returnedCount: 0, shipmentCount: 0, shippingCostIdr: 0 },
+  );
+
+  return (
+    <section aria-labelledby="dashboard-courier-heading" className="grid min-w-0 gap-4">
+      <div className="grid gap-1">
+        {heading}
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {context.periodLabel} · {context.timezoneLabel}. Kiriman, terkirim, dan retur dihitung
+          dari kiriman yang dibuat pada periode ini dengan status terkini; kiriman tanpa kurir
+          (masih draf atau estimasi) tidak masuk hitungan.
+          {showCost ? " Biaya kirim mengikuti catatan ledger Mengantar pada periode yang sama, termasuk penyesuaiannya, dan belum termasuk asuransi." : ""}
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {couriers.map((courier) => {
+          const row = byCourier.get(courier);
+          const used = Boolean(row && row.shipmentCount > 0);
+          return (
+            <Card className="min-w-0" key={courier}>
+              <CardHeader className={cardBandClassName}>
+                <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                  {courierDisplayName(courier)}
+                  {used ? null : <span className="text-xs font-normal text-muted-foreground">Belum dipakai</span>}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableCaption className="sr-only">Rekap {courierDisplayName(courier)} pada {context.periodLabel}</TableCaption>
+                  <TableBody>
+                    <TableRow><TableCell className="font-medium">Kiriman</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row?.shipmentCount ?? 0)}</TableCell></TableRow>
+                    <TableRow><TableCell className="font-medium">Terkirim</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row?.deliveredCount ?? 0)}</TableCell></TableRow>
+                    <TableRow><TableCell className="font-medium">Retur</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row?.returnedCount ?? 0)}</TableCell></TableRow>
+                    {showCost ? <TableRow><TableCell className="font-medium">Biaya kirim</TableCell><TableCell className="text-right tabular-nums">{idrFormatter.format(row?.shippingCostIdr ?? 0)}</TableCell></TableRow> : null}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Total {countFormatter.format(totals.shipmentCount)} kiriman · {countFormatter.format(totals.deliveredCount)} terkirim · {countFormatter.format(totals.returnedCount)} retur
+          {showCost ? ` · biaya kirim ${idrFormatter.format(totals.shippingCostIdr)}` : ""}
+        </p>
+        <DataFreshnessControl formattedGeneratedAt={formatClock(recap.generatedAt, context.range.timezone)} generatedAtIso={recap.generatedAt.toISOString()} initiallyStale={isDataStale(recap.generatedAt, new Date())} />
+      </div>
+    </section>
   );
 }
 
@@ -338,7 +534,7 @@ export async function DashboardPeriodTrendRegion({
     return (
       <section aria-labelledby="dashboard-trend-heading" className={cn("flex min-w-0 flex-col", dashboardOverviewSpan)}>
         <Card className="min-w-0 flex-1">
-          <CardHeader>{heading}</CardHeader>
+          <CardHeader className={cardBandClassName}>{heading}</CardHeader>
           <CardContent><RegionFailure description="Ringkasan dan daftar pekerjaan tetap tersedia. Coba muat ulang grafik." focusTargetId="dashboard-trend-heading" title="Grafik kiriman tidak dapat dimuat" /></CardContent>
         </Card>
       </section>
@@ -363,7 +559,7 @@ export async function DashboardPeriodTrendRegion({
   return (
     <section aria-labelledby="dashboard-trend-heading" className={cn("flex min-w-0 flex-col", dashboardOverviewSpan)}>
       <Card className="min-w-0 flex-1">
-        <CardHeader>
+        <CardHeader className={cardBandClassName}>
           {heading}
           <CardDescription className="mt-1">{context.periodLabel}{compare ? ` dibanding ${context.previousPeriodLabel}` : ""} · {context.timezoneLabel}</CardDescription>
         </CardHeader>
@@ -387,53 +583,6 @@ export async function DashboardPeriodTrendRegion({
   );
 }
 
-export async function DashboardMetricsRegion({ metricsPromise }: { metricsPromise: Promise<TenantDashboardMetrics> }) {
-  const result = await settle(metricsPromise);
-  if (!result.ok) return <RegionFailure description="Kesiapan outlet, ringkasan periode, dan kiriman terbaru tetap tersedia." title="Status operasional tidak dapat dimuat" />;
-  const metrics = result.value;
-  if (metrics.summary.total === 0) return null;
-  const exception = metrics.actionRequiredBreakdown;
-  const pulse = [
-    { description: "Lengkapi data lalu muat estimasi.", href: shipmentQueueHref("DRAFT"), icon: FilePenLine, label: "Draf perlu dilanjutkan", value: metrics.workflowBreakdown.draft },
-    { description: "Pilih layanan sebelum menerbitkan AWB.", href: shipmentQueueHref("ESTIMATED"), icon: ClipboardList, label: "Estimasi perlu dikonfirmasi", value: metrics.workflowBreakdown.estimated },
-    { description: `${exception.submissionUnknown} status belum pasti · ${exception.failed} gagal`, href: shipmentQueueHref("ACTION_REQUIRED"), icon: CircleAlert, label: "Perlu tindakan", value: metrics.summary.actionRequired },
-    ...(metrics.role === "TENANT_ADMIN" ? [
-      { description: "Pembayaran provider perlu dipulihkan sebelum AWB tersedia.", href: shipmentQueueHref("AWAITING_UPSTREAM_PAYMENT"), icon: CircleAlert, label: "Menunggu pembayaran", value: exception.awaitingUpstreamPayment },
-      { description: "Hasil rekonsiliasi terbaru yang masih memiliki selisih.", href: reconciliationVarianceHref(), icon: BookOpenText, label: "Selisih rekonsiliasi", value: metrics.finance.reconciliationVarianceCount },
-    ] : []),
-  ];
-  return (
-    <section aria-labelledby="pulse-heading" className="grid gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
-        <div className="grid min-w-0 gap-1">
-          <p className="text-xs font-medium text-muted-foreground">Saat ini</p>
-          <h2 className="text-lg font-semibold leading-tight tracking-tight" id="pulse-heading">Pekerjaan yang perlu diperhatikan</h2>
-          <p className="text-sm text-muted-foreground">Status terbaru dari semua periode; tidak mengikuti filter di atas.</p>
-        </div>
-        <div className="shrink-0"><DataFreshnessControl formattedGeneratedAt={formatClock(metrics.generatedAt, "Asia/Jakarta")} generatedAtIso={metrics.generatedAt.toISOString()} initiallyStale={isDataStale(metrics.generatedAt, new Date())} /></div>
-      </div>
-      <div className={cn("grid gap-4 sm:grid-cols-2", metrics.role === "TENANT_ADMIN" ? "xl:grid-cols-5" : "xl:grid-cols-3")}>
-        {pulse.map((item, index) => (
-          // A grid wrapper keeps each card stretched to the row height; the last card of an
-          // odd count spans the two-column row instead of leaving an empty cell.
-          <div className={cn("grid", pulse.length % 2 === 1 && index === pulse.length - 1 && "sm:col-span-2 xl:col-span-1")} key={item.label}>
-            <StatCard
-              // Precise rows: titles reserve two lines from xl and the icon aligns to the first
-              // title line, so every value and description starts on one line across the row.
-              className="[&_[data-slot=card-header]]:items-start [&_[data-slot=card-title]]:leading-5 xl:[&_[data-slot=card-title]]:min-h-10"
-              description={item.description}
-              href={item.href}
-              icon={item.icon}
-              title={item.label}
-              value={countFormatter.format(item.value)}
-            />
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 /**
  * The single shipment listing on the dashboard: the recent shipments merged with the
  * actionable set, each shipment once. Actionable rows lead (exceptions first, then
@@ -449,7 +598,7 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
     return (
       <section aria-labelledby="recent-heading" className={cn("flex min-w-0 flex-col", dashboardRecentSpan)}>
         <Card className="flex-1">
-          <CardHeader>{heading}{allShipmentsLink}</CardHeader>
+          <CardHeader className={cardBandClassName}>{heading}{allShipmentsLink}</CardHeader>
           <CardContent><RegionFailure description="Ringkasan periode dan status operasional tetap tersedia bila berhasil dimuat." focusTargetId="recent-heading" title="Kiriman terbaru dan tindak lanjut tidak dapat dimuat" /></CardContent>
         </Card>
       </section>
@@ -467,7 +616,7 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
   return (
     <section aria-labelledby="recent-heading" className={cn("flex min-w-0 flex-col", dashboardRecentSpan)}>
       <Card className={cn("flex-1", rows.length > 0 && "pb-0")}>
-        <CardHeader>
+        <CardHeader className={cardBandClassName}>
           {heading}
           <CardDescription>{rows.length > 0 ? "Yang perlu ditindaklanjuti tampil lebih dulu." : "Tidak ada kiriman yang perlu ditindaklanjuti saat ini."}</CardDescription>
           {allShipmentsLink}
@@ -483,7 +632,7 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
                 // under the row on phones and in a right-hand column from sm, so rows align.
                 <li className="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-2 px-(--card-spacing) py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" data-actionable={action ? "true" : undefined} key={row.shipmentId}>
                   <div className="grid min-w-0 gap-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><ShipmentReferenceLink className="md:min-h-6" shipmentId={row.shipmentId} publicReference={row.publicReference} /><ShipmentStatusBadge label={status.label} tone={status.tone} /></div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><ShipmentReferenceLink className="md:min-h-6" publicReference={row.publicReference} /><ShipmentStatusBadge label={status.label} tone={status.tone} /></div>
                     <p className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       <span className="flex min-w-0 max-w-full items-center gap-x-1.5">
                         <time className="shrink-0 whitespace-nowrap tabular-nums" dateTime={row.updatedAt.toISOString()} title={formatWibDateTime(row.updatedAt)}>{recentTimeFormatter.format(row.updatedAt)}<span className="sr-only"> WIB</span></time>
@@ -511,9 +660,10 @@ function SkeletonCard({ children, className, label }: { children: ReactNode; cla
 
 export function ReadinessSkeleton() { return <Skeleton aria-label="Memuat kesiapan outlet" className="h-20 w-full" />; }
 export function PeriodSummarySkeleton() { return <div aria-busy="true" aria-label="Memuat ringkasan periode" className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index}><CardHeader className="flex flex-row items-center justify-between"><Skeleton className="h-4 w-28" /><Skeleton className="size-4" /></CardHeader><CardContent className="grid gap-2"><Skeleton className="h-8 w-20" /><Skeleton className="h-3 w-36" /></CardContent></SkeletonCard>)}</div>; }
-export function PeriodTrendSkeleton() { return <SkeletonCard className={dashboardOverviewSpan} label="Memuat tren periode"><CardHeader><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-56" /></CardHeader><CardContent className="grid gap-4"><Skeleton className="h-60 w-full sm:h-72" /><Skeleton className="h-11 w-full" /></CardContent></SkeletonCard>; }
-export function PeriodSupportSkeleton() { return <SkeletonCard label="Memuat record pendukung Ringkasan"><CardHeader><Skeleton className="h-5 w-64" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></SkeletonCard>; }
+export function PeriodTrendSkeleton() { return <SkeletonCard className={dashboardOverviewSpan} label="Memuat tren periode"><CardHeader className={cardBandClassName}><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-56" /></CardHeader><CardContent className="grid gap-4"><Skeleton className="h-60 w-full sm:h-72" /><Skeleton className="h-11 w-full" /></CardContent></SkeletonCard>; }
+export function OutcomeSkeleton() { return <SkeletonCard label="Memuat hasil pengiriman"><CardHeader className={cardBandClassName}><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-56" /></CardHeader><CardContent><Skeleton className="h-44 w-full" /></CardContent></SkeletonCard>; }
+export function CourierRecapSkeleton() { return <SkeletonCard label="Memuat rekap per kurir"><CardHeader className={cardBandClassName}><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-56" /></CardHeader><CardContent><Skeleton className="h-44 w-full" /></CardContent></SkeletonCard>; }
+export function PeriodSupportSkeleton() { return <SkeletonCard label="Memuat record pendukung Ringkasan"><CardHeader className={cardBandClassName}><Skeleton className="h-5 w-64" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></SkeletonCard>; }
 // Mirrors DashboardMetricsRegion's geometry: the three-line heading block beside the freshness
 // control, then StatCard anatomy with the xl two-line title and the three-line description the longest admin card wraps to at xl.
-export function MetricsSkeleton() { return <div aria-busy="true" aria-label="Memuat pekerjaan saat ini" className="grid gap-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6"><div className="grid gap-1"><Skeleton className="h-4 w-14" /><Skeleton className="h-5.5 w-72 max-w-full" /><Skeleton className="h-5 w-96 max-w-full" /></div><Skeleton className="h-8 w-36" /></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <SkeletonCard className={cn("gap-2", index === 4 ? "sm:col-span-2 xl:col-span-1" : undefined)} key={index}><CardHeader className="flex flex-row items-start justify-between space-y-0 pb-0"><div className="min-h-5 xl:min-h-10"><Skeleton className="my-0.5 h-4 w-28" /></div><Skeleton className="size-4" /></CardHeader><CardContent className="grid gap-1"><div className="flex h-8 items-center"><Skeleton className="h-7 w-12" /></div><div className="grid h-4 content-start gap-2 pt-0.5 xl:h-12"><Skeleton className="h-3 w-36" /><Skeleton className="hidden h-3 w-24 xl:block" /></div></CardContent></SkeletonCard>)}</div></div>; }
-export function RecentSkeleton() { return <SkeletonCard className={cn("pb-0", dashboardRecentSpan)} label="Memuat kiriman terbaru dan tindak lanjut"><CardHeader><Skeleton className="h-5 w-36" /><Skeleton className="h-4 w-48" /></CardHeader><div className="divide-y border-t">{Array.from({ length: RECENT_VISIBLE_ROWS }, (_, index) => <div className="grid gap-1.5 px-(--card-spacing) py-2.5" key={index}><div className="flex justify-between gap-3"><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-20" /></div><Skeleton className="h-4 w-48 max-w-full" /></div>)}</div></SkeletonCard>; }
+export function RecentSkeleton() { return <SkeletonCard className={cn("pb-0", dashboardRecentSpan)} label="Memuat kiriman terbaru dan tindak lanjut"><CardHeader className={cardBandClassName}><Skeleton className="h-5 w-36" /><Skeleton className="h-4 w-48" /></CardHeader><div className="divide-y border-t">{Array.from({ length: RECENT_VISIBLE_ROWS }, (_, index) => <div className="grid gap-1.5 px-(--card-spacing) py-2.5" key={index}><div className="flex justify-between gap-3"><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-20" /></div><Skeleton className="h-4 w-48 max-w-full" /></div>)}</div></SkeletonCard>; }

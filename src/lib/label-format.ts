@@ -65,3 +65,36 @@ export function recipientDensity(input: {
     tier: "ultra",
   };
 }
+
+const wibDateFormatter = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone: "Asia/Jakarta" });
+const wibTimeFormatter = new Intl.DateTimeFormat("id-ID", { timeStyle: "short", timeZone: "Asia/Jakarta" });
+
+/** Date and time as two short lines for compact tables: "14 Sep 2026" and "15.24 WIB". */
+export function formatWibDateTimeParts(date: Date) {
+  return { date: wibDateFormatter.format(date), time: `${wibTimeFormatter.format(date)} WIB` };
+}
+
+/**
+ * District and city from a Mengantar area label ("subdistrict, district, city, province, zip").
+ * Counted from the end: drop a trailing postal code, then take the two parts before the province,
+ * so a missing subdistrict or a comma inside one never shifts the result. Two-part labels are
+ * already "district, city" and are returned unchanged; the full label stays on detail.
+ */
+export function formatDistrictCity(areaLabel: string) {
+  const parts = areaLabel.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length > 0 && /^\d{5}$/.test(parts[parts.length - 1])) parts.pop();
+  return parts.length >= 3 ? parts.slice(-3, -1).join(", ") : areaLabel;
+}
+
+/**
+ * Postal code from a Mengantar area label ("subdistrict, district, city, province, zip"),
+ * read from the trailing part so a comma inside an earlier segment never shifts the
+ * result (mirrors `formatDistrictCity`'s counted-from-the-end rule). Returns null when
+ * the label has no five-digit trailing segment (label predates postal code, or missing).
+ */
+export function formatPostalCode(areaLabel: string | null) {
+  if (!areaLabel) return null;
+  const parts = areaLabel.split(",").map((part) => part.trim()).filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last && /^\d{5}$/.test(last) ? last : null;
+}

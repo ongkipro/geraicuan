@@ -1,6 +1,5 @@
 import {
   BadgePercent,
-  Boxes,
   CircleAlert,
   ChevronDown,
   HandCoins,
@@ -10,7 +9,6 @@ import {
   Receipt,
   ReceiptText,
   Scale,
-  TrendingUp,
   TriangleAlert,
   Truck,
   type LucideIcon,
@@ -63,11 +61,13 @@ import {
 import { isDataStale } from "@/lib/data-freshness";
 import { reconciliationVarianceHref } from "@/lib/finance-exception-filter";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
+import { sectionHeadingClassName } from "@/components/cms/cms-layouts";
 import { cn } from "@/lib/utils";
 import { AnalyticsComparisonCue } from "./comparison-cue";
 import { CourierIssueRateChart } from "./courier-issue-rate-chart";
 import { courierIssueRate, isLowVolumeCourier, lowVolumeLabel, orderCouriersForRanking } from "./courier-volume";
 import { ShipmentTrendChart } from "./shipment-trend-chart";
+import { CourierAwbStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
 
 const DEFAULT_PAGE_SIZE = 50;
 const countFormatter = new Intl.NumberFormat("id-ID");
@@ -170,7 +170,7 @@ function SectionHeading({
 }) {
   return (
     <div className="space-y-1">
-      <h2 className={cn("text-lg font-semibold tracking-tight", focusRing)} id={id} tabIndex={-1}>{title}</h2>
+      <h2 className={cn(sectionHeadingClassName, focusRing)} id={id} tabIndex={-1}>{title}</h2>
       {description ? <p className="max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
     </div>
   );
@@ -253,29 +253,34 @@ export async function AnalyticsSummaryRegion({
   );
 }
 
+/**
+ * Spec 19 FIN-PROVIDER-SHIPPING, FIN-COD-FEE and FIN-COD-DISBURSEMENT-EST.
+ * T-177 (owner, 2026-09-17): COD reporting carries shipping and the COD fee,
+ * never merchandise revenue, goods value, COGS or margin.
+ */
 export async function AnalyticsFinancialRegion({ promise }: { promise: Promise<ShipmentKpiComparison> }) {
   const result = await settle(promise);
-  if (!result.ok) return <AnalyticsRegionError description="Ringkasan operasional dan tren tetap tersedia bila berhasil dimuat." focusTargetId="analytics-financial-heading" title="Nilai kiriman tidak dapat dimuat" />;
+  if (!result.ok) return <AnalyticsRegionError description="Ringkasan operasional dan tren tetap tersedia bila berhasil dimuat." focusTargetId="analytics-financial-heading" title="Biaya kirim dan COD tidak dapat dimuat" />;
   const { current: kpis, previous } = result.value;
+  const codFee = (value: typeof kpis) => value.codServiceFeeIdr + value.codVatIdr;
   const primaryMetrics: Metric[] = [
-    { context: "Titipan penerima, bukan pendapatan GeraiCUAN.", current: kpis.codPrincipalIdr, icon: Landmark, label: "Pokok COD (liabilitas)", previous: previous.codPrincipalIdr, value: idrFormatter.format(kpis.codPrincipalIdr) },
-    { context: "Pokok COD dikurangi COGS, Ongkir, Layanan, & PPN.", current: kpis.netMarginIdr, icon: TrendingUp, label: "Net Margin (Estimasi)", previous: previous.netMarginIdr, value: idrFormatter.format(kpis.netMarginIdr) },
+    { context: "Ongkir yang ditagihkan Mengantar untuk kiriman COD dan non-COD.", current: kpis.providerShippingIdr, icon: Truck, label: "Biaya kirim Mengantar", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
+    { context: "Biaya layanan ditambah PPN-nya; rinciannya di bawah.", current: codFee(kpis), icon: HandCoins, label: "Biaya COD", previous: codFee(previous), value: idrFormatter.format(codFee(kpis)) },
+    { context: "Nilai COD dikurangi biaya kirim Mengantar dan biaya COD, untuk kiriman COD yang resinya terbit pada periode ini.", current: kpis.codDisbursementEstimateIdr, icon: Landmark, label: "Estimasi dana dicairkan Mengantar", previous: previous.codDisbursementEstimateIdr, value: idrFormatter.format(kpis.codDisbursementEstimateIdr) },
   ];
-  const costMetrics: Metric[] = [
-    { current: kpis.providerShippingIdr, icon: Truck, label: "Ongkir provider", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
+  const codFeeParts: Metric[] = [
     { current: kpis.codServiceFeeIdr, icon: HandCoins, label: "Biaya layanan COD", previous: previous.codServiceFeeIdr, value: idrFormatter.format(kpis.codServiceFeeIdr) },
-    { current: kpis.codVatIdr, icon: Receipt, label: "PPN biaya layanan", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
-    { current: kpis.cogsIdr, icon: Boxes, label: "COGS / Modal HPP", previous: previous.cogsIdr, value: idrFormatter.format(kpis.cogsIdr) },
+    { current: kpis.codVatIdr, icon: Receipt, label: "PPN biaya layanan COD", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
   ];
   return (
     <section aria-labelledby="analytics-financial-heading" className="space-y-4">
-      <SectionHeading description="Mengikuti tanggal efektif catatan keuangan pada periode terpilih." id="analytics-financial-heading" title="Nilai kiriman" />
-      <MetricCards className="sm:grid-cols-2" metrics={primaryMetrics} />
+      <SectionHeading description="Biaya kirim dan biaya COD mengikuti tanggal efektif catatan keuangan; estimasi dana cair mengikuti tanggal resi terbit." id="analytics-financial-heading" title="Biaya kirim & COD" />
+      <MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={primaryMetrics} />
       <details className="group border-t pt-2" data-analytics-detail="costs">
-        <summary className={detailTrigger}><span>Lihat rincian biaya</span><ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
-        <div className="pt-3"><MetricCards className="sm:grid-cols-2 lg:grid-cols-4" metrics={costMetrics} /></div>
+        <summary className={detailTrigger}><span>Lihat rincian biaya COD</span><ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <div className="pt-3"><MetricCards className="sm:grid-cols-2" metrics={codFeeParts} /></div>
       </details>
-      <Alert><CircleAlert aria-hidden="true" /><AlertTitle>Pokok COD bukan pendapatan</AlertTitle><AlertDescription>Nilai di atas bukan kas yang sudah diterima. Rekonsiliasi dan sumber ledger tersedia di buku besar.</AlertDescription></Alert>
+      <Alert><CircleAlert aria-hidden="true" /><AlertTitle>Estimasi, bukan dana yang sudah cair</AlertTitle><AlertDescription>Dana yang benar-benar dicairkan Mengantar dan selisihnya ada di Keuangan.</AlertDescription></Alert>
     </section>
   );
 }
@@ -444,24 +449,22 @@ export async function AnalyticsShipmentRegion({
   return (
     <section aria-labelledby="analytics-shipments-heading" className="scroll-mt-6 space-y-4" id="kiriman-analitik">
       <SectionHeading description={`${description} (${context.timezoneLabel}) sesuai filter terpilih.`} id="analytics-shipments-heading" title="Kiriman" />
-      <Table className="min-w-[72rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel kiriman", role: "region", tabIndex: 0 }}>
+      <Table className="min-w-[56rem]" containerClassName={tableRegion} containerProps={{ "aria-label": "Tabel kiriman", role: "region", tabIndex: 0 }}>
         <TableCaption className="px-3 pb-3 text-left">Tabel kiriman tenant pada rentang, basis waktu, dan filter terpilih.</TableCaption>
-        <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-[color-mix(in_oklch,var(--muted)_40%,var(--background))]">Kiriman</TableHead><TableHead>Dibuat</TableHead><TableHead>{context.eventBasis === "outcome" ? "Outcome provider" : "Resi terbit"}</TableHead><TableHead>Outlet</TableHead><TableHead>Kurir</TableHead><TableHead>Layanan</TableHead><TableHead>Status</TableHead><TableHead>AWB</TableHead><TableHead className="text-right">Total tagihan COD provider</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-[color-mix(in_oklch,var(--muted)_40%,var(--background))]">Kiriman</TableHead><TableHead>Status</TableHead><TableHead>Dibuat</TableHead><TableHead>{context.eventBasis === "outcome" ? "Outcome provider" : "Resi terbit"}</TableHead><TableHead>Ekspedisi / Resi</TableHead><TableHead>Outlet</TableHead><TableHead className="text-right">Total tagihan COD provider</TableHead></TableRow></TableHeader>
         <TableBody>
           {shipmentPage.rows.map((row) => {
             const status = SHIPMENT_STATUS_PRESENTATION[row.status];
-            const detailHref = analyticsShipmentDetailHref(context.role, row.shipmentId);
+            const detailHref = analyticsShipmentDetailHref(context.role, row.publicReference);
             const reference = row.publicReference;
             return (
               <TableRow key={row.shipmentId}>
-                <TableCell className="sticky left-0 z-10 bg-background font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 max-w-40 items-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:underline md:min-h-0" href={detailHref}>{reference}</Link> : reference}</TableCell>
-                <TableCell>{formatInZone(row.createdAt, context.range.timezone)}</TableCell>
-                <TableCell>{row.issuedAt ? formatInZone(row.issuedAt, context.range.timezone) : "—"}</TableCell>
-                <TableCell>{row.outletName}</TableCell>
-                <TableCell className="uppercase">{row.courier ?? "—"}</TableCell>
-                <TableCell>{row.providerService ?? "—"}</TableCell>
+                <TableCell className="sticky left-0 z-10 bg-inherit font-medium">{detailHref ? <Link aria-label={`Buka detail kiriman ${reference}`} className="inline-flex min-h-11 items-center whitespace-nowrap text-primary underline-offset-4 hover:underline md:min-h-0" href={detailHref}>{reference}</Link> : <span className="whitespace-nowrap">{reference}</span>}</TableCell>
                 <TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell>
-                <TableCell className="font-mono text-xs">{row.cnoteNo ?? "—"}</TableCell>
+                <TableCell><StackedDateTime value={row.createdAt} /></TableCell>
+                <TableCell><StackedDateTime value={row.issuedAt} /></TableCell>
+                <TableCell className="max-w-48 whitespace-normal"><CourierAwbStack awb={row.cnoteNo} courier={row.courier?.toUpperCase() ?? null} service={row.providerService} /></TableCell>
+                <TableCell className="max-w-40 whitespace-normal wrap-anywhere">{row.outletName}</TableCell>
                 <TableCell className="text-right tabular-nums">{row.isCod && row.providerCodAmountIdr !== null ? idrFormatter.format(row.providerCodAmountIdr) : "—"}</TableCell>
               </TableRow>
             );
@@ -487,7 +490,7 @@ export function AnalyticsSummarySkeleton() {
 }
 
 export function AnalyticsFinancialSkeleton() {
-  return <div aria-busy="true" aria-label="Memuat nilai kiriman" className="space-y-4"><Skeleton className="h-6 w-40" /><div className="grid gap-4 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => statCardSkeleton(index))}</div><Skeleton className="h-11 w-full" /></div>;
+  return <div aria-busy="true" aria-label="Memuat biaya kirim dan COD" className="space-y-4"><Skeleton className="h-6 w-40" /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }, (_, index) => statCardSkeleton(index))}</div><Skeleton className="h-11 w-full" /></div>;
 }
 
 export function AnalyticsReconciliationSkeleton() {

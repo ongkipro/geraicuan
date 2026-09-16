@@ -54,6 +54,10 @@ const fixtureServices = [
     currency: "IDR",
     shippingAmountIdr: 8_000,
     shippingSourceField: "price",
+    codFeeIdr: 0,
+    discountIdr: 2_400,
+    normalPriceIdr: 8_000,
+    specialPriceIdr: 5_600,
     insuranceAmountIdr: null,
     insuranceSourceField: null,
     deliveryEstimate: "2 - 3 days",
@@ -64,6 +68,10 @@ const fixtureServices = [
     currency: "IDR",
     shippingAmountIdr: 22_500,
     shippingSourceField: "price",
+    codFeeIdr: 0,
+    discountIdr: 6_750,
+    normalPriceIdr: 22_500,
+    specialPriceIdr: 14_624,
     insuranceAmountIdr: null,
     insuranceSourceField: null,
     deliveryEstimate: "1 - 2 days",
@@ -195,6 +203,10 @@ describe("shipment estimate snapshots", () => {
         insuranceSourceField: schema.shipmentEstimateServices.insuranceSourceField,
         deliveryEstimate: schema.shipmentEstimateServices.deliveryEstimate,
         codEligible: schema.shipmentEstimateServices.codEligible,
+        codFeeIdr: schema.shipmentEstimateServices.codFeeIdr,
+        discountIdr: schema.shipmentEstimateServices.discountIdr,
+        normalPriceIdr: schema.shipmentEstimateServices.normalPriceIdr,
+        specialPriceIdr: schema.shipmentEstimateServices.specialPriceIdr,
       })
       .from(schema.shipmentEstimateServices)
       .where(eq(schema.shipmentEstimateServices.snapshotId, firstSnapshotId));

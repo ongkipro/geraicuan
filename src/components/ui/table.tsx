@@ -33,7 +33,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("bg-muted/40 [&_tr]:border-b", className)}
+      className={cn("bg-muted [&_tr]:border-b [&_tr]:border-b-border", className)}
       {...props}
     />
   )
@@ -54,7 +54,8 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        // Opaque for the same reason every row fill is: a pinned cell inherits it.
+        "border-t bg-muted font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -67,7 +68,11 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        // Zebra striping is the cheapest way to keep a wide row readable; hover and
+        // selection stay stronger than the stripe so they still read as state.
+        // Every one of these fills is opaque because a pinned first column takes
+        // `bg-inherit` from this row and would otherwise be see-through.
+        "border-b bg-card transition-colors even:bg-(--table-stripe) hover:bg-accent has-aria-expanded:bg-accent data-[state=selected]:bg-accent",
         className
       )}
       {...props}

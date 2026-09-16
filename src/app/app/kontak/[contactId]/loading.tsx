@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ContactDetailLoading() {
   return (
-    <PageContainer aria-busy="true" width="form">
+    <PageContainer aria-busy="true">
       <PageHeader
         actions={<Skeleton className="h-11 w-40" />}
         description="Data kontak dan alamat tersimpan sedang disiapkan."

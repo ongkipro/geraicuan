@@ -13,6 +13,7 @@ import {
   createContact,
   getContact,
   listContactAddresses,
+  listContactDirectory,
   listContacts,
   resolveActiveContactAddress,
   updateContact,
@@ -34,7 +35,12 @@ if (new URL(adminDatabaseUrl).pathname !== "/geraicuan_test") {
 const adminPool = new Pool({ connectionString: adminDatabaseUrl });
 const appPool = new Pool({ connectionString: appDatabaseUrl });
 const adminDb = drizzle({ client: adminPool, schema });
-const appDb = drizzle({ client: appPool, schema });
+let capturedStatements: string[] = [];
+const appDb = drizzle({
+  client: appPool,
+  schema,
+  logger: { logQuery: (query) => { capturedStatements.push(query); } },
+});
 const tenantA = "00000000-0000-0000-0000-000000000401";
 const tenantB = "00000000-0000-0000-0000-000000000402";
 const userAdmin = "contact-admin";
@@ -514,5 +520,162 @@ describe("tenant contact directory", () => {
     expect(afterArchive).toEqual(expect.arrayContaining([
       expect.objectContaining({ address: selected.address, name: selected.name, phone: selected.phone }),
     ]));
+  });
+
+  // T-167: /app/kontak's `peran` views over is_sender / is_recipient, and the
+  // directory row's primary-or-newest address with its missing-area state.
+  it("returns exactly the contacts holding each peran, a dual-role contact in both, and the primary-or-newest address per row", async () => {
+    const senderOnly = await withTenantContext(appDb, userAdmin, tenantA, (tx, context) =>
+      createContact(tx, context, {
+        ...input,
+        address: "Jl. T167 Pengirim 1",
+        addressLabel: "T167 pengirim",
+        destinationAreaLabel: "Kelurahan T167, Kecamatan T167, Kota T167, Provinsi T167, 40111",
+        isRecipient: false,
+        isSender: true,
+        name: "T167 Kontak Pengirim",
+        phone: "081200000101",
+      }),
+    );
+    const recipientOnly = await withTenantContext(appDb, userAdmin, tenantA, (tx, context) =>
+      createContact(tx, context, {
+        ...input,
+        address: "Jl. T167 Penerima 1",
+        addressLabel: "T167 penerima",
+        destinationAreaLabel: null,
+        isRecipient: true,
+        isSender: false,
+        name: "T167 Kontak Penerima",
+        phone: "081200000102",
+      }),
+    );
+    const dualRole = await withTenantContext(appDb, userAdmin, tenantA, (tx, context) =>
+      createContact(tx, context, {
+        ...input,
+        address: "Jl. T167 Dua Peran 1",
+        addressLabel: "T167 dua peran utama",
+        destinationAreaLabel: "Kelurahan T167 Dua, Kecamatan T167 Dua, Kota T167 Dua, Provinsi T167",
+        isRecipient: true,
+        isSender: true,
+        name: "T167 Kontak Dua Peran",
+        phone: "081200000103",
+      }),
+    );
+    // A second, later address on the dual-role contact: addressCount counts
+    // every active address, and "+N alamat" (rendered by the page) is that
+    // count minus the one primary address shown in the row.
+    await withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+      addContactAddress(tx, context, dualRole, {
+        address: "Jl. T167 Dua Peran 2",
+        addressLabel: "T167 dua peran kedua",
+        destinationAreaId: null,
+        destinationAreaLabel: null,
+      }),
+    );
+
+    // Historic data can carry no primary flag at all (e.g. rows written
+    // before the primary rule existed): the newest active address wins.
+    const [fallbackContact] = await adminDb
+      .insert(schema.contacts)
+      .values({ isRecipient: true, isSender: false, name: "T167 Kontak Fallback", phone: "081200000104", tenantId: tenantA })
+      .returning({ id: schema.contacts.id });
+    if (!fallbackContact) throw new Error("Fallback contact fixture was not created.");
+    await adminDb.insert(schema.contactAddresses).values([
+      {
+        address: "Jl. T167 Fallback Lama",
+        contactId: fallbackContact.id,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        destinationAreaLabel: "Kelurahan Lama, Kecamatan Lama, Kota Lama, Provinsi Lama, 40222",
+        isPrimary: false,
+        label: "T167 fallback lama",
+        tenantId: tenantA,
+      },
+      {
+        address: "Jl. T167 Fallback Baru",
+        contactId: fallbackContact.id,
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        destinationAreaLabel: "Kelurahan Baru, Kecamatan Baru, Kota Baru, Provinsi Baru, 40333",
+        isPrimary: false,
+        label: "T167 fallback baru",
+        tenantId: tenantA,
+      },
+    ]);
+
+    const [sender, recipient, all] = await Promise.all([
+      withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+        listContactDirectory(tx, context, { query: "T167", role: "sender", status: "active" }),
+      ),
+      withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+        listContactDirectory(tx, context, { query: "T167", role: "recipient", status: "active" }),
+      ),
+      withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+        listContactDirectory(tx, context, { query: "T167", role: "all", status: "active" }),
+      ),
+    ]);
+
+    expect(sender.map((row) => row.id).sort()).toEqual([senderOnly, dualRole].sort());
+    expect(recipient.map((row) => row.id).sort()).toEqual([recipientOnly, dualRole, fallbackContact.id].sort());
+    expect(all.map((row) => row.id).sort()).toEqual([senderOnly, recipientOnly, dualRole, fallbackContact.id].sort());
+
+    const dualRow = all.find((row) => row.id === dualRole);
+    expect(dualRow).toMatchObject({
+      address: "Jl. T167 Dua Peran 1",
+      addressCount: 2,
+      destinationAreaLabel: "Kelurahan T167 Dua, Kecamatan T167 Dua, Kota T167 Dua, Provinsi T167",
+    });
+
+    const recipientRow = all.find((row) => row.id === recipientOnly);
+    expect(recipientRow).toMatchObject({ address: "Jl. T167 Penerima 1", addressCount: 1, destinationAreaLabel: null });
+
+    const fallbackRow = all.find((row) => row.id === fallbackContact.id);
+    expect(fallbackRow).toMatchObject({
+      address: "Jl. T167 Fallback Baru",
+      addressCount: 2,
+      destinationAreaLabel: "Kelurahan Baru, Kecamatan Baru, Kota Baru, Provinsi Baru, 40333",
+    });
+  });
+
+  /**
+   * T-167 review: `now()` resolves once per statement, so a multi-row insert
+   * (a CSV import creating several addresses for one contact) leaves them
+   * sharing `created_at`. Ordering only by (is_primary, created_at) leaves the
+   * winner unspecified, and the directory can show a different address on a
+   * later read of unchanged data. The tie has to be broken in SQL.
+   */
+  it("breaks a tie on primary and created_at deterministically", async () => {
+    const [contact] = await adminDb
+      .insert(schema.contacts)
+      .values({ isRecipient: true, isSender: false, name: "T167 Kontak Seri", phone: "081200000105", tenantId: tenantA })
+      .returning({ id: schema.contacts.id });
+    if (!contact) throw new Error("Tie fixture contact was not created.");
+    // One statement, so both rows take the same now(); neither is primary.
+    await adminDb.insert(schema.contactAddresses).values(
+      ["Seri A", "Seri B"].map((label) => ({
+        address: `Jl. T167 ${label}`,
+        contactId: contact.id,
+        isPrimary: false,
+        label: `T167 ${label.toLowerCase()}`,
+        tenantId: tenantA,
+      })),
+    );
+    const stored = await adminDb
+      .select({ createdAt: schema.contactAddresses.createdAt })
+      .from(schema.contactAddresses)
+      .where(eq(schema.contactAddresses.contactId, contact.id));
+    expect(new Set(stored.map((row) => row.createdAt.toISOString())).size, "the fixture must really tie")
+      .toBe(1);
+
+    capturedStatements = [];
+    const reads = await Promise.all([1, 2].map(() =>
+      withTenantContext(appDb, userOperator, tenantA, (tx, context) =>
+        listContactDirectory(tx, context, { query: "T167 Kontak Seri", role: "all", status: "active" }),
+      ),
+    ));
+    expect(reads[0]?.[0]?.address).toBe(reads[1]?.[0]?.address);
+
+    const distinctOn = capturedStatements.find((statement) => /distinct on/i.test(statement));
+    expect(distinctOn, "the directory resolves the shown address with DISTINCT ON").toBeTruthy();
+    expect(distinctOn ?? "", distinctOn ?? "")
+      .toMatch(/order by[\s\S]*"contact_addresses"\."id"/i);
   });
 });

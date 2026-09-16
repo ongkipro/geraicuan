@@ -1,97 +1,79 @@
+import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
+import { HandoverTime, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import {
   formatDimensions,
+  formatDistrictCity,
   formatIdr,
   formatWeight,
   formatWibDateTime,
   recipientDensity,
 } from "@/lib/label-format";
+import { THERMAL } from "@/lib/label-size";
 
+/** "JNE REG" under a "JNE" heading reads twice; print the service alone when it repeats the courier. */
+function serviceName(courier: string, service: string) {
+  return service.toUpperCase().startsWith(`${courier.toUpperCase()} `) ? service.slice(courier.length + 1) : service;
+}
+
+/**
+ * T-176 thermal sheet: a 10 × 10 cm package label for the courier and, at 10 × 15 cm,
+ * a 10 × 5 cm stub the operator cuts off and hands to the sender.
+ */
 export function LabelSheet({ label }: { label: PrintableLabel }) {
+  return (
+    <LabelSheetFrame stub={<LabelSenderStub label={label} />}>
+      <LabelPackage label={label} />
+    </LabelSheetFrame>
+  );
+}
+
+function LabelPackage({ label }: { label: PrintableLabel }) {
   const recipientLayout = recipientDensity({
     nameLength: label.recipient.name.length,
     addressLength: label.recipient.address.length,
     areaLabelLength: label.destinationAreaLabel.length,
   });
-  const senderLayout = recipientDensity({
-    nameLength: label.sender.name.length,
-    addressLength: label.sender.address.length,
-    areaLabelLength: 0,
-  });
-  const dimensions = formatDimensions(
-    label.package.lengthCm,
-    label.package.widthCm,
-    label.package.heightCm,
-  );
+  const dimensions = formatDimensions(label.package.lengthCm, label.package.widthCm, label.package.heightCm);
+  const insurance = label.insuranceAmountIdr === null ? "Tidak ada" : formatIdr(label.insuranceAmountIdr);
 
   return (
-    <article className="label-sheet" aria-label="Label 100 × 150 mm">
+    <section aria-label="Label paket 10 × 10 cm" className="label-package">
       <div className="label-head">
-        <div>
-          <p className="label-courier">{label.courier}</p>
-          <p className="label-service">{label.providerService}</p>
-        </div>
+        <p className="label-courier">
+          {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
+        </p>
         <p className="label-mark">GeraiCUAN</p>
       </div>
 
-      <div>
-        <p className="label-eyebrow">No. resi (AWB) Mengantar</p>
-        <p className="label-awb">{label.awb}</p>
+      <div className="label-awb-block">
+        <LabelBarcode heightMm={THERMAL.packageBarHeightMm} value={label.awb} />
+        <p className="label-awb"><span className="label-eyebrow">Resi</span> {label.awb}</p>
       </div>
 
-      <div className="label-party" data-density={recipientLayout.tier}>
-        <p className="label-eyebrow">Penerima</p>
-        <p className="label-party-name">{label.recipient.name}</p>
-        <p className="label-party-phone">{label.recipient.phone}</p>
-        <p className="label-party-address">{label.recipient.address}</p>
+      <div className="label-party label-recipient" data-density={recipientLayout.tier}>
+        <p className="label-party-line">
+          <span className="label-eyebrow">Penerima</span>{" "}
+          <span className="label-party-name">{label.recipient.name}</span>{" "}
+          <span className="label-party-phone">{label.recipient.phone}</span>
+        </p>
         {recipientLayout.omitAreaLine ? null : (
-          <p className="label-party-address">{label.destinationAreaLabel}</p>
+          <p className="label-party-area">{label.destinationAreaLabel}</p>
         )}
+        <p className="label-party-address">{label.recipient.address}</p>
       </div>
 
-      <div
-        className="label-party label-sender"
-        data-density={senderLayout.tier}
-      >
-        <p className="label-eyebrow">Pengirim</p>
-        <p className="label-party-name">{label.sender.name}</p>
-        <p className="label-party-phone">{label.sender.phone}</p>
-        <p className="label-party-address">{label.sender.address}</p>
+      <div className="label-party label-sender">
+        <p className="label-sender-line">
+          <span className="label-eyebrow">Pengirim</span>{" "}
+          <span className="label-party-name">{label.sender.name}</span>{" "}
+          <span className="label-party-phone">{label.sender.phone}</span>
+          {" · "}
+          <span className="label-party-address">{label.sender.address}</span>
+        </p>
       </div>
 
-      <div>
-        <p className="label-eyebrow">Paket</p>
-        <dl className="label-facts">
-          <div className="label-facts-wide">
-            <dt>Isi</dt>
-            <dd className="label-facts-wrap">{label.package.content}</dd>
-          </div>
-          <div>
-            <dt>Berat</dt>
-            <dd>
-              {formatWeight(label.package.weightGrams)} · {label.package.quantity} koli
-            </dd>
-          </div>
-          <div>
-            <dt>Dimensi</dt>
-            <dd>{dimensions ?? "Tidak dicatat"}</dd>
-          </div>
-          <div>
-            <dt>Nilai</dt>
-            <dd>{formatIdr(label.package.declaredValueIdr)}</dd>
-          </div>
-          <div>
-            <dt>Asuransi</dt>
-            <dd>
-              {label.insuranceAmountIdr === null
-                ? "Tidak ada"
-                : formatIdr(label.insuranceAmountIdr)}
-            </dd>
-          </div>
-        </dl>
-      </div>
-
-      <div>
+      <div className="label-payment-block">
         {label.isCod ? (
           <>
             <div className="label-payment">
@@ -100,22 +82,12 @@ export function LabelSheet({ label }: { label: PrintableLabel }) {
             </div>
             {label.codBreakdown ? (
               <div className="label-money">
-                <div>
-                  <span>Nilai barang</span>
-                  <span>{formatIdr(label.codBreakdown.goodsValueIdr)}</span>
-                </div>
-                <div>
-                  <span>Ongkir penyedia</span>
-                  <span>{formatIdr(label.codBreakdown.shippingAmountIdr)}</span>
-                </div>
-                <div>
-                  <span>Biaya layanan COD</span>
-                  <span>{formatIdr(label.codBreakdown.serviceFeeIdr)}</span>
-                </div>
-                <div>
-                  <span>PPN</span>
-                  <span>{formatIdr(label.codBreakdown.vatAmountIdr)}</span>
-                </div>
+                <div><span>Nilai barang</span><span>{formatIdr(label.codBreakdown.goodsValueIdr)}</span></div>
+                <div><span>Ongkir Mengantar</span><span>{formatIdr(label.codBreakdown.shippingAmountIdr)}</span></div>
+                {/* One vocabulary with the draft and the shipment detail (T-175): this
+                    fee is Mengantar's COD fee, not a GeraiCUAN service charge. */}
+                <div><span>Biaya COD</span><span>{formatIdr(label.codBreakdown.serviceFeeIdr)}</span></div>
+                <div><span>PPN biaya COD</span><span>{formatIdr(label.codBreakdown.vatAmountIdr)}</span></div>
               </div>
             ) : null}
           </>
@@ -125,31 +97,58 @@ export function LabelSheet({ label }: { label: PrintableLabel }) {
               <span>NON-COD — JANGAN TAGIH PENERIMA</span>
             </div>
             <div className="label-money">
-              <div>
-                <span>Ongkir penyedia</span>
-                <span>{formatIdr(label.shippingAmountIdr)}</span>
-              </div>
-              <div>
-                <span>Asuransi</span>
-                <span>
-                  {label.insuranceAmountIdr === null
-                    ? "Tidak ada"
-                    : formatIdr(label.insuranceAmountIdr)}
-                </span>
-              </div>
+              <div><span>Ongkir Mengantar</span><span>{formatIdr(label.shippingAmountIdr)}</span></div>
             </div>
           </>
         )}
       </div>
 
+      <dl className="label-facts">
+        <div className="label-facts-wide"><dt>Isi</dt><dd>{label.package.content}</dd></div>
+        <div><dt>Berat</dt><dd>{formatWeight(label.package.weightGrams)} · {label.package.quantity} koli</dd></div>
+        <div><dt>Dimensi</dt><dd>{dimensions ?? "Tidak dicatat"}</dd></div>
+        <div><dt>Nilai</dt><dd>{formatIdr(label.package.declaredValueIdr)}</dd></div>
+        <div><dt>Asuransi Mengantar</dt><dd>{insurance}</dd></div>
+      </dl>
+
       <div className="label-footer">
         <p>
-          Nomor kiriman {label.publicReference} · Terbit{" "}
-          {formatWibDateTime(label.issuedAt)}
-          <br />
-          Nilai ongkir/asuransi berasal dari Mengantar
+          Nomor kiriman {label.publicReference} · Terbit {formatWibDateTime(label.issuedAt)}
         </p>
       </div>
-    </article>
+    </section>
+  );
+}
+
+/**
+ * The stub leaves the building with the sender, so it carries what proves and traces
+ * the handover and nothing that only the parcel needs: no recipient name, street
+ * address or phone, no sender contact, no package value and no COD breakdown.
+ */
+function LabelSenderStub({ label }: { label: PrintableLabel }) {
+  return (
+    <section aria-label="Bukti serah terima pengirim 10 × 5 cm" className="label-stub">
+      <div className="label-stub-head">
+        <p className="label-stub-title">Bukti serah terima · untuk pengirim</p>
+        <p className="label-stub-outlet">{label.outletName}</p>
+      </div>
+      <div className="label-stub-service">
+        <p className="label-courier">
+          {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
+        </p>
+        <p className="label-stub-payment">
+          {label.isCod ? <>COD <b>{formatIdr(label.providerCodAmountIdr as number)}</b></> : "NON-COD"}
+        </p>
+      </div>
+      <div className="label-awb-block">
+        <LabelBarcode heightMm={THERMAL.stubBarHeightMm} value={label.awb} />
+        <p className="label-awb"><span className="label-eyebrow">Resi</span> {label.awb}</p>
+      </div>
+      <dl className="label-stub-facts">
+        <div><dt>No. kiriman</dt><dd>{label.publicReference}</dd></div>
+        <div><dt>Tujuan</dt><dd>{formatDistrictCity(label.destinationAreaLabel)}</dd></div>
+        <div><dt>Diserahkan</dt><dd><HandoverTime /></dd></div>
+      </dl>
+    </section>
   );
 }

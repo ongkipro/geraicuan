@@ -79,9 +79,7 @@ vi.mock("@/db/analytics-repository", () => ({
       providerShippingIdr: 240_000,
       codServiceFeeIdr: 15_000,
       codVatIdr: 1_650,
-      codPrincipalIdr: 900_000,
-      cogsIdr: 500_000,
-      netMarginIdr: 143_350,
+      codDisbursementEstimateIdr: 643_350,
     },
     previous: {
       createdCount: 8,
@@ -90,9 +88,7 @@ vi.mock("@/db/analytics-repository", () => ({
       providerShippingIdr: 160_000,
       codServiceFeeIdr: 10_000,
       codVatIdr: 1_100,
-      codPrincipalIdr: 600_000,
-      cogsIdr: 350_000,
-      netMarginIdr: 78_900,
+      codDisbursementEstimateIdr: 428_900,
     },
   })),
   loadShipmentTrend: vi.fn(async () => ({
@@ -106,7 +102,7 @@ vi.mock("@/db/analytics-repository", () => ({
     rows: [
       {
         shipmentId: fixture.shipmentId,
-        publicReference: "95758-260901-281",
+        publicReference: "GC-10281",
         createdAt: new Date("2026-07-01T00:30:00.000Z"),
         issuedAt: new Date("2026-07-01T01:00:00.000Z"),
         outletName: "Outlet keputusan T28",
@@ -239,9 +235,9 @@ describe("tenant analytics decision context", () => {
     );
     expect(html).toContain("bukan pendapatan");
     expect(html).toContain(
-      `href="/app/pengiriman/${fixture.shipmentId}"`,
+      'href="/app/pengiriman/10281"',
     );
-    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260901-281");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("GC-10281");
     expect(html.replace(/<[^>]+>/g, " ")).not.toContain(fixture.shipmentId);
     expect(html).toMatch(/class="[^"]*inline-flex min-h-11[^"]*items-center[^"]*text-primary/);
     // Server pagination: page 1 of 2 disables backward links and links forward.
@@ -278,7 +274,7 @@ describe("tenant analytics decision context", () => {
     const html = await renderAnalytics({ rentang: "7-hari", tz: "Asia/Jakarta" });
 
     expect(html).toContain("Kiriman dibuat");
-    expect(html).toContain("Pokok COD (liabilitas)");
+    expect(html).toContain("Estimasi dana dicairkan Mengantar");
     expect(html).toContain("Exception rekonsiliasi tidak dapat dimuat");
   });
 
@@ -291,9 +287,7 @@ describe("tenant analytics decision context", () => {
     })).rejects.toThrow("NEXT_REDIRECT");
 
     expect(fixture.shipmentReads).toBe(0);
-    expect(analyticsShipmentDetailHref("OPERATOR", fixture.shipmentId)).toBeNull();
-    expect(
-      analyticsShipmentDetailHref("TENANT_ADMIN", fixture.shipmentId),
-    ).toBe(`/app/pengiriman/${fixture.shipmentId}`);
+    expect(analyticsShipmentDetailHref("OPERATOR", "GC-10281")).toBeNull();
+    expect(analyticsShipmentDetailHref("TENANT_ADMIN", "GC-10281")).toBe("/app/pengiriman/10281");
   });
 });

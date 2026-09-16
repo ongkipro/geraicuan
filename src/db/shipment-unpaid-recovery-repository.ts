@@ -1,5 +1,6 @@
 import "server-only";
 
+import { shipmentLabelHref } from "@/lib/shipment-number";
 import { and, asc, eq } from "drizzle-orm";
 
 import {
@@ -147,6 +148,7 @@ export async function listRecoveredShipmentAwbs(
   const rows = await tx
     .select({
       awb: providerOrderSnapshots.cnoteNo,
+      publicReference: shipments.publicReference,
       shipmentId: providerOrderSnapshots.shipmentId,
     })
     .from(providerUnpaidRecoveries)
@@ -186,7 +188,7 @@ export async function listRecoveredShipmentAwbs(
     if (!awb) throw new UnpaidRecoveryUnavailableError();
     return {
       awb,
-      labelHref: `/app/label/${encodeURIComponent(row.shipmentId)}`,
+      labelHref: shipmentLabelHref(row.publicReference),
       shipmentId: row.shipmentId,
     };
   });

@@ -75,7 +75,10 @@ async function observe(route, width) {
     assert.equal(new Set(table.headers).size, 1, 'Pinned and ordinary header surfaces agree');
   }
   const probe = JSON.parse(await session.evaluate(PROBE));
-  assert.equal(probe.overflow, 0, `${route}/${width} document overflow`);
+  // `scrollbar-gutter: stable` reserves the gutter, so a short page such as an
+  // empty /app/label reports a negative scrollWidth − clientWidth (−15). The rule
+  // is horizontal overflow of more than 1px, as in admin-programme.mjs.
+  assert(probe.overflow <= 1, `${route}/${width} document overflow ${probe.overflow}`);
   for (const key of ['unreachableScroll','unlabelledScroll','stickyIssues']) {
     assert.equal((Array.isArray(probe[key]) ? probe[key].length : probe[key]), 0, `${route}/${width} ${key}: ${JSON.stringify(probe[key])}`);
   }

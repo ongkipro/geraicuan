@@ -62,6 +62,10 @@ vi.mock("next/headers", () => ({
 
 vi.mock("@/db/client", () => ({ db: {} }));
 
+vi.mock("@/db/shipment-number-repository", () => ({
+  resolveShipmentRouteKey: vi.fn(async (_tx: unknown, _context: unknown, key: { kind: string; tenantNumber?: number }) =>
+    key.kind === "number" && key.tenantNumber === 10431 ? { shipmentId: SHIPMENT_ID, tenantNumber: 10431 } : null),
+}));
 vi.mock("@/db/tenant-context", () => ({
   withTenantContext: vi.fn(async (_db, userId, tenantId, callback) =>
     callback({}, { role: "OPERATOR", tenantId, userId }),
@@ -85,6 +89,18 @@ vi.mock("@/db/label-print-repository", () => ({
     mocks.listCalls += 1;
     return mocks.rows;
   }),
+  loadLabelIndexPage: vi.fn(async () => {
+    mocks.listCalls += 1;
+    const printed = mocks.rows.filter((row) => row.printCount > 0).length;
+    return {
+      rows: mocks.rows,
+      summary: {
+        "LBL-ALL": mocks.rows.length,
+        "LBL-PRINTED": printed,
+        "LBL-UNPRINTED": mocks.rows.length - printed,
+      },
+    };
+  }),
   loadPrintableLabel: vi.fn(async () => {
     if (mocks.detailReason) {
       throw new repositoryErrors.LabelUnavailableError(mocks.detailReason);
@@ -104,6 +120,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
     isCod: false,
     issuedAt: new Date("2026-09-01T01:00:00.000Z"),
     lastPrintedAt: null,
+    outletName: "Outlet Label Pusat",
     package: {
       content: "Pakaian",
       declaredValueIdr: 150_000,
@@ -127,7 +144,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
       phone: "081211110000",
     },
     shipmentId: SHIPMENT_ID,
-    publicReference: "95758-260901-431",
+    publicReference: "GC-10431",
     shippingAmountIdr: 8_000,
     ...overrides,
   };
@@ -139,7 +156,7 @@ async function renderIndex(searchParams: { q?: string | string[]; status?: strin
 }
 
 async function renderDetail() {
-  const element = await LabelDetailPage({ params: Promise.resolve({ shipmentId: SHIPMENT_ID }) });
+  const element = await LabelDetailPage({ params: Promise.resolve({ shipmentId: "10431" }) });
   return renderToStaticMarkup(element);
 }
 
@@ -176,12 +193,18 @@ describe("label route render contracts", () => {
   });
 
   it("keeps both status views reachable as plain links when the facet popover cannot run", async () => {
-    for (const [query, currentHref] of [[{}, "/app/label?q=123ABC"], [{ status: "unpaid" }, "/app/label?status=unpaid&amp;q=123ABC"]] as const) {
+    // T-163: every link on this page now carries the canonical range as well,
+    // or following one would silently reset the period back to the default.
+    const carried = "rentang=30-hari&amp;tz=Asia%2FJakarta";
+    for (const [query, currentHref] of [
+      [{}, `/app/label?${carried}&amp;q=123ABC`],
+      [{ status: "unpaid" }, `/app/label?${carried}&amp;status=unpaid&amp;q=123ABC`],
+    ] as const) {
       const html = await renderIndex({ ...query, q: "123ABC" });
       const fallback = html.match(/<noscript>([\s\S]*?)<\/noscript>/)?.[1] ?? "";
       expect(fallback).toMatch(/<nav[^>]*aria-label="Status kiriman"/);
-      expect(fallback).toContain('href="/app/label?q=123ABC"');
-      expect(fallback).toContain('href="/app/label?status=unpaid&amp;q=123ABC"');
+      expect(fallback).toContain(`href="/app/label?${carried}&amp;q=123ABC"`);
+      expect(fallback).toContain(`href="/app/label?${carried}&amp;status=unpaid&amp;q=123ABC"`);
       const current = fallback.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? [];
       expect(current).toHaveLength(1);
       expect(current[0]).toContain(`href="${currentHref}"`);
@@ -215,7 +238,7 @@ describe("label route render contracts", () => {
       recipientName: "Penerima Label",
       recipientPhone: "081299998765",
       shipmentId: SHIPMENT_ID,
-      publicReference: "95758-260901-431",
+      publicReference: "GC-10431",
       status: "ISSUED",
     });
     const html = await renderIndex();
@@ -261,7 +284,9 @@ describe("label route render contracts", () => {
     const html = await renderDetail();
 
     expect(html).toContain(title);
-    expect(html).toContain(`href="/app/pengiriman/${SHIPMENT_ID}"`);
+    // PR-44: the recovery path uses the canonical per-tenant number, never the UUID.
+    expect(html).toContain('href="/app/pengiriman/10431"');
+    expect(html).not.toContain(`/app/pengiriman/${SHIPMENT_ID}`);
     expect(html).toContain('href="/app/label"');
     expect(html).not.toContain('class="label-sheet"');
     expect(html).not.toContain('name="attemptId"');
@@ -283,25 +308,47 @@ describe("label route render contracts", () => {
 });
 
 describe("physical LabelSheet contract", () => {
-  it("retains one exact physical sheet with the required semantic regions", () => {
+  it("retains one physical sheet with the package label, cut line and sender stub by default", () => {
     const html = renderToStaticMarkup(createElement(LabelSheet, { label: printableLabel() }));
 
     expect(html.match(/<article/g)).toHaveLength(1);
-    expect(html).toContain('<article class="label-sheet" aria-label="Label 100 × 150 mm">');
+    expect(html).toMatch(/<article aria-label="Label 10 × 15 cm: label paket dan bukti pengirim" class="label-sheet" data-label-size="10x15">/);
     expect(html.match(/class="label-head"/g)).toHaveLength(1);
     expect(html.match(/class="label-party(?: |")/g)).toHaveLength(2);
     expect(html.match(/class="label-payment"/g)).toHaveLength(1);
     expect(html.match(/class="label-footer"/g)).toHaveLength(1);
+    expect(html.match(/class="label-stub"/g)).toHaveLength(1);
     expect(html).toContain("JNE-LABEL-000431");
-    expect(html.replace(/<[^>]+>/g, " ")).toContain("95758-260901-431");
+    expect(html.replace(/<[^>]+>/g, " ")).toContain("GC-10431");
     expect(html.replace(/<[^>]+>/g, " ")).not.toContain(SHIPMENT_ID);
     expect(html).toContain("Penerima Label");
     expect(html).toContain("Pengirim Label");
     expect(html).not.toContain("label-hide");
+  });
 
-    const css = readFileSync("src/app/globals.css", "utf8");
-    expect(css).toMatch(/\.label-sheet\s*\{[^}]*width:100mm;[^}]*height:150mm;[^}]*page:label;/);
-    expect(css).toMatch(/@page label\s*\{\s*size:100mm 150mm;\s*margin:0;\s*\}/);
+  it("offers the size choice before printing, defaulting to 10 × 15 cm, and previews that size", async () => {
+    const html = await renderDetail();
+    const radios = html.match(/<input[^>]*name="label-size"[^>]*>/g) ?? [];
+
+    expect(radios).toHaveLength(2);
+    expect(radios.filter((radio) => radio.includes('checked=""'))).toEqual([expect.stringContaining('value="10x15"')]);
+    expect(html).toContain("<legend");
+    expect(html).toContain("Ukuran label termal");
+    expect(html).toMatch(/Cetak label 10 × 15 cm/);
+    expect(html).toContain('aria-label="Pratinjau label 10 × 15 cm, sama dengan hasil cetak"');
+    // The choice sits before the preview and the print control, and the preview is the sheet itself.
+    expect(html.indexOf('name="label-size"')).toBeLessThan(html.indexOf('name="attemptId"'));
+    expect(html.indexOf('name="attemptId"')).toBeLessThan(html.indexOf('id="pratinjau-label"'));
+    expect(html).toMatch(/id="pratinjau-label"[^>]*>\s*<article[^>]*data-label-size="10x15"/);
+    expect(html).not.toContain("Barcode resi tidak dicetak");
+  });
+
+  it("warns before printing when the AWB is too long for a barcode", async () => {
+    mocks.label = printableLabel({ awb: "A".repeat(30) });
+    const html = await renderDetail();
+
+    expect(html).toContain("Barcode resi tidak dicetak");
+    expect(html).not.toContain("label-barcode");
   });
 
   it("describes a recorded print attempt without claiming physical print success", () => {

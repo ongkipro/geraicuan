@@ -5,16 +5,19 @@ const fixture = vi.hoisted(() => ({
   checkDuplicate: vi.fn(async () => false),
   create: vi.fn(),
   currentAuthority: { connectionUpdatedAt: null, source: "platform_default" as const, version: 4 },
+  loadDestinationForVerification: vi.fn(),
   lockAuthority: vi.fn(),
   redirect: vi.fn(),
   resolveCredentials: vi.fn(),
   resolveContact: vi.fn(),
   replay: vi.fn(),
+  stampDestinationVerified: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   redirect: fixture.redirect,
 }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/db/client", () => ({ db: {} }));
 vi.mock("@/lib/cms-auth", () => ({
   CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
@@ -36,8 +39,10 @@ vi.mock("@/db/shipment-draft-repository", () => ({
   checkDuplicateShipment: fixture.checkDuplicate,
   createShipmentDraft: fixture.create,
   DraftSubmissionConflictError: class DraftSubmissionConflictError extends Error {},
+  loadShipmentDraftDestinationForVerification: fixture.loadDestinationForVerification,
   OutletUnavailableError: class OutletUnavailableError extends Error {},
   resolveExistingShipmentDraftReplay: fixture.replay,
+  stampShipmentDraftDestinationVerified: fixture.stampDestinationVerified,
 }));
 vi.mock("@/db/contact-repository", () => ({
   ContactUnavailableError: class ContactUnavailableError extends Error {},
@@ -63,9 +68,10 @@ vi.mock("@/lib/mengantar-credentials", () => ({
   ),
 }));
 
-import { saveShipmentDraft } from "@/app/app/actions";
+import { saveShipmentDraft, verifyShipmentDraftDestinationArea } from "@/app/app/actions";
 
 const outletId = "00000000-0000-0000-0000-000000000111";
+const verificationShipmentId = "00000000-0000-4000-8000-000000000199";
 
 function form() {
   const data = new FormData();
@@ -104,6 +110,7 @@ beforeEach(() => {
     success: true,
   }));
   fixture.create.mockReset();
+  fixture.loadDestinationForVerification.mockReset();
   fixture.lockAuthority.mockReset().mockResolvedValue(fixture.currentAuthority);
   fixture.redirect.mockReset();
   fixture.replay.mockReset().mockResolvedValue(null);
@@ -111,6 +118,7 @@ beforeEach(() => {
   fixture.resolveCredentials.mockReset().mockResolvedValue({
     authority: fixture.currentAuthority,
   });
+  fixture.stampDestinationVerified.mockReset();
   fixture.create.mockResolvedValue("00000000-0000-4000-8000-000000000123");
   fixture.redirect.mockImplementation(() => undefined);
 });
@@ -280,5 +288,124 @@ describe("shipment destination authority action", () => {
     });
     expect(fixture.authority).not.toHaveBeenCalled();
     expect(fixture.create).not.toHaveBeenCalled();
+  });
+});
+
+// B3: every draft written before drizzle/0041 has destination_area_verified_at
+// permanently NULL, and nothing UPDATEs shipment_drafts otherwise. This is
+// the recovery action's contract: re-check the *stored* area against
+// Mengantar, never trust the stored label as the final answer, and stamp the
+// column only when the provider still confirms the exact same pair.
+describe("B3 shipment draft destination re-verification", () => {
+  function verifyForm(shipmentId = verificationShipmentId) {
+    const data = new FormData();
+    data.set("shipmentId", shipmentId);
+    return data;
+  }
+
+  it("rejects a malformed shipment id without touching the database", async () => {
+    await expect(
+      verifyShipmentDraftDestinationArea({}, verifyForm("not-a-uuid")),
+    ).resolves.toMatchObject({ error: expect.any(String) });
+    expect(fixture.loadDestinationForVerification).not.toHaveBeenCalled();
+    expect(fixture.authority).not.toHaveBeenCalled();
+  });
+
+  it("reports a missing or already-submitted draft without calling the provider", async () => {
+    fixture.loadDestinationForVerification.mockResolvedValue(null);
+
+    await expect(
+      verifyShipmentDraftDestinationArea({}, verifyForm()),
+    ).resolves.toMatchObject({ error: expect.any(String) });
+    expect(fixture.authority).not.toHaveBeenCalled();
+    expect(fixture.stampDestinationVerified).not.toHaveBeenCalled();
+  });
+
+  it("re-checks the stored area (not an operator-supplied one) and stamps only on a confirmed match", async () => {
+    fixture.loadDestinationForVerification.mockResolvedValue({
+      outletId,
+      destinationAreaId: "stored-area",
+      destinationAreaLabel: "Stored area label",
+      destinationAreaVerifiedAt: null,
+    });
+    fixture.authority.mockResolvedValue({
+      authority: fixture.currentAuthority,
+      option: { areaId: "stored-area", areaLabel: "Stored area label" },
+      success: true,
+    });
+    fixture.stampDestinationVerified.mockResolvedValue(true);
+
+    await expect(
+      verifyShipmentDraftDestinationArea({}, verifyForm()),
+    ).resolves.toEqual({ verified: true });
+
+    // The search query is the draft's own stored label, never a caller value.
+    expect(fixture.authority).toHaveBeenCalledWith(
+      outletId,
+      "Stored area label",
+      "stored-area",
+      "Stored area label",
+    );
+    expect(fixture.stampDestinationVerified).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      verificationShipmentId,
+      { areaId: "stored-area", areaLabel: "Stored area label" },
+    );
+  });
+
+  it("refuses to stamp when Mengantar no longer confirms the stored area", async () => {
+    fixture.loadDestinationForVerification.mockResolvedValue({
+      outletId,
+      destinationAreaId: "stored-area",
+      destinationAreaLabel: "Stored area label",
+      destinationAreaVerifiedAt: null,
+    });
+    fixture.authority.mockResolvedValue({
+      error: "selection_mismatch",
+      message: "Pilihan area berubah atau tidak cocok. Cari dan pilih ulang area tujuan.",
+      success: false,
+    });
+
+    await expect(
+      verifyShipmentDraftDestinationArea({}, verifyForm()),
+    ).resolves.toMatchObject({
+      error: "Pilihan area berubah atau tidak cocok. Cari dan pilih ulang area tujuan.",
+    });
+    expect(fixture.stampDestinationVerified).not.toHaveBeenCalled();
+  });
+
+  it("reports a concurrent draft change instead of forcing the stamp", async () => {
+    fixture.loadDestinationForVerification.mockResolvedValue({
+      outletId,
+      destinationAreaId: "stored-area",
+      destinationAreaLabel: "Stored area label",
+      destinationAreaVerifiedAt: null,
+    });
+    fixture.authority.mockResolvedValue({
+      authority: fixture.currentAuthority,
+      option: { areaId: "stored-area", areaLabel: "Stored area label" },
+      success: true,
+    });
+    fixture.stampDestinationVerified.mockResolvedValue(false);
+
+    await expect(
+      verifyShipmentDraftDestinationArea({}, verifyForm()),
+    ).resolves.toMatchObject({ error: expect.any(String) });
+  });
+
+  it("is idempotent once already verified", async () => {
+    fixture.loadDestinationForVerification.mockResolvedValue({
+      outletId,
+      destinationAreaId: "stored-area",
+      destinationAreaLabel: "Stored area label",
+      destinationAreaVerifiedAt: new Date("2026-09-16T00:00:00.000Z"),
+    });
+
+    await expect(
+      verifyShipmentDraftDestinationArea({}, verifyForm()),
+    ).resolves.toEqual({ verified: true });
+    expect(fixture.authority).not.toHaveBeenCalled();
+    expect(fixture.stampDestinationVerified).not.toHaveBeenCalled();
   });
 });

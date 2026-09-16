@@ -411,10 +411,59 @@ describe("design token contrast", () => {
 
   it("meets AA for body and muted text on every ground they sit on", () => {
     for (const ink of ["--ink", "--ink-muted"] as const) {
-      for (const ground of ["--canvas", "--surface", "--surface-sunken"] as const) {
+      for (const ground of ["--canvas", "--surface", "--surface-sunken", "--table-stripe"] as const) {
         expect(contrast(token(ink), token(ground)), `${ink} on ${ground}`)
           .toBeGreaterThanOrEqual(4.5);
       }
+    }
+  });
+
+  /**
+   * T-172 review: a pinned first column carries `bg-inherit` so it tracks the row
+   * it sits in. `even:bg-muted/40` made that inherited value translucent, and the
+   * cells scrolling underneath a pinned column showed through it on every second
+   * row. Every fill a row can take must therefore be opaque, and the stripe must
+   * still differ from the card or the striping is decoration with no effect.
+   */
+  it("gives table rows only opaque fills that a pinned cell can inherit", () => {
+    const table = readFileSync(join(process.cwd(), "src/components/ui/table.tsx"), "utf8");
+    // Every element a pinned cell can inherit from, not only TableRow: the footer
+    // is a row too, and it shipped `bg-muted/50` while nothing used it yet.
+    const fills = ["TableRow", "TableFooter", "TableHeader"].flatMap((name) => {
+      const body = table.match(new RegExp(`function ${name}[\\s\\S]*?\\n}`))?.[0];
+      expect(body, `${name} source`).toBeTruthy();
+      // `[...]` must be inside the character class or Tailwind's arbitrary-value
+      // syntax (`bg-[oklch(0.97_0_0_/_0.4)]`) is never captured at all, and the
+      // alpha hiding inside it goes unseen.
+      return (body!.match(/bg-[\w.,%[\]()/_-]+/g) ?? []).map((fill) => `${name}: ${fill}`);
+    });
+    expect(fills.length, "table fills found").toBeGreaterThan(2);
+    for (const fill of fills) {
+      expect(fill, "a row fill a pinned cell inherits must be opaque")
+        .not.toMatch(/\/|transparent/);
+    }
+    // The same fill can be moved into the CSS module, out of reach of the classes.
+    const tableModuleCss = readFileSync(join(process.cwd(), "src/components/ui/table.module.css"), "utf8");
+    for (const declaration of tableModuleCss.match(/background(?:-color)?:[^;]+;/g) ?? []) {
+      expect(declaration, "a module row fill must be opaque")
+        .not.toMatch(/transparent|\/\s*[0-9.]+%?\s*\)|rgba\(|hsla\(/);
+    }
+
+    const darkScope = new Map(tokens);
+    for (const rule of cssRules.filter((r) => r.selector === ".dark" && appliesOnScreen(r))) {
+      for (const [property, value] of rule.declarations) {
+        if (property.startsWith("--")) darkScope.set(property, value);
+      }
+    }
+    for (const [scheme, scope] of [["light", tokens], ["dark", darkScope]] as const) {
+      const raw = scope.get("--table-stripe");
+      expect(raw, `${scheme} --table-stripe`).toBeTruthy();
+      // An alpha channel is exactly the defect: `oklch(… / 40%)`, `#rrggbbaa`,
+      // `transparent`, or a `color-mix` that keeps one.
+      expect(raw, `${scheme} --table-stripe must be opaque`)
+        .not.toMatch(/\/|transparent|color-mix|^#(?:[0-9a-f]{4}|[0-9a-f]{8})$/i);
+      expect(parse(raw!, scope), "an invisible stripe is not a stripe")
+        .not.toEqual(parse("var(--surface)", scope));
     }
   });
 
@@ -665,7 +714,7 @@ describe("design token contrast", () => {
       }
     }
     const darkToken = (name: string) => parse(scope.get(name) ?? `missing ${name}`, scope);
-    const grounds = ["--canvas", "--surface", "--surface-sunken"] as const;
+    const grounds = ["--canvas", "--surface", "--surface-sunken", "--table-stripe"] as const;
 
     for (const ink of ["--ink", "--ink-muted"] as const) {
       for (const ground of grounds) {
@@ -705,4 +754,21 @@ describe("design token contrast", () => {
       expect(contrast(darkToken(stroke), darkToken("--card")), `dark ${stroke}`).toBeGreaterThanOrEqual(3);
     }
   });
+  // T-155: the CMS ground steps down so white cards read as cards, and one restrained
+  // resting elevation exists. Both must stay defined in light and dark, and the ground
+  // must keep the ink pairs the suite already measures.
+  it("defines the sunken CMS ground and one resting elevation in both schemes", () => {
+    const css = readFileSync("src/app/globals.css", "utf8");
+
+    expect(css).toMatch(/\[data-slot="sidebar-inset"\]\s*\{[^}]*background:\s*var\(--surface-sunken\)/);
+    // `:root, .dark {` at the top is the alias block; the dark palette is the standalone
+    // `.dark {` rule further down.
+    const darkIndex = css.indexOf("\n.dark {");
+    const light = css.slice(0, darkIndex);
+    const dark = css.slice(darkIndex);
+    expect(light, "light elevation token").toMatch(/--elevation-resting:/);
+    expect(dark, "dark elevation token").toMatch(/--elevation-resting:/);
+    expect(css, "elevation exposed as a utility").toMatch(/--shadow-resting:\s*var\(--elevation-resting\)/);
+  });
+
 });

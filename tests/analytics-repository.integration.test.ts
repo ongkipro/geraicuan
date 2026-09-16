@@ -357,9 +357,9 @@ describe("tenant shipment analytics repository", () => {
         providerShippingIdr: 18_000,
         codServiceFeeIdr: 3_300,
         codVatIdr: 363,
-        codPrincipalIdr: 100_000,
-        cogsIdr: 0,
-        netMarginIdr: 78_337,
+        // COD 113_663 − shipping 10_000 − Mengantar's 3.33% of the COD (3_785.08):
+        // 99_878, the exact shortfall T-175 found. The stored fee said 100_000.
+        codDisbursementEstimateIdr: 99_878,
       });
       expect(result.trend.generatedAt).toBeInstanceOf(Date);
       expect(result.trend.points.reduce((sum, row) => sum + row.createdCount, 0)).toBe(4);
@@ -480,9 +480,7 @@ describe("tenant shipment analytics repository", () => {
         providerShippingIdr: 7_000,
         codServiceFeeIdr: 0,
         codVatIdr: 0,
-        codPrincipalIdr: 0,
-        cogsIdr: 0,
-        netMarginIdr: -7_000,
+        codDisbursementEstimateIdr: 0,
       },
       count: 1,
     });
@@ -546,9 +544,8 @@ describe("tenant shipment analytics repository", () => {
       providerShippingIdr: 10_000,
       codServiceFeeIdr: 3_300,
       codVatIdr: 363,
-      codPrincipalIdr: 100_000,
-      cogsIdr: 0,
-      netMarginIdr: 86_337,
+      // Same shipment, same figure: 113_663 − 10_000 − 3_785.08 = 99_878.
+      codDisbursementEstimateIdr: 99_878,
     });
     expect(result.comparison.previous).toMatchObject({
       createdCount: 1,
@@ -592,56 +589,104 @@ describe("tenant shipment analytics repository", () => {
       providerShippingIdr: 0,
       codServiceFeeIdr: 0,
       codVatIdr: 0,
-      codPrincipalIdr: 0,
-      cogsIdr: 0,
-      netMarginIdr: 0,
+      codDisbursementEstimateIdr: 0,
     });
   });
 
-  it("sums the ledger-effective cohort's COGS, not the created cohort's, and subtracts it from net margin", async () => {
-    // The shared fixture leaves every cogs_amount_idr null, which cannot tell a
-    // correct aggregation apart from one that reads the wrong column or cohort.
-    //
-    // `failed` and `awaiting` were created inside the selected range but never
-    // submitted to the provider, so they carry no ledger entry at all: their
-    // COGS must NOT reach the total, in either cohort.
+  it("estimates the Mengantar disbursement from issued COD shipments on the settlement shipping basis, with no margin, COGS or goods figure (T-177)", async () => {
+    // Sequence 1 is the only COD order in range: COD 113_663 = goods 100_000
+    // + shipping 10_000 + fee 3_300 + VAT 363, a row written under the old
+    // additive formula. Mengantar deducts its special shipping price (7_000
+    // stored here) **and keeps 3.33% of the whole COD amount** — the rate proven
+    // on 2,866 real settlement lines — so the estimate is
+    //   113_663 − 7_000 − 113_663 × 333 / 10_000
+    //   = 113_663 − 7_000 − 3_785.0779 = 102_877.9221 → 102_878.
+    // It used to subtract the *stored* fee and VAT (3_663, i.e. 3.33% of goods
+    // plus shipping), which read 103_000: Rp 122 more than Mengantar pays, the
+    // same shortfall T-175 found in the COD amount itself. Non-COD orders, the
+    // unissued drafts and tenant B's order contribute nothing.
     await adminPool.query(
-      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
-      [failed, 20_000],
+      "UPDATE provider_order_snapshots SET provider_charged_shipping_idr = 7000 WHERE shipment_id = $1",
+      [createdBeforeIssuedInside],
     );
     await adminPool.query(
-      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
-      [awaiting, 5_000],
+      "UPDATE shipments SET cogs_amount_idr = 999000 WHERE id = ANY($1)",
+      [[createdBeforeIssuedInside, tenantBShipment]],
     );
-    // Created before the selected range, but its ledger entries (from
-    // `seedIssued`'s resolvedAt) are effective inside it — the exact
-    // creation/issuance straddle netMarginIdr must not mismatch on. Its COGS
-    // must reach the total precisely because it shares the same
-    // ledger-effective cohort as the other four financial terms.
+    // A COD total left behind by an earlier COD estimate does not make a
+    // shipment that was issued as non-COD pay out COD money (version 1 values
+    // for goods 100_000 + shipping 8_000).
+    const stale = orderIds(2);
     await adminPool.query(
-      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
-      [createdBeforeIssuedInside, 999_000],
+      `INSERT INTO shipment_cod_totals
+        (tenant_id, shipment_id, snapshot_id, estimate_service_id, currency,
+         goods_value_idr, shipping_amount_idr, service_fee_idr, vat_amount_idr, provider_cod_amount_idr)
+       VALUES ($1, $2, $3, $4, 'IDR', 100000, 8000, 3240, 356, 111596)`,
+      [tenantA, exactStart, stale.snapshot, stale.service],
     );
-    // Another tenant entirely.
-    await adminPool.query(
-      "UPDATE shipments SET cogs_amount_idr = $2 WHERE id = $1",
-      [tenantBShipment, 777_000],
-    );
-
     try {
       const kpis = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
         loadShipmentKpis(tx, context, range("Asia/Jakarta")),
       );
-
-      expect(kpis.cogsIdr).toBe(999_000);
-      // 100_000 principal - 18_000 shipping - 3_300 fee - 363 VAT - 999_000 COGS.
-      expect(kpis.netMarginIdr).toBe(-920_663);
-      expect(kpis.createdCount).toBe(4);
+      expect(kpis.codDisbursementEstimateIdr).toBe(102_878);
+      expect(kpis.codServiceFeeIdr + kpis.codVatIdr).toBe(3_663);
+      // The read model itself carries no merchandise figure, whatever a legacy
+      // column still holds.
+      expect(Object.keys(kpis).sort()).toEqual([
+        "codDisbursementEstimateIdr",
+        "codServiceFeeIdr",
+        "codVatIdr",
+        "createdCount",
+        "issuedCount",
+        "providerShippingIdr",
+        "resolvedSubmissionCount",
+      ]);
     } finally {
       await adminPool.query(
-        "UPDATE shipments SET cogs_amount_idr = NULL WHERE id = ANY($1)",
-        [[failed, awaiting, createdBeforeIssuedInside, tenantBShipment]],
+        "UPDATE provider_order_snapshots SET provider_charged_shipping_idr = NULL WHERE shipment_id = $1",
+        [createdBeforeIssuedInside],
       );
+      await adminPool.query(
+        "UPDATE shipments SET cogs_amount_idr = NULL WHERE id = ANY($1)",
+        [[createdBeforeIssuedInside, tenantBShipment]],
+      );
+      await adminPool.query("DELETE FROM shipment_cod_totals WHERE shipment_id = $1", [exactStart]);
+    }
+  });
+
+  it("reports Mengantar's COD fee under both ledger classifications, once each (T-178)", async () => {
+    // Sequence 1's issuance was ledgered before T-178 as the legacy
+    // GERAICUAN_COD_SERVICE_FEE_REVENUE (3_300). A later issuance in the same
+    // period carries MENGANTAR_COD_FEE_COST (4_000). The fee is both, once each.
+    const ids = orderIds(2);
+    const inserted = await adminPool.query<{ id: string }>(
+      `INSERT INTO ledger_entries
+        (tenant_id, outlet_id, shipment_id, provider_batch_id,
+         provider_order_snapshot_id, entry_type, financial_class, amount_idr,
+         currency, effective_at, source_event, source_event_id, actor_type)
+       VALUES ($1,$2,$3,$4,$5,'MENGANTAR_COD_FEE_COST','EXPENSE',4000,'IDR',
+         '2026-08-30T17:30:00Z','PROVIDER_ORDER_ISSUED',$5::uuid::text,'SYSTEM')
+       RETURNING id`,
+      [tenantA, outletA, exactStart, ids.batch, ids.order],
+    );
+    try {
+      const kpis = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
+        loadShipmentKpis(tx, context, range("Asia/Jakarta")),
+      );
+      expect(kpis.codServiceFeeIdr).toBe(7_300);
+      // The new type is a cost, and the legacy provider-shipping figure does not absorb it.
+      expect(kpis.providerShippingIdr).toBe(18_000);
+    } finally {
+      // Ledger rows are immutable; remove the fixture the way clean() does.
+      const client = await adminPool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SET LOCAL session_replication_role = replica");
+        await client.query("DELETE FROM ledger_entries WHERE id = $1", [inserted.rows[0]!.id]);
+        await client.query("COMMIT");
+      } finally {
+        client.release();
+      }
     }
   });
 

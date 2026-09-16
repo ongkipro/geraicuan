@@ -1,0 +1,174 @@
+{
+  "contract": "Mengantar GET /invoices sanitized fixture",
+  "evidence": "Shapes and enums from a read-only production capture on 2026-09-15 (docs https://api-public.mengantar.com/docs/). All identifiers, amounts and PII are synthetic. Identities observed on 150 invoices / 554 subItems: invoice.amount == sum(subItems.amount); subItem.amount == COD_AMOUNT - estimatedSpecialPrice; COD_FEE == COD_AMOUNT * 3.33%. T-178 (600 invoices / 2,866 COD subItems, tests/fixtures/mengantar-cod-identities.json): estimatedSpecialPrice is the discounted shipping plus COD_FEE unrounded, so amount and estimatedSpecialPrice are fractional whenever the fee is; the amounts below follow that shape.",
+  "reconciliation": {
+    "success": true,
+    "data": [
+      {
+        "subItems": [
+          {
+            "courier": "JNE",
+            "type": "typeRevenue",
+            "description": "SANITIZED-CNOTE-0001",
+            "amount": 99878.0221,
+            "COD_AMOUNT": 113663,
+            "COD_FEE": 3784.9779,
+            "estimatedSpecialPrice": 13784.9779,
+            "estimatedPrice": 13700,
+            "status": "statusCompleted",
+            "cnote_no": "SANITIZED-CNOTE-0001",
+            "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME",
+            "RECEIVER_PHONE": "SENTINEL-RECEIVER-PHONE",
+            "GOODS_DESC": "SENTINEL-GOODS-DESC",
+            "QTY": 1,
+            "PICKUP_NAME": "SENTINEL-PICKUP-NAME"
+          },
+          {
+            "courier": "JNE",
+            "type": "typeRevenue",
+            "description": "SANITIZED-CNOTE-0002",
+            "amount": 97878.0221,
+            "COD_AMOUNT": 113663,
+            "COD_FEE": 3784.9779,
+            "estimatedSpecialPrice": 15784.9779,
+            "estimatedPrice": 16500,
+            "status": "statusCompleted",
+            "cnote_no": "SANITIZED-CNOTE-0002",
+            "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME",
+            "RECEIVER_PHONE": "SENTINEL-RECEIVER-PHONE",
+            "GOODS_DESC": "SENTINEL-GOODS-DESC",
+            "QTY": 1,
+            "PICKUP_NAME": "SENTINEL-PICKUP-NAME"
+          }
+        ],
+        "status": "statusCleared",
+        "adminCleared": false,
+        "courier": "JNE",
+        "needToNotify": false,
+        "adminCreated": false,
+        "api_history": [],
+        "isViolation": false,
+        "_id": "SANITIZEDINVOICE0001",
+        "user_id": "SANITIZEDUSER0001",
+        "user": { "email": "sentinel@example.test", "name": "SENTINEL-ACCOUNT-NAME" },
+        "inv_number": "SANITIZED-INV-0001",
+        "type": "typeReconciliation",
+        "amount": 197756.0442,
+        "total": 197756.0442,
+        "description": "Auto Reconciliation",
+        "createdAt": "2026-09-10T03:00:00.000Z",
+        "updatedAt": "2026-09-10T03:05:00.000Z",
+        "balanceAmount": 999999
+      },
+      {
+        "subItems": [
+          {
+            "courier": "JNE",
+            "type": "typeRevenue",
+            "description": "SANITIZED-CNOTE-EXTERNAL-0009",
+            "amount": 48002,
+            "COD_AMOUNT": 60000,
+            "COD_FEE": 1998,
+            "estimatedSpecialPrice": 11998,
+            "estimatedPrice": 13700,
+            "status": "statusCompleted",
+            "cnote_no": "SANITIZED-CNOTE-EXTERNAL-0009",
+            "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME",
+            "RECEIVER_PHONE": "SENTINEL-RECEIVER-PHONE",
+            "GOODS_DESC": "SENTINEL-GOODS-DESC",
+            "QTY": 1,
+            "PICKUP_NAME": "SENTINEL-PICKUP-NAME"
+          }
+        ],
+        "status": "statusCleared",
+        "adminCleared": false,
+        "courier": "JNE",
+        "needToNotify": true,
+        "adminCreated": false,
+        "api_history": [],
+        "isViolation": false,
+        "_id": "SANITIZEDINVOICE0002",
+        "user_id": "SANITIZEDUSER0001",
+        "user": { "email": "sentinel@example.test", "name": "SENTINEL-ACCOUNT-NAME" },
+        "inv_number": "SANITIZED-INV-0002",
+        "type": "typeReconciliation",
+        "amount": 48002,
+        "total": 48002,
+        "description": "Auto Reconciliation",
+        "createdAt": "2026-09-11T03:00:00.000Z",
+        "updatedAt": "2026-09-11T03:05:00.000Z",
+        "balanceAmount": 1049999
+      }
+    ],
+    "count": 2,
+    "balance": 1049999
+  },
+  "payment": {
+    "success": true,
+    "data": [
+      {
+        "subItems": [
+          {
+            "courier": "JNE",
+            "type": "typePayment",
+            "description": "SANITIZED-CNOTE-0003",
+            "amount": -9000,
+            "COD_AMOUNT": 0,
+            "COD_FEE": 0,
+            "estimatedSpecialPrice": 9000,
+            "estimatedPrice": 12300,
+            "status": "statusCompleted",
+            "cnote_no": "SANITIZED-CNOTE-0003",
+            "RECEIVER_NAME": "SENTINEL-RECEIVER-NAME",
+            "RECEIVER_PHONE": "SENTINEL-RECEIVER-PHONE"
+          }
+        ],
+        "status": "statusCleared",
+        "courier": "JNE",
+        "_id": "SANITIZEDINVOICE0003",
+        "inv_number": "SANITIZED-INV-0003",
+        "type": "typePayment",
+        "amount": 9000,
+        "total": 9000,
+        "description": "Payment for returned order SANITIZED-CNOTE-0003",
+        "createdAt": "2026-09-12T03:00:00.000Z",
+        "updatedAt": "2026-09-12T03:00:00.000Z"
+      },
+      {
+        "subItems": [],
+        "status": "statusCleared",
+        "courier": "system",
+        "_id": "SANITIZEDINVOICE0004",
+        "inv_number": "SANITIZED-INV-0004",
+        "type": "typePayment",
+        "amount": 25000,
+        "total": 25000,
+        "description": "Payment for Non-COD batch SANITIZED-BATCH-0001",
+        "createdAt": "2026-09-12T04:00:00.000Z",
+        "updatedAt": "2026-09-12T04:00:00.000Z"
+      }
+    ],
+    "count": 2,
+    "balance": 1015999
+  },
+  "refund": {
+    "success": true,
+    "data": [
+      {
+        "subItems": [],
+        "status": "statusCleared",
+        "courier": "JNE",
+        "_id": "SANITIZEDINVOICE0005",
+        "inv_number": "SANITIZED-INV-0005",
+        "type": "typeRefund",
+        "amount": -40000,
+        "total": -40000,
+        "description": "Claim approved for damaged or lost order SANITIZED-CNOTE-0004",
+        "createdAt": "2026-09-13T03:00:00.000Z",
+        "updatedAt": "2026-09-13T03:00:00.000Z"
+      }
+    ],
+    "count": 1,
+    "balance": 1055999
+  }
+}

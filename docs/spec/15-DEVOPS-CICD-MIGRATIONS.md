@@ -20,3 +20,5 @@ The migration role uses `DATABASE_URL`; the Next.js runtime uses a distinct
 `APP_DATABASE_URL` login that inherits `geraicuan_app`. It must not be a
 superuser, a `BYPASSRLS` role, or a table owner. Login credentials remain
 environment secrets; the migration provisions only the non-login grant role.
+
+PR-44 (migration 0040) adds SECURITY DEFINER numbering functions owned by the migration role. They do not require that role to be a superuser or `BYPASSRLS`: `shipment-reference-repository.integration.test.ts` re-owns them to a NOSUPERUSER NOBYPASSRLS role and exercises every path. That owner needs what a table owner already has — SELECT on users/memberships/tenants/outlets/platform_roles, SELECT/INSERT/UPDATE on `tenant_shipment_counters`, UPDATE(`public_reference`) and SELECT on shipments, INSERT on audit_events, and EXECUTE on policy helper functions such as `tenant_member_governance_authorized`.

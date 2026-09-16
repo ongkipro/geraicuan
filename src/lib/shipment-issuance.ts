@@ -1,5 +1,6 @@
 import "server-only";
 
+import { shipmentLabelHref } from "@/lib/shipment-number";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
 
@@ -13,6 +14,7 @@ import {
   type TenantTransaction,
 } from "@/db/tenant-context";
 import {
+  MengantarOrderPayloadError,
   orchestrateFixtureBackedMengantarOrders,
   type MengantarOrderTransportLookup,
 } from "@/lib/mengantar-order";
@@ -68,6 +70,12 @@ export async function confirmFixtureBackedShipmentIssuance(
   if (!batch || execution.batches.length !== 1) {
     throw new ShipmentIssuanceUnavailableError();
   }
+  // The batch stayed queued rather than being claimed (see
+  // `submitPreparedBatch`): nothing was submitted, so surface the safe code
+  // that already carries telemetry instead of a generic "unavailable" refusal.
+  if (batch.payloadRejectionCode) {
+    throw new MengantarOrderPayloadError(batch.payloadRejectionCode);
+  }
 
   const detail = await withTenantContext(
     input.db,
@@ -81,7 +89,7 @@ export async function confirmFixtureBackedShipmentIssuance(
   const awb = detail.provider?.awb ?? null;
   const labelHref =
     detail.status === "ISSUED" && awb
-      ? `/app/label/${encodeURIComponent(detail.shipmentId)}`
+      ? shipmentLabelHref(detail.publicReference)
       : null;
 
   return {

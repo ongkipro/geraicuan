@@ -209,10 +209,10 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
   })();
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader eyebrow="Wawasan" description="Pantau aktivitas kiriman, performa kurir, dan rincian biaya." actions={parsed.filterRejected ? null : <Button asChild variant="outline"><Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link></Button>} focusTargetId="analytics-page-heading" title="Analitik" />
 
-      <AnalyticsFilters key={canonicalQueryString} activeCount={activeCount} options={baseData.filterOptions} todayLocalDate={todayLocalDate} values={filterValues} />
+      <AnalyticsFilters key={canonicalQueryString} activeCount={activeCount} comparisonLabel={decisionContext.previousPeriodLabel} options={baseData.filterOptions} rangeLabel={decisionContext.periodLabel} timezoneLabel={decisionContext.timezoneLabel} todayLocalDate={todayLocalDate} values={filterValues} />
 
       <section aria-labelledby="period-context-title" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm"><div><h2 className="font-medium text-foreground" id="period-context-title">{decisionContext.periodLabel}</h2><p className="max-w-2xl text-muted-foreground">{decisionContext.timezoneLabel} · {decisionContext.presetLabel}. Kiriman dibuat memakai waktu pembuatan; resi terbit memakai waktu AWB provider.</p></div><p aria-live="polite" className="text-muted-foreground" id="hasil-analitik" role="status">Dibanding <strong className="font-medium text-foreground">{decisionContext.previousPeriodLabel}</strong> / {decisionContext.timezoneLabel}.</p></section>
 

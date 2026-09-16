@@ -86,7 +86,7 @@ export async function recoverShipmentUnpaidPayment(
       resolveTransport: resolveSanctionedUnpaidRecoveryFixtureTransport,
     });
 
-    revalidatePath(`/app/pengiriman/${shipmentId}`);
+    revalidatePath("/app/pengiriman/[shipmentId]", "page");
     revalidatePath("/app/pengiriman");
     return { recovered: result };
   } catch (error) {
@@ -96,7 +96,7 @@ export async function recoverShipmentUnpaidPayment(
       };
     }
     if (error instanceof ShipmentUnpaidRecoveryReconciliationRequiredError) {
-      revalidatePath(`/app/pengiriman/${shipmentId}`);
+      revalidatePath("/app/pengiriman/[shipmentId]", "page");
       revalidatePath("/app/pengiriman");
       return {
         error:

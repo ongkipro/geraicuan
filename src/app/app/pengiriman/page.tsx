@@ -1,4 +1,6 @@
 import { PackageSearch, Plus, Upload } from "lucide-react";
+import { CourierAwbStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -11,7 +13,9 @@ import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { RangeFilterForm } from "@/components/cms/range-filter-form";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
+import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,11 +31,14 @@ import { db } from "@/db/client";
 import { loadShipmentQueuePage } from "@/db/shipment-queue-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { isDataStale } from "@/lib/data-freshness";
 import { formatWibDateTime, formatWeight } from "@/lib/label-format";
 import {
   parseShipmentQueueQuery,
   SHIPMENT_QUEUE_PAGE_SIZE,
+  SHIPMENT_QUEUE_SUMMARY_ENTRIES,
+  SHIPMENT_STATUS_OPTIONS,
   SHIPMENT_STATUS_PRESENTATION,
   shipmentQueueHref,
 } from "@/lib/shipment-queue";
@@ -41,7 +48,7 @@ export const metadata: Metadata = { robots: { index: false } };
 
 type SearchValue = string | string[] | undefined;
 type ShipmentQueuePageProps = {
-  searchParams: Promise<{ page?: SearchValue; status?: SearchValue }>;
+  searchParams: Promise<Record<string, SearchValue>>;
 };
 
 async function requireTenantPrincipal() {
@@ -64,7 +71,13 @@ function delayResult<T>(promise: Promise<T>, delayMs: number) {
 
 export default async function ShipmentQueuePage({ searchParams }: ShipmentQueuePageProps) {
   const principal = await requireTenantPrincipal();
-  const query = parseShipmentQueueQuery(await searchParams);
+  const params = await searchParams;
+  const query = parseShipmentQueueQuery(params);
+  // PR-53: the same control, the same URL contract, on the queue's existing
+  // created basis.
+  const now = new Date();
+  const range = parseAnalyticsRange(params, now);
+  const rangeQuery = serializeAnalyticsRange(range);
   const auditScenario = process.env.NODE_ENV === "development"
     ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/pengiriman")
     : null;
@@ -80,6 +93,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
       loadShipmentQueuePage(tx, context, {
         page: query.page,
         pageSize,
+        range,
         status: query.status,
       }),
   );
@@ -96,6 +110,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
       ? [`Halaman ${query.page} tidak tersedia; halaman terakhir ditampilkan.`]
       : []),
   ];
+  const carry = Object.fromEntries(rangeQuery);
   const selectedStatus = query.status === "ALL"
     ? null
     : query.status === "ACTION_REQUIRED"
@@ -103,7 +118,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
       : SHIPMENT_STATUS_PRESENTATION[query.status];
 
   return (
-    <PageContainer width="data">
+    <PageContainer>
       <PageHeader eyebrow="Operasional kiriman"
         actions={
           <>
@@ -146,6 +161,28 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
           <p>Urutan aktivitas terbaru.</p>
         </div>
 
+        <RangeFilterForm action="/app/pengiriman" idPrefix="shipment-queue" now={now} preserved={{ status: query.status === "ALL" ? undefined : query.status }} range={range} />
+
+        {/* PR-52: every entry writes this page's own `status` URL state, and
+            its count comes from the same tenant-scoped pass as the rows below. */}
+        <StateSummaryPanel
+          action="/app/pengiriman"
+          entries={SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => ({
+            count: data.summary[entry.metricId],
+            description: entry.description,
+            label: entry.label,
+            metricId: entry.metricId,
+            value: entry.value,
+          }))}
+          label="Ringkasan status kiriman"
+          param="status"
+          preserved={carry}
+          selected={query.status}
+          selectedElsewhereLabel={
+            SHIPMENT_STATUS_OPTIONS.find((option) => option.value === query.status)?.label
+          }
+        />
+
         {/* Below md the toolbar stacks: the status filter takes the full width
             and the freshness control gets its own row, so neither overlaps. */}
         <DataTableToolbar
@@ -158,16 +195,16 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             />
           }
           isFiltered={query.status !== "ALL"}
-          resetHref="/app/pengiriman"
+          resetHref={shipmentQueueHref("ALL", 1, carry)}
         >
-          <ShipmentQueueFilter status={query.status} />
+          <ShipmentQueueFilter carry={carry} status={query.status} />
         </DataTableToolbar>
 
         {data.rows.length === 0 ? (
           <EmptyState
             action={
               <Button asChild>
-                <Link href={selectedStatus ? "/app/pengiriman" : "/app/pengiriman/baru"}>
+                <Link href={selectedStatus ? shipmentQueueHref("ALL", 1, carry) : "/app/pengiriman/baru"}>
                   {selectedStatus ? "Tampilkan semua kiriman" : "Buat kiriman pertama"}
                 </Link>
               </Button>
@@ -203,11 +240,11 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-card px-3">Nomor kiriman</TableHead>
+                <TableHead className="sticky left-0 z-10 bg-inherit px-3">Nomor kiriman</TableHead>
                 <TableHead className="px-3">Status / Pembayaran</TableHead>
-                <TableHead className="px-3">Penerima / Tujuan</TableHead>
+                <TableHead className="px-3">Penerima</TableHead>
                 <TableHead className="px-3">Paket / Outlet</TableHead>
-                <TableHead className="px-3">Layanan / Resi</TableHead>
+                <TableHead className="px-3">Ekspedisi / Resi</TableHead>
                 <TableHead className="px-3">Aktivitas terakhir</TableHead>
               </TableRow>
             </TableHeader>
@@ -216,10 +253,10 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                 const status = SHIPMENT_STATUS_PRESENTATION[row.status];
                 return (
                   <TableRow className="group" key={row.shipmentId}>
-                    <TableCell className="sticky left-0 z-10 bg-card px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                    <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                       <Link
-                        className="inline-flex min-h-11 max-w-40 items-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:underline md:min-h-8"
-                        href={`/app/pengiriman/${encodeURIComponent(row.shipmentId)}`}
+                        className="inline-flex min-h-11 items-center whitespace-nowrap text-primary underline-offset-4 hover:underline md:min-h-8"
+                        href={shipmentDetailHref(row.publicReference, carry)}
                       >
                         {row.publicReference}
                       </Link>
@@ -230,11 +267,8 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                         {row.isCod ? "COD" : "Non-COD"}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-44 whitespace-normal px-3">
-                      <span className="block wrap-anywhere">{row.recipientName}</span>
-                      <span className="block text-xs wrap-anywhere text-muted-foreground">
-                        {row.destinationAreaLabel}
-                      </span>
+                    <TableCell className="max-w-48 whitespace-normal px-3">
+                      <RecipientStack areaLabel={row.destinationAreaLabel} name={row.recipientName} phone={row.recipientPhone} />
                     </TableCell>
                     <TableCell className="max-w-44 whitespace-normal px-3">
                       {/* Wraps rather than truncates: an overflow-hidden nowrap
@@ -246,14 +280,11 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                         {formatWeight(row.packageWeightGrams)} · {row.outletName}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-40 whitespace-normal px-3">
-                      <span className="block wrap-anywhere">{row.providerService ?? "—"}</span>
-                      {row.awb ? (
-                        <span className="block break-all font-mono text-xs text-muted-foreground">{row.awb}</span>
-                      ) : null}
+                    <TableCell className="max-w-44 whitespace-normal px-3">
+                      <CourierAwbStack awb={row.awb} service={row.providerService} />
                     </TableCell>
-                    <TableCell className="max-w-32 whitespace-normal px-3 text-xs text-muted-foreground">
-                      {formatWibDateTime(row.updatedAt)}
+                    <TableCell className="px-3">
+                      <StackedDateTime value={row.updatedAt} />
                     </TableCell>
                   </TableRow>
                 );
@@ -264,7 +295,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
 
         {data.totalCount > 0 ? (
           <DataTablePagination
-            hrefForPage={(page) => shipmentQueueHref(query.status, page)}
+            hrefForPage={(page) => shipmentQueueHref(query.status, page, carry)}
             label="Paginasi antrean kiriman"
             page={data.page}
             summary={<span className="tabular-nums">{data.totalCount} kiriman</span>}

@@ -18,8 +18,18 @@ export function TableScrollRegion({ children, ref, ...props }: ComponentProps<"d
     observer.observe(region);
     const table = region.querySelector("table");
     if (table) observer.observe(table);
+    // Inside a closed <details> Chrome skips the content's layout, so a width
+    // change after hydration (the shell's sidebar settling at tablet widths)
+    // never reaches the region's own observer and the hint stays stale. The
+    // disclosure itself is laid out, so watch it and its toggle as well.
+    const details = region.closest("details");
+    if (details) observer.observe(details);
+    details?.addEventListener("toggle", measure);
     measure();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      details?.removeEventListener("toggle", measure);
+    };
   }, [children]);
 
   return (

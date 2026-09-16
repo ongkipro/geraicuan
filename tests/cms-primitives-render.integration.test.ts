@@ -1,12 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Truck } from "lucide-react";
+import { Building2, Store, Truck, UsersRound } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DataTableFacetFilter } from "@/components/cms/data-table-facet-filter";
 import { DataTablePagination, getPageNumbers } from "@/components/cms/data-table-pagination";
 import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
-import { ContentSection, SettingsLayout } from "@/components/cms/settings-layout";
+import { ContentSection, SettingsCard, SettingsLayout } from "@/components/cms/settings-layout";
 import { StatCard } from "@/components/cms/stat-card";
 import { DataTableShell } from "@/components/cms/data-table-shell";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -223,15 +223,38 @@ describe("DataTableFacetFilter", () => {
 });
 
 describe("SettingsLayout", () => {
-  it("marks only the current navigation item", () => {
-    const html = render(createElement(SettingsLayout, {
-      currentHref: "/app/pengaturan",
-      items: [
-        { href: "/app/pengaturan", label: "Outlet" },
-        { href: "/app/anggota", label: "Anggota" },
-      ],
+  const items = [
+    { description: "Nama toko dan format.", href: "/app/pengaturan", icon: Store, label: "Profil toko" },
+    { description: "Kesiapan outlet.", href: "/app/pengaturan/outlet", icon: Building2, label: "Outlet" },
+    { description: "Peran akses anggota.", href: "/app/anggota", icon: UsersRound, label: "Anggota & akses" },
+  ];
+
+  function renderLayout(currentHref: string) {
+    return render(createElement(SettingsLayout, {
+      currentHref,
+      indexHref: "/app/pengaturan",
+      items,
       title: "Pengaturan",
     }, createElement(ContentSection, { id: "outlet", title: "Outlet" }, "Form")));
+  }
+
+  it("lists the menu in order with one line of description and a chevron per row", () => {
+    const html = renderLayout("/app/pengaturan");
+    const menu = html.match(/<nav aria-label="Menu pengaturan"[\s\S]*?<\/nav>/)?.[0] ?? "";
+
+    expect(menu).toBeTruthy();
+    const order = [...menu.matchAll(/href="([^"]+)"/g)].map(([, href]) => href);
+    expect(order).toEqual(items.map(({ href }) => href));
+    for (const { description, label } of items) {
+      expect(menu).toContain(label.replace(/&/g, "&amp;"));
+      expect(menu).toContain(description);
+    }
+    // One chevron per row: the mobile index rows are tappable destinations.
+    expect(menu.split("lucide-chevron-right").length - 1).toBe(items.length);
+  });
+
+  it("marks only the current navigation item", () => {
+    const html = renderLayout("/app/pengaturan");
 
     // "true", not "page": the shell sidebar owns the page-level current item.
     expect(html).not.toContain('aria-current="page"');
@@ -242,5 +265,57 @@ describe("SettingsLayout", () => {
     expect(html).toContain('<nav aria-label="Menu pengaturan"');
     expect(html).toMatch(/<h1[^>]*>Pengaturan<\/h1>/);
     expect(html).toMatch(/<section aria-labelledby="outlet"[^>]*>.*<h3[^>]*id="outlet"[^>]*>Outlet<\/h3>/);
+  });
+
+  it("marks a subpage item current and carries a back link to the settings index", () => {
+    const html = renderLayout("/app/pengaturan/outlet");
+
+    const current = tagsWith(html, "a", 'aria-current="true"');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toContain('href="/app/pengaturan/outlet"');
+    // The back link lives outside the menu nav, so it is not a second menu row.
+    const menu = html.match(/<nav aria-label="Menu pengaturan"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    const backLinks = tagsWith(html, "a", 'aria-label="Kembali ke Pengaturan"');
+    expect(backLinks.every((tag) => tag.includes('href="/app/pengaturan"'))).toBe(true);
+    expect(backLinks.some((tag) => menu.includes(tag))).toBe(false);
+    expect(backLinks).toHaveLength(1);
+    expect(backLinks[0]).toContain("lg:hidden");
+  });
+
+  it("shows the whole menu, and no back link, on the settings index", () => {
+    const html = renderLayout("/app/pengaturan");
+    const menu = html.match(/<nav aria-label="Menu pengaturan"[\s\S]*?<\/nav>/)?.[0] ?? "";
+
+    expect(tagsWith(html, "a", 'aria-label="Kembali ke Pengaturan"')).toHaveLength(0);
+    expect(menu).toContain('href="/app/pengaturan"');
+    // Below lg the index IS the menu; a subpage hides it behind the back link.
+    expect(html.match(/<aside[^>]*>/)?.[0]).not.toContain("max-lg:hidden");
+    expect(renderLayout("/app/pengaturan/outlet").match(/<aside[^>]*>/)?.[0])
+      .toContain("max-lg:hidden");
+  });
+});
+
+describe("SettingsCard", () => {
+  it("renders title, description, badge, body, and footer actions", () => {
+    const html = render(createElement(SettingsCard, {
+      badge: "Terkunci",
+      description: "Satu baris penjelasan.",
+      footer: createElement("button", { type: "button" }, "Simpan"),
+      id: "card-title",
+      title: "Judul kartu",
+    }, "Isi kartu"));
+
+    expect(html).toMatch(/<h2[^>]*id="card-title"[^>]*>Judul kartu<\/h2>/);
+    expect(html).toContain("Satu baris penjelasan.");
+    expect(html).toContain("Isi kartu");
+    expect(html).toContain("Terkunci");
+    const footer = html.match(/<div[^>]*data-slot="card-footer"[^>]*>[\s\S]*?<\/div>/)?.[0] ?? "";
+    expect(footer).toContain("Simpan");
+    expect(footer).toContain("justify-end");
+  });
+
+  it("omits the footer divider when a card has no actions", () => {
+    const html = render(createElement(SettingsCard, { title: "Tanpa aksi" }, "Isi"));
+    expect(html).not.toContain('data-slot="card-footer"');
   });
 });

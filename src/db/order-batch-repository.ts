@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { appendLedgerForIssuedProviderOrder } from "@/db/ledger-repository";
+import { mengantarCourierOfService } from "@/lib/mengantar-couriers";
 import {
   providerBatches,
   providerOrderSnapshots,
@@ -35,12 +36,17 @@ export type ProviderOrderSource = {
   recipientAddress: string;
   destinationAreaId: string;
   destinationAreaLabel: string;
+  /** NULL when the area was never re-checked against the Mengantar account. */
+  destinationAreaVerifiedAt: Date | null;
   packageContent: string;
   weightGrams: number;
   quantity: number;
   declaredValueIdr: number;
   isCod: boolean;
   providerCodAmountIdr: number | null;
+  isHazardous: boolean;
+  recipientAddressLandmark: string | null;
+  shippingInstruction: string | null;
 };
 
 export type ProviderBatchScope = {
@@ -106,21 +112,45 @@ export function deriveProviderAccountKey(accountIdentity: string): string {
 }
 
 export function providerCourierFromService(providerService: string): string {
-  const normalized = providerService.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (normalized.startsWith("SICEPAT")) return "SiCepat";
-  if (normalized.startsWith("NINJA")) return "Ninja";
-  if (normalized.startsWith("JT")) return "JT";
-  if (normalized.startsWith("JNE")) return "JNE";
-  if (normalized.startsWith("SAP")) return "SAP";
-  if (!normalized) throw new OrderBatchUnavailableError();
-  return providerService.trim();
+  // The ladder this replaced named five couriers, so `iDexpressCargo` fell
+  // through and became a courier of its own. The list is now the provider's own
+  // catalogue (see `src/lib/mengantar-couriers.ts`), and a service key no known
+  // courier claims is still returned as it came rather than dropped.
+  if (!providerService.trim().replace(/[^A-Za-z0-9]/g, "")) {
+    throw new OrderBatchUnavailableError();
+  }
+  return mengantarCourierOfService(providerService) ?? providerService.trim();
 }
 
 export function requiresProviderAccountSerialization(courier: string): boolean {
   return ["JT", "Ninja", "SiCepat"].includes(providerCourierFromService(courier));
 }
 
-type SelectedOrderRow = {
+/** Draft-owned operational columns both order loaders read (PR-47). */
+type DraftOperationalColumns = {
+  destinationAreaVerifiedAt: Date | null;
+  isHazardous: boolean;
+  recipientAddressLandmark: string | null;
+  shippingInstruction: string | null;
+};
+
+const DRAFT_OPERATIONAL_SELECT = sql`
+  draft.destination_area_verified_at AS "destinationAreaVerifiedAt",
+  draft.is_hazardous AS "isHazardous",
+  draft.recipient_address_landmark AS "recipientAddressLandmark",
+  draft.shipping_instruction AS "shippingInstruction"
+`;
+
+function draftOperationalColumns(row: DraftOperationalColumns): DraftOperationalColumns {
+  return {
+    destinationAreaVerifiedAt: row.destinationAreaVerifiedAt,
+    isHazardous: row.isHazardous,
+    recipientAddressLandmark: row.recipientAddressLandmark,
+    shippingInstruction: row.shippingInstruction,
+  };
+}
+
+type SelectedOrderRow = DraftOperationalColumns & {
   shipmentId: string;
   outletId: string;
   pickupAddressId: string;
@@ -130,6 +160,14 @@ type SelectedOrderRow = {
   providerService: string;
   currency: "IDR";
   shippingAmountIdr: number;
+  /**
+   * T-146: what Mengantar actually deducts at settlement — `estimatedSpecialPrice`
+   * falling back to `estimatedPrice` then `price` — kept separate from
+   * `shippingAmountIdr` (`price`, the buyer's basis) so the buyer-facing figure
+   * never moves. Same COALESCE order `shipment-draft-experience.tsx` uses for
+   * COD-SELLER-PAYOUT-IDR.
+   */
+  providerChargedShippingIdr: number;
   insuranceAmountIdr: number | null;
   destinationAreaId: string;
   destinationAreaLabel: string;
@@ -207,13 +245,20 @@ async function loadAndLockSelections(
     SELECT
       shipment.id AS "shipmentId",
       shipment.outlet_id AS "outletId",
-      outlet.default_pickup_address_id AS "pickupAddressId",
+      -- T-157: the pickup point chosen for this shipment. A pre-T-157 draft has
+      -- none, and falls back to the outlet's default pair.
+      COALESCE(draft.pickup_address_id, outlet.default_pickup_address_id) AS "pickupAddressId",
       estimate.id AS "estimateSnapshotId",
       service.id AS "estimateServiceId",
       estimate.credential_source AS "credentialSource",
       service.provider_service AS "providerService",
       service.currency AS "currency",
       service.shipping_amount_idr AS "shippingAmountIdr",
+      COALESCE(
+        service.special_price_idr,
+        service.normal_price_idr,
+        service.shipping_amount_idr
+      ) AS "providerChargedShippingIdr",
       service.insurance_amount_idr AS "insuranceAmountIdr",
       estimate.destination_area_id AS "destinationAreaId",
       estimate.destination_area_label AS "destinationAreaLabel",
@@ -223,6 +268,7 @@ async function loadAndLockSelections(
       draft.declared_value_idr AS "declaredValueIdr",
       draft.is_cod AS "isCod",
       cod.provider_cod_amount_idr AS "providerCodAmountIdr",
+      ${DRAFT_OPERATIONAL_SELECT},
       sender.name AS "senderName",
       sender.phone AS "senderPhone",
       sender.address AS "senderAddress",
@@ -247,7 +293,7 @@ async function loadAndLockSelections(
       AND estimate.shipment_id = shipment.id
       AND estimate.outlet_id = shipment.outlet_id
       AND estimate.tenant_id = shipment.tenant_id
-      AND estimate.origin_area_id = outlet.default_origin_area_id
+      AND estimate.origin_area_id = COALESCE(draft.origin_area_id, outlet.default_origin_area_id)
       AND estimate.destination_area_id = draft.destination_area_id
       AND estimate.destination_area_label = draft.destination_area_label
       AND estimate.weight_grams = draft.package_weight_grams
@@ -292,7 +338,7 @@ async function loadAndLockSelections(
   return selected.rows;
 }
 
-type ExistingConfirmationRow = {
+type ExistingConfirmationRow = DraftOperationalColumns & {
   batchId: string;
   status: (typeof providerBatches.$inferSelect)["status"];
   orderStatus: (typeof providerOrderSnapshots.$inferSelect)["status"];
@@ -342,13 +388,17 @@ async function loadExistingConfirmationBatches(
       batch.provider_account_key AS "providerAccountKey",
       shipment.id AS "shipmentId",
       shipment.status AS "shipmentStatus",
-      outlet.default_pickup_address_id AS "pickupAddressId",
+      COALESCE(draft.pickup_address_id, outlet.default_pickup_address_id) AS "pickupAddressId",
       provider_order.estimate_snapshot_id AS "estimateSnapshotId",
       provider_order.estimate_service_id AS "estimateServiceId",
       provider_order.provider_service AS "providerService",
       provider_order.status AS "orderStatus",
       provider_order.currency,
       provider_order.shipping_amount_idr AS "shippingAmountIdr",
+      COALESCE(
+        provider_order.provider_charged_shipping_idr,
+        provider_order.shipping_amount_idr
+      ) AS "providerChargedShippingIdr",
       provider_order.insurance_amount_idr AS "insuranceAmountIdr",
       provider_order.destination_area_id AS "destinationAreaId",
       provider_order.destination_area_label AS "destinationAreaLabel",
@@ -358,6 +408,7 @@ async function loadExistingConfirmationBatches(
       draft.declared_value_idr AS "declaredValueIdr",
       draft.is_cod AS "isCod",
       provider_order.provider_cod_amount_idr AS "providerCodAmountIdr",
+      ${DRAFT_OPERATIONAL_SELECT},
       sender.name AS "senderName",
       sender.phone AS "senderPhone",
       sender.address AS "senderAddress",
@@ -379,12 +430,14 @@ async function loadExistingConfirmationBatches(
     JOIN outlets AS outlet
       ON outlet.id = batch.outlet_id
       AND outlet.tenant_id = batch.tenant_id
-      AND outlet.default_pickup_address_id = batch.pickup_address_id
     JOIN shipment_drafts AS draft
       ON draft.shipment_id = shipment.id
       AND draft.tenant_id = shipment.tenant_id
       AND draft.destination_area_id = provider_order.destination_area_id
       AND draft.destination_area_label = provider_order.destination_area_label
+      -- T-157: the batch must still be leaving from the pickup point this
+      -- shipment chose (or, for a pre-T-157 draft, the outlet default).
+      AND COALESCE(draft.pickup_address_id, outlet.default_pickup_address_id) = batch.pickup_address_id
     JOIN shipment_parties AS sender
       ON sender.shipment_id = shipment.id
       AND sender.tenant_id = shipment.tenant_id
@@ -472,6 +525,7 @@ async function loadExistingConfirmationBatches(
               declaredValueIdr: row.declaredValueIdr,
               isCod: row.isCod,
               providerCodAmountIdr: row.providerCodAmountIdr,
+              ...draftOperationalColumns(row),
             }))
         : [],
     };
@@ -609,6 +663,7 @@ export async function prepareProviderBatches(
         destinationAreaLabel: row.destinationAreaLabel,
         currency: row.currency,
         shippingAmountIdr: row.shippingAmountIdr,
+        providerChargedShippingIdr: row.providerChargedShippingIdr,
         insuranceAmountIdr: row.insuranceAmountIdr,
         isCod: row.isCod,
         providerCodAmountIdr: row.providerCodAmountIdr,
@@ -651,6 +706,7 @@ export async function prepareProviderBatches(
         declaredValueIdr: row.declaredValueIdr,
         isCod: row.isCod,
         providerCodAmountIdr: row.providerCodAmountIdr,
+        ...draftOperationalColumns(row),
       })),
     });
   }

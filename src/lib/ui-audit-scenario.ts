@@ -67,6 +67,17 @@ export type UiAuditScenario =
   | "settings-error"
   | "settings-first-run"
   | "settings-many"
+  | "settings-outlet-error"
+  | "settings-outlet-stream"
+  | "settings-pickup-empty"
+  | "settings-pickup-error"
+  | "settings-pickup-list"
+  | "settings-pickup-provider-error"
+  | "settings-pickup-stream"
+  | "settings-connection-empty"
+  | "settings-connection-many"
+  | "settings-koneksi-error"
+  | "settings-koneksi-stream"
   | "settings-private-auth-error"
   | "settings-private-attention"
   | "settings-provider-error"
@@ -93,6 +104,10 @@ export type UiAuditScenario =
   | "label-index-empty"
   | "label-index-error"
   | "label-index-stream"
+  | "print-history-empty"
+  | "print-history-error"
+  | "shipment-report-empty"
+  | "shipment-report-error"
   | "shipment-detail-error"
   | "shipment-detail-payment-paying"
   | "shipment-detail-stale"
@@ -101,6 +116,7 @@ export type UiAuditScenario =
   | "shipment-draft-cod-ineligible"
   | "shipment-draft-error"
   | "shipment-draft-estimate-error"
+  | "shipment-draft-pickup-choice"
   | "shipment-draft-saved"
   | "shipment-draft-stream"
   | "shipment-draft-unconfigured"
@@ -114,7 +130,11 @@ export type UiAuditScenario =
   | "shipment-rts-filtered-empty"
   | "shipment-rts-invalid-query"
   | "shipment-rts-paginated"
-  | "shipment-rts-stream";
+  | "shipment-rts-stream"
+  | "resi-lookup-error"
+  | "resi-lookup-found"
+  | "resi-lookup-limited"
+  | "resi-lookup-missing";
 
 export type CmsUiAuditState =
   | "first-run"
@@ -148,6 +168,7 @@ type UiAuditScenarioContract = {
   mode: "read-only";
   ownerTask?: `T-${number}`;
   route:
+    | "/app/cek-resi"
     | "/app/cek-tarif"
     | "/app"
     | "/app/analitik"
@@ -155,11 +176,16 @@ type UiAuditScenarioContract = {
     | "/app/keuangan"
     | "/app/anggota"
     | "/app/pengaturan"
+    | "/app/pengaturan/outlet"
+    | "/app/pengaturan/pickup"
+    | "/app/pengaturan/koneksi"
     | "/app/kontak"
     | "/app/kontak/baru"
     | "/app/kontak/[contactId]"
     | "/app/label"
     | "/app/label/[shipmentId]"
+    | "/app/laporan/cetak-resi"
+    | "/app/laporan/pengiriman"
     | "/app/pengiriman"
     | "/app/pengiriman/baru"
     | "/app/pengiriman/rts"
@@ -172,6 +198,10 @@ type UiAuditScenarioContract = {
 };
 
 export const UI_AUDIT_SCENARIO_CONTRACTS = {
+  "resi-lookup-found": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "populated" },
+  "resi-lookup-missing": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "not-found" },
+  "resi-lookup-limited": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "partial-error" },
+  "resi-lookup-error": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "route-error" },
   "quick-rate-demo": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "populated" },
   "quick-rate-empty": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "healthy-empty" },
   "quick-rate-provider-error": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "partial-error" },
@@ -198,6 +228,10 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "label-index-empty": { mode: "read-only", route: "/app/label", state: "healthy-empty" },
   "label-index-error": { mode: "read-only", route: "/app/label", state: "route-error" },
   "label-index-stream": { mode: "read-only", route: "/app/label", state: "loading" },
+  "shipment-report-empty": { mode: "read-only", ownerTask: "T-165", route: "/app/laporan/pengiriman", state: "healthy-empty" },
+  "shipment-report-error": { mode: "read-only", ownerTask: "T-165", route: "/app/laporan/pengiriman", state: "route-error" },
+  "print-history-empty": { mode: "read-only", ownerTask: "T-166", route: "/app/laporan/cetak-resi", state: "healthy-empty" },
+  "print-history-error": { mode: "read-only", ownerTask: "T-166", route: "/app/laporan/cetak-resi", state: "route-error" },
   "analytics-first-run": { mode: "read-only", route: "/app/analitik", state: "first-run" },
   "analytics-page-error": { mode: "read-only", route: "/app/analitik", state: "route-error" },
   "analytics-stale": { mode: "read-only", route: "/app/analitik", state: "stale" },
@@ -253,15 +287,26 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "platform-tenant-provision-error": { mode: "read-only", route: "/platform/tenant", state: "partial-error" },
   "platform-tenant-provision-success": { mode: "read-only", route: "/platform/tenant", state: "primary-success" },
   "platform-tenant-stream": { mode: "read-only", route: "/platform/tenant", state: "loading" },
-  "settings-empty": { mode: "read-only", route: "/app/pengaturan", state: "healthy-empty" },
-  "settings-error": { mode: "read-only", route: "/app/pengaturan", state: "route-error" },
-  "settings-first-run": { mode: "read-only", route: "/app/pengaturan", state: "first-run" },
-  "settings-many": { mode: "read-only", ownerTask: "T-53", route: "/app/pengaturan", state: "populated" },
-  "settings-private-auth-error": { mode: "read-only", route: "/app/pengaturan", state: "partial-error" },
-  "settings-private-attention": { mode: "read-only", route: "/app/pengaturan", state: "partial-error" },
-  "settings-provider-error": { mode: "read-only", route: "/app/pengaturan", state: "partial-error" },
-  "settings-stream": { mode: "read-only", route: "/app/pengaturan", state: "loading" },
-  "settings-twenty": { mode: "read-only", ownerTask: "T-53", route: "/app/pengaturan", state: "populated" },
+  "settings-error": { mode: "read-only", ownerTask: "T-156", route: "/app/pengaturan", state: "route-error" },
+  "settings-stream": { mode: "read-only", ownerTask: "T-156", route: "/app/pengaturan", state: "loading" },
+  "settings-empty": { mode: "read-only", route: "/app/pengaturan/outlet", state: "healthy-empty" },
+  "settings-first-run": { mode: "read-only", route: "/app/pengaturan/outlet", state: "first-run" },
+  "settings-many": { mode: "read-only", ownerTask: "T-53", route: "/app/pengaturan/outlet", state: "populated" },
+  "settings-outlet-error": { mode: "read-only", route: "/app/pengaturan/outlet", state: "route-error" },
+  "settings-outlet-stream": { mode: "read-only", route: "/app/pengaturan/outlet", state: "loading" },
+  "settings-private-auth-error": { mode: "read-only", ownerTask: "T-158", route: "/app/pengaturan/koneksi", state: "partial-error" },
+  "settings-private-attention": { mode: "read-only", ownerTask: "T-158", route: "/app/pengaturan/koneksi", state: "partial-error" },
+  "settings-connection-empty": { mode: "read-only", ownerTask: "T-158", route: "/app/pengaturan/koneksi", state: "healthy-empty" },
+  "settings-connection-many": { mode: "read-only", ownerTask: "T-158", route: "/app/pengaturan/koneksi", state: "populated" },
+  "settings-koneksi-error": { mode: "read-only", ownerTask: "T-158", route: "/app/pengaturan/koneksi", state: "route-error" },
+  "settings-koneksi-stream": { mode: "read-only", ownerTask: "T-158", route: "/app/pengaturan/koneksi", state: "loading" },
+  "settings-provider-error": { mode: "read-only", route: "/app/pengaturan/outlet", state: "partial-error" },
+  "settings-twenty": { mode: "read-only", ownerTask: "T-53", route: "/app/pengaturan/outlet", state: "populated" },
+  "settings-pickup-empty": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "healthy-empty" },
+  "settings-pickup-error": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "route-error" },
+  "settings-pickup-list": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "populated" },
+  "settings-pickup-provider-error": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "partial-error" },
+  "settings-pickup-stream": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "loading" },
   "shipment-detail-error": { mode: "read-only", route: "/app/pengiriman/[shipmentId]", state: "route-error" },
   "shipment-detail-payment-paying": { mode: "read-only", route: "/app/pengiriman/[shipmentId]", state: "partial-error" },
   "shipment-detail-stale": { mode: "read-only", route: "/app/pengiriman/[shipmentId]", state: "stale" },
@@ -270,6 +315,7 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "shipment-draft-cod-ineligible": { mode: "read-only", route: "/app/pengiriman/baru", state: "populated" },
   "shipment-draft-error": { mode: "read-only", route: "/app/pengiriman/baru", state: "route-error" },
   "shipment-draft-estimate-error": { mode: "read-only", route: "/app/pengiriman/baru", state: "partial-error" },
+  "shipment-draft-pickup-choice": { mode: "read-only", ownerTask: "T-157", route: "/app/pengiriman/baru", state: "populated" },
   "shipment-draft-saved": { mode: "read-only", route: "/app/pengiriman/baru", state: "primary-success" },
   "shipment-draft-stream": { mode: "read-only", route: "/app/pengiriman/baru", state: "loading" },
   "shipment-draft-unconfigured": { mode: "read-only", route: "/app/pengiriman/baru", state: "healthy-empty" },
@@ -323,6 +369,11 @@ const COMMON_PAGE_STATES = [
 ] as const satisfies readonly CmsUiAuditState[];
 
 export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
+  {
+    kind: "page", ownerTask: "T-161", roles: ["TENANT_ADMIN", "OPERATOR"],
+    route: "/app/cek-resi", source: "src/app/app/cek-resi/page.tsx",
+    states: [...COMMON_PAGE_STATES, "invalid-query", "not-found", "partial-error", "pending", "unauthorized"],
+  },
   {
     kind: "page", ownerTask: "T-143", roles: ["TENANT_ADMIN", "OPERATOR"],
     route: "/app/cek-tarif", source: "src/app/app/cek-tarif/page.tsx",
@@ -442,6 +493,30 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
   },
   {
     kind: "page",
+    ownerTask: "T-165",
+    roles: ["TENANT_ADMIN"],
+    route: "/app/laporan/pengiriman",
+    source: "src/app/app/laporan/pengiriman/page.tsx",
+    states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "unauthorized"],
+  },
+  {
+    kind: "endpoint",
+    ownerTask: "T-165",
+    roles: ["TENANT_ADMIN"],
+    route: "/app/laporan/pengiriman/export.csv",
+    source: "src/app/app/laporan/pengiriman/export.csv/route.ts",
+    states: ["invalid-query", "primary-success", "route-error", "unauthorized"],
+  },
+  {
+    kind: "page",
+    ownerTask: "T-166",
+    roles: ["TENANT_ADMIN"],
+    route: "/app/laporan/cetak-resi",
+    source: "src/app/app/laporan/cetak-resi/page.tsx",
+    states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "unauthorized"],
+  },
+  {
+    kind: "page",
     ownerTask: "T-44",
     roles: ["TENANT_ADMIN"],
     route: "/app/keuangan",
@@ -450,10 +525,34 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
   },
   {
     kind: "page",
-    ownerTask: "T-45",
+    ownerTask: "T-156",
     roles: ["TENANT_ADMIN"],
     route: "/app/pengaturan",
     source: "src/app/app/pengaturan/page.tsx",
+    states: ["loading", "populated", "route-error", "pending", "primary-success", "unauthorized"],
+  },
+  {
+    kind: "page",
+    ownerTask: "T-157",
+    roles: ["TENANT_ADMIN"],
+    route: "/app/pengaturan/pickup",
+    source: "src/app/app/pengaturan/pickup/page.tsx",
+    states: [...COMMON_PAGE_STATES, "partial-error", "pending", "primary-success", "unauthorized"],
+  },
+  {
+    kind: "page",
+    ownerTask: "T-158",
+    roles: ["TENANT_ADMIN"],
+    route: "/app/pengaturan/koneksi",
+    source: "src/app/app/pengaturan/koneksi/page.tsx",
+    states: [...COMMON_PAGE_STATES, "partial-error", "pending", "primary-success", "unauthorized"],
+  },
+  {
+    kind: "page",
+    ownerTask: "T-45",
+    roles: ["TENANT_ADMIN"],
+    route: "/app/pengaturan/outlet",
+    source: "src/app/app/pengaturan/outlet/page.tsx",
     states: ["first-run", ...COMMON_PAGE_STATES, "partial-error", "pending", "primary-success", "unauthorized"],
   },
   {
@@ -499,6 +598,11 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
 ] as const satisfies readonly CmsUiAuditRouteContract[];
 
 export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
+  {
+    consumers: ["/app/cek-resi"], exportName: "lookupShipmentTracking", ownerTask: "T-161",
+    roles: ["TENANT_ADMIN", "OPERATOR"], source: "src/app/app/cek-resi/actions.ts",
+    states: ["invalid-query", "not-found", "partial-error", "pending", "populated", "unauthorized"],
+  },
   {
     consumers: ["/app/cek-tarif"], exportName: "checkShippingRates", ownerTask: "T-143",
     roles: ["TENANT_ADMIN", "OPERATOR"], source: "src/app/app/cek-tarif/actions.ts",
@@ -573,7 +677,7 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     states: ["healthy-empty", "loading", "partial-error", "populated", "unauthorized"],
   },
   {
-    consumers: ["/app/pengaturan"],
+    consumers: ["/app/pengaturan/pickup"],
     exportName: "loadMengantarPickupOptions",
     ownerTask: "T-52",
     roles: ["TENANT_ADMIN"],
@@ -597,7 +701,7 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     states: ["partial-error", "pending", "primary-success", "unauthorized"],
   },
   {
-    consumers: ["/app/pengaturan"],
+    consumers: ["/app/pengaturan/koneksi"],
     exportName: "savePrivateMengantarCredential",
     ownerTask: "T-45",
     roles: ["TENANT_ADMIN"],
@@ -605,7 +709,7 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     states: ["partial-error", "pending", "primary-success", "unauthorized"],
   },
   {
-    consumers: ["/app/pengaturan"],
+    consumers: ["/app/pengaturan/koneksi"],
     exportName: "switchMengantarToPlatformDefault",
     ownerTask: "T-45",
     roles: ["TENANT_ADMIN"],
@@ -613,9 +717,25 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     states: ["partial-error", "pending", "primary-success", "unauthorized"],
   },
   {
-    consumers: ["/app/pengaturan"],
-    exportName: "saveOutletSettings",
-    ownerTask: "T-45",
+    consumers: ["/app/pengaturan/pickup"],
+    exportName: "addOutletPickupPoint",
+    ownerTask: "T-157",
+    roles: ["TENANT_ADMIN"],
+    source: "src/app/app/pengaturan/actions.ts",
+    states: ["partial-error", "pending", "primary-success", "unauthorized"],
+  },
+  {
+    consumers: ["/app/pengaturan/pickup"],
+    exportName: "setDefaultOutletPickupPoint",
+    ownerTask: "T-157",
+    roles: ["TENANT_ADMIN"],
+    source: "src/app/app/pengaturan/actions.ts",
+    states: ["partial-error", "pending", "primary-success", "unauthorized"],
+  },
+  {
+    consumers: ["/app/pengaturan/pickup"],
+    exportName: "removeOutletPickupPoint",
+    ownerTask: "T-157",
     roles: ["TENANT_ADMIN"],
     source: "src/app/app/pengaturan/actions.ts",
     states: ["partial-error", "pending", "primary-success", "unauthorized"],

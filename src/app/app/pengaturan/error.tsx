@@ -4,15 +4,17 @@ import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-import { administrationNavigation } from "@/app/app/pengaturan/settings-nav";
+import {
+  administrationNavigation,
+  SETTINGS_INDEX_HREF,
+} from "@/app/app/pengaturan/settings-nav";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { SettingsLayout } from "@/components/cms/settings-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-
-export default function OutletSettingsError({ reset }: { reset: () => void }) {
+export default function TenantProfileSettingsError({ reset }: { reset: () => void }) {
   const errorTitleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,22 +22,23 @@ export default function OutletSettingsError({ reset }: { reset: () => void }) {
   }, []);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <SettingsLayout
         currentHref="/app/pengaturan"
         header={
           <PageHeader
-            description="Kelola lokasi pickup dan koneksi pengiriman outlet."
+            description="Identitas toko dan format angka, tanggal, dan nomor kiriman."
             eyebrow="Pengaturan"
-            title="Outlet & koneksi"
+            title="Profil toko"
           />
         }
+        indexHref={SETTINGS_INDEX_HREF}
         items={administrationNavigation}
-        navLabel="Administrasi"
+        navLabel="Menu pengaturan"
       >
         <Alert className="lg:max-w-xl" role="alert" variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <AlertTitle ref={errorTitleRef} tabIndex={-1}>Pengaturan outlet belum dapat dimuat</AlertTitle>
+          <AlertTitle ref={errorTitleRef} tabIndex={-1}>Profil toko belum dapat dimuat</AlertTitle>
           <AlertDescription className="space-y-4">
             <p>Coba lagi. Jika masalah berlanjut, hubungi pengelola platform tanpa mengirim kredensial.</p>
             <div className="flex flex-wrap gap-2">

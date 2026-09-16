@@ -13,7 +13,7 @@ const now = new Date("2026-09-15T01:00:00Z");
 const context: AnalyticsResolvedRegionProps = {
   activeDimensionCount: 0, canonicalQuery: "rentang=30-hari", eventBasis: "created", periodLabel: "17 Agu – 15 Sep 2026", previousPeriodLabel: "18 Jul – 16 Agu 2026", range: parseAnalyticsRange({ rentang: "30-hari" }, now), role: "TENANT_ADMIN", timezoneLabel: "WIB (UTC+07:00)",
 };
-const kpis = { createdCount: 10, issuedCount: 8, resolvedSubmissionCount: 10, providerShippingIdr: 20000, codServiceFeeIdr: 1000, codVatIdr: 110, codPrincipalIdr: 100000, cogsIdr: 50000, netMarginIdr: 28890 };
+const kpis = { createdCount: 10, issuedCount: 8, resolvedSubmissionCount: 10, providerShippingIdr: 20000, codServiceFeeIdr: 1000, codVatIdr: 110, codDisbursementEstimateIdr: 78890 };
 const comparison: ShipmentKpiComparison = { current: kpis, previous: kpis, eventGeneratedAt: now, backlogSnapshot: { asOf: now, awaitingPaymentCount: 0, needsActionCount: 0 } };
 
 describe("analytics progressive disclosure", () => {
@@ -39,20 +39,22 @@ describe("analytics progressive disclosure", () => {
     expect(disclosure).toContain("Volume rendah");
     expect(disclosure).toContain("Outcome terselesaikan");
   });
-  it("leaves principal and estimated margin visible with all four costs available on demand", async () => {
+  it("keeps shipping, the COD fee and the disbursement estimate visible with the fee split available on demand", async () => {
     const html = renderToStaticMarkup(await AnalyticsFinancialRegion({ promise: Promise.resolve(comparison) }));
     expect(html).not.toMatch(/<details[^>]*\bopen(?:=|>)/);
     const disclosure = /<details[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
     const outside = html.replace(disclosure, "");
-    for (const cost of ["Ongkir provider", "Biaya layanan COD", "PPN biaya layanan", "COGS / Modal HPP"]) expect(outside).not.toContain(cost);
-    expect(outside).toContain("Pokok COD (liabilitas)");
-    expect(disclosure).toContain("Ongkir provider");
-    expect(disclosure).toContain("Biaya layanan COD");
-    expect(disclosure).toContain("PPN biaya layanan");
-    expect(disclosure).toContain("COGS / Modal HPP");
-    expect(disclosure).not.toContain("Pokok COD (liabilitas)");
-    expect(html.indexOf("Net Margin (Estimasi)")).toBeLessThan(html.indexOf("<details"));
-    expect(html).toContain("bukan kas yang sudah diterima");
+    expect(outside).toContain("Biaya kirim Mengantar");
+    expect(outside).toContain("Rp\u00a020.000");
+    expect(outside).toContain("Biaya COD");
+    expect(outside).toContain("Rp\u00a01.110");
+    expect(outside).toContain("Estimasi dana dicairkan Mengantar");
+    expect(outside).toContain("Rp\u00a078.890");
+    for (const part of ["Biaya layanan COD", "PPN biaya layanan COD"]) {
+      expect(outside).not.toContain(part);
+      expect(disclosure).toContain(part);
+    }
+    expect(html).toContain("bukan dana yang sudah cair");
     expect(html).not.toContain("NaN");
   });
   it("keeps unresolved counts prominent even if their signed amounts cancel to zero", async () => {

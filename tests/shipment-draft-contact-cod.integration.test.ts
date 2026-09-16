@@ -63,21 +63,56 @@ describe("shipment draft contact and COD experience", () => {
   it("renders both contact searches with distinct accessible result regions", () => {
     const markup = renderToStaticMarkup(createElement(ShipmentDraftForm, {
       autoFocusFirstField: false,
-      outlets: [{ id: "00000000-0000-0000-0000-000000000027", name: "Outlet fixture" }],
+      outlets: [{ id: "00000000-0000-0000-0000-000000000027", name: "Outlet fixture", pickupPoints: [] }],
       submissionId: "00000000-0000-4000-8000-000000000040",
     }));
 
-    expect(occurrences(markup, 'type="search"')).toBe(2);
+    // PR-48: the contact picker is now the shared combobox — a role="combobox"
+    // trigger (id kept stable) whose in-popup CommandInput only renders once
+    // opened, so SSR markup asserts on the always-rendered trigger contract.
+    expect(occurrences(markup, 'role="combobox"')).toBeGreaterThanOrEqual(2);
     expect(markup).toContain('id="senderContactQuery"');
     expect(markup).toContain('id="recipientContactQuery"');
-    expect(markup).toContain('aria-controls="sender-contact-results"');
-    expect(markup).toContain('aria-controls="recipient-contact-results"');
+    expect(markup).toContain('aria-controls="senderContactQuery-list"');
+    expect(markup).toContain('aria-controls="recipientContactQuery-list"');
+    expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('noValidate=""');
-    expect(occurrences(markup, "min-h-11")).toBeGreaterThanOrEqual(18);
+    expect(occurrences(markup, "min-h-11")).toBeGreaterThanOrEqual(14);
     expect(markup).toContain('name="destinationMode"');
     expect(markup).toContain("Area tujuan Mengantar");
     expect(markup).not.toContain("ID area tujuan");
     expect(markup.indexOf("Outlet asal")).toBeLessThan(markup.indexOf("Area tujuan Mengantar"));
+  });
+
+  // Owner steering 2026-09-16: the form read as one long sheet with no visible break
+  // between origin, sender, recipient and package. Each section is a card whose headline
+  // sits on the shared muted band, and the first section is no longer unlabelled.
+  it("separates the draft form into named sections with banded headlines", () => {
+    const markup = renderToStaticMarkup(createElement(ShipmentDraftForm, {
+      autoFocusFirstField: false,
+      outlets: [{ id: "00000000-0000-0000-0000-000000000027", name: "Outlet fixture", pickupPoints: [] }],
+      submissionId: "00000000-0000-4000-8000-000000000041",
+    }));
+
+    // The headline now opens with a lucide marker, so read the heading's text content.
+    const headings = [...markup.matchAll(/<h2[^>]*data-slot="card-title"[^>]*>([\s\S]*?)<\/h2>/g)]
+      .map(([, inner]) => inner.replace(/<[^>]*>/g, "").trim());
+    expect(headings).toEqual([
+      "Gudang asal",
+      "Pengirim",
+      "Penerima",
+      "Paket",
+      "Instruksi dan penanganan",
+      "Nilai dan pembayaran",
+    ]);
+    // Every one of those headlines carries the band, not just the first.
+    const banded = [...markup.matchAll(/<div[^>]*data-slot="card-header"[^>]*class="([^"]*)"/g)]
+      .filter(([, className]) => className.includes("bg-muted/40") && className.includes("border-b"));
+    expect(banded).toHaveLength(headings.length);
+    // Every section headline carries an icon marker, and the icon is decorative only.
+    const markedHeadings = [...markup.matchAll(/<h2[^>]*data-slot="card-title"[^>]*>([\s\S]*?)<\/h2>/g)]
+      .filter(([, inner]) => /<svg[^>]*aria-hidden="true"/.test(inner));
+    expect(markedHeadings).toHaveLength(headings.length);
   });
 
   it("shows the selected contact and chosen address provenance", () => {
@@ -118,10 +153,10 @@ describe("shipment draft contact and COD experience", () => {
         services: [{
           codBreakdown: {
             goodsValueIdr: 100_000,
-            providerCodAmountIdr: 113_663,
-            serviceFeeIdr: 3_300,
+            providerCodAmountIdr: 113_790,
+            serviceFeeIdr: 3_414,
             shippingAmountIdr: 10_000,
-            vatAmountIdr: 363,
+            vatAmountIdr: 376,
           },
           codEligible: true,
           deliveryEstimate: "2–3 hari",
@@ -136,9 +171,9 @@ describe("shipment draft contact and COD experience", () => {
     expect(text).toContain("Layanan fixture T27");
     expect(text).toContain("Nilai barang dideklarasikan Rp 100.000");
     expect(text).toContain("Ongkir penyedia Rp 10.000");
-    expect(text).toContain("Biaya layanan COD GeraiCUAN Rp 3.300");
-    expect(text).toContain("PPN biaya layanan Rp 363");
-    expect(text).toContain("Total ditagih ke pelanggan Rp 113.663");
+    expect(text).toContain("Biaya COD Rp 3.414");
+    expect(text).toContain("PPN biaya COD Rp 376");
+    expect(text).toContain("Total ditagih ke pelanggan Rp 113.790");
     expect(text).toContain("belum mengonfirmasi layanan atau membuat pesanan ke penyedia");
   });
 

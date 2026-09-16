@@ -16,7 +16,6 @@ const errors = vi.hoisted(() => ({
 
 const actionMocks = vi.hoisted(() => ({
   loadMengantarPickupOptions: vi.fn(async () => ({})),
-  saveOutletSettings: vi.fn(async () => ({})),
   savePrivateMengantarCredential: vi.fn(async () => ({})),
   switchMengantarToPlatformDefault: vi.fn(async () => ({})),
 }));
@@ -107,7 +106,7 @@ function outlet(overrides: Record<string, unknown> = {}) {
 }
 
 async function renderPage(activeOutletId?: string) {
-  const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/page");
+  const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/outlet/page");
   return renderToStaticMarkup(await OutletSettingsPage({
     searchParams: Promise.resolve(activeOutletId ? { outlet: activeOutletId } : {}),
   }));
@@ -139,7 +138,7 @@ beforeEach(() => {
 describe("Outlet settings page acceptance", () => {
   it("redirects an unauthenticated request before entering tenant context or reading settings", async () => {
     mocks.authorizationDenied = true;
-    const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/page");
+    const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/outlet/page");
 
     await expect(OutletSettingsPage({})).rejects.toThrow("REDIRECT:/login/tenant");
     expect(mocks.contextCalls).toBe(0);
@@ -154,7 +153,7 @@ describe("Outlet settings page acceptance", () => {
     async (role, scope, destination) => {
       mocks.principal.role = role;
       mocks.principal.scope = scope;
-      const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/page");
+      const { default: OutletSettingsPage } = await import("@/app/app/pengaturan/outlet/page");
 
       await expect(OutletSettingsPage({})).rejects.toThrow(`REDIRECT:${destination}`);
       expect(mocks.contextCalls).toBe(0);
@@ -181,9 +180,13 @@ describe("Outlet settings page acceptance", () => {
     expect(html).toContain("Perlu dilengkapi");
     expect(html).toContain("Periksa alamat pickup, area asal.");
     expect(html).toContain("Default GeraiCUAN");
-    expect(html).toContain(`id="pickup-${OUTLET_ONE}"`);
+    // T-157: choosing a pickup point belongs to Titik pickup; this page states
+    // the resulting pair and links there instead of carrying a second editor.
+    expect(html).toContain("Belum ada titik pickup");
     expect(html).toContain("Akan terisi setelah pickup dipilih");
-    expect(html).toContain('name="connectionMode"');
+    expect(html).toContain(`href="/app/pengaturan/pickup?outlet=${OUTLET_ONE}"`);
+    expect(html).not.toContain(`id="pickup-${OUTLET_ONE}"`);
+    expect(html).not.toContain('name="defaultPickupAddressId"');
     expect(html).not.toContain("ID alamat pickup");
     expect(html).not.toContain("ID area asal");
     expect(html).not.toContain(SECRET_SENTINEL);
@@ -228,7 +231,7 @@ describe("Outlet settings page acceptance", () => {
 
     const html = await renderPage();
 
-    expect(occurrences(html, "<form")).toBe(1);
+    expect(occurrences(html, "<form")).toBe(0);
     expect(occurrences(html, 'id="outlet-detail-title"')).toBe(1);
     // The selector marks the active outlet with `aria-current="true"`, not
     // `"page"`. The shell navigation already owns the one truthful current
@@ -238,12 +241,12 @@ describe("Outlet settings page acceptance", () => {
     expect(occurrences(html, 'aria-current="page"')).toBe(0);
     const outletNav = html.match(/<nav[^>]*aria-label="Pilih outlet"[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(occurrences(outletNav, 'aria-current="true"')).toBe(1);
-    const settingsNav = html.match(/<nav[^>]*aria-label="Administrasi"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    const settingsNav = html.match(/<nav[^>]*aria-label="Menu pengaturan"[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(settingsNav.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? []).toHaveLength(1);
-    expect(settingsNav).toMatch(/<a[^>]*aria-current="true"[^>]*href="\/app\/pengaturan"/);
+    expect(settingsNav).toMatch(/<a[^>]*aria-current="true"[^>]*href="\/app\/pengaturan\/outlet"/);
     expect(occurrences(html, 'aria-current="true"')).toBe(2);
     expect(html).toContain('aria-label="Pilih outlet"');
-    expect(html).toContain(`href="/app/pengaturan?outlet=${OUTLET_TWO}#outlet-detail-title"`);
+    expect(html).toContain(`href="/app/pengaturan/outlet?outlet=${OUTLET_TWO}#outlet-detail-title"`);
     expect(html.indexOf("A — Belum siap")).toBeLessThan(
       html.indexOf("C — Privat perlu perhatian"),
     );
@@ -256,6 +259,7 @@ describe("Outlet settings page acceptance", () => {
     expect(html).toMatch(/Perlu dilengkapi<\/dt><dd[^>]*>2<\/dd>/);
     expect(html).not.toContain("API key tersimpan");
     expect(html).not.toContain("API key privat perlu diganti");
+    expect(html).not.toContain('name="apiKey"');
     expect(html).not.toContain(SECRET_SENTINEL);
     expect(html).not.toContain("secretReference");
     expect(html).not.toContain("vault://");
@@ -279,147 +283,53 @@ describe("Outlet settings page acceptance", () => {
     ];
 
     const selected = await renderPage(OUTLET_TWO);
-    expect(selected).toContain("API key tersimpan");
-    expect(selected).toContain("Tersimpan, belum diverifikasi");
-    expect(selected).toMatch(new RegExp(`aria-current="true"[^>]*href="/app/pengaturan\\?outlet=${OUTLET_TWO}`));
-    expect(occurrences(selected, "<form")).toBe(2);
+    expect(selected).toContain("B — Privat siap");
+    expect(selected).toContain("Akun sendiri");
+    expect(selected).toMatch(new RegExp(`aria-current="true"[^>]*href="/app/pengaturan/outlet\\?outlet=${OUTLET_TWO}`));
+    // The Outlet page carries no form at all after T-158's split.
+    expect(occurrences(selected, "<form")).toBe(0);
 
     const fallback = await renderPage("00000000-0000-4000-8000-999999999999");
     expect(fallback).toContain("A — Belum siap");
-    expect(fallback).not.toContain("API key tersimpan");
-    expect(occurrences(fallback, "<form")).toBe(1);
+    expect(fallback).toContain("Default GeraiCUAN");
+    expect(occurrences(fallback, "<form")).toBe(0);
   });
 
-  it("renders the saved readable selection, described errors, and a focusable result", async () => {
+  it("states the saved pickup pair read-only, with no second editor on this page", async () => {
     mocks.outlets = [outlet({
       defaultOriginAreaId: "origin-safe-preserved",
       defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
       defaultPickupAddressId: "pickup-safe-preserved",
       defaultPickupAddressLabel: "Gudang utama, Jalan Contoh 1",
     })];
-    mocks.locationState = {
-      errors: { defaultPickupAddressId: "Pilihan pickup sudah berubah." },
-      message: "Periksa kembali pengaturan yang ditandai.",
-      success: false,
-      values: {
-        connectionMode: "private",
-        defaultPickupAddressId: "pickup-safe-preserved",
-        outletId: OUTLET_ONE,
-      },
-    };
 
     const html = await renderPage();
 
-    expect(html).toMatch(/name="defaultPickupAddressId"[^>]*value="pickup-safe-preserved"/);
-    expect(html).toContain(`aria-describedby="pickup-error-${OUTLET_ONE}"`);
-    expect(html).toContain("Pilihan pickup sudah berubah.");
     expect(html).toContain("Gudang utama, Jalan Contoh 1");
     expect(html).toContain("Coblong, Kota Bandung, Jawa Barat");
-    expect(html).toContain('role="alert"');
-    expect(html).toMatch(/tabindex="-1">Lokasi belum tersimpan/);
+    expect(html).toContain("Kelola titik pickup");
+    // Nothing on this page can change the pair, so no save control exists.
+    expect(html).not.toContain("Simpan lokasi");
+    expect(html).not.toContain('role="combobox"');
     expect(html).not.toContain(SECRET_SENTINEL);
   });
 
-  it("renders a pending form as busy with a disabled, truthful submit control", async () => {
-    mocks.outlets = [outlet()];
-    mocks.locationPending = true;
-
-    const html = await renderPage();
-
-    expect(html).toContain('aria-busy="true"');
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Menyimpan lokasi…<\/button>/);
-  });
-
-  it("renders a focusable success result and the route that proves drafting readiness", async () => {
-    mocks.outlets = [outlet({
-      defaultOriginAreaId: "origin-ready",
-      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
-      defaultPickupAddressId: "pickup-ready",
-      defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
-      name: "Outlet Siap",
-      readinessStatus: "ready",
-    })];
-    mocks.locationState = {
-      message: "Pengaturan outlet tersimpan.",
-      success: true,
-    };
-
-    const html = await renderPage();
-
-    expect(html).toContain("Outlet Siap");
-    expect(html).toContain("Dapat dipakai untuk membuat kiriman");
-    expect(html).toContain('role="status"');
-    expect(html).toMatch(/tabindex="-1">Lokasi tersimpan/);
-    expect(html).toContain('href="/app/pengiriman/baru"');
-    expect(html).toContain("Buat kiriman");
-  });
-
-  it("renders a private replacement field blank with a safe stored timestamp", async () => {
-    mocks.outlets = [outlet({
-      connectionSource: "private",
-      connectionStatus: "private_ready",
-      connectionUpdatedAt: new Date("2026-09-01T02:00:00.000Z"),
-      defaultOriginAreaId: "origin-ready",
-      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
-      defaultPickupAddressId: "pickup-ready",
-      defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
-      readinessStatus: "ready",
-    })];
-
-    const html = await renderPage();
-
-    expect(html).toContain("API key tersimpan");
-    expect(html).toContain("1 Sep 2026");
-    expect(html).toMatch(/<input type="password"[^>]*autoComplete="new-password"[^>]*name="apiKey"/);
-    expect(html).not.toMatch(/name="apiKey"[^>]*value=/);
-    expect(html).toContain("Ganti API key");
-    expect(html).toContain("Daftar pickup dari akun Mengantar outlet.");
-    expect(html).not.toContain("Tersambung");
-    expect(html).not.toContain(SECRET_SENTINEL);
-  });
-
-  it("labels derived area and distinguishes the persisted connection source", async () => {
-    mocks.outlets = [outlet({
-      defaultOriginAreaId: "origin-ready",
-      defaultOriginAreaLabel: "Coblong, Kota Bandung, Jawa Barat",
-      defaultPickupAddressId: "pickup-ready",
-      defaultPickupAddressLabel: "Gudang siap, Jalan Contoh 1",
-      readinessStatus: "ready",
-    })];
-    const html = await renderPage();
-    expect(html).toMatch(new RegExp(`<output[^>]*aria-live="polite"[^>]*for="pickup-${OUTLET_ONE}"[^>]*id="origin-${OUTLET_ONE}"`));
-    expect(html).toContain(`for="origin-${OUTLET_ONE}"`);
-    expect(html).toContain('aria-labelledby="outlet-location-title"');
-    expect(html).toContain('aria-labelledby="outlet-connection-title"');
-    expect(occurrences(html, "Digunakan")).toBe(1);
-    expect(html).toContain("Daftar pickup dari Default GeraiCUAN.");
-    expect(html).not.toContain("Default GeraiCUAN sedang digunakan.");
-  });
-
-  it("keeps the shadcn connection workflow explicit and free of secret-derived UI", () => {
+  it("keeps credential handling off the Outlet page entirely", () => {
     const source = readFileSync(
-      join(process.cwd(), "src/app/app/pengaturan/outlet-settings-form.tsx"),
+      join(process.cwd(), "src/app/app/pengaturan/outlet-detail.tsx"),
       "utf8",
     );
 
-    for (const component of [
-      "AlertDialog", "Alert", "Badge", "Button", "Command", "Field", "Input", "Popover", "RadioGroup",
-    ]) {
-      expect(source).toContain(component);
-    }
-    expect(source).toContain("Akun Mengantar sendiri");
-    expect(source).toContain("Gunakan Default GeraiCUAN untuk {outlet.name}?");
-    expect(source).toContain('variant="destructive"');
-    expect(source).toContain("Hapus API key & gunakan default");
-    expect(source).toContain('key={credentialState.resultToken');
-    expect(source).toContain('type="password"');
+    // T-158: the credential workflow belongs to /app/pengaturan/koneksi, so
+    // nothing on this page may read, show, or submit an API key.
+    expect(source).not.toMatch(/apiKey|type="password"|savePrivateMengantarCredential/);
     expect(source).not.toMatch(/baseURL|baseUrl|secretReference|ciphertext|apiKeyFragment/);
-    expect(source).not.toContain("Tersambung");
+    expect(source).toContain("/app/pengaturan/koneksi?outlet=");
   });
 
   it("keeps the outlet form mounted when the connection source changes", () => {
     const source = readFileSync(
-      join(process.cwd(), "src/app/app/pengaturan/page.tsx"),
+      join(process.cwd(), "src/app/app/pengaturan/outlet/page.tsx"),
       "utf8",
     );
 
@@ -431,7 +341,7 @@ describe("Outlet settings page acceptance", () => {
 describe("Outlet settings route boundaries", () => {
   it("keeps loading semantics local to the page", async () => {
     const { default: OutletSettingsLoading } = await import(
-      "@/app/app/pengaturan/loading"
+      "@/app/app/pengaturan/outlet/loading"
     );
     const html = renderToStaticMarkup(createElement(OutletSettingsLoading));
 
@@ -442,7 +352,7 @@ describe("Outlet settings route boundaries", () => {
   });
 
   it("renders a sanitized focusable route error with retry and escape actions", async () => {
-    const { default: OutletSettingsError } = await import("@/app/app/pengaturan/error");
+    const { default: OutletSettingsError } = await import("@/app/app/pengaturan/outlet/error");
     const html = renderToStaticMarkup(createElement(OutletSettingsError, {
       reset: vi.fn(),
     }));

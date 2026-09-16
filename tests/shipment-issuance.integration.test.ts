@@ -119,9 +119,10 @@ beforeAll(async () => {
   await adminPool.query(
     `INSERT INTO shipment_drafts (
        shipment_id, tenant_id, destination_area_id, destination_area_label,
-       package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod
+       package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod,
+       destination_area_verified_at
      ) VALUES ($1, $2, 'fixture-destination', 'Tujuan sintetis',
-       'Paket sintetis T22', 1000, 1, 100000, true)`,
+       'Paket sintetis T22', 1000, 1, 100000, true, now())`,
     [shipmentId, tenantA],
   );
   await adminPool.query(
@@ -186,9 +187,10 @@ describe("T22 guarded queue-detail issuance", () => {
     expect(calculateCodAmounts(100000, 10000)).toEqual({
       goodsValueIdr: 100000,
       shippingAmountIdr: 10000,
-      serviceFeeIdr: 3300,
-      vatAmountIdr: 363,
-      providerCodAmountIdr: 113663,
+      serviceFeeIdr: 3414,
+      vatAmountIdr: 376,
+      providerCodAmountIdr: 113790,
+      codFormulaVersion: 2,
     });
 
     let submissions = 0;
@@ -227,10 +229,12 @@ describe("T22 guarded queue-detail issuance", () => {
     expect(submissions).toBe(0);
 
     const first = await command(operatorA, tenantA, eligibleServiceId);
+    // PR-44: the label link is the tenant's shipment number, never the UUID.
+    const { rows: [{ tenant_number: issuedNumber }] } = await adminPool.query("SELECT tenant_number FROM shipments WHERE id = $1", [shipmentId]);
     expect(first).toEqual({
       awb: "SANITIZED-CNOTE-0001",
       duplicate: false,
-      labelHref: `/app/label/${shipmentId}`,
+      labelHref: `/app/label/${issuedNumber}`,
       shipmentId,
       status: "ISSUED",
     });
@@ -251,9 +255,10 @@ describe("T22 guarded queue-detail issuance", () => {
       estimateServiceId: eligibleServiceId,
       goodsValueIdr: 100000,
       shippingAmountIdr: 10000,
-      serviceFeeIdr: 3300,
-      vatAmountIdr: 363,
-      providerCodAmountIdr: 113663,
+      serviceFeeIdr: 3414,
+      vatAmountIdr: 376,
+      providerCodAmountIdr: 113790,
+      codFormulaVersion: 2,
     });
     const providerRows = await adminDb
       .select({ cnoteNo: schema.providerOrderSnapshots.cnoteNo, status: schema.providerOrderSnapshots.status })
@@ -271,7 +276,7 @@ describe("T22 guarded queue-detail issuance", () => {
     );
     expect(after).toMatchObject({
       status: "ISSUED",
-      provider: { awb: "SANITIZED-CNOTE-0001", providerCodAmountIdr: 113663 },
+      provider: { awb: "SANITIZED-CNOTE-0001", providerCodAmountIdr: 113790 },
     });
     expect(shipmentLifecycleActions("ISSUED", "OPERATOR", shipmentId)).toEqual([
       expect.objectContaining({ href: `/app/label/${shipmentId}`, id: "open-label", kind: "link" }),

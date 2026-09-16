@@ -101,12 +101,12 @@ describe("Mengantar location-search resource controls", () => {
       .rejects.toBeInstanceOf(MengantarConfigurationError);
   });
 
-  it("persists an atomic 20-attempt tenant-actor budget with isolated actors and tenants", async () => {
+  it("persists an atomic 40-attempt tenant-actor budget with isolated actors and tenants", async () => {
     const consume = (actorId: string, tenantId: string) =>
       withTenantContext(appDb, actorId, tenantId, (tx, context) =>
         enforceLocationSearchRateLimit(tx, context));
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
       await consume(actorA, tenantA);
     }
     await expect(consume(actorA, tenantA)).rejects.toBeInstanceOf(
@@ -123,7 +123,7 @@ describe("Mengantar location-search resource controls", () => {
       [tenantA],
     );
     expect(persisted.rows).toEqual([
-      { actor_id: actorA, count: 20 },
+      { actor_id: actorA, count: 40 },
       { actor_id: actorA2, count: 1 },
     ]);
   });

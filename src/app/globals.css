@@ -25,6 +25,10 @@
   --warn:#a15c07;
   --warn-surface:#fffaeb;
   --overlay:rgb(15 23 42 / 46%);
+  --elevation-resting:0 1px 2px -1px rgb(16 24 40 / 8%), 0 1px 3px 0 rgb(16 24 40 / 5%);
+  /* The zebra stripe must be opaque: a pinned first column inherits the row's
+     background, and a translucent one lets the scrolled cells show through it. */
+  --table-stripe:oklch(0.976 0 0);
   --font-display:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-text:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
@@ -118,62 +122,108 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
 .label-caution details { color:var(--ink-muted); }
 .label-caution summary { display:flex; align-items:center; min-height:44px; color:var(--primary); cursor:pointer; }
 .label-caution details p { white-space:pre-wrap; }
-.label-sheet { width:100mm; height:150mm; padding:4mm; page:label; display:grid; grid-template-rows:11mm 20mm 41mm 22mm 18mm 20mm 10mm; border:1px solid var(--hairline-strong); color:#000; background:#fff; font-family:var(--font-text); font-size:9pt; line-height:1.25; }
-.label-sheet > * { min-width:0; overflow:hidden; padding:1.4mm 0; border-top:.3mm solid #000; }
-.label-sheet > :first-child { padding-top:0; border-top:0; }
-.label-eyebrow { margin:0 0 .8mm; font-size:6.5pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.label-head { display:flex; align-items:flex-start; justify-content:space-between; gap:2mm; }
-.label-courier { margin:0; font-size:13pt; font-weight:700; }
-.label-service { margin:0; font-size:8pt; }
-.label-mark { margin:0; font-size:7.5pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.label-awb { margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:19pt; font-weight:700; letter-spacing:.05em; font-variant-numeric:tabular-nums; word-break:break-all; }
-.label-party-name { margin:0; font-size:11pt; font-weight:700; line-height:1.2; }
-.label-party-phone { margin:0; font-size:9.5pt; font-variant-numeric:tabular-nums; }
-.label-party-address { margin:.6mm 0 0; font-size:9pt; line-height:1.3; }
-.label-party[data-density="long"] .label-party-name { font-size:10pt; }
-.label-party[data-density="long"] .label-party-address { font-size:8.25pt; line-height:1.28; }
-.label-party[data-density="dense"] .label-party-name { font-size:9.5pt; }
-.label-party[data-density="dense"] .label-party-address { font-size:7.5pt; line-height:1.2; }
-.label-party[data-density="ultra"] .label-party-name { font-size:9pt; }
-.label-party[data-density="ultra"] .label-party-address { font-size:7pt; line-height:1.15; }
-.label-sender .label-party-name { font-size:9.5pt; }
-.label-sender .label-party-phone { font-size:8.5pt; }
-.label-sender .label-party-address { font-size:8pt; }
-.label-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.4mm 2mm; margin:0; font-size:8pt; }
+/* T-176 thermal label. Sizes in mm for a 203 dpi head (1 dot = 0.125 mm). Pure black
+   on white only: no greys, tints, opacity or background fills, which a thermal head
+   renders as noise and which browsers drop from print anyway. Text floor 7pt; rules
+   in whole CSS px because Chrome snaps borders to them (1px = 0.26 mm, 2 dots; the
+   COD box and the cut line 2px = 4 dots); Code 128 modules 0.25 mm (2 dots) with a
+   10-module quiet zone inside the SVG box. The screen outline does not take space, so the preview has
+   exactly the printed geometry. */
+.label-sheet { position:relative; width:100mm; height:150mm; page:label-100x150; overflow:hidden; outline:1px solid var(--hairline-strong); color:#000; background:#fff; font-family:var(--font-text); font-size:8pt; line-height:1.2; font-variant-numeric:tabular-nums; }
+.label-sheet[data-label-size="10x10"] { height:100mm; page:label-100x100; }
+.label-sheet p, .label-sheet dl, .label-sheet dd { margin:0; }
+.label-package { display:grid; height:100mm; padding:3mm; grid-template-rows:8mm 17mm minmax(0,1fr) 8.4mm 14.4mm 10.8mm 4.8mm; overflow:hidden; }
+.label-package > * { min-width:0; overflow:hidden; padding-block:.7mm; border-top:1px solid #000; }
+.label-package > :first-child { padding-top:0; border-top:0; }
+.label-eyebrow { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.label-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; }
+.label-courier { font-size:15pt; font-weight:800; line-height:1.1; }
+.label-service { font-size:10pt; font-weight:700; }
+.label-mark { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.label-awb-block { display:flex; flex-direction:column; align-items:center; gap:.5mm; }
+.label-barcode { display:block; flex:none; }
+.label-awb { max-width:100%; font-family:var(--font-mono); font-size:12pt; font-weight:700; line-height:1.1; letter-spacing:.04em; text-align:center; overflow-wrap:anywhere; }
+.label-awb .label-eyebrow { font-family:var(--font-text); letter-spacing:.06em; }
+.label-party-line { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:1.5mm; }
+/* Recipient type steps down with the density tier, so short addresses print large
+   for a courier at arm's length and the 480-character ceiling still fits. */
+.label-party-name { font-size:12pt; font-weight:800; line-height:1.15; overflow-wrap:anywhere; }
+.label-party-phone { font-size:11pt; font-weight:700; }
+.label-party-area { font-size:9.5pt; font-weight:700; line-height:1.2; }
+.label-party-address { margin-top:.3mm !important; font-size:9pt; line-height:1.2; overflow-wrap:anywhere; }
+.label-recipient[data-density="long"] .label-party-name { font-size:10.5pt; }
+.label-recipient[data-density="long"] .label-party-phone { font-size:10pt; }
+.label-recipient[data-density="long"] .label-party-area { font-size:8.5pt; }
+.label-recipient[data-density="long"] .label-party-address { font-size:8pt; line-height:1.15; }
+.label-recipient[data-density="dense"] .label-party-name { font-size:10pt; }
+.label-recipient[data-density="dense"] .label-party-phone { font-size:9.5pt; }
+.label-recipient[data-density="dense"] .label-party-area { font-size:8pt; }
+.label-recipient[data-density="dense"] .label-party-address { font-size:7.25pt; line-height:1.12; }
+.label-recipient[data-density="ultra"] .label-party-name { font-size:9.5pt; }
+.label-recipient[data-density="ultra"] .label-party-phone { font-size:9pt; }
+.label-recipient[data-density="ultra"] .label-party-area { font-size:8pt; }
+.label-recipient[data-density="ultra"] .label-party-address { font-size:7pt; line-height:1.12; }
+.label-sender-line { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:7.5pt; line-height:1.15; overflow-wrap:anywhere; }
+.label-sender .label-party-name { font-size:7.5pt; font-weight:700; }
+.label-sender .label-party-phone { font-size:7.5pt; font-weight:700; }
+.label-sender .label-party-address { margin:0 !important; font-size:7.5pt; }
+.label-sender-line * { line-height:inherit; }
+.label-payment { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding:.2mm 1.5mm; border:2px solid #000; line-height:1.1; }
+.label-payment span { font-size:7.5pt; font-weight:700; letter-spacing:.04em; }
+.label-payment b { font-size:13pt; font-weight:800; }
+.label-money { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; margin-top:.5mm; font-size:7pt; line-height:1.15; }
+.label-money > div { display:flex; justify-content:space-between; gap:1mm; }
+.label-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; font-size:7.5pt; line-height:1.15; }
 .label-facts > div { display:grid; grid-template-columns:auto minmax(0,1fr); gap:0 1.2mm; min-width:0; }
 .label-facts-wide { grid-column:1 / -1; }
 .label-facts dt { font-weight:700; white-space:nowrap; }
-.label-facts dd { margin:0; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.label-facts-wrap { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; white-space:normal; }
-.label-payment { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding:1mm 2mm; border:.8mm solid #000; }
-.label-payment span { font-size:8pt; font-weight:700; letter-spacing:.06em; }
-.label-payment b { font-size:14pt; font-variant-numeric:tabular-nums; }
-.label-money { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 2mm; margin:1mm 0 0; font-size:7pt; }
-.label-money > div { display:flex; justify-content:space-between; gap:1mm; }
-.label-money span:last-child { font-variant-numeric:tabular-nums; }
-.label-footer { display:flex; align-items:flex-end; justify-content:space-between; gap:2mm; font-size:7pt; line-height:1.3; }
-.label-footer p { margin:0; }
-@page label { size:100mm 150mm; margin:0; }
+.label-facts dd { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.label-footer { font-size:7pt; line-height:1.2; }
+.label-cut { position:absolute; left:0; right:0; top:100mm; height:4mm; margin-top:-2mm; display:flex; align-items:center; gap:1.5mm; padding-inline:1mm; }
+.label-cut-rule { flex:1; height:0; border-top:2px dashed #000; }
+.label-cut-mark { display:flex; align-items:center; gap:1mm; font-size:7pt; font-weight:700; white-space:nowrap; }
+.label-cut-icon { width:3.5mm; height:3.5mm; stroke-width:2.25; }
+.label-stub { display:grid; height:50mm; padding:3mm; grid-template-rows:4.5mm 6.5mm 15mm minmax(0,1fr); overflow:hidden; }
+.label-stub > * { min-width:0; overflow:hidden; }
+.label-stub-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; border-bottom:1px solid #000; }
+.label-stub-title { flex:none; font-size:7pt; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.label-stub-outlet { min-width:0; overflow:hidden; font-size:8pt; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
+.label-stub-service { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding-top:.6mm; }
+.label-stub .label-courier { font-size:12pt; }
+.label-stub .label-service { font-size:9pt; }
+.label-stub-payment { flex:none; font-size:8pt; font-weight:700; }
+.label-stub-payment b { font-size:11pt; font-weight:800; }
+.label-stub .label-awb { font-size:11pt; }
+.label-stub-facts { display:grid; align-content:start; gap:.8mm; padding-top:1.2mm; font-size:10pt; line-height:1.2; }
+.label-stub-facts > div { display:grid; grid-template-columns:21mm minmax(0,1fr); align-items:baseline; gap:1.5mm; }
+.label-stub-facts dt { font-size:8pt; font-weight:400; }
+.label-stub-facts dd { min-width:0; overflow:hidden; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
+@page label-100x150 { size:100mm 150mm; margin:0; }
+@page label-100x100 { size:100mm 100mm; margin:0; }
 @media print {
   .label-hide { display:none !important; }
   html, body { margin:0; background:#fff; }
   .label-preview { overflow:visible; padding:0; border:0; background:none; }
-  .label-sheet { border:0; }
+  .label-sheet { outline:0; }
 }
 /* Shared authenticated CMS shell and operational primitives. */
-.cms-main { width:100%; max-width:92rem; margin-inline:auto; padding:1.5rem 1rem 3rem; }
+/* Reserve the scrollbar gutter so a short page centres like a long one. */
+html { scrollbar-gutter:stable; }
+.cms-main { --cms-header-h:6rem; width:100%; max-width:88rem; margin-inline:auto; padding:1.5rem 1rem 3rem; }
 .cms-skip-link { position:fixed; left:-9999px; top:0; z-index:20; padding:.75rem; color:var(--primary); background:var(--surface); }
 .cms-skip-link:focus-visible { left:.5rem; top:.5rem; }
 .cms-signout { display:grid; gap:.5rem; margin-top:.4rem; }
 .cms-signout-button { width:100%; }
 .cms-control-error { margin:0; color:var(--danger); font-size:.8125rem; line-height:1.4; }
 @media (min-width:768px) {
-  .cms-main { padding-inline:1.5rem; }
+  /* The header loses its stacked clock row, so a sticky aside may start higher. */
+  .cms-main { --cms-header-h:4rem; padding-inline:1.5rem; }
 }
 @media (min-width:1024px) {
   .cms-main { padding-inline:2rem; }
 }
 @theme inline {
+  --shadow-resting:var(--elevation-resting);
   --font-heading:var(--font-inter);
   --font-sans:var(--font-inter);
   --color-sidebar-ring:var(--sidebar-ring);
@@ -231,7 +281,7 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
 }
 [data-slot="sidebar-wrapper"],
 [data-slot="sidebar-inset"] {
-  background: var(--background);
+  background: var(--surface-sunken);
 }
 .cms-signout {
   display: grid;
@@ -257,6 +307,8 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
   [data-slot="sidebar-inset"] {
     display: block;
     min-height: 0;
+    /* The inset variant's screen margin would push a label off its page origin (T-176). */
+    margin: 0;
     background: #fff;
   }
   .cms-main {
@@ -267,6 +319,8 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
 }
 
 .dark {
+  --elevation-resting:0 1px 2px -1px rgb(0 0 0 / 55%), 0 1px 3px 0 rgb(0 0 0 / 40%);
+  --table-stripe:oklch(0.235 0 0);
   --background:oklch(0.145 0 0);
   --foreground:oklch(0.985 0 0);
   --card:oklch(0.205 0 0);
@@ -304,21 +358,33 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
 /* Shared work surfaces: structure and density, using the supplied theme tokens. */
 .cms-workspace { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:calc(var(--radius) * 1.8); background:var(--card); }
 .cms-section-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; font-size:1rem; font-weight:600; letter-spacing:-.015em; }
-.cms-filter-bar { display:grid; grid-template-columns:minmax(0,1fr) auto; min-width:0; gap:.5rem .75rem; padding-block:.75rem; border-block:1px solid var(--border); }
+.cms-filter-bar { display:grid; grid-template-columns:minmax(0,1fr) auto; min-width:0; gap:.5rem .75rem; padding:.875rem 1rem; border:1px solid var(--border); border-radius:calc(var(--radius) * 1.4); background:var(--card); box-shadow:var(--elevation-resting); }
 .cms-filter-bar > :first-child { display:contents; }
 .cms-filter-bar > :first-child > :first-child { grid-column:1 / -1; }
 .cms-filter-bar > :first-child > details { grid-column:1; grid-row:2; }
 .cms-filter-bar > :last-child { grid-column:2; grid-row:2; align-self:start; }
-.cms-filter-bar:has(details[open]) > :first-child > details { grid-column:1 / -1; }
-.cms-filter-bar:has(details[open]) > :last-child { grid-row:3; }
+.cms-filter-bar:has(> :first-child > details[open]) > :first-child > details { grid-column:1 / -1; }
+.cms-filter-bar:has(> :first-child > details[open]) > :last-child { grid-row:3; }
 .cms-filter-bar > * { min-width:0; }
 .cms-filter-advanced > summary { display:flex; width:fit-content; min-height:44px; align-items:center; gap:.5rem; list-style:none; cursor:pointer; color:var(--foreground); font-size:.8125rem; font-weight:500; }
 .cms-filter-advanced > summary::-webkit-details-marker { display:none; }
 .cms-filter-advanced[open] > summary > svg:last-child { transform:rotate(180deg); }
 .cms-filter-advanced[open] { padding-bottom:.25rem; }
+/* T-163 — the one date-range control (PR-53). A native <details>, so the named
+   `rentang`, `dari` and `sampai` controls stay in the page's single GET form
+   whether the panel is open or shut; CSS alone makes it read as a popover from
+   md and as a bottom sheet below it. */
+.cms-range-filter { position:relative; min-width:0; }
+.cms-range-filter > summary { display:flex; width:100%; min-height:44px; align-items:center; gap:.5rem; padding:0 .625rem; border:1px solid var(--border); border-radius:var(--radius-lg, .5rem); background:var(--background); color:var(--foreground); font-size:.875rem; font-weight:500; list-style:none; cursor:pointer; }
+.cms-range-filter > summary::-webkit-details-marker { display:none; }
+.cms-range-filter > summary:hover { background:var(--muted); }
+.cms-range-filter[open] > summary > svg:last-child { transform:rotate(180deg); }
+.cms-range-popover { position:fixed; inset-inline:0; bottom:0; z-index:50; display:grid; gap:1rem; max-height:85dvh; overflow:auto; padding:1rem; border-top:1px solid var(--border); border-radius:calc(var(--radius) * 1.4) calc(var(--radius) * 1.4) 0 0; background:var(--popover, var(--card)); color:var(--popover-foreground, var(--foreground)); box-shadow:0 -10px 30px rgb(16 24 40 / 18%); }
 @media (min-width:768px) {
   .cms-filter-bar { align-items:start; column-gap:1rem; }
   .cms-filter-bar > :first-child > :first-child { grid-column:1; }
-  .cms-filter-bar > :last-child, .cms-filter-bar:has(details[open]) > :last-child { grid-column:2; grid-row:1; padding-top:1.5rem; }
+  .cms-filter-bar > :last-child, .cms-filter-bar:has(> :first-child > details[open]) > :last-child { grid-column:2; grid-row:1; padding-top:1.5rem; }
   .cms-filter-advanced > summary { min-height:32px; }
+  .cms-range-filter > summary { min-height:36px; }
+  .cms-range-popover { position:absolute; inset-inline:auto; left:0; top:calc(100% + .375rem); bottom:auto; width:max-content; max-width:min(54rem, calc(100vw - 2rem)); max-height:min(80dvh, 40rem); border:1px solid var(--border); border-radius:calc(var(--radius) * 1.4); box-shadow:0 10px 30px rgb(16 24 40 / 14%); }
 }

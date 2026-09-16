@@ -22,7 +22,10 @@ import {
 
 import { AlertRegion } from "@/app/_components/alert-region";
 import { DataTablePagination } from "@/components/cms/data-table-pagination";
+import { ToneBadge, type StatusTone } from "@/components/cms/shipment-status-badge";
 import { DataTableToolbar, type DataTableFacet } from "@/components/cms/data-table-toolbar";
+import { ShipmentPrefixUnlockControl } from "@/app/platform/_components/shipment-prefix-unlock";
+import { loadPlatformTenantShipmentPrefix } from "@/db/shipment-number-repository";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { StatCard } from "@/components/cms/stat-card";
@@ -127,10 +130,13 @@ const numericClass = "text-right tabular-nums";
 const emptyClass = "rounded-md border border-dashed p-6";
 const secondaryLinkClass = "min-h-11 md:min-h-8";
 
-function severityVariant(severity: string): "destructive" | "outline" | "secondary" {
-  if (severity === "kritis") return "destructive";
-  if (severity === "perhatian") return "outline";
-  return "secondary";
+// T-155: "Perhatian" now carries the amber tone the palette always had; red stays
+// reserved for "Kritis", per spec 10's status vocabulary.
+function severityTone(severity: string): StatusTone {
+  if (severity === "kritis") return "danger";
+  if (severity === "perhatian") return "warn";
+  if (severity === "nonaktif") return "neutral";
+  return "ok";
 }
 function severityLabel(severity: string) {
   return severity === "normal" ? "Normal" : severity === "perhatian" ? "Perhatian" : "Kritis";
@@ -305,7 +311,7 @@ function Health({health,filters}:{health:PlatformHealth;filters:PlatformFilters}
             icon={icon}
             key={label}
             title={label}
-            value={<span className="flex flex-wrap items-center justify-between gap-2">{formatCount(tile.count)}<Badge variant={severityVariant(tile.severity)}>{severityLabel(tile.severity)}</Badge></span>}
+            value={<span className="flex flex-wrap items-center justify-between gap-2">{formatCount(tile.count)}<ToneBadge label={severityLabel(tile.severity)} tone={severityTone(tile.severity)} /></span>}
           />
         ))}
       </div>
@@ -490,7 +496,8 @@ function FinanceSummary({ finance, filters }: { finance: Finance; filters: Platf
     COD_PRINCIPAL_COLLECTABLE: "Pokok COD",
     MENGANTAR_SHIPPING_COST: "Ongkir Mengantar",
     MENGANTAR_INSURANCE_COST: "Asuransi Mengantar",
-    GERAICUAN_COD_SERVICE_FEE_REVENUE: "Pendapatan jasa COD",
+    MENGANTAR_COD_FEE_COST: "Biaya COD Mengantar",
+    GERAICUAN_COD_SERVICE_FEE_REVENUE: "Pendapatan jasa COD (entri lama)",
     COD_SERVICE_FEE_VAT_PAYABLE: "PPN jasa COD",
     NON_COD_UPSTREAM_PAYMENT: "Pembayaran non-COD",
     COD_REMITTANCE: "Remitansi COD",
@@ -504,7 +511,7 @@ function FinanceSummary({ finance, filters }: { finance: Finance; filters: Platf
             <StatCard icon={ReceiptText} title="Entri" value={formatCount(finance.ledger.entryCount)}/>
             <StatCard description="Bukan pendapatan GeraiCUAN." icon={Landmark} title="Pokok COD — liabilitas" value={idrFormatter.format(finance.ledger.codPrincipalLiabilityIdr)}/>
             <StatCard title="Biaya provider" value={idrFormatter.format(finance.ledger.providerCostIdr)}/>
-            <StatCard title="Pendapatan jasa COD" value={idrFormatter.format(finance.ledger.revenueIdr)}/>
+            <StatCard description="Entri lama. Biaya COD kini dicatat sebagai biaya provider karena dipotong Mengantar." title="Pendapatan jasa COD (entri lama)" value={idrFormatter.format(finance.ledger.revenueIdr)}/>
             <StatCard title="PPN terutang" value={idrFormatter.format(finance.ledger.vatPayableIdr)}/>
             <StatCard title="Pemulihan non-COD" value={idrFormatter.format(finance.ledger.upstreamRecoveryPaymentIdr)}/>
           </div>
@@ -580,6 +587,7 @@ export async function MonitoringView({kind,route,rawParams,tenantId}:PageInput){
   const filters=data.parsed.filters;const actualRoute=tenantId?`/platform/tenant/${tenantId}`:route;
   await recordPlatformMonitoringAccess(db,principal.userId,{route,scope:detail?"tenant":filters.scope.kind,tenantId:detail?detail.tenant.id:filters.scope.kind==="tenant"?filters.scope.tenantId:undefined});
   const canonical=`${actualRoute}?${data.parsed.canonicalQuery.toString()}`;
+  const shipmentPrefix=kind==="tenant-detail"&&detail?await loadPlatformTenantShipmentPrefix(db,principal.userId,detail.tenant.id).catch(()=>null):null;
   const titles:Record<PageKind,{eyebrow:string;title:string;intro:string}>={overview:{eyebrow:"Operasi platform",title:"Ringkasan operasional",intro:"Pantau antrean, kegagalan, volume, dan aktivitas lintas tenant."},"tenant-list":{eyebrow:"Tenant",title:"Daftar tenant",intro:"Temukan tenant dan bandingkan penggunaan operasional."},"tenant-detail":{eyebrow:"Detail tenant",title:detail?.tenant.name??"Detail tenant",intro:"Kondisi operasional dan konfigurasi aman tenant. Hanya konfigurasi aman yang ditampilkan; nilai kredensial tidak pernah ditampilkan."},audit:{eyebrow:"Audit",title:"Jejak audit",intro:"Tinjau tindakan platform dan hasil yang ditolak."}};
   const title=titles[kind];
   const stale=auditScenario?.endsWith("-stale");
@@ -587,10 +595,11 @@ export async function MonitoringView({kind,route,rawParams,tenantId}:PageInput){
   const scenarioInvalid=auditScenario?.endsWith("-invalid-query");
   const provisionState=auditScenario==="platform-tenant-provision-success"?{outcome:"success" as const,message:"Tenant audit berhasil diprovisikan."}:auditScenario==="platform-tenant-provision-error"?{outcome:"error" as const,message:"Provisioning tenant gagal. Nilai aman dipertahankan.",values:{name:"Tenant audit"}}:undefined;
   const lifecycleState=auditScenario==="platform-tenant-detail-lifecycle-success"?{outcome:"success" as const,message:"Status tenant berhasil diperbarui."}:auditScenario==="platform-tenant-detail-lifecycle-error"?{outcome:"error" as const,message:"Perubahan status gagal. Nilai aman dipertahankan.",values:{expectedName:detail?.tenant.name}}:undefined;
-  return <PageContainer width="wide"><PageHeader description={title.intro} eyebrow={title.eyebrow} title={title.title}/>{data.parsed.issues.length||scenarioInvalid?<AlertRegion className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm"><h2 className="font-medium">Filter disesuaikan</h2><ul className="mt-2 list-disc pl-5 text-muted-foreground">{data.parsed.issues.map((issue,index)=><li key={`${issue}-${index}`}>{platformIssueMessage(issue)}</li>)}{scenarioInvalid?<li>Parameter URL tidak dikenal; filter aman tetap digunakan.</li>:null}</ul><Button asChild className="mt-3 min-h-11" variant="outline"><Link href={canonical} prefetch={false}>Buka URL yang sudah dirapikan</Link></Button></AlertRegion>:null}<ScopeBar actualRoute={actualRoute} filters={filters} generatedAt={presentedAt} tenantName={detail?.tenant.name}/>
+  return <PageContainer><PageHeader description={title.intro} eyebrow={title.eyebrow} title={title.title}/>{data.parsed.issues.length||scenarioInvalid?<AlertRegion className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm"><h2 className="font-medium">Filter disesuaikan</h2><ul className="mt-2 list-disc pl-5 text-muted-foreground">{data.parsed.issues.map((issue,index)=><li key={`${issue}-${index}`}>{platformIssueMessage(issue)}</li>)}{scenarioInvalid?<li>Parameter URL tidak dikenal; filter aman tetap digunakan.</li>:null}</ul><Button asChild className="mt-3 min-h-11" variant="outline"><Link href={canonical} prefetch={false}>Buka URL yang sudah dirapikan</Link></Button></AlertRegion>:null}<ScopeBar actualRoute={actualRoute} filters={filters} generatedAt={presentedAt} tenantName={detail?.tenant.name}/>
   {stale?<Alert role="alert" variant="destructive"><AlertTitle>Data platform mungkin sudah kedaluwarsa</AlertTitle><AlertDescription className="space-y-3"><p>Snapshot terakhir melewati batas kesegaran. Data dianggap perlu diperbarui setelah {DATA_STALE_AFTER_MS/60_000} menit. Muat ulang sebelum mengambil keputusan siklus tenant.</p><Button asChild className="min-h-11" variant="outline"><Link href={canonical} prefetch={false}>Muat ulang data</Link></Button></AlertDescription></Alert>:null}
   {kind==="tenant-list"?<ProvisionTenantForm auditState={provisionState} initialAttemptId={randomUUID()}/>:null}
   {kind==="tenant-detail"&&detail?<TenantLifecycleControls auditState={lifecycleState} initialAttemptId={randomUUID()} status={detail.tenant.status} tenantId={detail.tenant.id} tenantName={detail.tenant.name}/>:null}
+  {kind==="tenant-detail"&&detail?<ShipmentPrefixUnlockControl initialAttemptId={randomUUID()} state={shipmentPrefix} tenantId={detail.tenant.id} tenantName={detail.tenant.name}/>:null}
   <FilterPanel actualRoute={actualRoute} filters={filters} issues={data.parsed.issues} options={data.options} route={route}/>
   {kind==="overview"||kind==="tenant-detail"?(health?<Health filters={filters} health={health}/>:<Degraded name="Kesehatan provider dan antrean"/>):null}
   {kind==="overview"||kind==="tenant-detail"?(counts?<Counts counts={counts} filters={filters} previous={fulfilled(previousResult)}/>:<Degraded name="Volume operasional"/>):null}

@@ -6,8 +6,10 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
+import { awbBarcodeFits } from "@/app/app/label/[shipmentId]/label-barcode";
 import { LabelPrintPanel } from "@/app/app/label/[shipmentId]/label-print-panel";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
+import { resolveShipmentRoute } from "@/app/app/shipment-route";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
@@ -36,9 +38,6 @@ import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-sc
 
 export const metadata: Metadata = { robots: { index: false } };
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 type LabelDetailPageProps = {
   params: Promise<{ shipmentId: string }>;
 };
@@ -61,8 +60,8 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
     ? parseUiAuditScenarioForRoute((await headers()).get(UI_AUDIT_HEADER), "/app/label/[shipmentId]")
     : null;
   if (auditScenario === "label-detail-error") throw new Error("Intentional development-only label detail failure.");
-  const { shipmentId } = await params;
-  if (!UUID_PATTERN.test(shipmentId)) notFound();
+  const { shipmentId: routeKey } = await params;
+  const shipmentId = await resolveShipmentRoute(principal, routeKey, "/app/label");
 
   let detailPromise = withTenantContext(
     db,
@@ -105,7 +104,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
           <PageHeader
             actions={<Button asChild className="min-h-11 max-md:w-full md:min-h-8" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
             description="Pratinjau cetak tersedia setelah nomor resi diterbitkan."
-            eyebrow="Label 100 × 150 mm"
+            eyebrow="Label termal"
             focusTargetId="label-detail-heading"
             title={heading}
           />
@@ -118,7 +117,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
               ? "Kiriman non-COD ini belum berstatus lunas di Mengantar, sehingga belum memiliki nomor resi. Tenant Admin perlu memulihkannya lebih dulu."
               : "Label hanya dapat dicetak setelah Mengantar mengembalikan nomor resi."}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button asChild className="min-h-11 max-md:w-full md:min-h-8"><Link href={`/app/pengiriman/${shipmentId}`}>Buka detail kiriman</Link></Button>
+              <Button asChild className="min-h-11 max-md:w-full md:min-h-8"><Link href={`/app/pengiriman/${routeKey}`}>Buka detail kiriman</Link></Button>
               <Button asChild className="min-h-11" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>
             </div>
           </AlertDescription>
@@ -139,19 +138,12 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
       <div className="label-hide">
         <PageHeader
           actions={<Button asChild className="min-h-11 max-md:w-full md:min-h-8" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
-          description="Periksa data kiriman, lalu gunakan dialog cetak browser dengan ukuran kertas 100 × 150 mm."
-          eyebrow="Label 100 × 150 mm"
+          description="Pilih ukuran label, periksa pratinjau, lalu cetak. 10 × 15 cm menyertakan bukti serah terima untuk pengirim."
+          eyebrow="Label termal"
           focusTargetId="label-detail-heading"
           title={heading}
         />
       </div>
-
-      <LabelPrintPanel
-        initialAttemptId={randomUUID()}
-        lastPrintedAt={detail.label.lastPrintedAt?.toISOString() ?? null}
-        printCount={detail.label.printCount}
-        shipmentId={detail.label.shipmentId}
-      />
 
       {recipientLayout.overCapacity ? (
         <Alert className="label-caution label-hide" role="status">
@@ -175,15 +167,23 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
         </Alert>
       ) : null}
 
-      <div
-        aria-label="Pratinjau label 100 × 150 mm"
-        className="label-preview"
-        id="pratinjau-label"
-        role="region"
-        tabIndex={0}
+      {awbBarcodeFits(detail.label.awb) ? null : (
+        <Alert className="label-hide" role="status">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Barcode resi tidak dicetak</AlertTitle>
+          <AlertDescription>Nomor resi terlalu panjang untuk barcode yang terbaca di lebar 10 cm, sehingga hanya teksnya yang dicetak. Kurir dapat mengetik nomor resi secara manual.</AlertDescription>
+        </Alert>
+      )}
+
+      <LabelPrintPanel
+        initialAttemptId={randomUUID()}
+        lastPrintedAt={detail.label.lastPrintedAt?.toISOString() ?? null}
+        operatorId={principal.userId}
+        printCount={detail.label.printCount}
+        shipmentId={detail.label.shipmentId}
       >
         <LabelSheet label={detail.label} />
-      </div>
+      </LabelPrintPanel>
 
       <Card aria-labelledby="riwayat-cetak-heading" className="label-hide" role="region">
         <CardHeader>
@@ -208,7 +208,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
               <TableBody>
                 {detail.events.map((event, index) => (
                   <TableRow key={`${event.printedAt.toISOString()}-${index}`}>
-                    <TableCell className="sticky left-0 z-10 bg-card tabular-nums">{event.sequence ?? "—"}</TableCell>
+                    <TableCell className="sticky left-0 z-10 bg-inherit tabular-nums">{event.sequence ?? "—"}</TableCell>
                     <TableCell>{formatWibDateTime(event.printedAt)}</TableCell>
                     <TableCell className="whitespace-normal">{event.actorRole === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"} · {event.actorNameMasked}</TableCell>
                     <TableCell className="whitespace-normal">{event.outcome === "PRINTED" ? "Tercatat" : event.reasonCode === "AWAITING_UPSTREAM_PAYMENT" ? "Diblokir: menunggu pelunasan" : "Diblokir: resi belum terbit"}</TableCell>

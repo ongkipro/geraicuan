@@ -18,7 +18,7 @@
 7. `10-DESIGN-SYSTEM-WHITELABEL.md` — visual direction and required screens.
 8. `13-COMPLIANCE-PRIVACY.md`, `15-DEVOPS-CICD-MIGRATIONS.md`, `16-OBSERVABILITY-RATE-LIMITING.md` — operations controls.
 9. `17-UX-FLOWS-SCREEN-CONTRACTS.md` — operator journeys, information architecture, screen states, and component boundaries.
-10. `18-AI-ROUTE-MAP.md` — route inventory and code navigation map.
+10. `18-SYSTEM-MAP.md` — route inventory and code navigation map.
 11. `19-METRICS-ANALYTICS-CONTRACT.md` — metric definitions, severity rules, chart catalogue, lineage diagrams, and pending metric decisions.
 12. `../../TASKS.md` — the sole canonical implementation queue.
 

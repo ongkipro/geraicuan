@@ -1,9 +1,11 @@
 import "server-only";
 
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 
 import {
+  ledgerEntries,
   outlets,
+  providerBatches,
   providerOrderSnapshots,
   shipmentDrafts,
   shipmentParties,
@@ -13,6 +15,11 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
 import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
 import { summarizeLatestReconciliationVariances } from "@/db/ledger-repository";
+import {
+  loadProviderDeliveryStatusBasis,
+  type ProviderDeliveryStatusBasis,
+} from "@/db/provider-settlement-repository";
+import { RTS_STATUSES } from "@/db/rts-repository";
 
 const DEFAULT_RECENT_LIMIT = 6;
 const MAX_RECENT_LIMIT = 20;
@@ -49,11 +56,9 @@ export type TenantDashboardRecentShipment = {
 
 export type TenantDashboardPeriodMetrics = {
   codCount: number;
-  codDeclaredValueIdr: number;
   createdCount: number;
   issuedCount: number;
   nonCodCount: number;
-  nonCodDeclaredValueIdr: number;
 };
 
 export type TenantDashboardPeriodSummary = {
@@ -88,6 +93,40 @@ export type TenantDashboardPeriodSupport = {
 
 export type TenantDashboardPeriodFilters = {
   outletId?: string;
+};
+
+/** One outcome row of the period cohort, split on the SHP-COD basis. */
+export type TenantDashboardOutcomeCounts = {
+  codCount: number;
+  nonCodCount: number;
+  totalCount: number;
+};
+
+export type TenantDashboardOutcomeSummary = {
+  /** PR-57: what the surface says about where these outcomes came from and how far behind they may be. */
+  basis: ProviderDeliveryStatusBasis;
+  cohortCount: number;
+  delivered: TenantDashboardOutcomeCounts;
+  failed: TenantDashboardOutcomeCounts;
+  generatedAt: Date;
+  /** The cohort minus the three settled outcomes, so the table sums to what it names. */
+  inProgress: TenantDashboardOutcomeCounts;
+  returned: TenantDashboardOutcomeCounts;
+};
+
+export type TenantDashboardCourierRecapRow = {
+  courier: string;
+  deliveredCount: number;
+  returnedCount: number;
+  shipmentCount: number;
+  /** null for OPERATOR: ledger money is a Tenant Admin capability. */
+  shippingCostIdr: number | null;
+};
+
+export type TenantDashboardCourierRecap = {
+  generatedAt: Date;
+  rows: TenantDashboardCourierRecapRow[];
+  shippingCostVisible: boolean;
 };
 
 type TenantDashboardMetricsBase = {
@@ -136,20 +175,12 @@ export async function loadTenantDashboardPeriodSummary(
         sql<number>`count(*) filter (where ${shipments.createdAt} >= ${currentRange.startInclusive} and ${shipments.createdAt} < ${currentRange.endExclusive} and ${shipmentDrafts.isCod})::int`.mapWith(Number),
       currentNonCodCount:
         sql<number>`count(*) filter (where ${shipments.createdAt} >= ${currentRange.startInclusive} and ${shipments.createdAt} < ${currentRange.endExclusive} and not ${shipmentDrafts.isCod})::int`.mapWith(Number),
-      currentCodDeclaredValueIdr:
-        sql<number>`coalesce(sum(${shipmentDrafts.declaredValueIdr}) filter (where ${shipments.createdAt} >= ${currentRange.startInclusive} and ${shipments.createdAt} < ${currentRange.endExclusive} and ${shipmentDrafts.isCod}), 0)::bigint`.mapWith(Number),
-      currentNonCodDeclaredValueIdr:
-        sql<number>`coalesce(sum(${shipmentDrafts.declaredValueIdr}) filter (where ${shipments.createdAt} >= ${currentRange.startInclusive} and ${shipments.createdAt} < ${currentRange.endExclusive} and not ${shipmentDrafts.isCod}), 0)::bigint`.mapWith(Number),
       previousCreatedCount:
         sql<number>`count(*) filter (where ${shipments.createdAt} >= ${previousRange.startInclusive} and ${shipments.createdAt} < ${previousRange.endExclusive})::int`.mapWith(Number),
       previousCodCount:
         sql<number>`count(*) filter (where ${shipments.createdAt} >= ${previousRange.startInclusive} and ${shipments.createdAt} < ${previousRange.endExclusive} and ${shipmentDrafts.isCod})::int`.mapWith(Number),
       previousNonCodCount:
         sql<number>`count(*) filter (where ${shipments.createdAt} >= ${previousRange.startInclusive} and ${shipments.createdAt} < ${previousRange.endExclusive} and not ${shipmentDrafts.isCod})::int`.mapWith(Number),
-      previousCodDeclaredValueIdr:
-        sql<number>`coalesce(sum(${shipmentDrafts.declaredValueIdr}) filter (where ${shipments.createdAt} >= ${previousRange.startInclusive} and ${shipments.createdAt} < ${previousRange.endExclusive} and ${shipmentDrafts.isCod}), 0)::bigint`.mapWith(Number),
-      previousNonCodDeclaredValueIdr:
-        sql<number>`coalesce(sum(${shipmentDrafts.declaredValueIdr}) filter (where ${shipments.createdAt} >= ${previousRange.startInclusive} and ${shipments.createdAt} < ${previousRange.endExclusive} and not ${shipmentDrafts.isCod}), 0)::bigint`.mapWith(Number),
     })
     .from(shipments)
     .innerJoin(
@@ -200,21 +231,281 @@ export async function loadTenantDashboardPeriodSummary(
   return {
     current: {
       codCount: created.currentCodCount,
-      codDeclaredValueIdr: created.currentCodDeclaredValueIdr,
       createdCount: created.currentCreatedCount,
       issuedCount: issued.currentIssuedCount,
       nonCodCount: created.currentNonCodCount,
-      nonCodDeclaredValueIdr: created.currentNonCodDeclaredValueIdr,
     },
     generatedAt: new Date(created.generatedAt),
     previous: {
       codCount: created.previousCodCount,
-      codDeclaredValueIdr: created.previousCodDeclaredValueIdr,
       createdCount: created.previousCreatedCount,
       issuedCount: issued.previousIssuedCount,
       nonCodCount: created.previousNonCodCount,
-      nonCodDeclaredValueIdr: created.previousNonCodDeclaredValueIdr,
     },
+  };
+}
+
+/**
+ * Spec 19 SHP-OUTCOME-DELIVERED / -RETURNED / -FAILED.
+ *
+ * The cohort is exactly the one SHP-CREATED already uses on this dashboard:
+ * tenant-scoped shipments (optionally one outlet) whose `created_at` falls in
+ * the WIB period, joined to their draft so the COD split uses the same
+ * `shipment_drafts.is_cod` flag as SHP-COD. The outcome itself is the current
+ * lifecycle status — no transition timestamp exists, so this reads as "of the
+ * shipments created in this period, where do they stand now", and every caption
+ * on the surface says so.
+ */
+export async function loadTenantDashboardOutcomeSummary(
+  tx: TenantTransaction,
+  context: TenantContext,
+  range: AnalyticsRange,
+  filters: TenantDashboardPeriodFilters = {},
+): Promise<TenantDashboardOutcomeSummary> {
+  const returned = inArray(shipments.status, [...RTS_STATUSES]);
+  const delivered = eq(shipments.status, "DELIVERED");
+  const failed = eq(shipments.status, "FAILED");
+  const count = (predicate: SQL, cod?: boolean) =>
+    sql<number>`count(*) filter (where ${predicate}${
+      cod === undefined
+        ? sql``
+        : cod
+          ? sql` and ${shipmentDrafts.isCod}`
+          : sql` and not ${shipmentDrafts.isCod}`
+    })::int`.mapWith(Number);
+
+  const [row] = await tx
+    .select({
+      generatedAt: sql<string>`statement_timestamp()`,
+      cohortCount: sql<number>`count(*)::int`.mapWith(Number),
+      // Review SF9: the three outcome rows cover 3 of 13 statuses, so the table has to
+      // account for the rest or it reads as if shipments vanished.
+      cohortCod: sql<number>`count(*) filter (where ${shipmentDrafts.isCod})::int`.mapWith(Number),
+      cohortNonCod: sql<number>`count(*) filter (where not ${shipmentDrafts.isCod})::int`.mapWith(Number),
+      deliveredTotal: count(delivered),
+      deliveredCod: count(delivered, true),
+      deliveredNonCod: count(delivered, false),
+      returnedTotal: count(returned),
+      returnedCod: count(returned, true),
+      returnedNonCod: count(returned, false),
+      failedTotal: count(failed),
+      failedCod: count(failed, true),
+      failedNonCod: count(failed, false),
+    })
+    .from(shipments)
+    .innerJoin(
+      shipmentDrafts,
+      and(
+        eq(shipmentDrafts.shipmentId, shipments.id),
+        eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(shipments.tenantId, context.tenantId),
+        filters.outletId ? eq(shipments.outletId, filters.outletId) : undefined,
+        gte(shipments.createdAt, range.startInclusive),
+        lt(shipments.createdAt, range.endExclusive),
+      ),
+    );
+
+  if (!row) throw new Error("Tenant dashboard outcome summary was not loaded.");
+
+  // PR-57: the outcome is the provider's report, not ours. The caption states
+  // that, and when the reader may see the evidence, when it was last pulled.
+  const basis = await loadProviderDeliveryStatusBasis(tx, context, filters);
+
+  return {
+    basis,
+    cohortCount: row.cohortCount,
+    inProgress: {
+      codCount: row.cohortCod - row.deliveredCod - row.returnedCod - row.failedCod,
+      nonCodCount: row.cohortNonCod - row.deliveredNonCod - row.returnedNonCod - row.failedNonCod,
+      totalCount: row.cohortCount - row.deliveredTotal - row.returnedTotal - row.failedTotal,
+    },
+    delivered: {
+      codCount: row.deliveredCod,
+      nonCodCount: row.deliveredNonCod,
+      totalCount: row.deliveredTotal,
+    },
+    failed: {
+      codCount: row.failedCod,
+      nonCodCount: row.failedNonCod,
+      totalCount: row.failedTotal,
+    },
+    generatedAt: new Date(row.generatedAt),
+    returned: {
+      codCount: row.returnedCod,
+      nonCodCount: row.returnedNonCod,
+      totalCount: row.returnedTotal,
+    },
+  };
+}
+
+/**
+ * Spec 19 CRR-SHIPMENTS / CRR-DELIVERED / CRR-RETURNED / CRR-SHIPPING-IDR.
+ *
+ * Counts share the SHP-CREATED cohort above, narrowed to shipments that already
+ * carry a provider batch (a draft has no courier yet). Cost is deliberately on
+ * the ledger's own `effective_at` basis so it equals the Analitik provider-cost
+ * KPI for the same period, outlet and courier; the surface labels both bases.
+ */
+export async function loadTenantDashboardCourierRecap(
+  tx: TenantTransaction,
+  context: TenantContext,
+  range: AnalyticsRange,
+  filters: TenantDashboardPeriodFilters = {},
+): Promise<TenantDashboardCourierRecap> {
+  const shippingCostVisible = context.role === "TENANT_ADMIN";
+  const volumeRows = await tx
+    .select({
+      generatedAt: sql<string>`statement_timestamp()`,
+      courier: providerBatches.courier,
+      shipmentCount: sql<number>`count(*)::int`.mapWith(Number),
+      deliveredCount:
+        sql<number>`count(*) filter (where ${eq(shipments.status, "DELIVERED")})::int`.mapWith(
+          Number,
+        ),
+      returnedCount:
+        sql<number>`count(*) filter (where ${inArray(shipments.status, [...RTS_STATUSES])})::int`.mapWith(
+          Number,
+        ),
+    })
+    .from(shipments)
+    .innerJoin(
+      shipmentDrafts,
+      and(
+        eq(shipmentDrafts.shipmentId, shipments.id),
+        eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      providerOrderSnapshots,
+      and(
+        eq(providerOrderSnapshots.shipmentId, shipments.id),
+        eq(providerOrderSnapshots.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      providerBatches,
+      and(
+        eq(providerBatches.id, providerOrderSnapshots.batchId),
+        eq(providerBatches.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(shipments.tenantId, context.tenantId),
+        filters.outletId ? eq(shipments.outletId, filters.outletId) : undefined,
+        gte(shipments.createdAt, range.startInclusive),
+        lt(shipments.createdAt, range.endExclusive),
+      ),
+    )
+    .groupBy(providerBatches.courier);
+
+  // Spec 19 M-0: a typed amount is the type plus every ADJUSTMENT that reverses
+  // an entry of that type. Same clause as the Analitik provider-cost KPI and the
+  // Keuangan ledger summary; the scope-parity test is what holds the three equal.
+  const costRows = shippingCostVisible
+    ? await tx
+        .select({
+          generatedAt: sql<string>`statement_timestamp()`,
+          courier: providerBatches.courier,
+          shippingCostIdr: sql<number>`coalesce(sum(
+            case
+              when ${ledgerEntries.entryType} = 'MENGANTAR_SHIPPING_COST'
+                then ${ledgerEntries.amountIdr}
+              when ${ledgerEntries.entryType} = 'ADJUSTMENT'
+                and ${ledgerEntries.reversesEntryId} in (
+                  select original.id
+                  from ledger_entries original
+                  where original.tenant_id = ${ledgerEntries.tenantId}
+                    and original.entry_type = 'MENGANTAR_SHIPPING_COST'
+                )
+                then ${ledgerEntries.amountIdr}
+              else 0
+            end
+          ), 0)::bigint`.mapWith(Number),
+        })
+        .from(ledgerEntries)
+        .innerJoin(
+          shipments,
+          and(
+            eq(shipments.id, ledgerEntries.shipmentId),
+            eq(shipments.tenantId, ledgerEntries.tenantId),
+          ),
+        )
+        .innerJoin(
+          providerBatches,
+          and(
+            eq(providerBatches.id, ledgerEntries.providerBatchId),
+            eq(providerBatches.tenantId, ledgerEntries.tenantId),
+          ),
+        )
+        .where(
+          and(
+            eq(ledgerEntries.tenantId, context.tenantId),
+            filters.outletId
+              ? eq(shipments.outletId, filters.outletId)
+              : undefined,
+            gte(ledgerEntries.effectiveAt, range.startInclusive),
+            lt(ledgerEntries.effectiveAt, range.endExclusive),
+          ),
+        )
+        .groupBy(providerBatches.courier)
+    : [];
+
+  const byCourier = new Map<string, TenantDashboardCourierRecapRow>();
+  const row = (courier: string) => {
+    const existing = byCourier.get(courier);
+    if (existing) return existing;
+    const created: TenantDashboardCourierRecapRow = {
+      courier,
+      deliveredCount: 0,
+      returnedCount: 0,
+      shipmentCount: 0,
+      shippingCostIdr: shippingCostVisible ? 0 : null,
+    };
+    byCourier.set(courier, created);
+    return created;
+  };
+  for (const volume of volumeRows) {
+    const target = row(volume.courier);
+    target.shipmentCount = volume.shipmentCount;
+    target.deliveredCount = volume.deliveredCount;
+    target.returnedCount = volume.returnedCount;
+  }
+  // A courier can appear on cost alone: a shipment created before this period
+  // can still have its cost recognized inside it.
+  for (const cost of costRows) row(cost.courier).shippingCostIdr = cost.shippingCostIdr;
+
+  // Spec 19 M-0 freshness: the generated-at is read from the database by the
+  // read that produced the region. An empty period produces no grouped row, so
+  // an aggregate (always exactly one row) supplies the same clock.
+  let generatedAt = volumeRows[0]?.generatedAt ?? costRows[0]?.generatedAt;
+  if (!generatedAt) {
+    const [clock] = await tx
+      .select({
+        generatedAt: sql<string>`statement_timestamp()`,
+        cohortCount: sql<number>`count(*)::int`.mapWith(Number),
+      })
+      .from(shipments)
+      .where(eq(shipments.tenantId, context.tenantId));
+    if (!clock) {
+      throw new Error("Tenant dashboard courier recap timestamp was not loaded.");
+    }
+    generatedAt = clock.generatedAt;
+  }
+
+  return {
+    generatedAt: new Date(generatedAt),
+    rows: [...byCourier.values()].sort(
+      (left, right) =>
+        right.shipmentCount - left.shipmentCount ||
+        (right.shippingCostIdr ?? 0) - (left.shippingCostIdr ?? 0) ||
+        (left.courier < right.courier ? -1 : left.courier > right.courier ? 1 : 0),
+    ),
+    shippingCostVisible,
   };
 }
 

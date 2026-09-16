@@ -53,6 +53,18 @@ let seedSummary;
 const fixedUuid = (prefix, index) =>
   `${prefix}000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 const sha256 = (value) => createHash("sha256").update(value, "utf8").digest("hex");
+// COD formula version 2 (T-175), the same integer rule as `calculateCodAmounts`
+// in src/db/cod-totals-repository.ts and the checks in drizzle/0048.
+const seedCodAmounts = (goodsValueIdr, shippingAmountIdr) => {
+  const base = BigInt(goodsValueIdr + shippingAmountIdr);
+  const providerCod = (base * BigInt(10000) + BigInt(9666)) / BigInt(9667);
+  const serviceFee = ((providerCod - base) * BigInt(100) + BigInt(55)) / BigInt(111);
+  return {
+    serviceFeeIdr: Number(serviceFee),
+    vatAmountIdr: Number(providerCod - base - serviceFee),
+    providerCodAmountIdr: Number(providerCod),
+  };
+};
 const jakartaDate = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Jakarta",
   year: "numeric",
@@ -414,15 +426,13 @@ try {
     let serviceFeeIdr = null;
     let vatAmountIdr = null;
     if (shipment.isCod) {
-      serviceFeeIdr = Math.floor(((declaredValueIdr + shippingAmountIdr) * 3 + 50) / 100);
-      vatAmountIdr = Math.floor((serviceFeeIdr * 11 + 50) / 100);
-      providerCodAmountIdr = declaredValueIdr + shippingAmountIdr + serviceFeeIdr + vatAmountIdr;
+      ({ serviceFeeIdr, vatAmountIdr, providerCodAmountIdr } = seedCodAmounts(declaredValueIdr, shippingAmountIdr));
       await client.query(
         `INSERT INTO shipment_cod_totals (
            id, tenant_id, shipment_id, snapshot_id, estimate_service_id, currency,
            goods_value_idr, shipping_amount_idr, service_fee_idr, vat_amount_idr,
-           provider_cod_amount_idr, created_at
-         ) VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, $8, $9, $10, $11)
+           provider_cod_amount_idr, created_at, cod_formula_version
+         ) VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, $8, $9, $10, $11, 2)
          ON CONFLICT (id) DO UPDATE SET
            tenant_id = EXCLUDED.tenant_id,
            shipment_id = EXCLUDED.shipment_id,
@@ -432,7 +442,8 @@ try {
            shipping_amount_idr = EXCLUDED.shipping_amount_idr,
            service_fee_idr = EXCLUDED.service_fee_idr,
            vat_amount_idr = EXCLUDED.vat_amount_idr,
-           provider_cod_amount_idr = EXCLUDED.provider_cod_amount_idr`,
+           provider_cod_amount_idr = EXCLUDED.provider_cod_amount_idr,
+           cod_formula_version = EXCLUDED.cod_formula_version`,
         [shipment.codTotalId, tenantId, shipment.id, shipment.estimateSnapshotId, shipment.estimateServiceId, declaredValueIdr, shippingAmountIdr, serviceFeeIdr, vatAmountIdr, providerCodAmountIdr, estimateAt],
       );
     }
@@ -568,10 +579,10 @@ try {
     const shippingAmountIdr = 12_000 + (shipment.index % 5) * 2_500;
     const insuranceAmountIdr = shipment.index % 3 === 0 ? 2_000 : null;
     if (shipment.isCod) {
-      const serviceFeeIdr = Math.floor(((declaredValueIdr + shippingAmountIdr) * 3 + 50) / 100);
-      const vatAmountIdr = Math.floor((serviceFeeIdr * 11 + 50) / 100);
+      const { serviceFeeIdr, vatAmountIdr } = seedCodAmounts(declaredValueIdr, shippingAmountIdr);
       await insertLedgerEntry({ shipment, entryType: "COD_PRINCIPAL_COLLECTABLE", financialClass: "LIABILITY", amountIdr: declaredValueIdr });
-      await insertLedgerEntry({ shipment, entryType: "GERAICUAN_COD_SERVICE_FEE_REVENUE", financialClass: "REVENUE", amountIdr: serviceFeeIdr });
+      // T-178: the COD fee is Mengantar's cost, not GeraiCUAN revenue.
+      await insertLedgerEntry({ shipment, entryType: "MENGANTAR_COD_FEE_COST", financialClass: "EXPENSE", amountIdr: serviceFeeIdr });
       await insertLedgerEntry({ shipment, entryType: "COD_SERVICE_FEE_VAT_PAYABLE", financialClass: "LIABILITY", amountIdr: vatAmountIdr });
     }
     await insertLedgerEntry({ shipment, entryType: "MENGANTAR_SHIPPING_COST", financialClass: "EXPENSE", amountIdr: shippingAmountIdr });
