@@ -48,7 +48,7 @@ export function ShipmentPrefixForm({ action, attemptId, lockedAtLabel, prefix, s
     const lockedPrefix = state.savedPrefix ?? prefix;
     return (
       <SettingsCard
-        badge={<Badge variant="secondary">Terkunci</Badge>}
+        badge={<Badge variant="secondary"><Lock aria-hidden="true" data-icon="inline-start" />Terkunci</Badge>}
         description={description}
         id="shipment-prefix-title"
         title="Awalan nomor kiriman"
@@ -73,7 +73,7 @@ export function ShipmentPrefixForm({ action, attemptId, lockedAtLabel, prefix, s
       description={description}
       footer={
         <Button
-          className="min-h-11 md:min-h-9"
+          className="min-h-11 md:min-h-10"
           disabled={!normalized || pending}
           form="shipment-prefix-form"
           type="submit"
@@ -110,7 +110,7 @@ export function ShipmentPrefixForm({ action, attemptId, lockedAtLabel, prefix, s
             aria-describedby="shipment-prefix-help"
             autoCapitalize="characters"
             autoComplete="off"
-            className="min-h-11 max-w-40 font-mono uppercase md:min-h-9"
+            className="min-h-11 max-w-40 font-mono uppercase md:min-h-10"
             id="shipment-prefix"
             maxLength={5}
             name="prefix"

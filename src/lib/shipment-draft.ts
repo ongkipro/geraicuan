@@ -237,7 +237,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     return message !== null;
   };
 
-  // A sender may be a store ("Toko 88"); a recipient is a person.
+  // A sender may be a store ("Gerai 88"); a recipient is a person.
   for (const [field, label, isSender] of [["senderName", "Nama pengirim", true], ["recipientName", "Nama penerima", false]] as const) {
     if (!raw[field] || raw[field].length > MAX_NAME_LENGTH) {
       errors[field] = "Nama wajib diisi dan maksimal 120 karakter.";

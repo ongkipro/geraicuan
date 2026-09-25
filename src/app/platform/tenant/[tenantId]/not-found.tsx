@@ -17,7 +17,7 @@ export default function PlatformTenantNotFound() {
         <AlertTitle>Detail tidak tersedia</AlertTitle>
         <AlertDescription className="space-y-3">
           <p>Tidak ada data tenant yang ditampilkan. Kembali ke daftar untuk memilih tenant yang tersedia.</p>
-          <Button asChild className="min-h-11" variant="outline">
+          <Button asChild className="min-h-11 md:min-h-10" variant="outline">
             <Link href="/platform/tenant" prefetch={false}>Kembali ke daftar tenant</Link>
           </Button>
         </AlertDescription>

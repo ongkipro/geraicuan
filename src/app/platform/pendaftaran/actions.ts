@@ -54,7 +54,7 @@ export async function reviewRegistration(
   if (decision === "REJECT") {
     if (reason.length < 5) {
       return {
-        errors: { reason: "Tulis alasan penolakan, minimal 5 karakter. Alasan ini dikirim ke pemilik toko." },
+        errors: { reason: "Tulis alasan penolakan, minimal 5 karakter. Alasan ini dikirim ke pemilik gerai." },
         message: "Pendaftaran belum ditolak.",
         outcome: "invalid",
         resultToken,
@@ -86,7 +86,7 @@ export async function reviewRegistration(
     if (error instanceof RegistrationReviewStateError) {
       return {
         message: error.reason === "unverified"
-          ? "Email pemilik belum terverifikasi. Toko dapat disetujui setelah pemilik memverifikasi emailnya."
+          ? "Email pemilik belum terverifikasi. Gerai dapat disetujui setelah pemilik memverifikasi emailnya."
           : error.reason === "invalid"
             ? "Permintaan tidak valid. Muat ulang halaman."
             : "Pendaftaran ini sudah diproses atau tidak lagi menunggu persetujuan. Muat ulang halaman.",
@@ -113,9 +113,9 @@ export async function reviewRegistration(
   // revalidation would refresh this list and unmount the decided card before
   // its result is read. The next visit lists only stores still awaiting approval.
   const notice = mailed
-    ? "Pemilik toko sudah dikirimi email."
+    ? "Pemilik gerai sudah dikirimi email."
     : "Email ke pemilik belum terkirim; hubungi pemilik secara langsung.";
   return reviewed.status === "ACTIVE"
-    ? { message: `Toko ${reviewed.storeName} disetujui. ${notice}`, outcome: "approved", resultToken, tenantId }
+    ? { message: `Gerai ${reviewed.storeName} disetujui. ${notice}`, outcome: "approved", resultToken, tenantId }
     : { message: `Pendaftaran ${reviewed.storeName} ditolak. ${notice}`, outcome: "rejected", resultToken, tenantId };
 }

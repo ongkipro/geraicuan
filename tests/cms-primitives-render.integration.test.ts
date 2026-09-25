@@ -172,7 +172,7 @@ describe("DataTableToolbar", () => {
 
     const faceted = render(createElement(DataTableToolbar, { facets: facets(true), resetHref: "/app/pengiriman", search }));
     expect(resetLink(faceted)).toHaveLength(1);
-    expect(faceted).toContain("Reset");
+    expect(faceted).toContain("Hapus filter");
 
     const searched = render(createElement(DataTableToolbar, {
       facets: facets(false), resetHref: "/app/pengiriman", search: { ...search, defaultValue: "JNE" },

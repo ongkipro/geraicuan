@@ -25,7 +25,7 @@ import {
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Outlet · GeraiCUAN", robots: { index: false } };
 
 const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
   dateStyle: "medium",
@@ -196,7 +196,7 @@ export default async function OutletSettingsPage({
         header={
           <PageHeader
             description="Kelola lokasi pickup dan koneksi pengiriman outlet."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Outlet"
           />
         }
@@ -218,7 +218,7 @@ export default async function OutletSettingsPage({
             {outlets.length > 1 ? (
               <dl
                 aria-label="Ringkasan kesiapan outlet"
-                className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4"
+                className="grid grid-cols-2 gap-4 rounded-xl bg-card p-4 border xl:grid-cols-4"
               >
                 {[
                   ["Total outlet", outlets.length],
@@ -226,8 +226,8 @@ export default async function OutletSettingsPage({
                   ["Perlu dilengkapi", outlets.length - readyCount],
                   ["Koneksi privat", privateCount],
                 ].map(([label, value]) => (
-                  <div className="grid gap-1 bg-background px-4 py-3" key={label}>
-                    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                  <div className="grid gap-1" key={label}>
+                    <dt className="text-sm text-muted-foreground">{label}</dt>
                     <dd className="text-2xl font-bold tabular-nums">{value}</dd>
                   </div>
                 ))}

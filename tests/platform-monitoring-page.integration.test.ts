@@ -435,7 +435,7 @@ describe("platform monitoring page states", () => {
     expect(monitoringSource).toContain("Parameter URL tidak dikenal; filter aman tetap digunakan.");
     expect(monitoringSource).not.toContain("Parameter audit tidak dikenal");
     // The stale-data alert names the freshness threshold it was crossed against.
-    expect(monitoringSource).toContain("Snapshot terakhir melewati batas kesegaran.");
+    expect(monitoringSource).toContain("Data terakhir melewati batas kesegaran.");
     // Same phrase as the tenant dashboard disclosure, so both surfaces name the threshold identically.
     expect(monitoringSource).toContain("Data dianggap perlu diperbarui setelah {DATA_STALE_AFTER_MS/60_000} menit.");
     expect(monitoringSource).not.toContain("Data dianggap kedaluwarsa setelah");
@@ -455,7 +455,7 @@ describe("platform monitoring page states", () => {
     expect(trend).toContain("<figure");
     expect(trend).toContain('data-slot="chart"');
     // Each series keeps its own stroke pattern, so the legend never relies on colour.
-    for (const [series, pattern] of [["Resi terbit", "6 4"], ["Batch gagal", "2 3"]] as const) {
+    for (const [series, pattern] of [["Resi terbit", "6 4"], ["Pengajuan gagal", "2 3"]] as const) {
       expect(trend, series).toMatch(new RegExp(`stroke-dasharray="${pattern}"[^]*?${series}`));
     }
     expect(trend).toContain("Kiriman dibuat");
@@ -479,7 +479,7 @@ describe("platform monitoring page states", () => {
     expect(hiddenInput(tenantForm, "tenant")).toContain('value="10000000-0000-4000-8000-000000000471"');
     expect(hiddenInput(tenantForm, "kurir")).toContain('value="JNE"');
     expect(hiddenInput(tenantForm, "status")).toContain('value="FAILED"');
-    expect(tenantForm).toMatch(/<select[^>]*name="rentang"/);
+    expect(tenantForm).toMatch(/<input[^>]*name="rentang"/);
     expect(tenantForm).not.toMatch(/name="tz"/);
     expect(tenantForm).toMatch(/<input[^>]*name="q"/);
     expect(tenantHtml).toContain('aria-label="Tenant: Alpha Outlet"');
@@ -508,42 +508,36 @@ describe("platform monitoring page states", () => {
     for (const html of await Promise.all([renderOverview(), renderTenantList(), renderTenantDetail(), renderAudit()])) {
       const form = html.match(/<form[^>]*method="get"[^>]*>[^]*?<\/form>/)?.[0] ?? "";
       expect(form).toContain('class="cms-filter-bar"');
-      const primary = form.slice(0, form.indexOf("<details"));
-      expect(primary).toMatch(/<select[^>]*name="rentang"/);
+      const primary = form.slice(0, form.indexOf('class="cms-filter-advanced"'));
+      // V-14: the tenant pages' shared range control, not a platform-only period select.
+      expect(primary).toContain('data-slot="date-range-filter"');
+      expect(primary).not.toMatch(/<select[^>]*name="rentang"/);
+      expect(primary).toMatch(/<input[^>]*name="rentang"/);
       expect(primary).toMatch(/<select[^>]*name="outlet"/);
+      expect(primary).toMatch(/name="dari"[^]*name="sampai"/);
       expect(form).toMatch(/<details[^>]*class="cms-filter-advanced"[^>]*>/);
       expect(form).not.toMatch(/<details[^>]*\bopen=""/);
-      expect(form.match(/name="rentang"/g)).toHaveLength(1);
       expect(form.match(/name="outlet"/g)).toHaveLength(1);
-      expect(form).toMatch(/<details[^>]*>[^]*name="dari"[^]*name="sampai"[^]*<\/details>/);
+      expect(form.match(/name="dari"/g)).toHaveLength(1);
+      expect(form.match(/name="sampai"/g)).toHaveLength(1);
       expect(form).not.toContain('name="tz"');
-      expect(form.match(/type="submit"/g)).toHaveLength(1);
+      // The range panel's own "Terapkan rentang" plus the bar's "Terapkan", as on /app.
+      expect(form.match(/type="submit"/g)).toHaveLength(2);
+      expect(form).toMatch(/>Terapkan<\/button>/);
     }
     const custom = await renderOverview({ rentang: "kustom", dari: "2026-08-01", sampai: "2026-08-30", tz: "Asia/Jayapura" });
-    expect(custom).toMatch(/<details[^>]*class="cms-filter-advanced"[^>]*open=""/);
-  });
-
-  it("opens custom dates from the small platform preset leaf", async () => {
-    const { PlatformPeriodSelect } = await import("@/app/platform/_components/platform-period-select");
-    const advanced = { open: false };
-    const form = { querySelector: vi.fn(() => advanced) };
-    const select = PlatformPeriodSelect({ className: "", presetId: "30-hari" });
-    const change = (value: string) => select.props.onChange({ target: { value, form } });
-    change("7-hari");
-    expect(advanced.open).toBe(false);
-    expect(form.querySelector).not.toHaveBeenCalled();
-    change("kustom");
-    expect(advanced.open).toBe(true);
+    expect(custom.match(/<input[^>]*id="platform-rentang-kustom"[^>]*>/)?.[0]).toContain('checked=""');
+    expect(custom).toMatch(/<input[^>]*name="dari"[^>]*value="2026-08-01"|<input[^>]*value="2026-08-01"[^>]*name="dari"/);
   });
 
   it("renders the empty overview with filters, local tables, and a global audit receipt", async () => {
     const html = await renderOverview();
 
-    expect(html).toContain("Ringkasan operasional");
+    expect(html).toContain(">Ringkasan</h1>");
     expect(html).toContain("Filter &amp; periode");
     expect(html).toContain("Tidak ada antrean provider.");
     expect(html).toContain("Belum ada tenant");
-    expect(html).toContain("Provision tenant pertama");
+    expect(html).toContain("Buat tenant pertama");
     expect(html).toContain("Belum ada aktivitas audit");
     // An empty period states it once; no chart and no empty table disclosure.
     expect(html).toContain("Belum ada data tren pada periode ini.");
@@ -573,6 +567,9 @@ describe("platform monitoring page states", () => {
     });
 
     expect(html).toContain("Filter disesuaikan");
+    // T-203 frame budget: the notice is the shared Alert, not a hand-tinted bordered box.
+    expect(html).toMatch(/<div[^>]*data-slot="alert"[^>]*role="presentation"[^>]*>[^]*Filter disesuaikan/);
+    expect(html).not.toContain("border-destructive/30");
     expect(html).toContain("Tenant tidak dikenal");
     expect(html).toContain("Outlet memerlukan lingkup tenant");
     expect(html).toContain("Status kiriman tidak dikenal");
@@ -607,8 +604,14 @@ describe("platform monitoring page states", () => {
 
     const html = await renderTenantList({ halaman: "2", q: "Alpha" });
 
-    expect(html).toContain("Daftar tenant");
-    expect(html.indexOf("Provisioning tenant")).toBeLessThan(html.indexOf("Filter &amp; periode"));
+    expect(html).toContain(">Tenant</h1>");
+    expect(html.indexOf("Buat tenant")).toBeLessThan(html.indexOf("Filter &amp; periode"));
+    // V-13/V-22: tenant status is an Indonesian badge with an icon, one tone per status.
+    const statusCells = html.match(/<td[^>]*><span[^>]*data-slot="badge"[^>]*>[^]*?<\/span><\/td>/g) ?? [];
+    expect(statusCells.join("")).toContain("Aktif");
+    expect(statusCells.join("")).toContain("Ditangguhkan");
+    expect(statusCells.every((cell) => cell.includes("<svg"))).toBe(true);
+    expect(html).not.toContain("Provisioning");
     expect(html).toContain("Tenant Gamma berhasil diprovisikan.");
     expect(html).toContain(`href="/platform/tenant/${TENANT_BETA}"`);
     expect(html).toContain("Halaman 2 dari 3");
@@ -621,13 +624,83 @@ describe("platform monitoring page states", () => {
     expect(anchors(html).find((tag) => tag.includes('aria-current="page"')))
       .toContain("halaman=2");
     // The toolbar Reset clears the search but keeps the period.
-    expect(html).toMatch(/<a\b[^>]*href="\/platform\/tenant\?rentang=30-hari&amp;tz=Asia%2FJakarta"[^>]*>Reset/);
+    expect(html).toMatch(/<a\b[^>]*href="\/platform\/tenant\?rentang=30-hari&amp;tz=Asia%2FJakarta"[^>]*>(?:<svg[\s\S]*?<\/svg>)?Hapus filter/);
     expect(html).toContain(`href="/platform/tenant/${TENANT_ALPHA}?rentang=30-hari&amp;tz=Asia%2FJakarta"`);
     expect(mocks.usageFilters[0]).toMatchObject({
       page: 2,
       query: "Alpha",
       scope: { kind: "global" },
     });
+  });
+
+  it("renders list rows as mobile record cards and keeps the tables for md and up (T-203)", async () => {
+    const recordList = (html: string, label: string) =>
+      html.match(new RegExp(`<ul aria-label="${label}[^"]*"[^>]*>[^]*?</ul>`))?.[0] ?? "";
+
+    mocks.usage = {
+      rows: [
+        tenantUsage({ failed: 2, unpaid: 1, shipments: 12, issued: 9, batches: 4, name: "Alpha Outlet", tenantId: TENANT_ALPHA }),
+        tenantUsage({ name: "Beta Outlet", status: "SUSPENDED", tenantId: TENANT_BETA, lastActivityAt: null }),
+      ],
+      total: 2,
+    };
+    const tenantHtml = await renderTenantList();
+    const tenants = recordList(tenantHtml, "Penggunaan tenant");
+    expect(tenants).toContain("md:hidden");
+    expect(tenants.match(/<li\b/g)).toHaveLength(2);
+    expect(tenants).toContain(`href="/platform/tenant/${TENANT_ALPHA}?rentang=30-hari&amp;tz=Asia%2FJakarta"`);
+    expect(tenants).toContain("12 kiriman · 9 resi terbit · 4 pengajuan");
+    expect(tenants).toContain("2 gagal · 1 belum dibayar");
+    expect(tenants).toContain("Belum ada aktivitas");
+    expect(tenants).toContain("Ditangguhkan");
+    // The table is the md-and-up view of the same rows.
+    expect(tenantHtml.match(/<div[^>]*data-slot="table-container"[^>]*>/g)?.find((tag) => tag.includes('aria-labelledby="tenant-caption"'))).toContain("max-md:hidden");
+
+    mocks.audit = { rows: [auditRow()], total: 1 };
+    const auditHtml = await renderAudit();
+    const audit = recordList(auditHtml, "Jejak audit");
+    expect(audit).toContain("Super Admin mencoba menangguhkan tenant");
+    expect(audit).toContain("Super Admin · Alpha Outlet");
+    expect(audit).toContain("Aktif → Ditangguhkan");
+    expect(audit).toContain("Ditolak");
+    expect(audit).not.toContain("SUPER_ADMIN");
+  });
+
+  it("shortens the tenant detail on a phone behind labelled disclosures, danger zone last (T-203)", async () => {
+    const detail = tenantDetail();
+    const batch = (detail.batches as Array<Record<string, unknown>>)[0];
+    mocks.detail = {
+      ...detail,
+      batches: Array.from({ length: 7 }, (_, index) => ({ ...batch, id: `30000000-0000-4000-8000-00000000050${index}` })),
+    };
+    mocks.audit = { rows: Array.from({ length: 6 }, (_, index) => auditRow({ id: `40000000-0000-4000-8000-00000000050${index}` })), total: 6 };
+
+    const html = await renderTenantDetail(TENANT_ALPHA);
+
+    // Five batch cards, then the other two behind a labelled disclosure; the desktop table keeps all seven.
+    const batches = html.slice(html.indexOf('id="tenant-batch-title"'), html.indexOf('id="batch-caption"'));
+    expect(batches.match(/<ul aria-label="Pengajuan ke provider terbaru"/g)).toHaveLength(1);
+    expect(batches).toMatch(/<details[^>]*>\s*<summary[^>]*>Tampilkan 2 pengajuan lainnya<\/summary>/);
+    expect(batches.match(/<li\b/g)).toHaveLength(7);
+    expect(batches).toContain("Gagal");
+    expect(batches).toContain("Akun provider #7 · Respons lain dari Mengantar (kode AUTH_REDACTED)");
+    expect(html).toContain("Tampilkan 1 aktivitas lainnya");
+    // Secondary health and volume breakdowns are collapsed, not removed.
+    expect(html).toMatch(/<summary[^>]*>Durasi penyelesaian dan antrean per akun<\/summary>/);
+    expect(html).toMatch(/<summary[^>]*>Rincian siklus kiriman \(8\)<\/summary>/);
+    expect(html).toContain("Pengajuan gagal");
+    expect(html).not.toMatch(/<details[^>]*\bopen=""[^>]*>\s*<summary[^>]*>(Tampilkan|Rincian|Durasi)/);
+    expect(html.indexOf("Zona berbahaya")).toBeGreaterThan(html.lastIndexOf("Tampilkan 1 aktivitas lainnya"));
+  });
+
+  it("keeps colour for decisions: a normal health tile and the match count read neutral (T-203)", async () => {
+    const html = await renderOverview();
+    const normalBadges = html.match(/<span[^>]*data-slot="badge"[^>]*>(?:(?!<\/span>).)*?Normal<\/span>/g) ?? [];
+    expect(normalBadges.length).toBeGreaterThan(0);
+    for (const badge of normalBadges) {
+      expect(badge).not.toContain("var(--ok)");
+      expect(badge).toContain("text-muted-foreground");
+    }
   });
 
   it("throws the route not-found boundary for an unknown tenant detail without recording access", async () => {
@@ -662,31 +735,40 @@ describe("platform monitoring page states", () => {
     expect(html).toContain("Alpha Outlet");
     expect(html).toContain("Kondisi operasional dan konfigurasi aman tenant.");
     expect(html).toContain("Hanya konfigurasi aman yang ditampilkan; nilai kredensial tidak pernah ditampilkan.");
-    expect(html.indexOf("Siklus tenant")).toBeLessThan(html.indexOf("Filter &amp; periode"));
-    expect(html).toContain("Tangguhkan tenant");
+    // V-36: the suspension sits in the danger zone that closes the page, after the audit trail.
+    expect(html.indexOf("Zona berbahaya")).toBeGreaterThan(html.indexOf('id="platform-audit-title"'));
+    expect(html.indexOf("Zona berbahaya")).toBeGreaterThan(html.indexOf("Awalan nomor kiriman"));
+    expect(html.indexOf("Tangguhkan tenant")).toBeGreaterThan(html.indexOf("Zona berbahaya"));
     expect(html).toContain("Ketik persis: Alpha Outlet");
     expect(html).toContain("Perubahan belum tersimpan");
     expect(html).toContain("Konfigurasi outlet tanpa nilai kredensial");
     expect(html).toContain("Privat aktif");
-    expect(html).toContain("Default platform");
-    expect(html).toContain("Batch provider terbaru; identitas akun dianonimkan");
+    expect(html).toContain("Bawaan platform");
+    expect(html).toContain("Pengajuan ke provider terbaru; identitas akun dianonimkan");
     expect(html).toContain("Akun provider #7");
     // The batch table fit at 1440 only once raw enums/codes may break and the two
     // timestamps share one two-line cell; TableCell is nowrap by default.
     const batchStart = html.indexOf('id="batch-caption"');
     const batchTable = html.slice(batchStart, html.indexOf("</table>", batchStart));
-    for (const value of ["FAILED", "AUTH_REDACTED"]) {
-      const cell = batchTable.match(new RegExp(`<td[^>]*>${value}</td>`))?.[0];
-      expect(cell, `${value} cell`).toBeDefined();
-      expect(cell).toMatch(/\bwhitespace-normal\b/);
-      expect(cell).toMatch(/\bwrap-anywhere\b/);
-    }
+    // The batch status and the safe error code read in Indonesian (V-6); an unknown code keeps
+    // its value in brackets for support, in a break-anywhere cell.
+    const statusCell = batchTable.match(/<td[^>]*>Gagal<\/td>/)?.[0];
+    expect(statusCell, "status cell").toBeDefined();
+    // Indonesian status words wrap at spaces, so the status cell no longer needs wrap-anywhere
+    // (it did while it held unbroken enum values); the code cell below still does.
+    expect(statusCell).toMatch(/\bwhitespace-normal\b/);
+    expect(batchTable).not.toMatch(/<td[^>]*>FAILED<\/td>/);
+    expect(batchTable).not.toMatch(/<td[^>]*>AUTH_REDACTED<\/td>/);
+    const codeCell = batchTable.match(/<td[^>]*>Respons lain dari Mengantar \(kode AUTH_REDACTED\)<\/td>/)?.[0];
+    expect(codeCell, "AUTH_REDACTED cell").toBeDefined();
+    expect(codeCell).toMatch(/\bwhitespace-normal\b/);
+    expect(codeCell).toMatch(/\bwrap-anywhere\b/);
     // Seven column headers plus the one row header of the single fixture batch.
     expect(batchTable.match(/<th[\s>]/g) ?? []).toHaveLength(7 + 1);
     const timeCell = batchTable.match(/<td[^>]*>(?:(?!<\/td>).)*Dicoba(?:(?!<\/td>).)*<\/td>/)?.[0];
     expect(timeCell, "merged timestamp cell").toBeDefined();
     expect(timeCell).toContain("Selesai —");
-    expect(html).toContain("Ledger dan rekonsiliasi");
+    expect(html).toContain("Keuangan dan rekonsiliasi");
     expect(html).toContain("Pokok COD — liabilitas");
     // T-193: historical VAT rows read as part of Mengantar's COD fee, never as a payable.
     const vatCard = html.match(/<div[^>]*data-slot="card"[^>]*>(?:(?!data-slot="card").)*PPN dalam biaya COD \(dipotong Mengantar\)(?:(?!data-slot="card").)*/)?.[0] ?? "";
@@ -733,9 +815,12 @@ describe("platform monitoring page states", () => {
 
     expect(html).toContain("Jejak audit");
     expect(html).toContain("Hasil");
-    expect(html).toContain("TENANT_SUSPENDED");
+    // V-6: an Indonesian sentence, never the stored code; a denied event reads as an attempt.
+    expect(html).toContain("Super Admin mencoba menangguhkan tenant");
+    expect(html).not.toContain("TENANT_SUSPENDED");
     expect(html).toContain("Ditolak");
-    expect(html).toContain("ACTIVE → SUSPENDED");
+    expect(html).toContain("Aktif → Ditangguhkan");
+    expect(html).not.toContain("SUPER_ADMIN");
     expect(html).toContain("Halaman 3 dari 3");
     expect(pageControl(html, "Halaman sebelumnya").link).toContain("halaman=2");
     // The last page cannot link past itself.

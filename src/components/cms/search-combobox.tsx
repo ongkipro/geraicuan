@@ -110,7 +110,7 @@ export function SearchCombobox<T>({
           aria-describedby={ariaDescribedBy}
           aria-expanded={open}
           aria-invalid={invalid}
-          className="h-auto min-h-11 w-full min-w-0 items-start justify-between gap-3 whitespace-normal px-3 py-2 text-left font-normal md:min-h-8"
+          className="h-auto min-h-11 w-full min-w-0 items-start justify-between gap-3 whitespace-normal px-2.5 py-1 text-left font-normal md:min-h-10"
           disabled={disabled}
           id={id}
           ref={triggerRef}
@@ -139,7 +139,7 @@ export function SearchCombobox<T>({
                 <AlertDescription className="grid gap-2">
                   <p>{typeahead.message ?? "Pencarian belum dapat diproses."}</p>
                   <Button
-                    className="min-h-11 justify-self-start"
+                    className="justify-self-start max-md:min-h-11"
                     onClick={() => typeahead.retry()}
                     ref={retryRef}
                     size="sm"

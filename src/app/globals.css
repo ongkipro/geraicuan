@@ -42,11 +42,13 @@
   --secondary:oklch(0.97 0 0);
   --secondary-foreground:oklch(0.205 0 0);
   --muted:oklch(0.97 0 0);
-  --muted-foreground:oklch(0.53 0 0);
+  /* T-203: secondary text for readers aged 40+ — about 7.5:1 on card and 7:1 on the sunken ground. */
+  --muted-foreground:oklch(0.45 0 0);
   --accent-foreground:#2e47ba;
   --destructive:oklch(0.505 0.19 27.5);
   --border:oklch(0.922 0 0);
-  --input:oklch(0.922 0 0);
+  /* Spec 10 §2.1: a resting field boundary is informational, so it holds 3:1 on white (V-39). */
+  --input:oklch(0.64 0 0);
   /* Okabe-Ito categorical ramp (spec 19): series differ by hue, not only
      lightness. --chart-3 (#e69f00) is 2.25:1 on white, so it is never a line
      stroke without a marker/label; the stroke tokens are measured in tests. */
@@ -56,7 +58,7 @@
   --chart-4:#cc79a7;
   --chart-5:#d55e00;
   --radius:0.45rem;
-  --sidebar:oklch(0.985 0 0);
+  --sidebar:oklch(1 0 0);
   --sidebar-foreground:oklch(0.145 0 0);
   --sidebar-primary:#2e47ba;
   --sidebar-primary-foreground:#ffffff;
@@ -145,29 +147,6 @@ body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--f
 .auth-card .auth-hint { color:#475467; font-size:.9375rem; }
 .auth-field-error { margin:0; color:var(--danger); font-size:.9375rem; font-weight:600; line-height:1.5; }
 .auth-card .auth-field-error { color:var(--danger); font-size:.9375rem; }
-.auth-password { position:relative; display:flex; align-items:stretch; gap:.5rem; }
-.auth-password [data-slot="input"] { flex:1 1 auto; min-width:0; }
-.auth-password-toggle {
-  display:inline-flex;
-  flex:0 0 auto;
-  align-items:center;
-  justify-content:center;
-  gap:.375rem;
-  min-width:3rem;
-  min-height:3rem;
-  padding:0 .875rem;
-  border:1px solid #98a2b3;
-  border-radius:var(--radius);
-  background:var(--surface);
-  color:var(--ink);
-  font:inherit;
-  font-size:.9375rem;
-  font-weight:600;
-  cursor:pointer;
-}
-.auth-password-toggle:hover { background:var(--surface-sunken); }
-.auth-password-toggle:focus-visible { outline:3px solid var(--ring); outline-offset:2px; }
-.auth-password-toggle svg { width:1.25rem; height:1.25rem; }
 .auth-submit { width:100%; min-height:3.25rem; margin-top:.25rem; font-size:1.0625rem; font-weight:700; }
 .auth-secondary-action { width:100%; min-height:3rem; font-size:1rem; font-weight:600; }
 .auth-form [data-slot="alert"], .auth-card [data-slot="alert"] { margin:0; padding:.875rem 1rem; font-size:1rem; line-height:1.55; }
@@ -336,20 +315,36 @@ html { scrollbar-gutter:stable; }
 /* PR-60: a store awaiting approval — a status, drawn in the warning tokens. */
 .approval-banner { border-color:var(--warn); background:var(--warn-surface); color:var(--ink); }
 .approval-banner > svg, .approval-banner [data-slot="alert-title"] { color:var(--warn); }
-.cms-main { --cms-header-h:6rem; width:100%; max-width:88rem; margin-inline:auto; padding:1.5rem 1rem 3rem; }
+/* T-204: the top bar is one 64px row at every width. */
+.cms-main { --cms-header-h:4rem; width:100%; max-width:88rem; margin-inline:auto; padding:1.5rem 1rem 3rem; }
 .cms-skip-link { position:fixed; left:-9999px; top:0; z-index:20; padding:.75rem; color:var(--primary); background:var(--surface); }
 .cms-skip-link:focus-visible { left:.5rem; top:.5rem; }
 .cms-signout { display:grid; gap:.5rem; margin-top:.4rem; }
 .cms-signout-button { width:100%; }
 .cms-control-error { margin:0; color:var(--danger); font-size:.8125rem; line-height:1.4; }
 @media (min-width:768px) {
-  /* The header loses its stacked clock row, so a sticky aside may start higher. */
-  .cms-main { --cms-header-h:4rem; padding-inline:1.5rem; }
+  .cms-main { padding-inline:1.5rem; }
 }
 @media (min-width:1024px) {
   .cms-main { padding-inline:2rem; }
 }
 @theme inline {
+  /* T-203 type scale for an operator audience aged 40+ (spec 10 §2.2). Every `text-*` utility in the
+     app resolves here, so the whole product moves together: 13 meta · 15 UI · 16 body · 18 · 20 · 26 page title. */
+  --text-xs:0.8125rem;
+  --text-xs--line-height:1.125rem;
+  --text-sm:0.9375rem;
+  --text-sm--line-height:1.375rem;
+  --text-base:1rem;
+  --text-base--line-height:1.5rem;
+  --text-lg:1.125rem;
+  --text-lg--line-height:1.625rem;
+  --text-xl:1.25rem;
+  --text-xl--line-height:1.75rem;
+  --text-2xl:1.625rem;
+  --text-2xl--line-height:2rem;
+  --text-3xl:1.875rem;
+  --text-3xl--line-height:2.25rem;
   --shadow-resting:var(--elevation-resting);
   --font-heading:var(--font-inter);
   --font-sans:var(--font-inter);
@@ -485,15 +480,23 @@ html { scrollbar-gutter:stable; }
 /* Shared work surfaces: structure and density, using the supplied theme tokens. */
 .cms-workspace { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:calc(var(--radius) * 1.8); background:var(--card); }
 .cms-section-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; font-size:1rem; font-weight:600; letter-spacing:-.015em; }
-.cms-filter-bar { display:grid; grid-template-columns:minmax(0,1fr) auto; min-width:0; gap:.5rem .75rem; padding:.875rem 1rem; border:1px solid var(--border); border-radius:calc(var(--radius) * 1.4); background:var(--card); box-shadow:var(--elevation-resting); }
-.cms-filter-bar > :first-child { display:contents; }
-.cms-filter-bar > :first-child > :first-child { grid-column:1 / -1; }
-.cms-filter-bar > :first-child > details { grid-column:1; grid-row:2; }
-.cms-filter-bar > :last-child { grid-column:2; grid-row:2; align-self:start; }
-.cms-filter-bar:has(> :first-child > details[open]) > :first-child > details { grid-column:1 / -1; }
-.cms-filter-bar:has(> :first-child > details[open]) > :last-child { grid-row:3; }
+/* T-204 reference filter row: one wrapping line of 40px controls (44px below md) —
+   range trigger, outlet select, "Terapkan", "Hapus filter" — aligned on their bottom
+   edge so a field that still carries a visible label lines up with the rest. The
+   field wrappers dissolve (display:contents) so every control is a flex item of the
+   row; an advanced disclosure takes its own full-width line after the actions. */
+.cms-filter-bar { display:flex; flex-wrap:wrap; align-items:flex-end; min-width:0; gap:.75rem; }
 .cms-filter-bar > * { min-width:0; }
-.cms-filter-advanced > summary { display:flex; width:fit-content; min-height:44px; align-items:center; gap:.5rem; list-style:none; cursor:pointer; color:var(--foreground); font-size:.8125rem; font-weight:500; }
+.cms-filter-bar > :first-child,
+.cms-filter-bar > :first-child > div:first-of-type:not([role="group"]) { display:contents; }
+.cms-filter-bar > :first-child > div:first-of-type > *,
+.cms-filter-bar > :first-child > [role="group"] { flex:1 1 10rem; min-width:0; }
+/* Below md the range trigger takes the first line; the other fields and the actions share the next. */
+.cms-filter-bar > :first-child > div:first-of-type > :has(> .cms-range-filter),
+.cms-filter-bar > :first-child > [role="group"] { flex-basis:100%; }
+.cms-filter-bar > :first-child > .cms-filter-advanced { order:1; flex:1 1 100%; min-width:0; }
+.cms-filter-bar > :last-child { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; }
+.cms-filter-advanced > summary { display:flex; width:fit-content; min-height:44px; align-items:center; gap:.5rem; list-style:none; cursor:pointer; color:var(--foreground); font-size:var(--text-sm); font-weight:500; }
 .cms-filter-advanced > summary::-webkit-details-marker { display:none; }
 .cms-filter-advanced[open] > summary > svg:last-child { transform:rotate(180deg); }
 .cms-filter-advanced[open] { padding-bottom:.25rem; }
@@ -502,53 +505,20 @@ html { scrollbar-gutter:stable; }
    whether the panel is open or shut; CSS alone makes it read as a popover from
    md and as a bottom sheet below it. */
 .cms-range-filter { position:relative; min-width:0; }
-.cms-range-filter > summary { display:flex; width:100%; min-height:44px; align-items:center; gap:.5rem; padding:0 .625rem; border:1px solid var(--border); border-radius:var(--radius-lg, .5rem); background:var(--background); color:var(--foreground); font-size:.875rem; font-weight:500; list-style:none; cursor:pointer; }
+.cms-range-filter > summary { display:flex; width:100%; min-height:44px; align-items:center; gap:.5rem; padding:0 .75rem; border:1px solid var(--input); border-radius:var(--radius-lg, .5rem); background:var(--background); color:var(--foreground); font-size:var(--text-sm); font-weight:500; list-style:none; cursor:pointer; }
 .cms-range-filter > summary::-webkit-details-marker { display:none; }
 .cms-range-filter > summary:hover { background:var(--muted); }
 .cms-range-filter[open] > summary > svg:last-child { transform:rotate(180deg); }
 .cms-range-popover { position:fixed; inset-inline:0; bottom:0; z-index:50; display:grid; gap:1rem; max-height:85dvh; overflow:auto; padding:1rem; border-top:1px solid var(--border); border-radius:calc(var(--radius) * 1.4) calc(var(--radius) * 1.4) 0 0; background:var(--popover, var(--card)); color:var(--popover-foreground, var(--foreground)); box-shadow:0 -10px 30px rgb(16 24 40 / 18%); }
 @media (min-width:768px) {
-  .cms-filter-bar { align-items:start; column-gap:1rem; }
-  .cms-filter-bar > :first-child > :first-child { grid-column:1; }
-  .cms-filter-bar > :last-child, .cms-filter-bar:has(> :first-child > details[open]) > :last-child { grid-column:2; grid-row:1; padding-top:1.5rem; }
-  .cms-filter-advanced > summary { min-height:32px; }
-  .cms-range-filter > summary { min-height:36px; }
+  .cms-filter-bar > :first-child > div:first-of-type > *,
+  .cms-filter-bar > :first-child > div:first-of-type > :has(> .cms-range-filter),
+  .cms-filter-bar > :first-child > [role="group"] { flex:0 1 auto; }
+  .cms-filter-bar .cms-range-filter { min-width:16rem; }
+  .cms-filter-advanced > summary { min-height:40px; }
+  .cms-range-filter > summary { min-height:40px; }
   .cms-range-popover { position:absolute; inset-inline:auto; left:0; top:calc(100% + .375rem); bottom:auto; width:max-content; max-width:min(54rem, calc(100vw - 2rem)); max-height:min(80dvh, 40rem); border:1px solid var(--border); border-radius:calc(var(--radius) * 1.4); box-shadow:0 10px 30px rgb(16 24 40 / 14%); }
 }
 
-/* iOS Glassmorphism and Squircle Design Standards (Spec 20) */
-.ios-glass-card {
-  background: color-mix(in srgb, var(--card) 85%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius: 1.125rem;
-  box-shadow: 0 4px 20px -2px rgb(0 0 0 / 4%), 0 1px 4px -1px rgb(0 0 0 / 2%);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.ios-glass-card:hover {
-  box-shadow: 0 10px 30px -4px rgb(0 0 0 / 6%), 0 2px 8px -2px rgb(0 0 0 / 3%);
-}
-.ios-squircle {
-  border-radius: 0.875rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-.ios-btn-primary {
-  background: #007aff;
-  color: #ffffff;
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 14px 0 rgba(0, 122, 255, 0.35);
-  transition: all 0.15s ease;
-}
-.ios-btn-primary:hover {
-  background: #006ee6;
-  box-shadow: 0 6px 20px 0 rgba(0, 122, 255, 0.45);
-  transform: translateY(-0.5px);
-}
-.ios-btn-primary:active {
-  transform: scale(0.98);
-}
+
 

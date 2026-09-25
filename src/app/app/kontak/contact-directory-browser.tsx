@@ -8,22 +8,24 @@ import { useFormStatus } from "react-dom";
 import { searchContacts, type ContactSearchState, type ContactSearchRow } from "@/app/app/kontak/actions";
 import { AlsoRoleBadge, CopyPhoneButton, WhatsAppLink } from "@/app/app/kontak/contact-ui";
 import { EmptyState } from "@/components/cms/empty-state";
+import { desktopTableClassName, RecordItem, RecordList } from "@/components/cms/record-list";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
+import { dataTableSurfaceClassName } from "@/components/cms/data-table-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatDistrictCity, formatPostalCode } from "@/lib/label-format";
+import { areaDisplayCase, formatDistrictCity, formatPostalCode } from "@/lib/label-format";
 import {
   contactDetailHref,
   contactMetricPrefix,
   contactRoleLabel,
-  contactStatusEntries,
   otherContactRole,
   type ContactRole,
   type ContactStatusFilter,
 } from "@/lib/contact-role-filter";
+import { cn } from "@/lib/utils";
 import { TYPEAHEAD_DEBOUNCE_MS, TYPEAHEAD_MIN_LENGTH } from "@/lib/use-typeahead-search";
 
 const SEARCH_PRIVACY_NOTE = "Pencarian dikirim privat dan tidak disimpan di alamat halaman.";
@@ -31,25 +33,27 @@ const countFormatter = new Intl.NumberFormat("id-ID");
 
 function SearchButton() {
   const { pending } = useFormStatus();
-  return <Button className="min-h-11" disabled={pending} type="submit"><Search aria-hidden="true" /><span className="max-sm:sr-only">{pending ? "Mencari…" : "Cari"}</span></Button>;
+  return <Button className="min-h-11" disabled={pending} type="submit" variant="outline"><Search aria-hidden="true" /><span className="max-sm:sr-only">{pending ? "Mencari…" : "Cari"}</span></Button>;
 }
 
-function ContactArea({ contact, role }: { contact: ContactSearchRow; role: ContactRole }) {
+/** `inCard`: the record-list line is already `text-sm` muted (spec 10 §6), so the table's `text-xs` meta is dropped. */
+function ContactArea({ contact, inCard = false, role }: { contact: ContactSearchRow; inCard?: boolean; role: ContactRole }) {
+  const meta = inCard ? "" : "text-xs";
   if (!contact.address) {
-    return <span className="block text-xs text-muted-foreground">Belum ada alamat</span>;
+    return <span className={`block ${meta} text-muted-foreground`}>Belum ada alamat</span>;
   }
   const postalCode = formatPostalCode(contact.destinationAreaLabel);
   return (
     <>
       {/* Full street address only in the table (md and up); the phone card
           keeps the area summary so a row stays scannable (T-149). */}
-      <span className="hidden wrap-anywhere md:line-clamp-2">{contact.address}</span>
-      <span className="block wrap-anywhere text-xs text-muted-foreground">
-        {contact.destinationAreaLabel ? formatDistrictCity(contact.destinationAreaLabel) : "Area belum dipilih"}
+      <span className="hidden font-medium wrap-anywhere md:line-clamp-2">{areaDisplayCase(contact.address)}</span>
+      <span className={`block wrap-anywhere ${meta} text-muted-foreground`}>
+        {contact.destinationAreaLabel ? areaDisplayCase(formatDistrictCity(contact.destinationAreaLabel)) : "Area belum dipilih"}
         {postalCode ? <span className="tabular-nums"> · {postalCode}</span> : null}
       </span>
       {contact.addressCount > 1 ? (
-        <Link className="inline-flex min-h-6 items-center text-xs text-primary underline-offset-4 hover:underline" href={`${contactDetailHref(contact.id, role)}#alamat`}>
+        <Link className={`inline-flex min-h-11 items-center ${meta} text-primary underline-offset-4 hover:underline md:min-h-8`} href={`${contactDetailHref(contact.id, role)}#alamat`}>
           +{contact.addressCount - 1} alamat
         </Link>
       ) : null}
@@ -58,7 +62,7 @@ function ContactArea({ contact, role }: { contact: ContactSearchRow; role: Conta
 }
 
 function StatusBadge({ archived }: { archived: boolean }) {
-  return archived ? <Badge variant="outline">Diarsipkan</Badge> : <Badge variant="secondary">Aktif</Badge>;
+  return archived ? <ToneBadge label="Diarsipkan" tone="neutral" /> : <ToneBadge label="Aktif" tone="ok" />;
 }
 
 /**
@@ -69,19 +73,24 @@ function StatusBadge({ archived }: { archived: boolean }) {
 export function ContactDirectoryBrowser({
   filter,
   initialRows,
+  pagination,
   role,
   status,
+  totalCount,
 }: {
   filter?: ReactNode;
   initialRows: ContactSearchRow[];
+  /** Server-rendered pager for the directory list; hidden while search results show. */
+  pagination?: ReactNode;
   role: ContactRole;
   status: ContactStatusFilter;
+  /** Every contact under the status filter, not only this page's rows. */
+  totalCount?: number;
 }) {
   const label = contactRoleLabel(role);
   const noun = label.toLowerCase();
   const otherRole = otherContactRole(role);
   const holdsOther = (contact: ContactSearchRow) => (role === "pengirim" ? contact.isRecipient : contact.isSender);
-  const statusEntry = contactStatusEntries(role).find((entry) => entry.value === status);
   const showStatus = status === "all";
   const initialState: ContactSearchState = { rows: initialRows, searched: false };
   const [state, action, pending] = useActionState<ContactSearchState, FormData>(searchContacts, initialState);
@@ -122,13 +131,14 @@ export function ContactDirectoryBrowser({
     <div className="grid min-w-0 gap-4">
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
         {filter}
-        <form action={action} aria-busy={pending} className="flex min-w-0 flex-1 items-center gap-2" noValidate ref={formRef}>
+        {/* T-206 (owner reference pengirim.html): status tabs start, search end of one row from lg. */}
+        <form action={action} aria-busy={pending} className="flex min-w-0 flex-1 items-center gap-2 lg:ml-auto lg:max-w-md" noValidate ref={formRef}>
           <input name="status" type="hidden" value={status} />
           <input name="peran" type="hidden" value={role} />
           <label className="relative min-w-0 flex-1" htmlFor="contact-search">
             <span className="sr-only">Cari {noun}</span>
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input aria-describedby={state.error ? "contact-search-error contact-search-help" : "contact-search-help"} aria-invalid={Boolean(state.error)} className="min-h-11 pl-9" id="contact-search" maxLength={80} name="q" onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama atau nomor telepon" ref={searchRef} type="search" value={query} />
+            <Input aria-describedby={state.error ? "contact-search-error contact-search-help" : "contact-search-help"} aria-invalid={Boolean(state.error)} className="min-h-11 pl-9" id="contact-search" maxLength={80} name="q" onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama atau telepon" ref={searchRef} type="search" value={query} />
             <span className="sr-only" id="contact-search-help">{SEARCH_PRIVACY_NOTE}</span>
           </label>
           {query || state.searched ? (
@@ -153,49 +163,52 @@ export function ContactDirectoryBrowser({
           {/* Keeps the outline h1 → h2 → h3 when the empty state renders its own h3. */}
           <h2 className="sr-only">Daftar {noun}</h2>
           <p aria-live="polite" className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground" data-metric-id={`${contactMetricPrefix(role)}-LISTED`}>{countFormatter.format(state.rows.length)} {noun}</span>
-            {state.searched ? " cocok dengan pencarian" : statusEntry ? ` · ${statusEntry.description}` : null}
+            <span className="font-medium text-foreground" data-metric-id={`${contactMetricPrefix(role)}-LISTED`}>{countFormatter.format(state.searched ? state.rows.length : totalCount ?? state.rows.length)} {noun}</span>
+            {state.searched ? " cocok dengan pencarian" : null}
           </p>
           {state.rows.length === 0 ? (
             <EmptyState
               action={state.searched ? undefined : createAction}
-              description={state.searched ? "Periksa ejaan atau hapus pencarian." : status === "archived" ? `${label} yang diarsipkan akan tersedia di sini.` : role === "pengirim" ? "Simpan toko atau gudang asal kiriman agar tidak perlu mengetik ulang di setiap draf." : "Simpan pembeli yang sering menerima kiriman agar tidak perlu mengetik ulang di setiap draf."}
+              description={state.searched ? "Periksa ejaan atau hapus pencarian." : status === "archived" ? `${label} yang diarsipkan akan tersedia di sini.` : role === "pengirim" ? "Simpan gerai atau gudang asal kiriman agar tidak perlu mengetik ulang di setiap draf." : "Simpan pembeli yang sering menerima kiriman agar tidak perlu mengetik ulang di setiap draf."}
               icon={state.searched ? Search : UserRound}
               title={state.searched ? `Tidak ada ${noun} yang cocok` : status === "archived" ? `Belum ada ${noun} diarsipkan` : `Belum ada ${noun}`}
             />
           ) : (
             <>
-              <ul aria-label={`Daftar ${noun}`} className="grid gap-2 md:hidden">
+              {/* Spec 10 §6 (T-203): name + status → phone with the one icon action → area. */}
+              <RecordList label={`Daftar ${noun}`}>
                 {state.rows.map((contact) => (
-                  <li className="grid gap-2 ios-glass-card rounded-2xl border border-border/60 p-3.5 shadow-xs" key={contact.id}>
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <Link className="inline-flex min-h-11 min-w-0 items-center font-medium wrap-anywhere text-primary underline-offset-4 hover:underline" href={contactDetailHref(contact.id, role)}>{contact.name}</Link>
-                      {holdsOther(contact) ? <AlsoRoleBadge role={otherRole} /> : null}
-                      {showStatus ? <StatusBadge archived={contact.archived} /> : null}
-                    </div>
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="wrap-anywhere font-mono text-sm tabular-nums">{contact.phone}</span>
-                      <span className="flex shrink-0 items-center">
+                  <RecordItem
+                    key={contact.id}
+                    primary={(
+                      <span className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="wrap-anywhere tabular-nums">{contact.phone}</span>
                         <WhatsAppLink name={contact.name} phone={contact.phone} />
-                        <CopyPhoneButton name={contact.name} phone={contact.phone} />
                       </span>
-                    </div>
-                    <div className="min-w-0"><ContactArea contact={contact} role={role} /></div>
-                  </li>
+                    )}
+                    secondary={<ContactArea contact={contact} inCard role={role} />}
+                    status={holdsOther(contact) || showStatus ? (
+                      <span className="flex flex-wrap justify-end gap-1">
+                        {holdsOther(contact) ? <AlsoRoleBadge role={otherRole} /> : null}
+                        {showStatus ? <StatusBadge archived={contact.archived} /> : null}
+                      </span>
+                    ) : undefined}
+                    title={<Link className="inline-flex min-h-11 min-w-0 items-center wrap-anywhere text-primary underline-offset-4 hover:underline" href={contactDetailHref(contact.id, role)}>{contact.name}</Link>}
+                  />
                 ))}
-              </ul>
-              <Table className="min-w-[44rem]" containerClassName="hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:block" containerProps={{ "aria-label": `Tabel ${noun}; geser horizontal untuk melihat seluruh kolom`, role: "region", tabIndex: 0 }}>
+              </RecordList>
+              <Table className="min-w-[44rem]" containerClassName={cn(dataTableSurfaceClassName, desktopTableClassName)} containerProps={{ "aria-label": `Tabel ${noun}; geser horizontal untuk melihat seluruh kolom`, role: "region", tabIndex: 0 }}>
                 <TableCaption className="sr-only">{label} tenant</TableCaption>
-                <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Nama</TableHead><TableHead>Telepon</TableHead><TableHead>Alamat</TableHead>{showStatus ? <TableHead>Status</TableHead> : null}<TableHead className="w-24 text-right"><span className="sr-only">Aksi</span></TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Nama {noun}</TableHead><TableHead>Nomor telepon</TableHead><TableHead>{role === "penerima" ? "Alamat dan area" : "Alamat utama"}</TableHead>{showStatus ? <TableHead>Status</TableHead> : null}<TableHead className="w-24 text-right"><span className="sr-only">Aksi</span></TableHead></TableRow></TableHeader>
                 <TableBody>{state.rows.map((contact) => (
-                  <TableRow className="group" key={contact.id}>
-                    <TableCell className="sticky left-0 z-10 max-w-64 whitespace-normal bg-inherit font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                  <TableRow key={contact.id}>
+                    <TableCell className="sticky left-0 z-10 max-w-64 whitespace-normal bg-inherit font-medium">
                       <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                         <Link className="inline-flex min-h-8 items-center wrap-anywhere text-primary underline-offset-4 hover:underline" href={contactDetailHref(contact.id, role)}>{contact.name}</Link>
                         {holdsOther(contact) ? <AlsoRoleBadge role={otherRole} /> : null}
                       </span>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap px-3 font-mono text-xs tabular-nums">{contact.phone}</TableCell>
+                    <TableCell className="whitespace-nowrap px-3 tabular-nums">{contact.phone}</TableCell>
                     <TableCell className="max-w-72 whitespace-normal px-3"><ContactArea contact={contact} role={role} /></TableCell>
                     {showStatus ? <TableCell><StatusBadge archived={contact.archived} /></TableCell> : null}
                     <TableCell className="px-2 text-right"><span className="inline-flex items-center"><WhatsAppLink name={contact.name} phone={contact.phone} /><CopyPhoneButton name={contact.name} phone={contact.phone} /></span></TableCell>
@@ -204,6 +217,7 @@ export function ContactDirectoryBrowser({
               </Table>
             </>
           )}
+          {state.searched ? null : pagination}
         </section>
       )}
     </div>

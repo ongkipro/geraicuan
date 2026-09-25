@@ -16,11 +16,11 @@ export default function PlatformError({ reset }: { error: Error & { digest?: str
 
   return (
     <PageContainer>
-      <PageHeader description="Pulihkan workspace tanpa menampilkan detail internal atau data terlindungi." eyebrow="Operasi platform" title="Workspace platform" />
+      <PageHeader description="Muat ulang halaman tanpa menampilkan detail internal atau data terlindungi." eyebrow="Platform" title="Halaman platform" />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Pemantauan tidak dapat dimuat</AlertTitle>
-        <AlertDescription className="space-y-3"><p>Terjadi gangguan saat membaca data operasional. Tidak ada detail internal yang ditampilkan.</p><Button className="min-h-11" onClick={reset} ref={retryRef} type="button" variant="outline">Coba lagi</Button></AlertDescription>
+        <AlertDescription className="space-y-3"><p>Terjadi gangguan saat membaca data operasional. Tidak ada detail internal yang ditampilkan.</p><Button className="min-h-11 md:min-h-10" onClick={reset} ref={retryRef} type="button" variant="outline">Coba lagi</Button></AlertDescription>
       </Alert>
     </PageContainer>
   );

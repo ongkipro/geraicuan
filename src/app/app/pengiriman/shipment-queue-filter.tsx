@@ -1,6 +1,5 @@
 "use client";
 
-import { ListFilter } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -40,22 +39,25 @@ export function ShipmentQueueFilter({
   const [pending, startTransition] = useTransition();
   const operational = SHIPMENT_STATUS_OPTIONS.filter((option) => OPERATIONAL_VALUES.has(option.value));
   const lifecycle = SHIPMENT_STATUS_OPTIONS.filter((option) => !OPERATIONAL_VALUES.has(option.value));
+  const current = SHIPMENT_STATUS_OPTIONS.find((option) => option.value === status)?.label;
 
   return (
     // Single-choice view with grouped options, so it stays a Select (combobox)
-    // rather than a multi-select facet; styled as a toolbar facet trigger.
-    // Reset lives in the page's DataTableToolbar.
+    // rather than a multi-select facet. T-203: the trigger names itself in
+    // words ("Status: …") and renders the chosen label on first paint instead
+    // of waiting for Radix to mirror the item text after hydration; no dashed
+    // frame (spec 10 §1.6). Reset lives in the page's DataTableToolbar.
     <div className="flex w-full items-center md:w-auto">
       <label className="flex w-full items-center md:w-auto" htmlFor="status-kiriman">
-        <span className="sr-only">Tampilan antrean</span>
+        <span className="sr-only">Status kiriman</span>
         <Select
           disabled={pending}
           onValueChange={(value) => startTransition(() => router.push(shipmentQueueHref(value as ShipmentQueueStatusFilter, 1, carry)))}
           value={status}
         >
-          <SelectTrigger className="w-full justify-start border-dashed max-md:min-h-11 md:w-[13.5rem]" id="status-kiriman">
-            <ListFilter aria-hidden="true" className="text-muted-foreground" />
-            <SelectValue className="flex-1 text-left" />
+          <SelectTrigger className="w-full justify-start font-medium max-md:min-h-11 md:w-auto md:min-w-54" id="status-kiriman">
+            <span aria-hidden="true" className="text-muted-foreground">Status:</span>
+            <SelectValue className="flex-1 text-left">{current}</SelectValue>
           </SelectTrigger>
           <SelectContent align="start">
             <SelectGroup>
@@ -64,7 +66,7 @@ export function ShipmentQueueFilter({
             </SelectGroup>
             <SelectSeparator />
             <SelectGroup>
-              <SelectLabel>Status lifecycle</SelectLabel>
+              <SelectLabel>Tahap kiriman</SelectLabel>
               {lifecycle.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
             </SelectGroup>
           </SelectContent>

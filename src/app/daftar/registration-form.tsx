@@ -63,8 +63,8 @@ export function RegistrationForm() {
         </Alert>
         <ol className="auth-steps">
           <li>Buka email dari GeraiCUAN dan tekan tombol <strong>Verifikasi email</strong>. Tautan berlaku 24 jam. Tidak ada? Periksa folder spam.</li>
-          <li>Masuk, lalu siapkan toko: hubungkan akun Mengantar milik toko dan pilih titik pickup.</li>
-          <li>Tunggu persetujuan Super Admin. Kami kirim email begitu toko disetujui; setelah itu Anda bisa membuat kiriman.</li>
+          <li>Masuk, lalu siapkan gerai: hubungkan akun Mengantar milik gerai dan pilih titik pickup.</li>
+          <li>Tunggu persetujuan Super Admin. Kami kirim email begitu gerai disetujui; setelah itu Anda bisa membuat kiriman.</li>
         </ol>
         <Button asChild className="auth-submit">
           <Link href="/login/tenant">Ke halaman masuk</Link>
@@ -113,9 +113,9 @@ export function RegistrationForm() {
       ) : null}
 
       <fieldset className="auth-section">
-        <legend>Data toko</legend>
+        <legend>Data gerai</legend>
         <div className="auth-field">
-          <Label htmlFor="storeName">Nama toko</Label>
+          <Label htmlFor="storeName">Nama gerai</Label>
           <CharacterClassInput
             aria-describedby={describe("storeName")}
             aria-invalid={invalid("storeName")}
@@ -130,7 +130,7 @@ export function RegistrationForm() {
           <FieldError id="storeName-error" message={errors.storeName} />
         </div>
         <div className="auth-field">
-          <Label htmlFor="whatsapp">Nomor WhatsApp toko</Label>
+          <Label htmlFor="whatsapp">Nomor WhatsApp gerai</Label>
           <p className="auth-hint" id="whatsapp-hint">Nomor Indonesia, misalnya 0812 3456 7890.</p>
           <CharacterClassInput
             aria-describedby={describe("whatsapp", "whatsapp-hint")}
@@ -228,15 +228,15 @@ export function RegistrationForm() {
             value="setuju"
           />
           <span>
-            Saya setuju dengan syarat penggunaan GeraiCUAN: data toko diperiksa Super Admin
-            sebelum toko disetujui, dan toko mengirim dengan akun Mengantar miliknya sendiri.
+            Saya setuju dengan syarat penggunaan GeraiCUAN: data gerai diperiksa Super Admin
+            sebelum gerai disetujui, dan gerai mengirim dengan akun Mengantar miliknya sendiri.
           </span>
         </label>
         <FieldError id="terms-error" message={errors.terms} />
       </div>
 
       <Button className="auth-submit" disabled={pending} type="submit">
-        {pending ? "Mendaftarkan toko…" : "Daftarkan toko"}
+        {pending ? "Mendaftarkan gerai…" : "Daftarkan gerai"}
       </Button>
     </form>
   );

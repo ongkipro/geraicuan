@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { ContactDirectoryBrowser } from "@/app/app/kontak/contact-directory-browser";
 import type { ContactSearchRow } from "@/app/app/kontak/actions";
+import { DataTablePagination } from "@/components/cms/data-table-pagination";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
@@ -24,7 +25,10 @@ import {
 } from "@/lib/contact-role-filter";
 
 type SearchValue = string | string[] | undefined;
-export type ContactRoleDirectorySearchParams = Promise<{ status?: SearchValue }>;
+export type ContactRoleDirectorySearchParams = Promise<{ halaman?: SearchValue; status?: SearchValue }>;
+
+/** Contacts per directory page, the same as the shipment queue. */
+const CONTACT_PAGE_SIZE = 20;
 
 function firstValue(value: SearchValue) {
   return Array.isArray(value) ? value[0] : value;
@@ -59,14 +63,28 @@ export async function ContactRoleDirectory({
   searchParams: ContactRoleDirectorySearchParams;
   stream?: boolean;
 }) {
-  const { invalid: invalidStatus, status } = parseContactStatusFilter(firstValue((await searchParams).status));
-  let pagePromise = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-    loadContactDirectoryPage(tx, context, { query: "", role: contactRoleToRepositoryRole(role), status }),
-  );
+  const params = await searchParams;
+  const { invalid: invalidStatus, status } = parseContactStatusFilter(firstValue(params.status));
+  const requestedPage = Math.max(1, Number.parseInt(firstValue(params.halaman) ?? "1", 10) || 1);
+  let pagePromise = withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
+    const repositoryRole = contactRoleToRepositoryRole(role);
+    const first = await loadContactDirectoryPage(tx, context, {
+      limit: CONTACT_PAGE_SIZE, offset: (requestedPage - 1) * CONTACT_PAGE_SIZE, query: "", role: repositoryRole, status,
+    });
+    // A page past the end shows the last page instead of an empty list.
+    const lastPage = Math.max(1, Math.ceil(first.summary[status] / CONTACT_PAGE_SIZE));
+    if (requestedPage <= lastPage) return { ...first, page: requestedPage };
+    const last = await loadContactDirectoryPage(tx, context, {
+      limit: CONTACT_PAGE_SIZE, offset: (lastPage - 1) * CONTACT_PAGE_SIZE, query: "", role: repositoryRole, status,
+    });
+    return { ...last, page: lastPage };
+  });
   if (stream) {
     pagePromise = pagePromise.then((value) => new Promise<typeof value>((resolve) => setTimeout(() => resolve(value), 1_200)));
   }
-  const { rows, summary } = await pagePromise;
+  const { page, rows, summary } = await pagePromise;
+  const totalCount = summary[status];
+  const totalPages = Math.max(1, Math.ceil(totalCount / CONTACT_PAGE_SIZE));
   const contactRows: ContactSearchRow[] = rows.map((contact) => ({
     address: contact.address,
     addressCount: contact.addressCount,
@@ -83,7 +101,7 @@ export async function ContactRoleDirectory({
   return (
     <PageContainer>
       <PageHeader
-        actions={<Button asChild className="ios-btn-primary min-h-11"><Link href={`/app/kontak/baru?peran=${role}`}><Plus aria-hidden="true" />{label} baru</Link></Button>}
+        actions={<Button asChild><Link href={`/app/kontak/baru?peran=${role}`}><Plus aria-hidden="true" />{label} baru</Link></Button>}
         description={CONTACT_ROLE_DESCRIPTIONS[role]}
         eyebrow="Data"
         title={label}
@@ -107,8 +125,19 @@ export async function ContactRoleDirectory({
           />
         )}
         initialRows={contactRows}
+        pagination={totalPages > 1 ? (
+          <DataTablePagination
+            hrefForPage={(target) => `${contactListHref(role)}?status=${status}&halaman=${target}`}
+            label={`Paginasi ${label.toLowerCase()}`}
+            page={page}
+            summary={<span className="tabular-nums">{totalCount} {label.toLowerCase()}</span>}
+            totalCount={totalCount}
+            totalPages={totalPages}
+          />
+        ) : null}
         role={role}
         status={status}
+        totalCount={totalCount}
       />
     </PageContainer>
   );

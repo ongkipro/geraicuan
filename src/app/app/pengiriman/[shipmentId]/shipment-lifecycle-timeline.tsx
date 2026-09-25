@@ -33,14 +33,14 @@ export function ShipmentLifecycleTimeline({ status }: { status: ShipmentStatus }
           const presentation = SHIPMENT_STATUS_PRESENTATION[step];
           return (
             <li className="relative flex min-h-14 gap-3 pb-4 last:min-h-0 last:pb-0" key={step}>
-              {index < steps.length - 1 ? <span aria-hidden="true" className="absolute left-[9px] top-5 h-[calc(100%-0.25rem)] w-px bg-border" /> : null}
-              {complete ? <Check aria-hidden="true" className="relative z-10 mt-0.5 size-5 rounded-full bg-primary p-1 text-primary-foreground" /> : <Circle aria-hidden="true" className={`relative z-10 mt-0.5 size-5 bg-card ${current ? "fill-primary text-primary" : "text-muted-foreground"}`} />}
+              {index < steps.length - 1 ? <span aria-hidden="true" className="absolute top-5 -bottom-0.5 left-2.5 w-px bg-border" /> : null}
+              {complete ? <Check aria-hidden="true" className="relative z-10 mt-0.5 size-5 rounded-full bg-accent p-1 text-accent-foreground" /> : <Circle aria-hidden="true" className={`relative z-10 mt-0.5 size-5 bg-card ${current ? "fill-primary text-primary" : "text-muted-foreground"}`} />}
               <div className="min-w-0">
+                {/* T-206: the status guidance already leads the rail's "Status paket" card; not repeated here. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className={current ? "font-medium" : "text-sm text-muted-foreground"}>{presentation.label}</p>
+                  <p className={current ? "text-sm font-semibold" : "text-sm text-muted-foreground"}>{presentation.label}</p>
                   {current ? <Badge variant="secondary">Status saat ini</Badge> : null}
                 </div>
-                {current ? <p className="mt-1 text-sm leading-5 text-muted-foreground">{presentation.guidance}</p> : null}
               </div>
             </li>
           );

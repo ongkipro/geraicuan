@@ -60,7 +60,7 @@ export async function reconcileShipmentUnknownSubmission(
     return { error: "Rekonsiliasi hasil penyedia hanya tersedia untuk Tenant Admin." };
   }
   if (!isSanctionedReconciliationFixtureEnabled()) {
-    return { error: "Rekonsiliasi dinonaktifkan karena fixture non-produksi yang disetujui belum diaktifkan." };
+    return { error: "Rekonsiliasi dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan." };
   }
 
   try {

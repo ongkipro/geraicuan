@@ -22,9 +22,9 @@ export default function TenantError({
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Operasional tenant"
+      <PageHeader eyebrow="Utama"
         focusTargetId={HEADING_ID}
-        title="Ringkasan"
+        title="Dasbor"
       />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />

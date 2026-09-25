@@ -12,15 +12,15 @@ export default function PlatformLoading() {
           replaced the moment the route's own header streams in. */}
       <PageHeader
         description="Navigasi dan lingkup platform tetap tersedia saat data pemantauan dimuat."
-        eyebrow="Operasi platform"
+        eyebrow="Platform"
         title="Pemantauan platform"
       />
       {/* Mirrors the page: scope line, visible primary filter controls, the four
           StatCard tiles, then a bordered table. */}
       <Skeleton className="h-5 w-full max-w-lg" />
-      <div className="grid grid-cols-2 gap-3 border-y py-3 md:max-w-xl">
+      <div className="grid grid-cols-2 gap-3 py-3 md:max-w-xl">
         <Skeleton className="h-16 md:h-13"/><Skeleton className="h-16 md:h-13"/>
-        <Skeleton className="h-11 md:h-8"/><Skeleton className="h-11 md:h-8"/>
+        <Skeleton className="h-11 md:h-10"/><Skeleton className="h-11 md:h-10"/>
       </div>
       <section aria-label="Memuat ringkasan keputusan" className="grid gap-4">
         <Skeleton className="h-7 w-56 max-w-full" />

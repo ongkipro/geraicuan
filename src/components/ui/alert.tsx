@@ -27,7 +27,9 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      role="alert"
+      // Spec 10 §7: only an urgent failure interrupts a screen reader; an informational
+      // note is a polite status. A caller's explicit `role` still wins (spread below).
+      role={variant === "destructive" ? "alert" : "status"}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />

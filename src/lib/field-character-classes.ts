@@ -121,7 +121,7 @@ const ERROR_SUFFIX: Readonly<Record<CharacterClass, string>> = {
 };
 
 /**
- * T-196 owner decision: a sender may be a store ("Toko 88"), so a sender name
+ * T-196 owner decision: a sender may be a store ("Gerai 88"), so a sender name
  * takes digits; a recipient is a person. A contact holding both roles follows
  * the sender rule, because it must still be usable as a sender.
  */

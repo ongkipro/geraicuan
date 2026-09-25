@@ -70,7 +70,7 @@ try {
       results.push({name,width,probe});
     }
   }
-  // T-156: the PR-46 settings menu — full rows on the Profil toko index below
+  // T-156: the PR-46 settings menu — full rows on the Profil gerai index below
   // lg, one back link on every other settings page, the left rail from lg.
   for(const width of [1440,1024,390]) {
     const railWidth = width>=1024;
@@ -87,7 +87,7 @@ try {
     assert.equal(index.chevronsVisible.every(Boolean),!railWidth,`index chevrons ${width}`);
     if(!railWidth) assert(index.rowHeights.every(h=>h>=44),`index rows below 44px: ${JSON.stringify(index.rowHeights)}`);
     const indexProbe=JSON.parse(await s.evaluate(PROBE));
-    // <= 0: Profil toko is short enough that `scrollbar-gutter: stable` leaves
+    // <= 0: Profil gerai is short enough that `scrollbar-gutter: stable` leaves
     // the document narrower than the viewport. Only a positive value is overflow.
     assert(indexProbe.overflow<=0,`profil-toko/${width} overflow ${indexProbe.overflow}`);
     assert.equal(indexProbe.contrastFails,0,`profil-toko/${width} contrast`);
@@ -123,7 +123,7 @@ try {
   await screenshot('outlet-private-draft-mobile');
   await visit('settings-connection-many','/app/pengaturan/koneksi?outlet='+privateOutlet,390);
   await s.evaluate(`document.querySelector('[role=radio][value=platform_default]').click()`);
-  await clickText('Gunakan Default GeraiCUAN');
+  await clickText('Gunakan koneksi bawaan GeraiCUAN');
   await waitFor(`!!document.querySelector('[role=alertdialog]')`);
   await screenshot('outlet-confirm-mobile');
   await clickText('Batal');
@@ -135,7 +135,8 @@ try {
   assert(await s.evaluate(`!!document.querySelector('a[href^="/app/pengaturan/pickup?outlet="]')`),'the Outlet page links to the page that owns pickup');
   await screenshot('outlet-location-summary-mobile');
   await visit('members-populated','/app/anggota',390);
-  await s.evaluate(`[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Undang anggota').click()`);
+  // V-23 (T-202): the header "Undang anggota" jump button was removed; the card's submit is the one CTA.
+  await s.evaluate(`document.getElementById('member-invite-email').focus()`);
   await waitFor(`document.activeElement?.id==='member-invite-email'`);
   await s.send('Page.bringToFront');
   await pause(700);

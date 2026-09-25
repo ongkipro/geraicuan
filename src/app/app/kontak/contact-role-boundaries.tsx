@@ -17,7 +17,7 @@ export function ContactRoleDirectoryLoading({ role }: { role: ContactRole }) {
   return (
     <PageContainer aria-busy="true">
       <PageHeader
-        actions={<Skeleton className="h-11 w-32 md:h-8" />}
+        actions={<Skeleton className="h-11 w-32 md:h-10" />}
         description={CONTACT_ROLE_DESCRIPTIONS[role]}
         eyebrow="Data"
         title={label}
@@ -28,7 +28,7 @@ export function ContactRoleDirectoryLoading({ role }: { role: ContactRole }) {
           <Skeleton className="h-11 min-w-0 flex-1 md:h-9" />
         </div>
         <Skeleton className="h-5 w-40" />
-        <div className="overflow-hidden rounded-md border">
+        <div className="overflow-hidden rounded-xl bg-card border">
           <Skeleton className="h-10 w-full rounded-none" />
           <div className="grid gap-3 p-4">
             {Array.from({ length: 4 }, (_, index) => (

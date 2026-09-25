@@ -32,26 +32,28 @@ describe("tenant CMS shell contract", () => {
     );
 
     expect(operatorLabels).toEqual([
-      "Dasbor", "Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Pengirim", "Penerima", "Cek resi", "Cek tarif",
+      "Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Pengirim", "Penerima", "Cek resi", "Cek tarif",
     ]);
-    expect(operatorLabels).not.toContain("Analitik");
+    expect(operatorLabels).not.toContain("Laporan pengiriman");
     expect(operatorLabels).not.toContain("Pengaturan");
     expect(operatorLabels).not.toContain("Anggota & akses");
-    expect(adminLabels).toContain("Analitik");
+    expect(adminLabels).toContain("Laporan pengiriman");
     expect(adminLabels).toContain("Pengaturan");
+    // T-204: the masking product has no Impor CSV, Keuangan or Analitik menu.
+    for (const removed of ["Impor CSV", "Keuangan", "Analitik"]) expect(adminLabels).not.toContain(removed);
     expect(adminLabels).not.toContain("Anggota & akses");
   });
 
   it.each([
     ["/app", "Dasbor"],
-    ["/app/impor", "Impor CSV"],
     ["/app/pengiriman", "Histori kiriman"],
     ["/app/pengiriman/baru", "Buat kiriman"],
     ["/app/pengiriman/3b4f", "Histori kiriman"],
     ["/app/pengiriman/rts", "Retur (RTS)"],
     ["/app/label", "Cetak resi"],
     ["/app/label/3b4f", "Cetak resi"],
-    ["/app/analitik", "Analitik"],
+    ["/app/laporan/pengiriman", "Laporan pengiriman"],
+    ["/app/laporan/cetak-resi", "Riwayat cetak resi"],
     ["/app/kontak/pengirim", "Pengirim"],
     ["/app/kontak/penerima", "Penerima"],
     ["/app/kontak/baru", "Pengirim"],
@@ -108,27 +110,25 @@ describe("tenant CMS shell contract", () => {
     ).toEqual(["Utama", "Pengiriman", "Data", "Cek"]);
   });
 
-  it("promotes Impor CSV and Cetak resi into the Pengiriman group (PR-54)", () => {
+  it("keeps Cetak resi in the Pengiriman group and no Impor CSV (PR-54, T-204)", () => {
     const group = tenantCmsNavigation("TENANT_ADMIN", "/app").find(({ label }) => label === "Pengiriman");
     expect(group?.items.map((item) => [item.key, item.label, item.href])).toEqual([
       ["shipment-new", "Buat kiriman", "/app/pengiriman/baru"],
-      ["import", "Impor CSV", "/app/impor"],
       ["shipments", "Histori kiriman", "/app/pengiriman"],
       ["rts", "Retur (RTS)", "/app/pengiriman/rts"],
       ["print-label", "Cetak resi", "/app/label"],
     ]);
   });
 
-  it("splits contacts into Pengirim and Penerima in the Data group and gathers the three reports under Laporan (PR-54, PR-55, T-188)", () => {
+  it("splits contacts into Pengirim and Penerima in the Data group and gathers the reports under Laporan (PR-54, PR-55, T-188)", () => {
     const groups = tenantCmsNavigation("TENANT_ADMIN", "/app");
     expect(groups.find(({ label }) => label === "Data")?.items.map((item) => [item.key, item.label, item.shortLabel, item.href])).toEqual([
       ["contacts-sender", "Pengirim", "PG", "/app/kontak/pengirim"],
       ["contacts-recipient", "Penerima", "PN", "/app/kontak/penerima"],
     ]);
-    // T-165 and T-166 joined Analitik here; every one of the three is a Tenant
-    // Admin record, so an operator sees no Laporan group at all.
+    // T-165 and T-166 are Tenant Admin records, so an operator sees no Laporan
+    // group at all; T-204 removed Analitik (its courier view moves into the report).
     expect(groups.find(({ label }) => label === "Laporan")?.items.map((item) => [item.key, item.label, item.href])).toEqual([
-      ["analytics", "Analitik", "/app/analitik"],
       ["shipment-report", "Laporan pengiriman", "/app/laporan/pengiriman"],
       ["print-history-report", "Riwayat cetak resi", "/app/laporan/cetak-resi"],
     ]);
@@ -193,7 +193,7 @@ describe("tenant CMS shell contract", () => {
     if (destination) expect(itemsFor("OPERATOR", destination).filter((item) => item.current)).toHaveLength(1);
   });
 
-  it.each(["/app/analitik", "/app/keuangan", "/app/pengaturan", "/app/anggota"])(
+  it.each(["/app/laporan/pengiriman", "/app/laporan/cetak-resi", "/app/pengaturan", "/app/anggota"])(
     "does not claim a permitted destination is current on forbidden route %s",
     (pathname) => {
       expect(
@@ -323,25 +323,30 @@ describe("responsive CMS navigation presentation", () => {
     // the collapsed desktop rail; otherwise the mobile Sheet needs two Escapes.
     expect(navigationSource).toContain("tooltip={railTooltip(item.label)}");
     expect(navigationSource).toContain('state === "collapsed" && !isMobile ? label : undefined');
-    expect(navigationSource).toContain('className="max-md:min-h-11"');
+    expect(navigationSource).toMatch(/className="h-10 [^"]*max-md:h-11/);
   });
 
-  it("gives every non-Utama group its own label glyph and drops the Cek Tarif header button (PR-51, PR-54)", () => {
+  it("gives every destination its own icon in one flat list with uppercase group labels (T-204, supersedes T-187/T-192)", () => {
     const headerToolsSource = readFileSync(
       "src/app/_components/cms-header-tools.tsx",
       "utf8",
     );
-    expect(navigationSource).toContain("Pengiriman: Package,");
-    expect(navigationSource).toContain("Data: ContactRound,");
-    expect(navigationSource).toContain("Cek: ScanSearch,");
-    expect(navigationSource).toContain("Laporan: BarChart3,");
-    expect(navigationSource).toContain("Pengelolaan: Settings2,");
-    // T-192: icons mark top-level rows only; submenu items (tree and rail flyout) are text.
-    expect(navigationSource).not.toContain('"tracking-lookup": PackageSearch');
-    expect(navigationSource).not.toContain('"quick-rate": Calculator');
-    expect(navigationSource).toMatch(/const navigationIcons: Record<string, LucideIcon> = \{\s*dashboard: LayoutDashboard,\s*\}/);
-    expect(navigationSource).not.toMatch(/group\.items\.map\(\(item\) => \{\s*const Icon/);
-    expect(navigationSource).toContain("const GroupIcon = navigationGroupIcons[group.label] ?? FileText;");
+    const keys = [
+      ...tenantCmsNavigation("TENANT_ADMIN", "/app"),
+      ...platformCmsNavigation("/platform"),
+    ].flatMap((group) => group.items.map((item) => item.key));
+    for (const key of keys) {
+      expect(navigationSource, key).toMatch(new RegExp(`(?:"${key}"|\\b${key}): [A-Z][A-Za-z0-9]+,`));
+    }
+    expect(navigationSource).toContain("const Icon = navigationIcons[item.key] ?? FileText;");
+    // Group labels are plain uppercase headings over a labelled list — no tree
+    // lines, no disclosure, no stored open state, no rail flyout.
+    expect(navigationSource).toContain("<SidebarGroupLabel");
+    expect(navigationSource).toMatch(/className="[^"]*\buppercase\b[^"]*"\s*id=\{labelId\}/);
+    expect(navigationSource).toContain("aria-labelledby={labelled ? labelId : undefined}");
+    for (const gone of ["Collapsible", "localStorage", "DropdownMenu", "data-nav-tree-item", "SidebarMenuSub"]) {
+      expect(navigationSource, gone).not.toContain(gone);
+    }
     // The header keeps only the command palette; Cek tarif is reached from the sidebar group.
     expect(headerToolsSource).not.toContain("CmsQuickRateLink");
     expect(headerToolsSource).not.toContain("/app/cek-tarif");
@@ -350,24 +355,14 @@ describe("responsive CMS navigation presentation", () => {
     expect(headerToolsSource).toContain("tenantCmsNavigation(props.role, pathname, searchParams)");
   });
 
-  it("makes the whole group row one disclosure button, label included (T-187, supersedes the PR-54 split row)", () => {
-    // The item <a> keeps its own shape untouched — this is what keeps
-    // "no data-state on a nav link" true even once groups collapse.
-    expect(navigationSource).toContain('aria-current={item.current ? "page" : undefined}');
-    expect(navigationSource).toContain("<CollapsibleTrigger asChild>");
-    expect(navigationSource).toContain("aria-expanded={open}");
-    expect(navigationSource).toContain("aria-controls={contentId}");
-    expect(navigationSource).toMatch(/<CollapsibleTrigger asChild>\s*<SidebarMenuButton[\s\S]*?<GroupIcon[\s\S]*?\{group\.label\}[\s\S]*?<ChevronDown[\s\S]*?<\/SidebarMenuButton>\s*<\/CollapsibleTrigger>/);
-    expect(navigationSource).not.toContain("grup ${group.label}");
-  });
-
-  it("persists group open/closed state in localStorage, forces the current-route group open, and falls back to a DropdownMenu flyout on the icon rail (PR-54)", () => {
-    expect(navigationSource).toContain("GROUP_STATE_STORAGE_KEY");
-    expect(navigationSource).toContain("window.localStorage.getItem(GROUP_STATE_STORAGE_KEY)");
-    expect(navigationSource).toContain("window.localStorage.setItem(GROUP_STATE_STORAGE_KEY");
-    expect(navigationSource).toContain("groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? true)");
-    expect(navigationSource).toContain("const isRail = state === \"collapsed\" && !isMobile;");
-    expect(navigationSource).toContain("<DropdownMenu>");
+  it("marks the current page with the soft accent and hovers on a neutral ground (T-204)", () => {
+    expect(sidebarSource).toContain("data-active:bg-sidebar-accent");
+    expect(sidebarSource).toContain("hover:bg-muted hover:text-sidebar-foreground");
+    const menuButtonVariants = /const sidebarMenuButtonVariants = cva\(\s*"([^"]*)"[\s\S]*?default: "([^"]*)"/.exec(sidebarSource);
+    expect(menuButtonVariants).not.toBeNull();
+    for (const classes of [menuButtonVariants![1], menuButtonVariants![2]]) {
+      expect(classes).not.toMatch(/(?:^|\s)hover:bg-sidebar-accent(?:\s|$)/);
+    }
   });
 
   it("keeps account and sign-out controls at least 44px tall", () => {

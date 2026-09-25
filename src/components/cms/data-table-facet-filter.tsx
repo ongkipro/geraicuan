@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CirclePlus } from "lucide-react";
+import { Check, ListFilter } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -63,11 +63,10 @@ export function DataTableFacetFilter({ clearHref, options, searchPlaceholder, ti
       <PopoverTrigger asChild>
         <Button
           aria-label={selected.length ? `${title}: ${selected.map((option) => option.label).join(", ")}` : title}
-          className="h-8 border-dashed max-md:min-h-11"
-          size="sm"
+          className="h-10 font-medium max-md:min-h-11"
           variant="outline"
         >
-          <CirclePlus aria-hidden="true" />
+          <ListFilter aria-hidden="true" className="text-muted-foreground" />
           {title}
           {selected.length ? (
             <>
@@ -117,7 +116,7 @@ export function DataTableFacetFilter({ clearHref, options, searchPlaceholder, ti
                   </span>
                   <span className="min-w-0 flex-1 truncate">{option.label}</span>
                   {option.count !== undefined ? (
-                    <span className="ms-auto font-mono text-xs tabular-nums text-muted-foreground">
+                    <span className="ms-auto text-xs tabular-nums text-muted-foreground">
                       {countFormatter.format(option.count)}
                     </span>
                   ) : null}

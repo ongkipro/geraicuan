@@ -179,6 +179,21 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
+**2026-09-25 — Phase 17: masking-first product on the owner's HTML reference (T-204–T-206).** Impor CSV, Keuangan and Analitik removed (database kept); the Mengantar status pull now lives on Histori kiriman and Retur; Buat kiriman rebuilt with sender-on-label sources, several products, courier logo cards and a sticky summary; every page aligned to `~/Documents/work/notes/geraicuan-html/`. Full suite 1,476/1,476; review FAIL (sender address) → fixed → PASS. Order creation still waits on Mengantar (T-153). See BUILD-LOG.
+
+
+**2026-09-25 — T-203 precision for a 40+ audience.** One type scale (13/15/16/18/20/26/30) and darker secondary text for the whole product, 40px controls and 44px touch targets, colour only on the primary action, status, variance and danger, money in sans tabular numbers, and every list on a phone as app-style cards (V-9 resolved by the owner's choice). Full suite 1,527/1,527; re-screen of 27 routes at 1440/390 clean; independent review FAIL → fixed → PASS. See BUILD-LOG.
+
+
+**2026-09-25 — T-202 professional low-frame UI and register repairs.** Glass, second primary, raw palette and nested frames are gone from every route; one KPI card, one card radius, Indonesian labels for couriers, provider/finance statuses and audit events; nav label = H1 = title. Register: 36 fixed, 3 partial with reason, V-9 awaiting the owner. Full suite 1,520/1,520; independent review PASS. See BUILD-LOG.
+
+
+**2026-09-25 — T-201 design contract v2.0 and global visual register.** Spec 10 is now the single design contract (GeraiOS professional shadcn pattern, no glass; spec 20 superseded). Screening of 37 routes at 1440/390 recorded 40 findings in `docs/visual-screening-register.md`; repairs are follow-up tasks. No overflow at 390 on any route.
+
+
+**2026-09-25 — T-200 one-page shipment creation implemented.** `/app/pengiriman/baru` now runs fill → automatic Mengantar estimate → service choice and AWB confirmation on one page, in the spec 20 glass style, reusing the existing issuance action and guards. Full suite 1,507/1,507 on a disposable database; browser flow verified with sanctioned fixtures. Checkpoint commit `9b76fe8` holds the earlier Phase 14–15 work. Live order creation remains gated by T-153. See BUILD-LOG.
+
+
 **2026-09-14 — T-116 shell recomposed on the shadcn-admin pattern.** Tenant and platform share one inset Sidebar with brand header, grouped icon navigation, and a footer account menu; verified at desktop, tablet, and mobile including sign-out. T-117 closed the analytics filter client-bundle regression. Next: black-and-white tokens, dashboard, data table, and settings patterns. See BUILD-LOG.
 
 

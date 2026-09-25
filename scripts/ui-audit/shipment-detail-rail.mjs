@@ -89,7 +89,8 @@ try {
         const inMain=(sel)=>!!main.querySelector(sel);
         return {
           sideBySide: railBox.left >= mainBox.right,
-          railBelow: railBox.top >= mainBox.bottom - 1,
+          railAbove: railBox.bottom <= mainBox.top + 1,
+          railScrolls: /auto|scroll/.test(getComputedStyle(rail).overflowY),
           railPosition: getComputedStyle(rail).position,
           statusInRail: inRail('#status-lifecycle-heading'),
           resiInRail: inRail('#riwayat-label-heading'),
@@ -119,8 +120,9 @@ try {
         await shot(`${name}-alert`);
         layout.codFormulaRetired = retired;
       }
-      if (width === 1440) assert(layout.sideBySide && layout.railPosition === 'sticky', `${name}: ${JSON.stringify(layout)}`);
-      else assert(layout.railBelow, `${name}: one column below the split — ${JSON.stringify(layout)}`);
+      // V-11: the rail scrolls with the page (no nested scroll); V-10: below the split it comes first.
+      if (width === 1440) assert(layout.sideBySide && !layout.railScrolls, `${name}: ${JSON.stringify(layout)}`);
+      else assert(layout.railAbove, `${name}: status and next action first below the split — ${JSON.stringify(layout)}`);
       const probe = JSON.parse(await s.evaluate(PROBE));
       assert(probe.overflow <= 1, `${name}: overflow ${probe.overflow}`);
       assert.equal(probe.h1, 1, `${name}: h1`);

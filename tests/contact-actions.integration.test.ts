@@ -636,7 +636,7 @@ describe("contact Server Actions", () => {
       message: "Kontak tidak tersedia atau batas 20 alamat aktif sudah tercapai.",
     });
     await expect(archiveContactAction({}, archive)).resolves.toEqual({
-      error: "Kontak tidak tersedia atau actor tidak memiliki izin Tenant Admin.",
+      error: "Kontak tidak tersedia atau akun Anda tidak memiliki izin Tenant Admin.",
     });
     expect(mocks.updated).toEqual([]);
     expect(mocks.added).toEqual([]);
@@ -647,14 +647,14 @@ describe("contact Server Actions", () => {
   it("keeps archive Tenant-Admin-only and maps cross-tenant or unavailable targets safely", async () => {
     const { archiveContactAction } = await import("@/app/app/kontak/[contactId]/actions");
     await expect(archiveContactAction({}, archiveForm())).resolves.toEqual({
-      error: "Kontak tidak tersedia atau actor tidak memiliki izin Tenant Admin.",
+      error: "Kontak tidak tersedia atau akun Anda tidak memiliki izin Tenant Admin.",
     });
     expect(mocks.archived).toEqual([]);
 
     mocks.principal.role = "TENANT_ADMIN";
     mocks.archiveFailure = "unavailable";
     await expect(archiveContactAction({}, archiveForm())).resolves.toEqual({
-      error: "Kontak tidak tersedia atau actor tidak memiliki izin Tenant Admin.",
+      error: "Kontak tidak tersedia atau akun Anda tidak memiliki izin Tenant Admin.",
     });
     expect(mocks.archived).toEqual([]);
 

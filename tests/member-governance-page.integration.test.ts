@@ -261,7 +261,7 @@ describe("Anggota & akses inside the PR-46 settings pattern", () => {
     // marks is the one it is on. `aria-current="true"` (not "page") because the
     // shell sidebar owns the single "page" for this route.
     expect(html).toContain('aria-label="Menu pengaturan"');
-    for (const label of ["Profil toko", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota &amp; akses"]) {
+    for (const label of ["Profil gerai", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota &amp; akses"]) {
       expect(html).toContain(label);
     }
     const marked = html.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? [];

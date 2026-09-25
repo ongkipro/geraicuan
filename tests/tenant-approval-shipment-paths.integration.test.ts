@@ -122,14 +122,6 @@ const paths: Path[] = [
       ),
   },
   {
-    name: "bulk import preview",
-    run: async () => (await import("@/app/app/impor/actions")).uploadBulkIntake({}, form({})),
-  },
-  {
-    name: "bulk import draft creation",
-    run: async () => (await import("@/app/app/impor/actions")).createSelectedDrafts({}, form({})),
-  },
-  {
     name: "quick rate",
     run: async () => (await import("@/app/app/cek-tarif/actions")).checkShippingRates({}, form({ outletId })),
   },
@@ -138,8 +130,8 @@ const paths: Path[] = [
     run: async () => (await import("@/app/app/location-actions")).searchMengantarDestinationAreas(outletId, "Bandung"),
   },
   {
-    name: "Mengantar settlement pull",
-    run: async () => (await import("@/app/app/keuangan/actions")).pullMengantarSettlement({}, form({ outletId })),
+    name: "Mengantar status pull",
+    run: async () => (await import("@/app/app/pengiriman/status-sync-actions")).pullMengantarStatus({}, form({ outletId })),
   },
   {
     name: "label print",

@@ -124,7 +124,7 @@ export function providerDeliveryBasisSentence(input: {
   subject: string;
 }) {
   if (!input.observationVisible) {
-    return `${input.subject} mengikuti status yang dilaporkan Mengantar dan hanya berubah saat Admin menarik data Mengantar di Keuangan, jadi bisa tertinggal dari kondisi kurir.`;
+    return `${input.subject} mengikuti status yang dilaporkan Mengantar dan hanya berubah saat Admin memperbarui status dari Mengantar di Histori kiriman atau Retur, jadi bisa tertinggal dari kondisi kurir.`;
   }
   return input.formattedObservedAt
     ? `${input.subject} mengikuti status yang dilaporkan Mengantar; tarikan terakhir ${input.formattedObservedAt} dan bisa tertinggal dari kondisi kurir.`

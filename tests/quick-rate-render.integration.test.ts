@@ -26,6 +26,29 @@ describe("quick-rate presentation", () => {
     expect(html).toContain('aria-label="Perbandingan estimasi ongkir"');
     expect(html).not.toMatch(/Bayar|Total tagihan|Buat pesanan/);
   });
+  // T-206 (owner reference komponen-kurir.html): logos beside the service and courier chips
+  // that narrow the table — only when more than one courier answered, "Semua kurir" pressed first.
+  it("shows courier logos and offers courier chips only when several couriers answered", () => {
+    const single = renderToStaticMarkup(createElement(QuickRateResults, { quote }));
+    expect(single).toMatch(/<span aria-hidden="true"[^>]*><img[^>]*src="\/couriers\/jne.svg"/);
+    expect(single).not.toContain('aria-label="Saring kurir"');
+
+    const several = renderToStaticMarkup(createElement(QuickRateResults, { quote: { ...quote, services: [
+      ...quote.services,
+      { providerService: "JNECargo", shippingAmountIdr: 40000, deliveryEstimate: "3–5 hari", codEligible: false },
+      { providerService: "JT", shippingAmountIdr: 24000, deliveryEstimate: "1–2 hari", codEligible: true },
+    ] } }));
+    const group = /<div aria-label="Saring kurir"[\s\S]*?<\/div>/.exec(several)?.[0] ?? "";
+    const chips = group.match(/<button[^>]*aria-pressed="(?:true|false)"[^>]*>[\s\S]*?<\/button>/g) ?? [];
+    // JNE REG and JNE Cargo are one courier: Semua kurir, JNE, J&T.
+    expect(chips).toHaveLength(3);
+    expect(chips[0]).toContain('aria-pressed="true"');
+    expect(chips[0]).toContain("Semua kurir");
+    expect(chips.slice(1).every((chip) => chip.includes('aria-pressed="false"'))).toBe(true);
+    expect(group).toContain("J&amp;T");
+    // Every service still shows while no courier is chosen.
+    expect(several.match(/<tr/g)?.length).toBe(4);
+  });
   it("distinguishes no services from zero-cost shipping", () => {
     const html = renderToStaticMarkup(createElement(QuickRateResults, { quote: { ...quote, services: [] } }));
     expect(html).toContain("Belum ada layanan untuk rute ini");

@@ -1,5 +1,7 @@
-import { ArrowRight, PackageSearch } from "lucide-react";
-import { PaymentStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { randomUUID } from "node:crypto";
+
+import { ArrowRight, ChevronDown, PackageSearch } from "lucide-react";
+import { PaymentStack, RecipientStack, shipmentIdLinkClassName, ShipmentRecordItem, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -11,10 +13,12 @@ import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { RangeFilterForm } from "@/components/cms/range-filter-form";
+import { desktopTableClassName, RecordList } from "@/components/cms/record-list";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
 import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -30,9 +34,13 @@ import {
   type RtsFilterStatus,
 } from "@/db/rts-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { listTenantOutlets } from "@/db/tenant-repository";
+import { MengantarStatusPull } from "@/app/app/pengiriman/mengantar-status-pull";
+import { pullMengantarStatus } from "@/app/app/pengiriman/status-sync-actions";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatWeight, formatWibDateTime } from "@/lib/label-format";
+import { serviceDisplayName } from "@/lib/labels/courier";
 import { providerDeliveryBasisSentence } from "@/lib/provider-delivery-status";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
@@ -41,9 +49,12 @@ import {
 } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = {
-  title: "Retur (RTS) | GeraiCUAN",
+  title: "Retur (RTS) · GeraiCUAN",
   robots: { index: false },
 };
+
+/** The table sits inside the list card, so its scroll region keeps only the focus ring (spec 10 §1.6). */
+const inCardTableRegionClassName = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 type SearchValue = string | string[] | undefined;
 type RtsPageProps = {
@@ -146,6 +157,10 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
   );
   if (auditScenario === "shipment-rts-stream") dataPromise = delayResult(dataPromise, 1_200);
   const loadedData = await dataPromise;
+  // T-204: the status pull moved here from Keuangan; Tenant Admin only, as before.
+  const pullOutlets = principal.role === "TENANT_ADMIN"
+    ? await withTenantContext(db, principal.userId, principal.tenantId, listTenantOutlets)
+    : [];
   const data = auditScenario === "shipment-rts-empty" || auditScenario === "shipment-rts-filtered-empty"
     ? { ...loadedData, page: 1, rows: [], totalCount: 0, totalPages: 1 }
     : loadedData;
@@ -164,6 +179,9 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
   // status badge in this same table reads from there, and two vocabularies for
   // one status is what this page used to show.
   //
+  // T-203: each entry's description is a few words (spec 10 §6 StateSummaryPanel);
+  // the full guidance stays with the status on the detail page.
+  //
   // PR-52 names four entries; the provider-problem cohort stays as a fifth
   // because the repository already returns those rows inside "Semua retur" and
   // dropping the entry would leave that cohort visible but unfilterable.
@@ -178,35 +196,35 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
       key: "ALL",
       label: "Semua retur",
       count: data.summary.totalRtsCount,
-      description: "Seluruh kiriman retur dan bermasalah",
+      description: "Termasuk kendala",
       metricId: "RTS-ALL",
     },
     {
       key: "RTS_QUEUED",
       label: SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.label,
       count: data.summary.queuedCount,
-      description: SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.guidance,
+      description: "Tunggu dijemput",
       metricId: "RTS-QUEUED",
     },
     {
       key: "RTS_IN_TRANSIT",
       label: SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.label,
       count: data.summary.inTransitCount,
-      description: SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.guidance,
+      description: "Menuju outlet asal",
       metricId: "RTS-IN-TRANSIT",
     },
     {
       key: "RTS_RECEIVED",
       label: SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.label,
       count: data.summary.receivedCount,
-      description: SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.guidance,
+      description: "Sudah di outlet",
       metricId: "RTS-RECEIVED",
     },
     {
       key: "PROBLEM",
       label: SHIPMENT_STATUS_PRESENTATION.PROBLEM.label,
       count: data.summary.problemCount,
-      description: SHIPMENT_STATUS_PRESENTATION.PROBLEM.guidance,
+      description: "Laporan kurir",
       metricId: "RTS-PROBLEM",
     },
   ];
@@ -218,18 +236,18 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
           <Button asChild variant="outline">
             <Link href="/app/pengiriman">
               <PackageSearch aria-hidden="true" />
-              Semua Kiriman
+              Histori kiriman
             </Link>
           </Button>
         }
-        description="Pantau kiriman Return to Sender (RTS), tindak lanjuti kendala kurir, dan verifikasi barang yang sudah diterima kembali di outlet asal."
-        eyebrow="Operasional kiriman"
+        description="Pantau retur, tindak lanjuti kendala kurir, dan cek barang yang kembali ke outlet."
+        eyebrow="Pengiriman"
         focusTargetId="rts-dashboard-heading"
         title="Retur (RTS)"
       />
 
       {issues.length > 0 ? (
-        <Alert variant="destructive">
+        <Alert>
           <AlertTitle>Filter disesuaikan</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-4">
@@ -247,16 +265,16 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
 
         <RangeFilterForm action="/app/pengiriman/rts" idPrefix="rts" now={now} preserved={{ status: statusFilter === "ALL" ? undefined : statusFilter }} range={range} />
 
-        {/* PR-57: these states are Mengantar's report, applied when a Tenant
-            Admin pulls provider data, so the queue says what feeds it and how
-            far behind it may be rather than reading as live courier truth. */}
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          {providerDeliveryBasisSentence({
-            formattedObservedAt: data.basis.lastObservedAt ? formatWibDateTime(data.basis.lastObservedAt) : null,
-            observationVisible: data.basis.observationVisible,
-            subject: "Status retur",
-          })}
-        </p>
+        {pullOutlets.length > 0 ? (
+          <MengantarStatusPull
+            action={pullMengantarStatus}
+            attemptId={randomUUID()}
+            idPrefix="rts"
+            outlets={pullOutlets}
+            periodLabel={formatRangeLabel(range).periodLabel}
+            range={{ presetId: range.presetId, timezone: range.timezone, startDate: range.startDate, lastIncludedDate: range.lastIncludedDate }}
+          />
+        ) : null}
 
         {/* No Reset link: "Semua retur" is the clear, and a second control for
             it would be a duplicate action. Each count is printed once, inside
@@ -276,6 +294,27 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
           selected={statusFilter}
         />
 
+        {/* T-206 reference: the records and the pagination share one bordered card. */}
+        <Card className="min-w-0 gap-0 py-0">
+        {/* PR-57: these states are Mengantar's report, applied when a Tenant
+            Admin pulls provider data, so the queue says what feeds it and how
+            far behind it may be rather than reading as live courier truth.
+            T-206: the short fact leads the card; the full sentence is one click away. */}
+        <details className="group border-b px-4 py-2 text-sm text-muted-foreground">
+          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-sm font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-10 [&::-webkit-details-marker]:hidden">
+            {data.basis.observationVisible && data.basis.lastObservedAt
+              ? `Status dari Mengantar · diperbarui ${formatWibDateTime(data.basis.lastObservedAt)}`
+              : "Status dari Mengantar"}
+            <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="max-w-2xl pb-2">
+            {providerDeliveryBasisSentence({
+              formattedObservedAt: data.basis.lastObservedAt ? formatWibDateTime(data.basis.lastObservedAt) : null,
+              observationVisible: data.basis.observationVisible,
+              subject: "Status retur",
+            })}
+          </p>
+        </details>
         {data.rows.length === 0 ? (
           <EmptyState
             description={
@@ -287,9 +326,26 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
             title="Tidak ada kiriman retur"
           />
         ) : (
+          <>
+          <RecordList className="rounded-none border-0" label="Daftar kiriman retur">
+            {data.rows.map((row) => (
+              <ShipmentRecordItem
+                areaLabel={row.destinationAreaLabel}
+                at={row.updatedAt}
+                awb={row.awb}
+                href={shipmentDetailHref(row.publicReference)}
+                key={row.shipmentId}
+                payment={row}
+                recipientName={row.recipientName}
+                reference={row.publicReference}
+                service={row.providerService}
+                status={SHIPMENT_STATUS_PRESENTATION[row.status as keyof typeof SHIPMENT_STATUS_PRESENTATION] ?? { label: row.status, tone: "neutral" }}
+              />
+            ))}
+          </RecordList>
           <Table
             className="min-w-[60rem]"
-            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName={`${inCardTableRegionClassName} ${desktopTableClassName}`}
             containerProps={{
               "aria-label": "Daftar kiriman retur; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -297,7 +353,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
             }}
           >
             <TableCaption className="sr-only">
-              Daftar kiriman retur to sender (RTS) dan detail statusnya.
+              Daftar kiriman retur (RTS) dan detail statusnya.
             </TableCaption>
             <TableHeader>
               <TableRow>
@@ -305,12 +361,12 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                     six scroll under it, and is opaque so the scrolled
                     content does not read through — the same treatment the
                     shipment queue gives its reference column. */}
-                <TableHead className="sticky left-0 z-10 min-w-[140px] bg-card">Resi</TableHead>
-                <TableHead className="min-w-[150px]">Penerima</TableHead>
-                <TableHead className="min-w-[120px]">Outlet & Kurir</TableHead>
-                <TableHead className="min-w-[120px]">Pembayaran & Berat</TableHead>
+                <TableHead className="sticky left-0 z-10 min-w-36">Resi</TableHead>
+                <TableHead className="min-w-36">Penerima</TableHead>
+                <TableHead className="min-w-30">Outlet & Kurir</TableHead>
+                <TableHead className="min-w-30">Pembayaran & Berat</TableHead>
                 {/* Status and its update time share a column so the table fits 1440 without scrolling. */}
-                <TableHead className="min-w-[130px]">Status & Waktu</TableHead>
+                <TableHead className="min-w-32">Status & Waktu</TableHead>
                 <TableHead className="min-w-40">Catatan / Kejadian</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
@@ -325,10 +381,10 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                   };
 
                 return (
-                  <TableRow key={row.shipmentId} className="group transition-colors hover:bg-muted/30">
-                    <TableCell className="sticky left-0 z-10 max-w-40 whitespace-normal bg-inherit font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                  <TableRow key={row.shipmentId}>
+                    <TableCell className="sticky left-0 z-10 max-w-40 whitespace-normal bg-inherit">
                       <Link
-                        className="flex min-h-11 max-w-40 items-center break-all font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
+                        className={`flex min-h-11 max-w-40 items-center break-all md:min-h-8 ${shipmentIdLinkClassName}`}
                         href={shipmentDetailHref(row.publicReference)}
                       >
                         {row.awb ? row.awb : row.publicReference}
@@ -343,7 +399,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                       <div className="text-xs">{row.outletName}</div>
                       {row.providerService ? (
                         <div className="text-xs text-muted-foreground">
-                          {row.providerService}
+                          {serviceDisplayName(row.providerService)}
                         </div>
                       ) : null}
                     </TableCell>
@@ -376,10 +432,10 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs max-md:min-h-11">
+                      <Button asChild size="sm" variant="ghost" className="max-md:min-h-11">
                         <Link href={shipmentDetailHref(row.publicReference)}>
                           Detail
-                          <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                          <ArrowRight aria-hidden="true" />
                         </Link>
                       </Button>
                     </TableCell>
@@ -388,10 +444,12 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
               })}
             </TableBody>
           </Table>
+          </>
         )}
 
         {data.totalPages > 1 ? (
           <DataTablePagination
+            className="border-t p-4"
             hrefForPage={(page) => rtsHref(statusFilter, page, carry)}
             label="Paginasi daftar retur"
             page={data.page}
@@ -400,10 +458,11 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
             totalPages={data.totalPages}
           />
         ) : (
-          <p className="text-sm tabular-nums text-muted-foreground">
+          <p className="border-t p-4 text-sm tabular-nums text-muted-foreground">
             {data.totalCount} kiriman · halaman {data.page} dari {data.totalPages}
           </p>
         )}
+        </Card>
       </section>
     </PageContainer>
   );

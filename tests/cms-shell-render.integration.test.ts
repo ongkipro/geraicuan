@@ -42,21 +42,6 @@ function currentLabels(html: string) {
   );
 }
 
-// T-187: each group row is one <button> whose visible label is its accessible
-// name. Attribute order in the rendered tag depends on Radix's Slot merge, so
-// look the tag up by our data-nav-group-trigger attribute and read the rest of
-// the button (tag plus content) order-independently.
-function groupTrigger(html: string, groupLabel: string) {
-  return new RegExp(`<button(?=[^>]*data-nav-group-trigger="${groupLabel}")[^>]*>[\\s\\S]*?</button>`).exec(html)?.[0] ?? null;
-}
-
-function toggleButton(html: string, groupLabel: string) {
-  const trigger = groupTrigger(html, groupLabel);
-  if (trigger?.includes('aria-expanded="true"')) return "open";
-  if (trigger?.includes('aria-expanded="false"')) return "closed";
-  return null;
-}
-
 describe("rendered CMS shell", () => {
   const html = renderTenantShell("/app/kontak/pengirim");
 
@@ -104,61 +89,63 @@ describe("rendered CMS shell", () => {
   });
 });
 
-describe("PR-54 / T-187 collapsible navigation tree", () => {
-  it("opens every group on a first visit (no stored preference exists on the server render)", () => {
+describe("T-204 flat navigation list (supersedes the PR-54 / T-187 tree)", () => {
+  const groupLabels = ["Pengiriman", "Data", "Cek", "Laporan", "Pengelolaan"];
+
+  it("renders every destination with its own icon under an uppercase group label, all visible", () => {
     const html = renderTenantShell("/app/kontak/pengirim");
-    // Utama is a single unlabelled destination, never collapsible.
-    expect(html).toContain("<span>Dasbor</span>");
-    for (const group of ["Pengiriman", "Data", "Cek", "Laporan", "Pengelolaan"]) {
-      expect(toggleButton(html, group)).toBe("open");
+    const nav = /<nav aria-label="Navigasi tenant"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    for (const label of groupLabels) {
+      const heading = new RegExp(`<div[^>]*data-sidebar="group-label"[^>]*id="cms-nav-group-${label.toLowerCase()}"[^>]*>${label}</div>`).exec(nav)?.[0] ?? "";
+      expect(heading, label).toMatch(/\buppercase\b/);
+      // The list under it is named by it.
+      expect(nav).toMatch(new RegExp(`<ul[^>]*aria-labelledby="cms-nav-group-${label.toLowerCase()}"`));
     }
-    for (const label of ["Pengirim", "Penerima", "Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Cek resi", "Cek tarif", "Analitik", "Laporan pengiriman", "Riwayat cetak resi", "Keuangan", "Pengaturan"]) {
-      expect(html).toContain(`<span>${label}</span>`);
+    // The brand link is the large menu button; destinations are the default size.
+    const links = [...nav.matchAll(/<a(?=[^>]*data-size="default")[^>]*data-sidebar="menu-button"[^>]*>([\s\S]*?)<\/a>/g)];
+    const labels = links.map((match) => match[1].replace(/<[^>]*>/g, "").trim());
+    expect(labels).toEqual([
+      "Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Pengirim", "Penerima",
+      "Cek resi", "Cek tarif", "Laporan pengiriman", "Riwayat cetak resi", "Pengaturan",
+    ]);
+    for (const [, content] of links) {
+      expect(content).toMatch(/^<svg[^>]*aria-hidden="true"/);
     }
+    // One icon per destination, none repeated.
+    const icons = links.map(([, content]) => /class="lucide ([^" ]+)/.exec(content)?.[1]);
+    expect(new Set(icons).size).toBe(icons.length);
+    expect(nav).not.toContain("aria-expanded");
+    expect(nav).not.toContain("data-nav-tree-item");
+    expect(nav).not.toMatch(/Impor CSV|Keuangan|Analitik/);
   });
 
   it.each([
-    ["/app/pengiriman/baru", "Pengiriman", "Buat kiriman", ["Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi"]],
-    ["/app/cek-resi", "Cek", "Cek resi", ["Cek tarif"]],
-    ["/app/analitik", "Laporan", "Analitik", []],
-    ["/app/keuangan", "Pengelolaan", "Keuangan", ["Pengaturan"]],
-  ] as const)("opens %s's group (%s) and renders every sibling destination", (pathname, group, currentLabel, siblings) => {
+    ["/app/pengiriman/baru", "Buat kiriman"],
+    ["/app/cek-resi", "Cek resi"],
+    ["/app/laporan/pengiriman", "Laporan pengiriman"],
+    ["/app/anggota", "Pengaturan"],
+  ] as const)("marks %s's destination (%s) current with the soft accent", (pathname, currentLabel) => {
     const html = renderTenantShell(pathname);
-    expect(toggleButton(html, group)).toBe("open");
     expect(currentLabels(html)).toEqual([currentLabel]);
-    expect(html).toContain(`<span>${currentLabel}</span>`);
-    for (const sibling of siblings) {
-      expect(html).toContain(`<span>${sibling}</span>`);
-    }
+    const current = /<a[^>]*aria-current="page"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(current).toContain('data-active="true"');
+    expect(current).toContain("data-active:bg-sidebar-accent");
+    expect(current).toMatch(/\bh-10\b/);
+    expect(current).toMatch(/\bmax-md:h-11\b/);
   });
+});
 
-  it("makes the whole row (icon, label, chevron) one native disclosure button named by its visible label", () => {
-    const html = renderTenantShell("/app/kontak/pengirim");
-    const trigger = groupTrigger(html, "Data");
-    expect(trigger).not.toBeNull();
-    expect(trigger).toContain('type="button"');
-    expect(trigger).toContain('aria-expanded="true"');
-    expect(trigger).toContain('aria-controls="cms-nav-group-data"');
-    // The label text lives INSIDE the button, so clicking it toggles the group;
-    // no aria-label overrides the visible name (WCAG 2.5.3).
-    expect(trigger).toMatch(/<span[^>]*>Data<\/span>/);
-    expect(trigger).not.toMatch(/^<button[^>]*aria-label=/);
-    // Row height: 36px desktop, 44px touch.
-    expect(trigger).toMatch(/\bh-9\b/);
-    expect(trigger).toMatch(/\bmax-md:h-11\b/);
-    // The old split shape (a separate "Buka/Tutup grup" chevron button) is gone.
-    expect(html).not.toMatch(/aria-label="(Buka|Tutup) grup /);
-  });
+describe("T-204 top bar", () => {
+  const html = renderTenantShell("/app");
+  const header = /<header[^>]*data-slot="cms-header"[\s\S]*?<\/header>/.exec(html)?.[0] ?? "";
 
-  it("draws each group's items as a tree: guide and connector pseudo-elements on every item, the last guide stopping at its connector", () => {
-    const html = renderTenantShell("/app/kontak/pengirim");
-    const items = [...html.matchAll(/<li[^>]*data-nav-tree-item[^>]*>/g)].map((match) => match[0]);
-    expect(items).toHaveLength(14);
-    for (const item of items) {
-      expect(item).toMatch(/before:absolute/);
-      expect(item).toMatch(/after:absolute/);
-      expect(item).toMatch(/last:before:bottom-1\/2/);
-    }
+  it("shows the store, the role badge and the scope line, then the page search", () => {
+    expect(header).toMatch(/<strong[^>]*>Tenant Uji<\/strong>/);
+    expect(header).toContain("Tenant Admin");
+    expect(header).toContain("Data tenant");
+    expect(header).toMatch(/aria-label="Cari halaman"/);
+    expect(header).toContain("⌘K");
+    expect(header).toMatch(/\bh-16\b/);
   });
 });
 
@@ -179,21 +166,9 @@ describe("mobile shell contracts that server render cannot reach", () => {
     expect(shell).toContain('side={isMobile ? "bottom" : "right"}');
   });
 
-  it("persists group open state in localStorage, read only in an effect (never during the SSR-equivalent render)", () => {
-    // T-187: stored collapse is honoured, the current-route group always wins,
-    // and a group absent from storage defaults to open.
-    expect(navigation).toContain("groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? true)");
-    expect(navigation).toContain('window.localStorage.getItem(GROUP_STATE_STORAGE_KEY)');
-    expect(navigation).toContain('window.localStorage.setItem(GROUP_STATE_STORAGE_KEY');
-    expect(navigation).toMatch(/useEffect\(\(\) => \{[\s\S]*?applyStoredGroupState\(\);/);
-    // The initial useState is a pure function of the route-derived groups, so
-    // the first client render matches the server render exactly.
-    expect(navigation).toContain("useState<Record<string, boolean>>(() => defaultOpenGroups(groups))");
-  });
-
-  it("opens a DropdownMenu flyout for each group at the icon-rail width, because SidebarMenuSub is hidden there", () => {
-    expect(sidebar).toContain("group-data-[collapsible=icon]:hidden");
-    expect(navigation).toContain("const isRail = state === \"collapsed\" && !isMobile;");
-    expect(navigation).toMatch(/if \(isRail\) \{[\s\S]*?<DropdownMenu>/);
+  it("keeps the collapsed rail as the same items with tooltips, no flyout", () => {
+    expect(navigation).toContain('state === "collapsed" && !isMobile ? label : undefined');
+    expect(navigation).toContain("tooltip={railTooltip(item.label)}");
+    expect(navigation).not.toContain("isRail");
   });
 });

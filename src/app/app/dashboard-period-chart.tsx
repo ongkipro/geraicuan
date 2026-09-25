@@ -20,7 +20,7 @@ type DashboardPeriodChartPoint = {
 
 export function DashboardPeriodChart({ data, sevenDays, compare }: { data: DashboardPeriodChartPoint[]; sevenDays: boolean; compare: boolean }) {
   const chartConfig = {
-    currentCount: { color: "var(--primary)", label: sevenDays ? "7 hari terakhir" : "Periode dipilih" },
+    currentCount: { color: "var(--chart-1)", label: sevenDays ? "7 hari terakhir" : "Periode dipilih" },
     previousCount: { color: "var(--muted-foreground)", label: sevenDays ? "7 hari sebelumnya" : "Periode sebelumnya" },
   } satisfies ChartConfig;
 

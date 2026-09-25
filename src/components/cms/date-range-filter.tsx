@@ -122,7 +122,7 @@ export function DateRangeFilter({
   const selected: DateRange | undefined = toDay(start)
     ? { from: toDay(start), to: toDay(end) }
     : undefined;
-  const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium text-foreground";
+  const fieldClass = "grid min-w-0 gap-1.5 text-sm font-medium text-foreground";
 
   return (
     <details
@@ -152,7 +152,7 @@ export function DateRangeFilter({
       <div aria-label="Pilih rentang tanggal" className="cms-range-popover" role="group">
         <div className="flex flex-col gap-4 lg:flex-row">
           <div className="grid content-start gap-2 lg:w-44 lg:shrink-0">
-            <span className="text-xs font-medium text-foreground" id={`${idPrefix}-range-preset-label`}>
+            <span className="text-sm font-medium text-foreground" id={`${idPrefix}-range-preset-label`}>
               Periode
             </span>
             {/* One value, two shapes. The Select carries no `name`, so only the
@@ -189,7 +189,7 @@ export function DateRangeFilter({
               {ANALYTICS_PRESETS.map((item) => (
                 <label
                   className={cn(
-                    "flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 text-sm md:min-h-9",
+                    "flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 text-sm md:min-h-10",
                     preset === item.id ? "bg-muted font-medium" : "hover:bg-accent",
                   )}
                   htmlFor={`${idPrefix}-rentang-${item.id}`}
@@ -236,7 +236,7 @@ export function DateRangeFilter({
           <label className={fieldClass} htmlFor={`${idPrefix}-dari`}>
             Dari tanggal
             <Input
-              className="min-h-11 md:h-9"
+              className="max-md:min-h-11"
               id={`${idPrefix}-dari`}
               max={todayLocalDate}
               name="dari"
@@ -248,7 +248,7 @@ export function DateRangeFilter({
           <label className={fieldClass} htmlFor={`${idPrefix}-sampai`}>
             Sampai tanggal
             <Input
-              className="min-h-11 md:h-9"
+              className="max-md:min-h-11"
               id={`${idPrefix}-sampai`}
               max={todayLocalDate}
               name="sampai"
@@ -261,13 +261,13 @@ export function DateRangeFilter({
 
         {/* `id` first so a page-level regex bound to `<p class="…">` keeps
             matching that page's own summary line, not this one. */}
-        <p id={`${idPrefix}-range-resolved`} className="text-xs leading-5 text-muted-foreground">
+        <p id={`${idPrefix}-range-resolved`} className="text-sm text-muted-foreground">
           Rentang aktif: {rangeLabel} · {timezoneLabel}
           {comparisonLabel ? ` · dibandingkan dengan ${comparisonLabel}` : ""}
         </p>
 
         <div>
-          <Button className="min-h-11 md:h-9 md:min-h-9" type="submit">Terapkan rentang</Button>
+          <Button className="max-md:min-h-11" type="submit">Terapkan rentang</Button>
         </div>
       </div>
     </details>

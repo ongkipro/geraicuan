@@ -72,7 +72,7 @@ export async function recoverShipmentUnpaidPayment(
   if (!isSanctionedUnpaidRecoveryFixtureEnabled()) {
     return {
       error:
-        "Pemulihan dinonaktifkan karena fixture non-produksi yang disetujui belum diaktifkan.",
+        "Pemulihan dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan.",
     };
   }
 

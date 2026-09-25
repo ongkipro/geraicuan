@@ -84,7 +84,6 @@ export const COD_FORMULA_RETIRED_MESSAGE =
 export const LEGACY_COD_FEE_VAT_LABEL = "PPN dalam biaya COD (dipotong Mengantar)";
 export const LEGACY_COD_FEE_VAT_NOTE =
   "Entri lama. PPN ini sudah termasuk dalam biaya COD 3,33% yang dipotong Mengantar, bukan kewajiban GeraiCUAN, dan tidak dihitung sebagai utang.";
-export const LEGACY_COD_FEE_VAT_CLASS_LABEL = "Bagian biaya COD, bukan kewajiban";
 
 export type CodChargeBreakdown = NonNullable<ReturnType<typeof codChargeBreakdown>>;
 

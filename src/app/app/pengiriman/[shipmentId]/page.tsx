@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeft, CircleAlert, Clock3 } from "lucide-react";
+import { CircleAlert, Clock3, Printer } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -8,11 +8,15 @@ import {
   ShipmentIssuancePanel,
   type ShipmentEstimateOption,
 } from "@/app/app/pengiriman/[shipmentId]/issuance-panel";
+import { BackLink } from "@/components/cms/back-link";
+import { HelpHint } from "@/components/cms/help-hint";
 import { ShipmentUnpaidRecoveryPanel } from "@/app/app/pengiriman/[shipmentId]/unpaid-recovery-panel";
 import { ShipmentReconciliationPanel } from "@/app/app/pengiriman/[shipmentId]/reconciliation-panel";
 import { ShipmentLifecycleTimeline } from "@/app/app/pengiriman/[shipmentId]/shipment-lifecycle-timeline";
 import { ShipmentStaleOperationPanel } from "@/app/app/pengiriman/[shipmentId]/stale-operation-panel";
+import { CopyPhoneButton } from "@/app/app/kontak/contact-ui";
 import { resolveShipmentRoute } from "@/app/app/shipment-route";
+import { CourierLogo } from "@/components/cms/courier-logo";
 import { DataFreshnessControl } from "@/components/cms/data-freshness-control";
 import { DetailLayout, PageAside } from "@/components/cms/cms-layouts";
 import { DefinitionGrid } from "@/components/cms/detail-section";
@@ -32,13 +36,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/db/client";
-import { calculateCodAmounts, shipmentCodFormulaRetired } from "@/db/cod-totals-repository";
+import { shipmentCodFormulaRetired } from "@/db/cod-totals-repository";
+import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
 import { shipmentLabelHref } from "@/lib/shipment-number";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { isDataStale } from "@/lib/data-freshness";
-import { codChargeBreakdown, shippingMengantarDeductsIdr } from "@/lib/mengantar-cod-fee";
+import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
+import {
+  PROVIDER_BATCH_STATUS_LABELS,
+  PROVIDER_ORDER_STATUS_LABELS,
+  providerResponseLabel,
+} from "@/lib/labels/provider";
 import { PAYMENT_AMOUNT_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import {
   formatDimensions,
@@ -55,11 +65,11 @@ import { isSanctionedUnpaidRecoveryFixtureEnabled } from "@/lib/sanctioned-unpai
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Detail kiriman · GeraiCUAN", robots: { index: false } };
 
 type ShipmentDetailPageProps = {
   params: Promise<{ shipmentId: string }>;
-  /** The queue's own URL state, replayed by "Kembali ke antrean" (PR-53). */
+  /** The queue's own URL state, replayed by "Kembali ke histori kiriman" (PR-53). */
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
@@ -225,6 +235,9 @@ export default async function ShipmentDetailPage({
   const operationCanBeChecked = detail.provider?.batchStatus === "SUBMITTING"
     || (detail.provider?.recoveryStatus === "PAYING"
       && principal.role === "TENANT_ADMIN");
+  // One filled primary per page (spec 10): when the issuance panel is on the page its
+  // confirm button is the primary, so the next-action links stay outline.
+  const issuancePanelShown = detail.status === "ESTIMATED" && Boolean(detail.estimate);
   const actions = shipmentLifecycleActions(
     detail.status,
     principal.role,
@@ -237,52 +250,50 @@ export default async function ShipmentDetailPage({
     detail.package.widthCm,
     detail.package.heightCm,
   );
-  const estimateOptions: ShipmentEstimateOption[] =
-    detail.estimate?.services.map((service) => ({
-      // COD only: a COD Ongkir amount is the charge chosen with the service.
-      codBreakdown:
-        detail.paymentMethod === "COD" && service.codEligible && !detail.codFormulaRetired
-          ? codChargeBreakdown(calculateCodAmounts(
-              detail.package.declaredValueIdr,
-              service.shippingAmountIdr,
-            ))
-          : null,
-      codEligible: service.codEligible,
-      deliveryEstimate: service.deliveryEstimate,
-      estimateServiceId: service.estimateServiceId,
-      insuranceAmountIdr: service.insuranceAmountIdr,
-      providerService: service.providerService,
-      shippingAmountIdr: service.shippingAmountIdr,
-      shippingDeductedIdr: shippingMengantarDeductsIdr(service),
-    })) ?? [];
+  const estimateOptions: ShipmentEstimateOption[] = detail.estimate
+    ? buildShipmentEstimateOptions({
+        codFormulaRetired: detail.codFormulaRetired,
+        declaredValueIdr: detail.package.declaredValueIdr,
+        paymentMethod: detail.paymentMethod,
+        services: detail.estimate.services,
+      })
+    : [];
 
-  const emptyNote = "rounded-lg border border-dashed bg-muted/40 p-3 text-sm text-muted-foreground";
+  // Spec 10 §1.6: nothing inside a card is framed, so an empty region is plain text.
+  const emptyNote = "text-sm text-muted-foreground";
 
   return (
     <PageContainer>
-      <PageHeader
-        actions={
-          <Button asChild className="min-h-11 max-md:w-full md:min-h-8" size="sm" variant="outline">
-            <Link href={queueHref}><ArrowLeft aria-hidden="true" /> Kembali ke antrean</Link>
-          </Button>
-        }
-        description="Snapshot operasional kiriman di dalam tenant aktif."
-        eyebrow="Detail pengiriman"
-        focusTargetId="shipment-detail-heading"
-        title={<>Kiriman <span className="font-mono">{detail.publicReference}</span></>}
-      />
+      {/* T-206 (owner reference detail-kiriman.html): back link above the eyebrow, status beside the title. */}
+      <div className="grid gap-1">
+        <BackLink href={queueHref}>Kembali ke histori kiriman</BackLink>
+        <PageHeader
+          actions={<span className="flex items-center"><ShipmentStatusBadge label={status.label} tone={status.tone} /></span>}
+          description="Status, tindakan berikutnya, pihak, paket, dan biaya satu kiriman."
+          eyebrow="Pengiriman"
+          focusTargetId="shipment-detail-heading"
+          title={<>Kiriman <span className="font-mono">{detail.publicReference}</span></>}
+        />
+      </div>
 
       <DetailLayout
+        asideFirst
         aside={(
-          <PageAside label="Status kiriman">
+          // V-10: the rail (status and the next action) leads in the DOM, so it comes first on
+          // mobile and in focus order at every width (spec 10 §9). V-11: the rail scrolls with the
+          // page instead of owning a nested, clipped scroll area.
+          <PageAside
+            className="@4xl/page:static @4xl/page:max-h-none @4xl/page:overflow-visible"
+            label="Status kiriman"
+          >
             <Card>
               <CardHeader>
-                <CardTitle id="status-lifecycle-heading">Status</CardTitle>
-                <CardDescription className="leading-6">{status.guidance}</CardDescription>
+                <CardTitle id="status-lifecycle-heading">Status paket</CardTitle>
                 <CardAction><ShipmentStatusBadge label={status.label} tone={status.tone} /></CardAction>
               </CardHeader>
-              <CardContent className="grid gap-2 text-xs text-muted-foreground">
-                <dl className="grid gap-1">
+              <CardContent className="grid gap-3">
+                <p className="text-sm font-medium leading-6">{status.guidance}</p>
+                <dl className="grid gap-1 border-t pt-3 text-sm text-muted-foreground">
                   <div className="flex items-baseline justify-between gap-3"><dt>Dibuat</dt><dd>{formatWibDateTime(detail.createdAt)}</dd></div>
                   <div className="flex items-baseline justify-between gap-3"><dt>Aktivitas terakhir</dt><dd>{formatWibDateTime(detail.updatedAt)}</dd></div>
                 </dl>
@@ -296,15 +307,19 @@ export default async function ShipmentDetailPage({
                   <ul className="grid gap-3" aria-labelledby="tindakan-heading">
                     {actions.map((action, index) => (
                       <li className="grid gap-2" key={action.id}>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{action.label}</p>
-                          <p className="text-sm text-muted-foreground">{action.description}</p>
-                        </div>
                         {action.kind === "link" && action.href ? (
-                          <Button asChild className="min-h-11 w-full" variant={index === 0 ? "default" : "outline"}><Link href={action.href}>{action.label}</Link></Button>
+                          // The button names the action; its longer description is its accessible description.
+                          <Button asChild className="min-h-11 w-full md:min-h-10" variant={index === 0 && !issuancePanelShown ? "default" : "outline"}>
+                            <Link aria-describedby={`tindakan-${action.id}`} href={action.href}>{action.id === "open-label" ? <Printer aria-hidden="true" /> : null}{action.label}</Link>
+                          </Button>
                         ) : (
-                          <Badge className="w-fit" variant="outline">Belum tersedia</Badge>
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium">{action.label}</p>
+                            <Badge className="shrink-0" variant="outline">Belum tersedia</Badge>
+                          </div>
                         )}
+                        {/* T-206: a link button says what it does; its sentence stays for screen readers only. */}
+                        <p className={action.kind === "link" && action.href ? "sr-only" : "text-sm text-muted-foreground"} id={`tindakan-${action.id}`}>{action.description}</p>
                       </li>
                     ))}
                   </ul>
@@ -334,36 +349,6 @@ export default async function ShipmentDetailPage({
               />
             ) : null}
 
-            <Card aria-labelledby="riwayat-label-heading" role="region">
-              <CardHeader>
-                <CardTitle id="riwayat-label-heading">Resi dan label</CardTitle>
-                <CardDescription>
-                  {detail.printCount === 0
-                    ? "Belum ada cetak label tercatat."
-                    : `Label sudah dicetak ${detail.printCount}×.`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                {detail.provider?.awb ? (
-                  <div className="grid gap-1">
-                    <p className="text-sm text-muted-foreground">{detail.provider.courier ?? "—"} · {detail.provider.providerService}</p>
-                    <p className="font-mono text-sm font-medium">{detail.provider.awb}</p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Belum ada resi</p>
-                )}
-                {detail.status === "ISSUED" ? (
-                  <Button asChild className="min-h-11 w-full md:min-h-8" size="sm" variant="outline">
-                    <Link href={shipmentLabelHref(detail.publicReference)}>Buka label dan riwayat cetak</Link>
-                  </Button>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Riwayat cetak tersedia setelah Mengantar menerbitkan AWB.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
             <ShipmentLifecycleTimeline status={detail.status} />
           </PageAside>
         )}
@@ -378,7 +363,7 @@ export default async function ShipmentDetailPage({
           <Alert>
             <Clock3 aria-hidden="true" />
             <AlertTitle>Upaya penyedia masih tercatat berjalan</AlertTitle>
-            <AlertDescription>Gunakan pemeriksaan state aman di panel Status kiriman jika proses tidak berubah setelah beberapa menit. Pemeriksaan ini tidak mengulang pengiriman atau pembayaran.</AlertDescription>
+            <AlertDescription>Gunakan pemeriksaan status aman di panel Status jika proses tidak berubah setelah beberapa menit. Pemeriksaan ini tidak mengulang pengiriman atau pembayaran.</AlertDescription>
           </Alert>
         ) : null}
 
@@ -386,7 +371,7 @@ export default async function ShipmentDetailPage({
           <Alert variant="destructive">
             <CircleAlert aria-hidden="true" />
             <AlertTitle>Jangan kirim ulang</AlertTitle>
-            <AlertDescription>{principal.role === "TENANT_ADMIN" ? "Hasil penyedia belum pasti. Gunakan rekonsiliasi satu kali di panel Status kiriman untuk memeriksa identifier yang sudah tersimpan tanpa mengirim ulang pesanan." : "Hasil penyedia belum pasti. Jangan mengirim ulang; minta Tenant Admin menjalankan rekonsiliasi berdasarkan identifier yang sudah tersimpan."}</AlertDescription>
+            <AlertDescription>{principal.role === "TENANT_ADMIN" ? "Hasil penyedia belum pasti. Gunakan rekonsiliasi satu kali di panel Status untuk memeriksa referensi yang sudah tersimpan tanpa mengirim ulang pesanan." : "Hasil penyedia belum pasti. Jangan mengirim ulang; minta Tenant Admin menjalankan rekonsiliasi berdasarkan referensi yang sudah tersimpan."}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -402,16 +387,47 @@ export default async function ShipmentDetailPage({
             <AlertTitle>AWB belum tersedia</AlertTitle>
             <AlertDescription>
               {principal.role === "TENANT_ADMIN"
-                ? "Kiriman non-COD ini menunggu pelunasan Mengantar. Danai saldo terlebih dahulu, lalu gunakan konfirmasi pemulihan satu kali di panel Status kiriman."
+                ? "Kiriman non-COD ini menunggu pelunasan Mengantar. Danai saldo terlebih dahulu, lalu gunakan konfirmasi pemulihan satu kali di panel Status."
                 : "Kiriman non-COD ini menunggu pelunasan Mengantar. Jangan membuat kiriman pengganti; minta Tenant Admin menjalankan pemulihan."}
             </AlertDescription>
           </Alert>
         ) : null}
 
+        {/* T-206: the resi is the page's key fact, so it leads the main column as in the owner
+            reference — courier logo and service beside a large AWB. The label link stays the one
+            "Tindakan berikutnya" action (V-23). */}
+        <Card aria-labelledby="riwayat-label-heading" role="region">
+          <CardHeader className="border-b">
+            <CardTitle id="riwayat-label-heading">Resi dan label</CardTitle>
+            <CardAction className="self-center text-sm text-muted-foreground">
+              {detail.printCount === 0 ? "Belum dicetak" : `Dicetak ${detail.printCount}×`}
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {detail.provider?.awb ? (
+              <div className="flex min-w-0 flex-col gap-4 rounded-lg bg-muted p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="grid min-w-0 gap-1">
+                  <p className="text-sm text-muted-foreground">Kurir dan layanan</p>
+                  <p className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold">
+                    <span aria-hidden="true" className="inline-flex"><CourierLogo courier={detail.provider.courier ?? detail.provider.providerService ?? ""} /></span>
+                    {serviceDisplayName(detail.provider.providerService)}
+                  </p>
+                </div>
+                <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end sm:text-right">
+                  <p className="text-sm text-muted-foreground">Nomor resi</p>
+                  <p className="font-mono text-xl font-bold break-all">{detail.provider.awb}</p>
+                  <CopyPhoneButton label="Salin nomor resi" name={detail.provider.awb} phone={detail.provider.awb} showLabel />
+                </div>
+              </div>
+            ) : (
+              <p className={emptyNote}>Belum ada resi. Resi dan riwayat cetak tersedia setelah Mengantar menerbitkan AWB.</p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card aria-labelledby="konteks-heading" role="region">
-          <CardHeader>
+          <CardHeader className="border-b">
             <CardTitle id="konteks-heading">Konteks operasional</CardTitle>
-            <CardDescription>Outlet, tujuan, dan paket yang tersimpan pada kiriman ini.</CardDescription>
           </CardHeader>
           <CardContent>
             <DefinitionGrid items={[
@@ -427,27 +443,29 @@ export default async function ShipmentDetailPage({
         </Card>
 
         <Card aria-labelledby="snapshot-pihak-heading" role="region">
-          <CardHeader>
-            <CardTitle id="snapshot-pihak-heading">Snapshot pihak kiriman</CardTitle>
-            <CardDescription>Snapshot ini tidak berubah ketika direktori kontak diperbarui.</CardDescription>
+          <CardHeader className="border-b">
+            <CardTitle id="snapshot-pihak-heading">Data pihak saat kiriman dibuat</CardTitle>
+            <CardAction className="-my-2">
+              <HelpHint label="Tentang data pihak">Data ini disalin saat kiriman dibuat dan tidak berubah ketika direktori kontak diperbarui.</HelpHint>
+            </CardAction>
           </CardHeader>
           <CardContent>
             {detail.sender && detail.recipient ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-6 sm:grid-cols-2">
                 {[
                   { label: "Pengirim", party: detail.sender },
                   { label: "Penerima", party: detail.recipient },
                 ].map(({ label, party }) => (
-                  <article className="grid min-w-0 content-start gap-1.5 rounded-lg border bg-muted/20 p-4 text-sm" key={label}>
-                    <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
-                    <p className="font-medium wrap-anywhere">{party.name}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{party.phone}</p>
-                    <p className="leading-6 text-muted-foreground wrap-anywhere">{party.address}</p>
+                  <article className="grid min-w-0 content-start gap-1.5 text-sm" key={label}>
+                    <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</h3>
+                    <p className="text-base font-semibold wrap-anywhere">{party.name}</p>
+                    <p className="text-sm tabular-nums text-muted-foreground">{party.phone}</p>
+                    <p className="leading-6 wrap-anywhere">{party.address}</p>
                   </article>
                 ))}
               </div>
             ) : (
-              <Alert variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Snapshot pihak kiriman tidak lengkap</AlertTitle></Alert>
+              <Alert variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Data pihak kiriman tidak lengkap</AlertTitle></Alert>
             )}
           </CardContent>
         </Card>
@@ -464,29 +482,31 @@ export default async function ShipmentDetailPage({
           />
         ) : (
           <Card aria-labelledby="estimasi-heading" role="region">
-            <CardHeader>
+            <CardHeader className="border-b">
               <CardTitle id="estimasi-heading">Estimasi tersimpan</CardTitle>
               {detail.estimate ? (
-                <CardDescription className="max-w-2xl leading-6">
-                  Diambil {formatWibDateTime(detail.estimate.retrievedAt)} · {" "}
-                  {detail.estimate.isCodRequested ? "COD diminta" : "Non-COD"}.
-                  Daftar ini hanya-baca; belum ada konfirmasi layanan dari halaman
-                  detail.
+                <CardDescription>
+                  Diambil {formatWibDateTime(detail.estimate.retrievedAt)} · {detail.estimate.isCodRequested ? "COD diminta" : "Non-COD"}
                 </CardDescription>
+              ) : null}
+              {detail.estimate ? (
+                <CardAction className="-my-2">
+                  <HelpHint label="Tentang estimasi tersimpan">Daftar ini hanya-baca; belum ada konfirmasi layanan dari halaman detail.</HelpHint>
+                </CardAction>
               ) : null}
             </CardHeader>
             <CardContent>
               {detail.estimate ? (
                 detail.estimate.services.length > 0 ? (
                   <Table
-                    containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    containerClassName="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     containerProps={{ "aria-label": "Daftar estimasi tersimpan", role: "region", tabIndex: 0 }}
                   >
                     <TableHeader>
                       <TableRow>
                         <TableHead scope="col">Layanan</TableHead>
-                        <TableHead scope="col">Ongkir penyedia</TableHead>
-                        <TableHead scope="col">Asuransi</TableHead>
+                        <TableHead className="text-right" scope="col">Ongkir penyedia</TableHead>
+                        <TableHead className="text-right" scope="col">Asuransi</TableHead>
                         <TableHead scope="col">Estimasi tiba</TableHead>
                         <TableHead scope="col">COD</TableHead>
                       </TableRow>
@@ -494,14 +514,18 @@ export default async function ShipmentDetailPage({
                     <TableBody>
                       {detail.estimate.services.map((service) => (
                         <TableRow key={service.providerService}>
-                          <TableCell className="font-medium">{service.providerService}</TableCell>
-                          <TableCell className="font-mono tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
-                          <TableCell className="font-mono tabular-nums">
-                            {service.insuranceAmountIdr === null
-                              ? "Tidak dikembalikan"
-                              : formatIdr(service.insuranceAmountIdr)}
+                          <TableCell className="font-medium">
+                            <span className="flex items-center gap-2">
+                              <span aria-hidden="true" className="inline-flex w-12 shrink-0 justify-center"><CourierLogo className="h-5 max-w-12" courier={service.providerService} /></span>
+                              {serviceDisplayName(service.providerService)}
+                            </span>
                           </TableCell>
-                          <TableCell>{service.deliveryEstimate}</TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
+                          {/* V-12: the same money cells as the issuance table; a missing value is a dash, not mono prose. */}
+                          <TableCell className="text-right tabular-nums">
+                            {service.insuranceAmountIdr === null ? "—" : formatIdr(service.insuranceAmountIdr)}
+                          </TableCell>
+                          <TableCell>{deliveryEstimateLabel(service.deliveryEstimate)}</TableCell>
                           <TableCell><Badge variant={service.codEligible ? "secondary" : "outline"}>{service.codEligible ? "Didukung" : "Tidak"}</Badge></TableCell>
                         </TableRow>
                       ))}
@@ -518,31 +542,34 @@ export default async function ShipmentDetailPage({
         )}
 
         <Card aria-labelledby="hasil-penyedia-heading" role="region">
-          <CardHeader>
+          <CardHeader className="border-b">
             <CardTitle id="hasil-penyedia-heading">Hasil penyedia</CardTitle>
             <CardDescription>Nilai tersimpan dari respons Mengantar.</CardDescription>
           </CardHeader>
           <CardContent>
             {detail.provider ? (
               <DefinitionGrid items={[
-                { label: "Status pesanan", value: detail.provider.orderStatus },
-                { label: "Referensi pesanan", value: detail.provider.orderId ?? "Belum tersedia" },
-                { label: "Status batch", value: detail.provider.batchStatus ?? "Belum tersedia" },
-                { label: "Kurir / layanan", value: `${detail.provider.courier ?? "—"} · ${detail.provider.providerService}` },
-                { label: "AWB Mengantar", value: detail.provider.awb ?? "Belum tersedia" },
+                { label: "Status pesanan", value: PROVIDER_ORDER_STATUS_LABELS[detail.provider.orderStatus] },
+                { label: "Referensi pesanan", value: detail.provider.orderId ? <span className="font-mono">{detail.provider.orderId}</span> : "Belum tersedia" },
+                {
+                  label: "Status pengiriman ke Mengantar",
+                  value: detail.provider.batchStatus ? PROVIDER_BATCH_STATUS_LABELS[detail.provider.batchStatus] : "Belum tersedia",
+                },
+                { label: "Layanan", value: serviceDisplayName(detail.provider.providerService) },
+                { label: "AWB Mengantar", value: detail.provider.awb ? <span className="font-mono">{detail.provider.awb}</span> : "Belum tersedia" },
                 {
                   label: "Ongkir / asuransi",
                   value: `${formatIdr(detail.provider.shippingAmountIdr)} · ${detail.provider.insuranceAmountIdr === null ? "asuransi tidak dikembalikan" : formatIdr(detail.provider.insuranceAmountIdr)}`,
                 },
                 ...(detail.provider.providerCodAmountIdr === null ? [] : [{
                   label: PAYMENT_AMOUNT_LABELS[detail.paymentMethod],
-                  value: formatIdr(detail.provider.providerCodAmountIdr),
+                  value: <span className="text-base font-semibold">{formatIdr(detail.provider.providerCodAmountIdr)}</span>,
                 }]),
                 {
                   label: "Status pembayaran",
                   value: detail.provider.isPaid === null ? "Belum diketahui" : detail.provider.isPaid ? "Lunas menurut penyedia" : "Belum lunas menurut penyedia",
                 },
-                { label: "Respons aman", value: detail.provider.safeResponseCode ?? detail.provider.batchSafeErrorCode ?? "Tidak ada kode aman" },
+                { label: "Keterangan respons", value: providerResponseLabel(detail.provider.safeResponseCode ?? detail.provider.batchSafeErrorCode) },
               ]} />
             ) : (
               <p className={emptyNote} role="status">Belum ada hasil pesanan penyedia untuk kiriman ini.</p>

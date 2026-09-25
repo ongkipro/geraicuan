@@ -132,7 +132,7 @@ export async function confirmShipmentIssuance(
   if (!isSanctionedOrderFixtureEnabled()) {
     return {
       error:
-        "Penerbitan dinonaktifkan karena fixture non-produksi yang disetujui belum diaktifkan.",
+        "Penerbitan dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan.",
     };
   }
 
@@ -147,6 +147,8 @@ export async function confirmShipmentIssuance(
     });
     revalidatePath("/app/pengiriman/[shipmentId]", "page");
     revalidatePath("/app/pengiriman");
+    // T-200: the one-page creation flow shows the same confirmation.
+    revalidatePath("/app/pengiriman/baru");
     if (result.status !== "ISSUED" || !result.awb || !result.labelHref) {
       return {
         error:

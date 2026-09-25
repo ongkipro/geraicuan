@@ -15,7 +15,7 @@ import {
   formatDraftIdr,
 } from "@/app/app/shipment-draft-experience";
 import { PaymentMethodFields } from "@/app/app/shipment-draft-form";
-import { loadShipmentExport, loadShipmentPage } from "@/db/analytics-repository";
+import { loadShipmentPage } from "@/db/analytics-repository";
 import {
   calculateCodAmounts,
   calculateCodOngkirAmounts,
@@ -34,7 +34,7 @@ import { completeProviderOrder } from "@/db/order-batch-repository";
 import * as schema from "@/db/schema";
 import { loadShipmentReportPage } from "@/db/shipment-report-repository";
 import { withTenantContext } from "@/db/tenant-context";
-import { serializeAnalyticsCsv, serializeShipmentReportCsv } from "@/lib/analytics-export";
+import { serializeShipmentReportCsv } from "@/lib/analytics-export";
 import { EMPTY_ANALYTICS_FILTERS } from "@/lib/analytics-filters";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import {
@@ -622,7 +622,7 @@ describe("T-186 an issued COD Ongkir shipment: ledger, label, report and analyti
     expect(text).not.toMatch(/Nilai barang \S/);
   });
 
-  it("states the method in the report, its export and the analytics table and export", async () => {
+  it("states the method in the report, its export and the analytics read model", async () => {
     const ongkir = await seedQueued(31, "COD_ONGKIR");
     await seedQueued(32, "COD");
 
@@ -644,10 +644,6 @@ describe("T-186 an issued COD Ongkir shipment: ledger, label, report and analyti
       loadShipmentPage(tx, context, range, { limit: 50, offset: 0 }));
     expect(analytics.rows.find((row) => row.shipmentId === ongkir.shipmentId)).toMatchObject({ isCod: true, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: charge });
     expect(analytics.rows.map((row) => row.paymentMethod).sort()).toEqual(["COD", "COD_ONGKIR"]);
-    const exported = await withTenantContext(appDb, userA, tenantA, (tx, context) => loadShipmentExport(tx, context, range));
-    const csv = serializeAnalyticsCsv(exported.rows).replace("﻿", "").trimEnd().split("\r\n");
-    expect(csv[0]!.split(",").at(-1)).toBe('"payment_method"');
-    expect(csv.slice(1).map((line) => line.split(",").at(-1)).sort()).toEqual(['"COD"', '"COD_ONGKIR"']);
 
     // The other tenant sees none of it.
     const foreign = await withTenantContext(appDb, userB, tenantB, (tx, context) =>

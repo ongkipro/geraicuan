@@ -28,7 +28,7 @@ export default function OutletSettingsError({ reset }: { reset: () => void }) {
         header={
           <PageHeader
             description="Kelola lokasi pickup dan koneksi pengiriman outlet."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Outlet"
           />
         }

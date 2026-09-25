@@ -39,7 +39,7 @@ describe("host routing decisions (PR-58)", () => {
   it.each([
     [TENANT, "/app"],
     [TENANT, "/app/pengiriman/baru"],
-    [TENANT, "/app/impor/template.csv"],
+    [TENANT, "/app/laporan/pengiriman/export.csv"],
     [TENANT, "/daftar"],
     [TENANT, "/verifikasi-email"],
     [TENANT, "/lupa-password"],
@@ -49,6 +49,8 @@ describe("host routing decisions (PR-58)", () => {
     [PLATFORM, "/platform/tenant/abc"],
     [PLATFORM, "/api/auth/sign-in/email"],
     [PLATFORM, "/icon.svg"],
+    [TENANT, "/couriers/jne.svg"],
+    [PLATFORM, "/couriers/jne.svg"],
   ])("serves the owning surface: %s %s", (host, path) => {
     expect(route(host, path)).toEqual({ kind: "next" });
   });
@@ -57,7 +59,7 @@ describe("host routing decisions (PR-58)", () => {
     [TENANT, "/platform"],
     [TENANT, "/platform/audit"],
     [PLATFORM, "/app"],
-    [PLATFORM, "/app/keuangan"],
+    [PLATFORM, "/app/pengiriman/rts"],
     [PLATFORM, "/daftar"],
     [PLATFORM, "/lupa-password"],
     [PLATFORM, "/api/webhooks/mengantar"],

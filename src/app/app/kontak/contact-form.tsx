@@ -35,7 +35,7 @@ import {
 function SubmitButton({ disabled = false }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={disabled || pending} type="submit">
+    <Button className="min-h-11 max-md:w-full md:min-h-10" disabled={disabled || pending} type="submit">
       {pending ? "Menyimpan…" : "Simpan kontak"}
     </Button>
   );
@@ -62,8 +62,8 @@ export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[
         <AlertDescription className="grid gap-4">
           <p>{state.message}</p>
           <div className="flex flex-col gap-2 md:flex-row">
-            <Button asChild className="min-h-11 md:min-h-8"><Link href={contactDetailHref(state.successId, state.successRole ?? role)}>Buka detail kontak</Link></Button>
-            <Button asChild className="min-h-11 md:min-h-8" variant="outline"><Link href={contactListHref(state.successRole ?? role)}>Kembali ke daftar {contactRoleLabel(state.successRole ?? role).toLowerCase()}</Link></Button>
+            <Button asChild className="min-h-11 md:min-h-10"><Link href={contactDetailHref(state.successId, state.successRole ?? role)}>Buka detail kontak</Link></Button>
+            <Button asChild className="min-h-11 md:min-h-10" variant="outline"><Link href={contactListHref(state.successRole ?? role)}>Kembali ke daftar {contactRoleLabel(state.successRole ?? role).toLowerCase()}</Link></Button>
           </div>
         </AlertDescription>
       </Alert>
@@ -90,7 +90,6 @@ export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[
       <Card aria-labelledby="contact-data-heading" role="region">
         <CardHeader className="border-b">
           <CardTitle id="contact-data-heading">Kontak</CardTitle>
-          <CardDescription className="leading-6">Nama dan nomor yang dipakai kurir untuk konfirmasi.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <FieldGroup>
@@ -112,8 +111,8 @@ export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[
 
       <Card aria-labelledby="contact-role-heading" role="region">
         <CardHeader className="border-b">
-          <CardTitle id="contact-role-heading">Peran</CardTitle>
-          <CardDescription className="leading-6">Disiapkan sebagai {contactRoleLabel(role).toLowerCase()}. Centang keduanya bila kontak juga dipakai sebagai {contactRoleLabel(otherContactRole(role)).toLowerCase()}.</CardDescription>
+          <CardTitle id="contact-role-heading">Peran kontak</CardTitle>
+          <CardDescription>Centang keduanya bila kontak juga dipakai sebagai {contactRoleLabel(otherContactRole(role)).toLowerCase()}.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <FieldSet aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} data-invalid={Boolean(errors.roles)} id="roles" tabIndex={-1}>
@@ -122,7 +121,7 @@ export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[
               {CONTACT_ROLES.map((option) => {
                 const name = option === "pengirim" ? "roleSender" : "roleRecipient";
                 return (
-                  <label className="flex min-h-11 items-start gap-3 rounded-lg border p-3 text-sm has-checked:border-primary has-checked:bg-muted/60" key={option}>
+                  <label className="flex min-h-11 items-start gap-3 rounded-lg border p-3 text-sm has-checked:border-primary has-checked:bg-accent" key={option}>
                     <input aria-describedby={`${name}-effect`} className="mt-0.5 size-4 accent-primary" defaultChecked={state.errors ? values[name] === "on" : role === option} name={name} onChange={option === "pengirim" ? (event) => setIsSender(event.target.checked) : undefined} type="checkbox" />
                     <span className="grid gap-0.5">
                       <span className="font-medium">{contactRoleLabel(option)}</span>
@@ -140,14 +139,13 @@ export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[
       <Card aria-labelledby="contact-address-heading" role="region">
         <CardHeader className="border-b">
           <CardTitle id="contact-address-heading">Alamat pertama</CardTitle>
-          <CardDescription className="leading-6">Alamat ini dapat dipakai kembali pada draf berikutnya.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <FieldGroup>
             <Field className={fieldWidth.lg} data-invalid={Boolean(errors.addressLabel)}>
               <FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel>
               <CharacterClassInput aria-describedby={describedBy("addressLabel")} aria-invalid={Boolean(errors.addressLabel)} characterClass="BUSINESS_NAME" className="min-h-11" defaultValue={values.addressLabel} id="addressLabel" name="addressLabel" required />
-              <FieldDescription>Contoh: Gudang Bandung, Rumah, atau Toko Pusat.</FieldDescription>
+              <FieldDescription>Contoh: Gudang Bandung, Rumah, atau Gerai Pusat.</FieldDescription>
               <FieldError id="addressLabel-error">{errors.addressLabel}</FieldError>
             </Field>
             <Field className={fieldWidth.full} data-invalid={Boolean(errors.addressText)}>
@@ -166,8 +164,9 @@ export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[
         </CardContent>
       </Card>
 
-      <div className="flex flex-col gap-3 border-t pt-4 md:flex-row md:items-center md:justify-between">
-        <p className="text-sm text-muted-foreground">Perubahan kontak tidak mengubah kiriman yang sudah dibuat.</p>
+      {/* T-206 (owner reference kontak-baru.html): Batal and the one primary, end-aligned. */}
+      <div className="flex flex-col-reverse gap-3 md:flex-row md:justify-end">
+        <Button asChild className="min-h-11 max-md:w-full md:min-h-10" variant="outline"><Link href={contactListHref(role)}>Batal</Link></Button>
         <SubmitButton />
       </div>
     </form>

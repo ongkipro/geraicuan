@@ -36,7 +36,7 @@ export function missingOutletConfiguration(outlet: SafeOutletReadiness) {
   if (hasLegacyLocation) missing.push("label lokasi Mengantar");
   if (outlet.connectionStatus === "private_attention") missing.push("koneksi Mengantar");
   if (outlet.privateConnectionRequired && outlet.connectionSource !== "private") {
-    missing.push("akun Mengantar milik toko");
+    missing.push("akun Mengantar milik gerai");
   }
   return missing;
 }

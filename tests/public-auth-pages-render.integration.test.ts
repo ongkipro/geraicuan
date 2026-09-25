@@ -14,11 +14,11 @@ describe("public tenant-host pages", () => {
     const html = renderToStaticMarkup(createElement(RegistrationPage));
 
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    expect(html).toContain(">Daftarkan toko Anda</h1>");
+    expect(html).toContain(">Daftarkan gerai Anda</h1>");
     expect(html).toContain('data-surface="tenant"');
     for (const [id, label] of [
-      ["storeName", "Nama toko"],
-      ["whatsapp", "Nomor WhatsApp toko"],
+      ["storeName", "Nama gerai"],
+      ["whatsapp", "Nomor WhatsApp gerai"],
       ["ownerName", "Nama pemilik"],
       ["email", "Email"],
       ["password", "Kata sandi"],
@@ -76,7 +76,7 @@ describe("public tenant-host pages", () => {
     const page = renderToStaticMarkup(await ConfirmEmailPage({ searchParams: Promise.resolve({ token }) }));
     expect(page.match(/<h1\b/g)).toHaveLength(1);
     expect(page).toContain(">Verifikasi email</h1>");
-    expect(page).toContain("Masukkan kata sandi yang Anda buat saat mendaftarkan toko");
+    expect(page).toContain("Masukkan kata sandi yang Anda buat saat mendaftarkan gerai");
     expect(page).toContain(`name="token" value="${token}"`);
     expect(page).toContain('for="password"');
     expect(page).toContain(">Kata sandi pendaftaran</label>");

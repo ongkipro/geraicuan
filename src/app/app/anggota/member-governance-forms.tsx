@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { ChevronDown, UserPlus } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import { changeMemberRoleAction, deactivateMemberAction, inviteMemberAction, type MemberActionState } from "@/app/app/anggota/actions";
 import { SettingsCard } from "@/components/cms/settings-layout";
@@ -29,25 +29,6 @@ function ActionMessage({ resultRef, state }: { resultRef: React.RefObject<HTMLDi
   );
 }
 
-export function InviteMemberHeaderAction() {
-  return (
-    <Button
-      className="min-h-11 md:min-h-8"
-      onClick={() => {
-        // The invite form is an always-visible settings section: bring its heading into
-        // view, then move keyboard focus to the first field so the action is not scroll-only.
-        document.getElementById("invite-member-title")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        document.getElementById("member-invite-email")?.focus({ preventScroll: true });
-      }}
-      type="button"
-      variant="outline"
-    >
-      <UserPlus aria-hidden="true" />
-      Undang anggota
-    </Button>
-  );
-}
-
 export function InviteMemberForm({ attemptId }: { attemptId: string }) {
   const [state, formAction, pending] = useActionState(inviteMemberAction, { nextAttemptId: attemptId });
   const emailRef = useRef<HTMLInputElement>(null);
@@ -67,7 +48,7 @@ export function InviteMemberForm({ attemptId }: { attemptId: string }) {
     <SettingsCard
       description="Berikan akses tenant kepada akun GeraiCUAN yang sudah aktif."
       footer={
-        <Button className="min-h-11 md:min-h-9" disabled={pending} form={INVITE_FORM_ID} type="submit">
+        <Button className="min-h-11 md:min-h-10" disabled={pending} form={INVITE_FORM_ID} type="submit">
           {pending ? "Memproses undangan…" : "Undang anggota"}
         </Button>
       }
@@ -172,7 +153,7 @@ export function MemberControls({ deactivateAttemptId, isCurrentUser, isLastActiv
           <ChevronDown aria-hidden="true" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="grid gap-5 rounded-md border bg-muted/30 p-4 lg:grid-cols-2">
+      <CollapsibleContent className="grid gap-5 border-t pt-4 lg:grid-cols-2">
         <form action={roleAction} aria-busy={rolePending} className="grid content-start gap-4" id={roleFormId} noValidate>
           <input name="attemptId" type="hidden" value={roleState.nextAttemptId ?? roleAttemptId} />
           <input name="membershipId" type="hidden" value={membershipId} />

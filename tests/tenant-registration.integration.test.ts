@@ -313,11 +313,11 @@ describe("/daftar server path (PR-59)", () => {
     });
     expect(state).toMatchObject({
       errors: {
-        email: "Isi alamat email yang benar, misalnya nama@toko.com.",
+        email: "Isi alamat email yang benar, misalnya nama@gerai.com.",
         ownerName: "Isi nama pemilik, 2 sampai 120 karakter.",
         password: "Kata sandi minimal 8 karakter.",
         passwordConfirmation: "Konfirmasi kata sandi belum sama.",
-        storeName: "Isi nama toko, 2 sampai 120 karakter.",
+        storeName: "Isi nama gerai, 2 sampai 120 karakter.",
         terms: "Centang persetujuan syarat penggunaan untuk melanjutkan.",
         whatsapp: "Isi nomor WhatsApp Indonesia yang benar, misalnya 0812 3456 7890.",
       },
@@ -1016,7 +1016,7 @@ describe("T-198 security review follow-up", () => {
     const address = email("t198-emoji");
     const { state } = await register({ email: address, storeName: "Toko Jaya \u{1F680}" }, "203.0.113.130");
     expect(state).toMatchObject({
-      errors: { storeName: expect.stringMatching(/^Nama toko /) },
+      errors: { storeName: expect.stringMatching(/^Nama gerai /) },
       status: "invalid",
     });
     expect(await rowsFor(address)).toEqual([]);

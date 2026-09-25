@@ -18,13 +18,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CharacterClassInput } from "@/components/ui/character-class-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { tenantStatusLabel, tenantStatusTone } from "@/lib/labels/audit";
+import { cn } from "@/lib/utils";
 
 const initialState: PlatformTenantLifecycleState = {};
+// A disclosure that looks like the outline button it opens; the form below it is unframed (spec 10 §1.6).
+const disclosureSummaryClass = cn(buttonVariants({ variant: "outline" }), "min-h-11 md:min-h-10 w-fit cursor-pointer list-none [&::-webkit-details-marker]:hidden");
 
 function ActionOutcome({ resultRef, state }: { resultRef: RefObject<HTMLDivElement | null>; state: PlatformTenantLifecycleState }) {
   const entries = Object.entries(state.errors ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1]));
@@ -46,7 +51,7 @@ function ActionOutcome({ resultRef, state }: { resultRef: RefObject<HTMLDivEleme
           return <li key={key}>{href ? <a className="underline underline-offset-4" href={href}>{message}</a> : message}</li>;
         })}</ul> : null}
         {state.outcome === "success" && state.tenant ? (
-          <Button asChild className="min-h-11" variant="outline">
+          <Button asChild className="min-h-11 md:min-h-10" variant="outline">
             <Link href={`/platform/tenant/${state.tenant.id}`} prefetch={false}>
               Buka detail {state.tenant.name}
             </Link>
@@ -108,7 +113,7 @@ function ConfirmAction({
       setOpen(nextOpen);
     }}>
       <AlertDialogTrigger asChild>
-        <Button className="min-h-11 w-fit" disabled={disabled} ref={triggerRef} type="button" variant={variant}>
+        <Button className="min-h-11 md:min-h-10 w-fit" disabled={disabled} ref={triggerRef} type="button" variant={variant}>
           {children}
         </Button>
       </AlertDialogTrigger>
@@ -128,10 +133,10 @@ function ConfirmAction({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="min-h-11" disabled={disabled}>Batal</AlertDialogCancel>
+          <AlertDialogCancel className="min-h-11 md:min-h-10" disabled={disabled}>Batal</AlertDialogCancel>
           <Button
             aria-busy={disabled}
-            className="min-h-11"
+            className="min-h-11 md:min-h-10"
             disabled={disabled}
             form={formId}
             name="confirmation"
@@ -159,15 +164,15 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
   return (
     <section aria-labelledby="provision-tenant-title" className="grid gap-3">
       <div>
-        <h2 className="font-semibold" id="provision-tenant-title">Siklus tenant</h2>
-        <p className="text-sm leading-6 text-muted-foreground">Provision tenant baru sebelum meninjau daftar operasional.</p>
+        <h2 className="font-semibold" id="provision-tenant-title">Tenant baru</h2>
+        <p className="text-sm leading-6 text-muted-foreground">Buat tenant baru sebelum meninjau daftar operasional.</p>
       </div>
       <ActionOutcome resultRef={resultRef} state={state} />
-      <details className="rounded-xl border bg-card" open={state.outcome === "invalid" || state.outcome === "error"}>
-        <summary className="min-h-11 cursor-pointer content-center px-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-          Provisioning tenant
+      <details open={state.outcome === "invalid" || state.outcome === "error"}>
+        <summary className={disclosureSummaryClass}>
+          Buat tenant
         </summary>
-        <form action={action} aria-busy={pending} className="grid gap-4 border-t p-4" id={formId} noValidate>
+        <form action={action} aria-busy={pending} className="grid gap-4 pt-4" id={formId} noValidate>
           <input name="attemptId" type="hidden" value={attemptId} />
           <input name="lifecycleAction" type="hidden" value="create" />
           <div className="grid max-w-2xl gap-2">
@@ -177,7 +182,7 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
               aria-invalid={Boolean(state.errors?.tenantName)}
               autoComplete="organization"
               characterClass="BUSINESS_NAME"
-              className="min-h-11"
+              className="min-h-11 md:min-h-10"
               defaultValue={state.values?.name ?? ""}
               id="tenant-name"
               maxLength={120}
@@ -197,9 +202,9 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
             focusAfterSubmitRef={nameRef}
             resultRef={resultRef}
             resultToken={state.resultToken}
-            title="Provision tenant baru?"
+            title="Buat tenant baru?"
           >
-            Provisioning tenant
+            Buat tenant
           </ConfirmAction>
         </form>
       </details>
@@ -215,12 +220,16 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
 
   if (status !== "ACTIVE" && status !== "SUSPENDED") {
     return (
-      <section aria-labelledby="tenant-lifecycle-title" className="grid gap-2 rounded-xl border bg-muted/30 p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-semibold" id="tenant-lifecycle-title">Siklus tenant</h2>
-          <Badge variant="outline">{status}</Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">Tidak ada perubahan status yang tersedia untuk status tenant saat ini.</p>
+      <section aria-labelledby="tenant-lifecycle-title">
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle id="tenant-lifecycle-title">Siklus tenant</CardTitle>
+              <ToneBadge label={tenantStatusLabel(status)} tone={tenantStatusTone(status)} />
+            </div>
+            <CardDescription>Tidak ada perubahan status yang tersedia untuk status tenant saat ini.</CardDescription>
+          </CardHeader>
+        </Card>
       </section>
     );
   }
@@ -232,23 +241,27 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
   const inputId = "tenant-confirmation-name";
   const formId = `tenant-lifecycle-form-${tenantId}`;
 
+  // Pattern 3 / V-36: the last region of the tenant detail page. Suspension is the
+  // danger zone; reactivation sits in the same place without the danger wording.
   return (
-    <section aria-labelledby="tenant-lifecycle-title" className="grid gap-3">
-      <div className="grid gap-1 rounded-xl border bg-muted/30 p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-semibold" id="tenant-lifecycle-title">Siklus tenant</h2>
-          <Badge variant={suspending ? "secondary" : "destructive"}>{suspending ? "Aktif" : "Ditangguhkan"}</Badge>
-        </div>
-        <p className="text-sm leading-6 text-muted-foreground">
-          {suspending ? "Penangguhan memblokir operasi tenant sampai tenant diaktifkan kembali." : "Aktivasi kembali membuka otorisasi operasional tenant."}
-        </p>
-      </div>
+    <section aria-labelledby="tenant-lifecycle-title">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle id="tenant-lifecycle-title">{suspending ? "Zona berbahaya · Siklus tenant" : "Siklus tenant"}</CardTitle>
+            <ToneBadge label={tenantStatusLabel(status)} tone={tenantStatusTone(status)} />
+          </div>
+          <CardDescription>
+            {suspending ? "Penangguhan memblokir operasi tenant sampai tenant diaktifkan kembali." : "Aktivasi kembali membuka otorisasi operasional tenant."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
       <ActionOutcome resultRef={resultRef} state={state} />
-      <details className="rounded-xl border bg-card" open={state.outcome === "invalid" || state.outcome === "error"}>
-        <summary className="min-h-11 cursor-pointer content-center px-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      <details open={state.outcome === "invalid" || state.outcome === "error"}>
+        <summary className={cn(disclosureSummaryClass, suspending && "text-destructive")}>
           {actionLabel}
         </summary>
-        <form action={action} aria-busy={pending} className="grid gap-4 border-t p-4" id={formId} noValidate>
+        <form action={action} aria-busy={pending} className="grid gap-4 pt-4" id={formId} noValidate>
           <input name="attemptId" type="hidden" value={attemptId} />
           <input name="lifecycleAction" type="hidden" value={actionName} />
           <input name="tenantId" type="hidden" value={tenantId} />
@@ -258,7 +271,7 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
               aria-describedby={`${hintId}${state.errors?.confirmationName ? ` ${inputId}-error` : ""}`}
               aria-invalid={Boolean(state.errors?.confirmationName)}
               autoComplete="off"
-              className="min-h-11"
+              className="min-h-11 md:min-h-10"
               defaultValue={state.values?.expectedName ?? ""}
               id={inputId}
               maxLength={120}
@@ -285,6 +298,8 @@ export function TenantLifecycleControls({ auditState = initialState, initialAtte
           </ConfirmAction>
         </form>
       </details>
+        </CardContent>
+      </Card>
     </section>
   );
 }

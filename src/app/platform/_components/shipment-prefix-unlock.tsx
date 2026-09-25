@@ -56,7 +56,7 @@ export function ShipmentPrefixUnlockControl({ initialAttemptId, state: prefixSta
         <input name="attemptId" type="hidden" value={state.resultToken ?? initialAttemptId} />
         <AlertDialog onOpenChange={setOpen} open={open}>
           <AlertDialogTrigger asChild>
-            <Button className="min-h-11 w-fit" disabled={pending || !prefixState?.lockedAt} type="button" variant="outline">{pending ? "Memproses…" : "Buka kunci awalan"}</Button>
+            <Button className="min-h-11 md:min-h-10 w-fit" disabled={pending || !prefixState?.lockedAt} type="button" variant="outline">{pending ? "Memproses…" : "Buka kunci awalan"}</Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -64,8 +64,8 @@ export function ShipmentPrefixUnlockControl({ initialAttemptId, state: prefixSta
               <AlertDialogDescription>Tenant Admin dapat memilih awalan baru satu kali. Semua nomor kiriman tenant ini akan tampil dengan awalan baru, sehingga label yang sudah tercetak tidak lagi sama dengan layar.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="min-h-11">Batal</AlertDialogCancel>
-              <Button className="min-h-11" onClick={() => { setOpen(false); formRef.current?.requestSubmit(); }} type="button">Buka kunci</Button>
+              <AlertDialogCancel className="min-h-11 md:min-h-10">Batal</AlertDialogCancel>
+              <Button className="min-h-11 md:min-h-10" onClick={() => { setOpen(false); formRef.current?.requestSubmit(); }} type="button">Buka kunci</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

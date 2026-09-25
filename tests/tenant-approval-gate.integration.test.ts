@@ -262,7 +262,7 @@ describe("store setup is the only caller allowed to reach a pending tenant", () 
       "src/app/app/estimate-actions.ts",
       "src/app/app/pengiriman/[shipmentId]/actions.ts",
       "src/app/app/pengiriman/[shipmentId]/unpaid-recovery-actions.ts",
-      "src/app/app/impor/actions.ts",
+      "src/app/app/pengiriman/status-sync-actions.ts",
       "src/app/app/cek-tarif/actions.ts",
       "src/app/app/location-actions.ts",
       "src/lib/mengantar-order.ts",

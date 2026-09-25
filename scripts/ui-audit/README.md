@@ -76,10 +76,6 @@ the same instrument, committed, wired to `pnpm test:ui-audit`.
   width) each catch a live-injected violation. Round 14 found these
   measurements existed and were summed into the sweep's headline numbers
   but had never once been deliberately triggered and confirmed caught.
-- `sidebar-tree.mjs` — T-187 CMS sidebar tree: label-click and keyboard
-  toggles, all groups open by default, stored collapse vs forced current
-  group, tree guide geometry, rail flyout, mobile Sheet; screenshots in
-  `.output/sidebar-tree/`. Logs in once as the tenant.
 - `env.dev.sh`, `env.integration.sh` — thin wrappers around the two env
   blocks root `README.md` already documents, so these scripts don't retype
   them. Both require `POSTGRES_PASSWORD` to already be exported.

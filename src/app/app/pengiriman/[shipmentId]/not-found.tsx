@@ -12,8 +12,8 @@ export default function ShipmentNotFound() {
   return (
     <PageContainer>
       <FocusHeadingOnMount id={headingId} />
-      <PageHeader eyebrow="Detail pengiriman" focusTargetId={headingId} title="Detail kiriman" />
-      <section role="status"><EmptyState action={<Button asChild><Link href="/app/pengiriman">Kembali ke antrean</Link></Button>} description="Kiriman mungkin tidak ada atau tidak termasuk dalam lingkup tenant aktif. Tidak ada data tenant lain yang ditampilkan." icon={PackageX} title="Detail kiriman tidak tersedia" /></section>
+      <PageHeader eyebrow="Pengiriman" focusTargetId={headingId} title="Detail kiriman" />
+      <section role="status"><EmptyState action={<Button asChild><Link href="/app/pengiriman">Kembali ke histori kiriman</Link></Button>} description="Kiriman mungkin tidak ada atau tidak termasuk dalam lingkup tenant aktif. Tidak ada data tenant lain yang ditampilkan." icon={PackageX} title="Detail kiriman tidak tersedia" /></section>
     </PageContainer>
   );
 }

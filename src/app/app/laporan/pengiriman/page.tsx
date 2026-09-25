@@ -4,16 +4,21 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { CourierPerformanceSection } from "@/app/app/laporan/pengiriman/courier-performance";
 import { ShipmentReportFilters } from "@/app/app/laporan/pengiriman/report-filters";
+import { HelpHint } from "@/components/cms/help-hint";
 import { DataTablePagination } from "@/components/cms/data-table-pagination";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { desktopTableClassName, RecordItem, RecordList } from "@/components/cms/record-list";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
-import { StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { dataTableSurfaceClassName } from "@/components/cms/data-table-shell";
+import { shipmentIdLinkClassName, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -24,13 +29,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/db/client";
-import { loadAnalyticsFilterOptions } from "@/db/analytics-repository";
+import { loadAnalyticsFilterOptions, loadCourierPerformance, type CourierPerformanceRow } from "@/db/analytics-repository";
 import { loadShipmentReportPage } from "@/db/shipment-report-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { parseTenantAnalyticsQuery, type TenantAnalyticsIssue } from "@/lib/analytics-filters";
 import { analyticsIssueMessage, formatRangeLabel, parseAnalyticsRange } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { formatIdr } from "@/lib/label-format";
+import { serviceDisplayName } from "@/lib/labels/courier";
+import { areaDisplayCase, formatDistrictCity, formatIdr, formatWibDateTimeParts } from "@/lib/label-format";
+import { courierDisplayName } from "@/lib/mengantar-couriers";
+import { shipmentDetailHref } from "@/lib/shipment-number";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
@@ -41,7 +49,10 @@ import {
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Laporan pengiriman · GeraiCUAN", robots: { index: false } };
+
+/** Spec 10 §1.6: a table inside a card has no outer frame, only the focus ring of its scroll region. */
+const inCardTableClassName = "min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 type ShipmentReportPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -51,7 +62,7 @@ function reportIssueMessage(issue: TenantAnalyticsIssue) {
   switch (issue) {
     case "outlet_tidak_dikenal": return "Outlet tidak tersedia pada tenant ini. Filter ditolak.";
     case "kurir_tidak_dikenal": return "Kurir tidak tersedia pada tenant ini. Filter ditolak.";
-    case "status_tidak_dikenal": return "Lifecycle tidak dikenali. Filter ditolak.";
+    case "status_tidak_dikenal": return "Status kiriman tidak dikenali. Filter ditolak.";
     case "basis_tidak_dikenal": return "Basis laporan tidak dikenali. Filter ditolak.";
     default: return analyticsIssueMessage(issue);
   }
@@ -124,6 +135,21 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
         }),
       );
   const data = auditScenario === "shipment-report-empty" ? emptyPage : loaded;
+  // T-204: Analitik's courier performance, on this page's filters. Its own
+  // transaction, so a failed read degrades only that section.
+  let courierPerformance: CourierPerformanceRow[] | null = [];
+  if (!parsed.filterRejected && auditScenario !== "shipment-report-empty") {
+    try {
+      courierPerformance = await withTenantContext(
+        db,
+        principal.userId,
+        principal.tenantId,
+        (tx, context) => loadCourierPerformance(tx, context, range, filters),
+      );
+    } catch {
+      courierPerformance = null;
+    }
+  }
   const todayLocalDate = parseAnalyticsRange({ rentang: "hari-ini", tz: range.timezone }, now).startDate;
 
   return (
@@ -134,12 +160,13 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
             <Link href={exportHref}><Download aria-hidden="true" />Ekspor CSV</Link>
           </Button>
         )}
-        description="Catatan kiriman per periode, outlet, kurir, dan lifecycle, dengan ekspor CSV yang mengikuti filter yang sama."
+        description="Rincian kiriman, biaya Mengantar, dan estimasi pencairan COD."
         eyebrow="Laporan"
         focusTargetId="shipment-report-heading"
         title="Laporan pengiriman"
       />
 
+      <div className="grid min-w-0 gap-2">
       <ShipmentReportFilters
         activeCount={activeCount}
         options={options}
@@ -156,9 +183,17 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
         }}
       />
 
-      <p className="max-w-2xl text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-        {periodLabel} · {timezoneLabel} · {presetLabel}
-      </p>
+      {/* Spec 10 §3 filter row: the active range sits under the row in text-xs muted. */}
+      <div className="flex min-w-0 items-center gap-1">
+        <p className="min-w-0 text-xs text-muted-foreground wrap-anywhere">
+          {periodLabel} · {timezoneLabel} · {presetLabel}
+        </p>
+        <HelpHint label="Penjelasan periode laporan">
+          <p>Periode memakai waktu kiriman dibuat.</p>
+          <p>Menerapkan filter selalu kembali ke halaman pertama, dan ekspor CSV mengikuti filter yang sama.</p>
+        </HelpHint>
+      </div>
+      </div>
 
       {parsed.issues.length > 0 ? (
         <Alert variant={parsed.filterRejected ? "destructive" : "default"}>
@@ -178,88 +213,104 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
       ) : null}
 
       <section aria-labelledby="shipment-report-totals-title" className="grid min-w-0 gap-3">
-        <h2 className="text-sm font-medium text-foreground" id="shipment-report-totals-title">
-          Ringkasan periode
-        </h2>
-        {/* Reading measure: the screening audit caps prose at 672px, and this
-            line runs the full container width at 1920 without it. */}
-        <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground" id="shipment-report-totals-title">
+            Ringkasan periode
+          </h2>
           <Badge variant="secondary">
             <span className="tabular-nums">{data.totals.shipmentCount}</span> kiriman
           </Badge>
-          {" "}Total berikut dihitung atas seluruh baris yang cocok dengan filter, bukan hanya halaman ini. Dana dicairkan Mengantar di sini masih estimasi: nilai COD dikurangi biaya kirim dan biaya COD.
-        </p>
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <div className="grid gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground" id="shipment-report-courier-title">Total per kurir</h3>
-            {data.totals.byCourier.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Belum ada kiriman pada periode ini.</p>
-            ) : (
-              <Table
-                containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-2xs overflow-hidden"
-                containerProps={{ "aria-labelledby": "shipment-report-courier-title", role: "region", tabIndex: 0 }}
-              >
-                <TableCaption className="sr-only">Total kiriman, biaya kirim Mengantar, biaya COD, dan estimasi dana dicairkan Mengantar per kurir.</TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Kurir</TableHead>
-                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Kiriman</TableHead>
-                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Biaya kirim Mengantar</TableHead>
-                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Biaya COD</TableHead>
-                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Estimasi dana dicairkan Mengantar</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.totals.byCourier.map((total) => (
-                    <TableRow key={total.courier ?? "tanpa-kurir"} className="transition-colors hover:bg-muted/30">
-                      <TableCell className="px-3 text-xs font-medium whitespace-nowrap">{total.courier ?? "Belum ada kurir"}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{total.shipmentCount}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{formatIdr(total.shippingCostIdr)}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{formatIdr(total.codFeeIdr)}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{formatIdr(total.codDisbursementEstimateIdr)}</TableCell>
+          <HelpHint label="Penjelasan ringkasan periode">
+            <p>Total dihitung atas seluruh baris yang cocok dengan filter, bukan hanya halaman ini.</p>
+            <p>Estimasi dana dicairkan Mengantar = nilai COD dikurangi biaya kirim dan biaya COD.</p>
+          </HelpHint>
+        </div>
+        {/* T-206 reference: the two totals side by side, each one bordered card with its table unframed inside. */}
+        <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+          <Card className="min-w-0">
+            <CardHeader>
+              <CardTitle id="shipment-report-courier-title">Total per kurir</CardTitle>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              {data.totals.byCourier.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Belum ada kiriman pada periode ini.</p>
+              ) : (
+                <Table
+                  containerClassName={inCardTableClassName}
+                  containerProps={{ "aria-labelledby": "shipment-report-courier-title", role: "region", tabIndex: 0 }}
+                >
+                  <TableCaption className="sr-only">Total kiriman, biaya kirim Mengantar, biaya COD, dan estimasi dana dicairkan Mengantar per kurir.</TableCaption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-3 whitespace-nowrap">Kurir</TableHead>
+                      <TableHead className="px-3 text-right whitespace-nowrap">Kiriman</TableHead>
+                      <TableHead className="px-3 text-right whitespace-nowrap">Biaya kirim Mengantar</TableHead>
+                      <TableHead className="px-3 text-right whitespace-nowrap">Biaya COD</TableHead>
+                      <TableHead className="px-3 text-right whitespace-nowrap">Estimasi dana dicairkan Mengantar</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground" id="shipment-report-lifecycle-title">Total per lifecycle</h3>
-            {data.totals.byLifecycle.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Belum ada kiriman pada periode ini.</p>
-            ) : (
-              <Table
-                containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-2xs overflow-hidden"
-                containerProps={{ "aria-labelledby": "shipment-report-lifecycle-title", role: "region", tabIndex: 0 }}
-              >
-                <TableCaption className="sr-only">Total kiriman per lifecycle.</TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Lifecycle</TableHead>
-                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Kiriman</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.totals.byLifecycle.map((total) => (
-                    <TableRow key={total.status} className="transition-colors hover:bg-muted/30">
-                      <TableCell className="px-3 whitespace-nowrap">
-                        <ShipmentStatusBadge
-                          label={SHIPMENT_STATUS_PRESENTATION[total.status].label}
-                          tone={SHIPMENT_STATUS_PRESENTATION[total.status].tone}
-                        />
-                      </TableCell>
-                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{total.shipmentCount}</TableCell>
+                  </TableHeader>
+                  <TableBody>
+                    {data.totals.byCourier.map((total) => (
+                      <TableRow key={total.courier ?? "tanpa-kurir"}>
+                        <TableCell className="px-3 font-medium whitespace-nowrap">{total.courier ? courierDisplayName(total.courier) : "Belum ada kurir"}</TableCell>
+                        <TableCell className="px-3 text-right tabular-nums whitespace-nowrap">{total.shipmentCount}</TableCell>
+                        <TableCell className="px-3 text-right tabular-nums whitespace-nowrap">{formatIdr(total.shippingCostIdr)}</TableCell>
+                        <TableCell className="px-3 text-right tabular-nums whitespace-nowrap">{formatIdr(total.codFeeIdr)}</TableCell>
+                        {/* The reference highlights the payout column: weight, not colour (spec 10 §1.9). */}
+                        <TableCell className="px-3 text-right font-semibold tabular-nums whitespace-nowrap">{formatIdr(total.codDisbursementEstimateIdr)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="min-w-0">
+            <CardHeader>
+              <CardTitle id="shipment-report-lifecycle-title">Total per status</CardTitle>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              {data.totals.byLifecycle.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Belum ada kiriman pada periode ini.</p>
+              ) : (
+                <Table
+                  containerClassName={inCardTableClassName}
+                  containerProps={{ "aria-labelledby": "shipment-report-lifecycle-title", role: "region", tabIndex: 0 }}
+                >
+                  <TableCaption className="sr-only">Total kiriman per status.</TableCaption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-3 whitespace-nowrap">Status</TableHead>
+                      <TableHead className="px-3 text-right whitespace-nowrap">Kiriman</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {data.totals.byLifecycle.map((total) => (
+                      <TableRow key={total.status}>
+                        <TableCell className="px-3 whitespace-nowrap">
+                          <ShipmentStatusBadge
+                            label={SHIPMENT_STATUS_PRESENTATION[total.status].label}
+                            tone={SHIPMENT_STATUS_PRESENTATION[total.status].tone}
+                          />
+                        </TableCell>
+                        <TableCell className="px-3 text-right font-semibold tabular-nums whitespace-nowrap">{total.shipmentCount}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </section>
 
+      <CourierPerformanceSection periodLabel={periodLabel} rows={courierPerformance} timezoneLabel={timezoneLabel} />
+
       <section aria-labelledby="shipment-report-rows-title" className="grid min-w-0 gap-3">
-        <h2 className="sr-only" id="shipment-report-rows-title">Baris laporan</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground" id="shipment-report-rows-title">Daftar kiriman</h2>
+          {data.totals.shipmentCount > 0 ? <Badge variant="secondary"><span className="tabular-nums">{data.totals.shipmentCount}</span> baris</Badge> : null}
+        </div>
         {data.rows.length === 0 ? (
           <EmptyState
             action={activeCount > 0 ? (
@@ -268,7 +319,7 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
               <Button asChild><Link href="/app/pengiriman/baru">Buat kiriman pertama</Link></Button>
             )}
             description={activeCount > 0
-              ? "Longgarkan periode, outlet, kurir, atau lifecycle untuk melihat baris lain."
+              ? "Longgarkan periode, outlet, kurir, atau status untuk melihat baris lain."
               : "Laporan terisi setelah kiriman pertama dibuat pada periode ini."}
             icon={FileSpreadsheet}
             title={activeCount > 0
@@ -276,9 +327,39 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
               : "Belum ada kiriman pada periode ini."}
           />
         ) : (
+          <>
+          {/* Spec 10 §6/§9 (T-203): below md the rows are cards; the wide table keeps md and up. */}
+          <RecordList initial={10} label="Baris laporan pengiriman">
+            {data.rows.map((row) => {
+              const created = formatWibDateTimeParts(row.createdAt);
+              const carrier = row.providerService
+                ? serviceDisplayName(row.providerService)
+                : row.courier ? courierDisplayName(row.courier) : "Belum ada kurir";
+              return (
+                <RecordItem
+                  key={row.shipmentId}
+                  meta={<time dateTime={row.createdAt.toISOString()}>{created.date}</time>}
+                  primary={areaDisplayCase(formatDistrictCity(row.destinationAreaLabel))}
+                  secondary={`${carrier} · ${PAYMENT_METHOD_LABELS[row.paymentMethod]} · ${row.outletName}`}
+                  status={(
+                    <ShipmentStatusBadge
+                      label={SHIPMENT_STATUS_PRESENTATION[row.status].label}
+                      tone={SHIPMENT_STATUS_PRESENTATION[row.status].tone}
+                    />
+                  )}
+                  title={(
+                    <Link className={`inline-flex min-h-11 items-center whitespace-nowrap ${shipmentIdLinkClassName}`} href={shipmentDetailHref(row.publicReference)}>
+                      {row.publicReference}
+                    </Link>
+                  )}
+                  value={row.shippingCostIdr === null ? "Biaya kirim belum ada" : `Biaya kirim ${formatIdr(row.shippingCostIdr)}`}
+                />
+              );
+            })}
+          </RecordList>
           <Table
             className="min-w-[72rem]"
-            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName={cn(dataTableSurfaceClassName, desktopTableClassName)}
             containerProps={{
               "aria-label": "Baris laporan pengiriman; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -295,7 +376,7 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
                   return (
                     <TableHead
                       className={cn(
-                        "px-3 text-xs font-semibold whitespace-nowrap",
+                        "px-3 whitespace-nowrap",
                         index === 0 && "sticky left-0 z-10 bg-inherit",
                         isFinancial && "text-right",
                       )}
@@ -309,35 +390,36 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
             </TableHeader>
             <TableBody>
               {data.rows.map((row) => (
-                <TableRow className="group transition-colors hover:bg-muted/30" key={row.shipmentId}>
-                  <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
-                    <span className="font-mono font-semibold text-primary whitespace-nowrap">{row.publicReference}</span>
+                <TableRow key={row.shipmentId}>
+                  <TableCell className="sticky left-0 z-10 bg-inherit px-3">
+                    <Link className={`whitespace-nowrap ${shipmentIdLinkClassName}`} href={shipmentDetailHref(row.publicReference)}>{row.publicReference}</Link>
                     <span className="mt-0.5 block text-xs text-muted-foreground whitespace-nowrap">{row.outletName}</span>
                   </TableCell>
-                  <TableCell className="px-3 whitespace-nowrap text-xs"><StackedDateTime value={row.createdAt} /></TableCell>
-                  <TableCell className="px-3 whitespace-nowrap text-xs"><StackedDateTime value={row.issuedAt} /></TableCell>
-                  <TableCell className="min-w-[14rem] max-w-[20rem] px-3 text-xs leading-relaxed whitespace-normal break-words">{row.destinationAreaLabel}</TableCell>
-                  <TableCell className="px-3 whitespace-nowrap text-xs font-medium">{row.courier ?? "—"}</TableCell>
-                  <TableCell className="px-3 whitespace-nowrap text-xs text-muted-foreground">{row.providerService ?? "—"}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap"><StackedDateTime value={row.createdAt} /></TableCell>
+                  <TableCell className="px-3 whitespace-nowrap"><StackedDateTime value={row.issuedAt} /></TableCell>
+                  <TableCell className="min-w-56 max-w-80 px-3 whitespace-normal break-words">{areaDisplayCase(row.destinationAreaLabel)}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap font-medium">{row.courier ? courierDisplayName(row.courier) : "—"}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap text-muted-foreground">{serviceDisplayName(row.providerService)}</TableCell>
                   <TableCell className="px-3 whitespace-nowrap">
                     <ShipmentStatusBadge
                       label={SHIPMENT_STATUS_PRESENTATION[row.status].label}
                       tone={SHIPMENT_STATUS_PRESENTATION[row.status].tone}
                     />
                   </TableCell>
-                  <TableCell className="px-3 whitespace-nowrap text-xs font-medium">{PAYMENT_METHOD_LABELS[row.paymentMethod]}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap font-medium">{PAYMENT_METHOD_LABELS[row.paymentMethod]}</TableCell>
                   {[row.shippingCostIdr, row.codFeeIdr, row.codDisbursementEstimateIdr].map((amount, index) => (
-                    <TableCell className="px-3 text-right tabular-nums whitespace-nowrap text-xs font-medium" key={index}>
+                    <TableCell className="px-3 text-right tabular-nums whitespace-nowrap font-medium" key={index}>
                       {amount === null ? "—" : formatIdr(amount)}
                     </TableCell>
                   ))}
-                  <TableCell className="px-3 whitespace-nowrap text-xs text-muted-foreground">
+                  <TableCell className="px-3 whitespace-nowrap text-muted-foreground">
                     {row.printCount > 0 ? `Sudah dicetak (${row.printCount}×)` : "Belum dicetak"}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </>
         )}
 
         {data.totals.shipmentCount > 0 ? (

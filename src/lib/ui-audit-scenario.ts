@@ -8,11 +8,6 @@ export type UiAuditScenario =
   | "quick-rate-provider-error"
   | "quick-rate-error"
   | "quick-rate-stale"
-  | "analytics-first-run"
-  | "analytics-page-error"
-  | "analytics-stale"
-  | "analytics-stream"
-  | "analytics-trend-error"
   | "dashboard-action-error"
   | "dashboard-action-empty"
   | "dashboard-first-run"
@@ -22,11 +17,6 @@ export type UiAuditScenario =
   | "dashboard-period-error"
   | "dashboard-stream"
   | "dashboard-stale"
-  | "finance-empty"
-  | "finance-error"
-  | "finance-partial-error"
-  | "finance-stale"
-  | "finance-stream"
   | "members-error"
   | "members-inactive"
   | "members-populated"
@@ -83,11 +73,6 @@ export type UiAuditScenario =
   | "settings-provider-error"
   | "settings-stream"
   | "settings-twenty"
-  | "bulk-import-error"
-  | "bulk-import-mixed"
-  | "bulk-import-no-valid"
-  | "bulk-import-stream"
-  | "bulk-import-unconfigured"
   | "contacts-recipient-error"
   | "contacts-recipient-stream"
   | "contacts-sender-error"
@@ -176,9 +161,6 @@ type UiAuditScenarioContract = {
     | "/app/cek-resi"
     | "/app/cek-tarif"
     | "/app"
-    | "/app/analitik"
-    | "/app/impor"
-    | "/app/keuangan"
     | "/app/anggota"
     | "/app/pengaturan"
     | "/app/pengaturan/outlet"
@@ -214,11 +196,6 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "quick-rate-provider-error": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "partial-error" },
   "quick-rate-error": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "route-error" },
   "quick-rate-stale": { mode: "read-only", ownerTask: "T-143", route: "/app/cek-tarif", state: "stale" },
-  "bulk-import-error": { mode: "read-only", route: "/app/impor", state: "route-error" },
-  "bulk-import-mixed": { mode: "read-only", route: "/app/impor", state: "partial-error" },
-  "bulk-import-no-valid": { mode: "read-only", route: "/app/impor", state: "partial-error" },
-  "bulk-import-stream": { mode: "read-only", route: "/app/impor", state: "loading" },
-  "bulk-import-unconfigured": { mode: "read-only", route: "/app/impor", state: "healthy-empty" },
   "contacts-sender-error": { mode: "read-only", route: "/app/kontak/pengirim", state: "route-error" },
   "contacts-recipient-error": { mode: "read-only", route: "/app/kontak/penerima", state: "route-error" },
   "contacts-area-error": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "partial-error" },
@@ -241,11 +218,6 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "shipment-report-error": { mode: "read-only", ownerTask: "T-165", route: "/app/laporan/pengiriman", state: "route-error" },
   "print-history-empty": { mode: "read-only", ownerTask: "T-166", route: "/app/laporan/cetak-resi", state: "healthy-empty" },
   "print-history-error": { mode: "read-only", ownerTask: "T-166", route: "/app/laporan/cetak-resi", state: "route-error" },
-  "analytics-first-run": { mode: "read-only", route: "/app/analitik", state: "first-run" },
-  "analytics-page-error": { mode: "read-only", route: "/app/analitik", state: "route-error" },
-  "analytics-stale": { mode: "read-only", route: "/app/analitik", state: "stale" },
-  "analytics-stream": { mode: "read-only", route: "/app/analitik", state: "loading" },
-  "analytics-trend-error": { mode: "read-only", route: "/app/analitik", state: "partial-error" },
   "dashboard-action-error": { mode: "read-only", route: "/app", state: "partial-error" },
   "dashboard-action-empty": { mode: "read-only", route: "/app", state: "healthy-empty" },
   "dashboard-first-run": { mode: "read-only", route: "/app", state: "first-run" },
@@ -255,11 +227,6 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "dashboard-period-error": { mode: "read-only", route: "/app", state: "partial-error" },
   "dashboard-stream": { mode: "read-only", route: "/app", state: "loading" },
   "dashboard-stale": { mode: "read-only", route: "/app", state: "stale" },
-  "finance-empty": { mode: "read-only", route: "/app/keuangan", state: "healthy-empty" },
-  "finance-error": { mode: "read-only", route: "/app/keuangan", state: "route-error" },
-  "finance-partial-error": { mode: "read-only", route: "/app/keuangan", state: "partial-error" },
-  "finance-stale": { mode: "read-only", route: "/app/keuangan", state: "stale" },
-  "finance-stream": { mode: "read-only", route: "/app/keuangan", state: "loading" },
   "members-error": { mode: "read-only", route: "/app/anggota", state: "route-error" },
   "members-inactive": { mode: "read-only", route: "/app/anggota", state: "partial-error" },
   "members-populated": { mode: "read-only", route: "/app/anggota", state: "populated" },
@@ -400,22 +367,6 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
   },
   {
     kind: "page",
-    ownerTask: "T-38",
-    roles: ["TENANT_ADMIN", "OPERATOR"],
-    route: "/app/analitik",
-    source: "src/app/app/analitik/page.tsx",
-    states: ["first-run", ...COMMON_PAGE_STATES, "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
-  },
-  {
-    kind: "endpoint",
-    ownerTask: "T-38",
-    roles: ["TENANT_ADMIN", "OPERATOR"],
-    route: "/app/analitik/export.csv",
-    source: "src/app/app/analitik/export.csv/route.ts",
-    states: ["invalid-query", "primary-success", "route-error", "unauthorized"],
-  },
-  {
-    kind: "page",
     ownerTask: "T-39",
     roles: ["TENANT_ADMIN", "OPERATOR"],
     route: "/app/pengiriman",
@@ -445,22 +396,6 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
     route: "/app/pengiriman/baru",
     source: "src/app/app/pengiriman/baru/page.tsx",
     states: ["healthy-empty", "loading", "populated", "partial-error", "pending", "primary-success", "route-error", "unauthorized"],
-  },
-  {
-    kind: "page",
-    ownerTask: "T-41",
-    roles: ["TENANT_ADMIN", "OPERATOR"],
-    route: "/app/impor",
-    source: "src/app/app/impor/page.tsx",
-    states: ["healthy-empty", "loading", "partial-error", "pending", "populated", "primary-success", "route-error", "unauthorized"],
-  },
-  {
-    kind: "endpoint",
-    ownerTask: "T-41",
-    roles: ["TENANT_ADMIN", "OPERATOR"],
-    route: "/app/impor/template.csv",
-    source: "src/app/app/impor/template.csv/route.ts",
-    states: ["primary-success", "route-error", "unauthorized"],
   },
   // T-188: the single /app/kontak directory became two role menus.
   {
@@ -534,14 +469,6 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
     route: "/app/laporan/cetak-resi",
     source: "src/app/app/laporan/cetak-resi/page.tsx",
     states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "unauthorized"],
-  },
-  {
-    kind: "page",
-    ownerTask: "T-44",
-    roles: ["TENANT_ADMIN"],
-    route: "/app/keuangan",
-    source: "src/app/app/keuangan/page.tsx",
-    states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   },
   {
     kind: "page",
@@ -715,19 +642,11 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     states: ["healthy-empty", "loading", "partial-error", "populated", "unauthorized"],
   },
   {
-    consumers: ["/app/keuangan"],
-    exportName: "runLedgerReconciliation",
-    ownerTask: "T-44",
+    consumers: ["/app/pengiriman", "/app/pengiriman/rts"],
+    exportName: "pullMengantarStatus",
+    ownerTask: "T-204",
     roles: ["TENANT_ADMIN"],
-    source: "src/app/app/keuangan/actions.ts",
-    states: ["partial-error", "pending", "primary-success", "unauthorized"],
-  },
-  {
-    consumers: ["/app/keuangan"],
-    exportName: "reverseLedgerEntry",
-    ownerTask: "T-44",
-    roles: ["TENANT_ADMIN"],
-    source: "src/app/app/keuangan/actions.ts",
+    source: "src/app/app/pengiriman/status-sync-actions.ts",
     states: ["partial-error", "pending", "primary-success", "unauthorized"],
   },
   {

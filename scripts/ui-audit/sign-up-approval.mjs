@@ -177,7 +177,7 @@ try {
     await s.goto(`${tenant}/login`);
     await wait(hydrated);
     const tenantPage = await s.evaluate(`({h1:document.querySelector('h1')?.textContent,surface:document.querySelector('.auth-page')?.dataset.surface,daftar:!!document.querySelector('a[href="/daftar"]'),lupa:!!document.querySelector('a[href="/lupa-password"]'),toggle:!!document.querySelector('button[aria-controls=password]'),font:getComputedStyle(document.getElementById('email')).fontSize,fieldHeight:document.getElementById('email').getBoundingClientRect().height})`);
-    check(`tenant login @${width} offers sign-up, recovery and a password toggle`, tenantPage.h1 === "Masuk ke toko Anda" && tenantPage.surface === "tenant" && tenantPage.daftar && tenantPage.lupa && tenantPage.toggle && tenantPage.fieldHeight >= 48, tenantPage);
+    check(`tenant login @${width} offers sign-up, recovery and a password toggle`, tenantPage.h1 === "Masuk ke gerai Anda" && tenantPage.surface === "tenant" && tenantPage.daftar && tenantPage.lupa && tenantPage.toggle && tenantPage.fieldHeight >= 48, tenantPage);
     await probe("tenant-login");
     await s.goto(`${platform}/login`);
     await wait(hydrated);
@@ -276,9 +276,9 @@ try {
     // The dashboard streams: wait for the page itself, not its loading frame.
     await wait("!!document.querySelector('[data-testid=tenant-approval-banner]') && [...document.querySelectorAll('main h1')].some(h=>h.textContent==='Siapkan toko Anda') && document.querySelectorAll('main h1').length===1");
     const dashboard = await s.evaluate("({h1:document.querySelector('main h1')?.textContent,steps:document.querySelectorAll('ol[aria-label] li').length})");
-    check(`pending store dashboard @${width} shows the banner and setup steps`, dashboard.h1 === "Siapkan toko Anda" && dashboard.steps === 4, dashboard);
+    check(`pending store dashboard @${width} shows the banner and setup steps`, dashboard.h1 === "Siapkan gerai Anda" && dashboard.steps === 4, dashboard);
     await probe("pending-dashboard", { auth: false });
-    for (const path of ["/app/pengiriman/baru", "/app/cek-tarif", "/app/impor"]) {
+    for (const path of ["/app/pengiriman/baru", "/app/cek-tarif"]) {
       await s.goto(`${tenant}${path}`);
       await wait("!!document.querySelector('[data-testid=tenant-approval-refused]')");
       check(`${path} @${width} is refused server-side with the stated reason`, await s.evaluate("location.pathname==='/app'&&location.search==='?persetujuan=diperlukan'"));
@@ -301,7 +301,7 @@ try {
     await probe("lupa-password");
     await fill({ email: stores.pending.email });
     await s.evaluate("document.querySelector('form .auth-submit').click()");
-    await wait("document.body.innerText.includes('Jika email itu terdaftar sebagai akun toko')", 200);
+    await wait("document.body.innerText.includes('Jika email itu terdaftar sebagai akun gerai')", 200);
     await probe("lupa-password-sent");
   }
   const resetLink = linksFor(stores.pending.email, "reset-password").at(-1);
@@ -338,7 +338,7 @@ try {
     const queue = await s.evaluate(`({h1:document.querySelector('main h1').textContent,current:document.querySelector('a[aria-current=page]')?.textContent?.trim(),cards:[...document.querySelectorAll('[role=article]')].map(c=>({title:c.querySelector('[data-slot=card-title]')?.textContent,text:c.innerText.slice(0,300),approveDisabled:[...c.querySelectorAll('button')].find(b=>b.textContent.includes('Setujui'))?.disabled}))})`);
     const pendingCard = queue.cards.find((card) => card.title === stores.pending.name);
     const secondCard = queue.cards.find((card) => card.title === stores.second.name);
-    check(`approval queue @${width} lists store, owner, email, WhatsApp, registered at and verification state`, queue.h1 === "Pendaftaran toko" && pendingCard && secondCard
+    check(`approval queue @${width} lists store, owner, email, WhatsApp, registered at and verification state`, queue.h1 === "Pendaftaran" && pendingCard && secondCard
       && pendingCard.text.includes(stores.pending.owner) && pendingCard.text.includes(stores.pending.email) && pendingCard.text.includes("0812 3456 7890")
       && pendingCard.text.includes("Email terverifikasi") && secondCard.text.includes("Email belum terverifikasi")
       && pendingCard.approveDisabled === false && secondCard.approveDisabled === true, { current: queue.current, h1: queue.h1, cards: queue.cards.length });
@@ -357,7 +357,7 @@ try {
   await wait("!!document.querySelector('[role=alertdialog]')");
   await probe("platform-pendaftaran-confirm", { auth: false });
   await s.evaluate("[...document.querySelectorAll('[role=alertdialog] button')].find(b=>b.textContent.includes('Ya, setujui')).click()");
-  await wait("document.body.innerText.includes('Toko disetujui')", 200);
+  await wait("document.body.innerText.includes('Gerai disetujui')", 200);
   await probe("platform-pendaftaran-approved", { auth: false });
   const decided = await db.query(`SELECT u.email, t.status, (SELECT array_agg(action ORDER BY created_at) FROM audit_events e WHERE e.tenant_id=t.id) AS actions FROM users u JOIN memberships m ON m.user_id=u.id JOIN tenants t ON t.id=m.tenant_id WHERE u.email = ANY($1) ORDER BY u.email`, [[stores.pending.email, stores.second.email]]);
   const byEmail = Object.fromEntries(decided.rows.map((row) => [row.email, row]));

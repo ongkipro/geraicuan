@@ -15,7 +15,7 @@
 4. `04-SYSTEM-ARCHITECTURE.md` — trust boundaries and containers.
 5. `05-DATA-MODEL.md` — entities, money invariants, ERD.
 6. `06-TENANT-ISOLATION.md`, `07-IAM-RBAC-ABAC.md`, `12-SECURITY-ARCHITECTURE.md` — isolation and controls.
-7. `10-DESIGN-SYSTEM-WHITELABEL.md` — visual direction and required screens.
+7. `10-DESIGN-SYSTEM-WHITELABEL.md` — the single design contract (v2.0, GeraiOS professional shadcn pattern): tokens, shell, page patterns, components, states, screening. `20-IOS-GLASS-UI-ARCHITECTURE.md` is superseded.
 8. `13-COMPLIANCE-PRIVACY.md`, `15-DEVOPS-CICD-MIGRATIONS.md`, `16-OBSERVABILITY-RATE-LIMITING.md` — operations controls.
 9. `17-UX-FLOWS-SCREEN-CONTRACTS.md` — operator journeys, information architecture, screen states, and component boundaries.
 10. `18-SYSTEM-MAP.md` — route inventory and code navigation map.

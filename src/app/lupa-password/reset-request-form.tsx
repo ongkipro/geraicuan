@@ -26,7 +26,7 @@ export function PasswordResetRequestForm() {
           <MailCheck aria-hidden="true" />
           <AlertTitle>Periksa email Anda</AlertTitle>
           <AlertDescription>
-            Jika email itu terdaftar sebagai akun toko, tautan untuk membuat kata sandi baru sudah
+            Jika email itu terdaftar sebagai akun gerai, tautan untuk membuat kata sandi baru sudah
             dikirim. Tautan berlaku 1 jam. Tidak ada di kotak masuk? Periksa folder spam.
           </AlertDescription>
         </Alert>

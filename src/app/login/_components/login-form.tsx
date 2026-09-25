@@ -37,7 +37,7 @@ const notices: Record<LoginNotice, { body: string; title: string; tone: "default
     tone: "default",
   },
   "email-terverifikasi": {
-    body: "Toko Anda sekarang menunggu persetujuan Super Admin. Anda sudah bisa masuk untuk menyiapkan outlet, titik pickup dan akun Mengantar milik toko. Membuat kiriman terbuka setelah toko disetujui, dan kami kirim email begitu keputusan dibuat.",
+    body: "Gerai Anda sekarang menunggu persetujuan Super Admin. Anda sudah bisa masuk untuk menyiapkan outlet, titik pickup dan akun Mengantar milik gerai. Membuat kiriman terbuka setelah gerai disetujui, dan kami kirim email begitu keputusan dibuat.",
     title: "Email terverifikasi",
     tone: "default",
   },

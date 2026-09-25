@@ -5,7 +5,7 @@ import { CircleAlert, LockKeyhole, Users } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { InviteMemberForm, InviteMemberHeaderAction, MemberControls } from "@/app/app/anggota/member-governance-forms";
+import { InviteMemberForm, MemberControls } from "@/app/app/anggota/member-governance-forms";
 import { EmptyState } from "@/components/cms/empty-state";
 import {
   administrationNavigation,
@@ -14,6 +14,7 @@ import {
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { SettingsCard, SettingsLayout } from "@/components/cms/settings-layout";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db/client";
@@ -23,7 +24,7 @@ import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = {
-  title: "Anggota tenant | GeraiCUAN",
+  title: "Anggota & akses · GeraiCUAN",
   robots: { index: false },
 };
 
@@ -32,6 +33,12 @@ const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
   timeStyle: "short",
   timeZone: "Asia/Jakarta",
 });
+
+/** Two initials from the stored display name, e.g. "Ayu Admin" → "AA". */
+function initials(name: string) {
+  const letters = name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toLocaleUpperCase("id-ID"));
+  return letters.join("") || "?";
+}
 
 const auditUpdatedAt = new Date("2026-09-01T00:00:00.000Z");
 
@@ -119,9 +126,8 @@ export default async function TenantMembersPage() {
         currentHref="/app/anggota"
         header={
           <PageHeader
-            actions={<InviteMemberHeaderAction />}
             description="Undang anggota, ubah peran, dan nonaktifkan akses tenant."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Anggota & akses"
           />
         }
@@ -134,25 +140,24 @@ export default async function TenantMembersPage() {
             <Alert>
               <CircleAlert aria-hidden="true" />
               <AlertTitle>Hanya satu Tenant Admin aktif</AlertTitle>
-              <AlertDescription>Admin terakhir tidak dapat diturunkan perannya atau dinonaktifkan. Undang Tenant Admin lain agar akses tenant tetap terjaga.</AlertDescription>
+              <AlertDescription>Undang Tenant Admin lain agar akses tenant tetap terjaga.</AlertDescription>
             </Alert>
           ) : null}
 
           <SettingsCard
-            description="Jumlah anggota tenant ini menurut status dan peran."
             id="member-summary-title"
             title="Ringkasan akses"
           >
-            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-4 xl:grid-cols-4">
               {[
                 ["Total anggota", members.length],
                 ["Aktif", activeCount],
                 ["Tenant Admin aktif", activeAdminCount],
                 ["Nonaktif", members.length - activeCount],
               ].map(([label, value]) => (
-                <div className="grid gap-1 bg-background px-4 py-3" key={label}>
-                  <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-                  <dd className="text-2xl font-bold tabular-nums">{value}</dd>
+                <div className="grid gap-1" key={label}>
+                  <dt className="text-sm text-muted-foreground">{label}</dt>
+                  <dd className="text-3xl font-bold tabular-nums">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -160,15 +165,15 @@ export default async function TenantMembersPage() {
 
           <SettingsCard
             badge={activeAdminCount === 1 ? <Badge variant="outline"><LockKeyhole aria-hidden="true" />Admin terakhir dilindungi</Badge> : undefined}
-            description="Kelola peran dan akses setiap anggota. Anggota aktif ditampilkan lebih dulu."
+            description="Anggota aktif ditampilkan lebih dulu."
             id="tenant-members-title"
             title="Daftar anggota"
           >
             {members.length === 0 ? (
               <EmptyState description="Data anggota tenant belum tersedia. Muat ulang halaman atau hubungi dukungan sebelum mengelola akses." icon={Users} title="Anggota tidak ditemukan" />
             ) : (
-              <div className="min-w-0 overflow-hidden rounded-md border">
-                <div aria-hidden="true" className="hidden h-10 items-center justify-between gap-4 border-b bg-muted/50 px-4 text-xs font-medium text-muted-foreground sm:flex">
+              <div className="min-w-0">
+                <div aria-hidden="true" className="hidden h-10 items-center justify-between gap-4 border-b bg-muted px-4 text-xs font-medium text-muted-foreground sm:flex">
                   <span>Anggota</span>
                   <span>Peran &amp; status</span>
                 </div>
@@ -181,14 +186,20 @@ export default async function TenantMembersPage() {
                     return (
                       <li className="grid min-w-0 gap-3 px-4 py-4" key={member.id}>
                         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                          <div className="grid min-w-0 gap-0.5">
-                            <p className="text-sm font-semibold leading-6 [overflow-wrap:anywhere]" id={`member-name-${member.id}`}>{member.name}{isCurrentUser ? " (Anda)" : ""}</p>
-                            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" title={member.email}>{member.email}</p>
-                            <p className="text-xs text-muted-foreground">Diperbarui {updatedAtFormatter.format(member.updatedAt)} WIB</p>
+                          {/* T-206 reference: initials avatar beside name and email (round is allowed for avatars, spec 10 §2.3). */}
+                          <div className="flex min-w-0 items-start gap-3">
+                            <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-foreground">
+                              {initials(member.name)}
+                            </span>
+                            <div className="grid min-w-0 gap-0.5">
+                              <p className="text-base font-semibold leading-6 [overflow-wrap:anywhere]" id={`member-name-${member.id}`}>{member.name}{isCurrentUser ? " (Anda)" : ""}</p>
+                              <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" title={member.email}>{member.email}</p>
+                              <p className="text-xs text-muted-foreground">Diperbarui {updatedAtFormatter.format(member.updatedAt)} WIB</p>
+                            </div>
                           </div>
                           <div aria-label={`Peran ${roleLabel}; status ${statusLabel}`} className="flex shrink-0 flex-wrap gap-2 sm:justify-end" role="group">
                             <Badge variant="outline">{roleLabel}</Badge>
-                            <Badge variant={member.status === "ACTIVE" ? "secondary" : "outline"}>{statusLabel}</Badge>
+                            <ToneBadge label={statusLabel} tone={member.status === "ACTIVE" ? "ok" : "neutral"} />
                             {isLastActiveAdmin ? <Badge variant="outline"><LockKeyhole aria-hidden="true" />Admin terakhir</Badge> : null}
                           </div>
                         </div>

@@ -3,19 +3,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  CompactShipmentStepIndicator,
   ShipmentStepIndicator,
   type ShipmentStep,
 } from "@/app/app/pengiriman/baru/shipment-step-indicator";
 
 const STEPS: ShipmentStep[] = [
-  { detail: "Selesai · Outlet Bandung", label: "Draf", state: "done" },
-  { label: "Estimasi", state: "current" },
-  { label: "Konfirmasi", state: "pending" },
-  { label: "AWB", state: "pending" },
+  { detail: "Selesai · Outlet Bandung", label: "Isi data", state: "done" },
+  { label: "Cek tarif", state: "current" },
+  { label: "Terbitkan resi", state: "pending" },
 ];
 
-describe("shipment step indicator (design spec §7.1/§7.3)", () => {
+// T-205 replaced the rail list and the separate mobile progress bar with one step card
+// under the page header (the owner's reference), read once at every width. The pins
+// below keep the §7.1 intent of the earlier pair.
+describe("shipment step indicator (design spec §7.1)", () => {
   it("marks exactly one current step with aria-current and a visible state word, never colour alone", () => {
     const html = renderToStaticMarkup(createElement(ShipmentStepIndicator, { steps: STEPS }));
 
@@ -25,8 +26,9 @@ describe("shipment step indicator (design spec §7.1/§7.3)", () => {
     expect(html).toContain("Menunggu");
     // A stepper is a list of states, not tabs (design spec §7.1, pinned sweep rule).
     expect(html).not.toContain('role="tablist"');
-    // The done marker carries a distinct glyph (Check icon), not colour alone.
     expect(html).toContain("<nav");
+    expect(html).toMatch(/<ol[^>]*>/);
+    // The done marker carries a distinct glyph (Check icon), not colour alone.
     expect(html.match(/<svg/g) ?? []).toHaveLength(1);
   });
 
@@ -36,33 +38,16 @@ describe("shipment step indicator (design spec §7.1/§7.3)", () => {
     expect(html.match(/aria-current="step"/g) ?? []).toHaveLength(0);
   });
 
-  it("renders the compact mobile bar hidden at the split breakpoint with sr-only per-segment state", () => {
-    const html = renderToStaticMarkup(createElement(CompactShipmentStepIndicator, { steps: STEPS }));
+  it("keeps every step's words visible at every width and the connectors decorative", () => {
+    const html = renderToStaticMarkup(createElement(ShipmentStepIndicator, { steps: STEPS }));
 
-    expect(html).toContain("@4xl/page:hidden");
-    expect(html).toContain("Langkah 2 dari 4 · Estimasi");
-    expect(html).toContain("sr-only");
-    expect(html).toContain("Langkah Estimasi: Sedang dikerjakan");
-    // The bars are decoration and say so: with the words on the page ground, a
-    // set of empty `<li>` carrying `aria-current="step"` announced three blank
-    // list items ahead of the sentence that states where the operator is. The
-    // heading line and the sr-only list are what a screen reader reads.
-    expect(html).toMatch(/<ol[^>]*aria-hidden="true"/);
-    expect(html.match(/aria-current="step"/g) ?? []).toHaveLength(0);
-  });
-
-  it("keeps the per-step words off the tinted bars", () => {
-    const html = renderToStaticMarkup(createElement(CompactShipmentStepIndicator, { steps: STEPS }));
-
-    // Each bar is a fill on --ok, --primary or --hairline. A `sr-only` span is
-    // clipped to a pixel but still painted, so text placed inside a bar
-    // inherits page ink over that fill: the current bar measured 2.57:1 in the
-    // T-159 browser sweep at 1024 and 390. The bars carry no text at all; the
-    // words live in one line on the page ground.
-    const bars = html.match(/<li[^>]*>[\s\S]*?<\/li>/g) ?? [];
-    expect(bars).toHaveLength(STEPS.length);
-    for (const bar of bars) expect(bar.replace(/^<li[^>]*>|<\/li>$/g, "")).toBe("");
-    for (const step of STEPS) expect(html).toContain(`Langkah ${step.label}:`);
+    // One tree for all widths: no step text is hidden below a breakpoint or left to sr-only.
+    expect(html).not.toContain("sr-only");
+    expect(html).not.toMatch(/@4xl\/page:hidden|max-sm:hidden/);
+    for (const step of STEPS) expect(html).toContain(`>${step.label}</span>`);
+    // The hairlines between steps carry no text and are hidden from assistive technology.
+    const connectors = html.match(/<span aria-hidden="true" class="hidden h-px[^"]*"><\/span>/g) ?? [];
+    expect(connectors).toHaveLength(STEPS.length - 1);
   });
 });
 
@@ -71,9 +56,16 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn((href: string) => { throw new Error(`REDIRECT:${href}`); }),
 }));
 vi.mock("@/db/client", () => ({ db: {} }));
+// T-205: the page reads the gerai's name and WhatsApp for the "Alamat gerai" sender
+// source; the stub transaction answers that one select with the gerai below.
+const tenantSelect = {
+  from: () => tenantSelect,
+  limit: async () => [{ name: "Gerai Bandung", phone: "081234567890" }],
+  where: () => tenantSelect,
+};
 vi.mock("@/db/tenant-context", () => ({
   withTenantContext: vi.fn(async (_db, _userId, _tenantId, callback) =>
-    callback({}, { role: "TENANT_ADMIN", tenantId: "00000000-0000-4000-8000-000000000701", userId: "draft-render-user" }),
+    callback({ select: () => tenantSelect }, { role: "TENANT_ADMIN", tenantId: "00000000-0000-4000-8000-000000000701", userId: "draft-render-user" }),
   ),
 }));
 vi.mock("@/db/outlet-pickup-point-repository", () => ({
@@ -98,17 +90,25 @@ vi.mock("@/app/app/estimate-actions", () => ({ loadShipmentEstimate: vi.fn() }))
 vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: vi.fn(async () => ({ options: [], success: true })) }));
 
 describe("pengiriman/baru page layout (design spec §2.2/§7)", () => {
-  it("wraps the draft form in the two-column form pattern with the stepper and summary in the rail", async () => {
+  it("wraps the draft form in the two-column form pattern with the stepper above and the summary in the rail", async () => {
     const { default: NewShipmentPage } = await import("@/app/app/pengiriman/baru/page");
     const html = renderToStaticMarkup(await NewShipmentPage({ searchParams: Promise.resolve({}) }));
 
     expect(html).toContain("@4xl/page:grid-cols-[minmax(0,1fr)_22rem]");
     expect(html).toContain('aria-label="Ringkasan pembuatan kiriman"');
     expect(html).toContain("Tahapan pembuatan kiriman");
-    // One marker, from the desktop stepper. The compact bars became decoration
-    // (`aria-hidden`) once the per-step words moved onto the page ground, so a
-    // screen reader hears the current step once rather than twice.
+    // One step card at every width, so a screen reader hears the current step once.
     expect(html.match(/aria-current="step"/g) ?? []).toHaveLength(1);
+    // The steps sit above the two columns, not inside the rail (T-205, the owner's reference).
+    expect(html.indexOf("Tahapan pembuatan kiriman")).toBeLessThan(html.indexOf('aria-label="Ringkasan pembuatan kiriman"'));
+    // The "Alamat gerai" source is offered and prefills the label sender from the gerai.
+    expect(html).toContain("Alamat gerai");
+    expect(html).toMatch(/<input[^>]*id="senderName"[^>]*value="Gerai Bandung"/);
+    // One primary per width: the rail's submit shows from the split, the bottom bar's below it.
+    const submits = html.match(/<button[^>]*type="submit"[^>]*>Simpan &amp; cek tarif<\/button>/g) ?? [];
+    expect(submits).toHaveLength(2);
+    expect(submits.filter((button) => /\bhidden\b[^"]*@4xl\/page:inline-flex/.test(button))).toHaveLength(1);
+    expect(html).toMatch(/<div class="sticky bottom-0[^"]*@4xl\/page:hidden"/);
     expect(html).not.toContain('role="tablist"');
     // T-149: the single frame ships without a per-page width prop.
     expect(html).not.toMatch(/<div[^>]*width=/);

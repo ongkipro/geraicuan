@@ -18,9 +18,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { CharacterClassTextarea } from "@/components/ui/character-class-input";
+import { cn } from "@/lib/utils";
 
 const initialState: RegistrationReviewState = {};
 
@@ -62,7 +63,7 @@ export function RegistrationReviewControls({
           <Alert role={settled ? "status" : "alert"} variant={settled ? "default" : "destructive"}>
             <AlertTitle>
               {outcome.outcome === "approved"
-                ? "Toko disetujui"
+                ? "Gerai disetujui"
                 : outcome.outcome === "rejected"
                   ? "Pendaftaran ditolak"
                   : "Keputusan belum tersimpan"}
@@ -80,23 +81,23 @@ export function RegistrationReviewControls({
           </form>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button className="min-h-11 max-sm:w-full" disabled={busy || !emailVerified}>
-                Setujui toko
+              <Button className="min-h-11 md:min-h-10 max-sm:w-full" disabled={busy || !emailVerified}>
+                Setujui gerai
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Setujui {storeName}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Toko langsung dapat membuat, mengestimasi dan menerbitkan kiriman dengan akun
+                  Gerai langsung dapat membuat, mengestimasi dan menerbitkan kiriman dengan akun
                   Mengantar miliknya sendiri. Pemilik menerima email dan keputusan ini tercatat di
                   jejak audit.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="min-h-11">Batal</AlertDialogCancel>
+                <AlertDialogCancel className="min-h-11 md:min-h-10">Batal</AlertDialogCancel>
                 <AlertDialogAction
-                  className="min-h-11"
+                  className="min-h-11 md:min-h-10"
                   form={approveFormId}
                   onClick={() => setDecision("APPROVE")}
                   type="submit"
@@ -107,16 +108,18 @@ export function RegistrationReviewControls({
             </AlertDialogContent>
           </AlertDialog>
 
-          <details className="min-w-0 flex-1 basis-72 rounded-lg border bg-card" open={Boolean(reasonError)}>
-            <summary className="flex min-h-11 cursor-pointer items-center px-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+          {/* V-35: a compact outline trigger beside the one primary; opened, the
+              unframed reason form takes the full row below both buttons. */}
+          <details className="min-w-0 open:basis-full" open={Boolean(reasonError)}>
+            <summary className={cn(buttonVariants({ variant: "outline" }), "min-h-11 md:min-h-10 w-fit cursor-pointer list-none max-sm:w-full [&::-webkit-details-marker]:hidden")}>
               Tolak pendaftaran
             </summary>
-            <form action={action} aria-busy={rejecting} className="grid gap-3 border-t p-4" noValidate>
+            <form action={action} aria-busy={rejecting} className="grid max-w-2xl gap-3 pt-4" noValidate>
               <input name="tenantId" type="hidden" value={tenantId} />
               <input name="decision" type="hidden" value="REJECT" />
               <Label htmlFor={`reason-${tenantId}`}>Alasan penolakan</Label>
               <p className="text-sm text-muted-foreground" id={`reason-hint-${tenantId}`}>
-                Dikirim ke pemilik toko melalui email. 5 sampai 500 karakter.
+                Dikirim ke pemilik gerai melalui email. 5 sampai 500 karakter.
               </p>
               <CharacterClassTextarea
                 aria-describedby={`reason-hint-${tenantId}${reasonError ? ` reason-error-${tenantId}` : ""}`}
@@ -133,7 +136,7 @@ export function RegistrationReviewControls({
                 <p className="text-sm font-medium text-destructive" id={`reason-error-${tenantId}`}>{reasonError}</p>
               ) : null}
               <Button
-                className="min-h-11 max-sm:w-full sm:justify-self-start"
+                className="min-h-11 md:min-h-10 max-sm:w-full sm:justify-self-start"
                 disabled={busy}
                 onClick={() => setDecision("REJECT")}
                 type="submit"

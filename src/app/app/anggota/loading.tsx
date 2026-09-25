@@ -17,7 +17,7 @@ export default function TenantMembersLoading() {
         header={
           <PageHeader
             description="Undang anggota, ubah peran, dan nonaktifkan akses tenant."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Anggota & akses"
           />
         }
@@ -33,9 +33,9 @@ export default function TenantMembersLoading() {
               <Skeleton className="h-4 w-72 max-w-full" />
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
                 {Array.from({ length: 4 }, (_, index) => (
-                  <div className="grid gap-2 bg-background px-4 py-3" key={index}>
+                  <div className="grid gap-2" key={index}>
                     <Skeleton className="h-3 w-24 max-w-full" />
                     <Skeleton className="h-7 w-10" />
                   </div>
@@ -49,8 +49,8 @@ export default function TenantMembersLoading() {
               <Skeleton className="h-4 w-80 max-w-full" />
             </CardHeader>
             <CardContent>
-              <div className="min-w-0 overflow-hidden rounded-md border">
-                <div className="hidden h-10 border-b bg-muted/50 sm:block" />
+              <div className="min-w-0">
+                <div className="hidden h-10 border-b bg-muted sm:block" />
                 <div className="divide-y">
                   {Array.from({ length: 3 }, (_, index) => (
                     <div className="grid gap-3 px-4 py-4" key={index}>

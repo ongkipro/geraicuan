@@ -163,7 +163,8 @@ describe("contact route render contracts", () => {
     expect(populated).toContain("081234567890");
     expect(populated).not.toContain("0812••••890");
     expect(populated).not.toContain("••••");
-    expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru\?peran=pengirim"/);
+    // T-202 V-1: the create action is a default Button; PageHeader's action slot gives it the 44px floor.
+    expect(populated).toMatch(/\[&amp;&gt;\*\]:min-h-11[^"]*"><a[^>]*data-variant="default"[^>]*href="\/app\/kontak\/baru\?peran=pengirim"/);
     // The row: street address, district/city, postal code (all derived from
     // the same stored destination_area_label), and a WhatsApp affordance
     // built from the canonical phone.
@@ -326,8 +327,11 @@ describe("contact route render contracts", () => {
     expect(header).toMatch(/data-variant="secondary"[^>]*>Pengirim</);
     expect(header).toMatch(/data-variant="outline"[^>]*>Penerima</);
     expect(header).toContain(">Aktif<");
-    expect(header).toContain('href="#form-kontak"');
-    expect(header).toContain(`href="/app/kontak/${CONTACT_ID}?dari=pengirim&amp;arsipkan=1#arsip-kontak"`);
+    // T-202 V-8/V-24: the header keeps the back link and one primary; "Ubah" (an anchor to the
+    // form directly below) is gone and "Arsipkan" moved into the danger zone at the bottom.
+    expect(header).not.toContain('href="#form-kontak"');
+    expect(header.match(/data-variant="default"/g)).toHaveLength(1);
+    expect(fromSenders).toContain(`href="/app/kontak/${CONTACT_ID}?dari=pengirim&amp;arsipkan=1#arsip-kontak"`);
     expect(fromSenders).toContain('id="form-kontak"');
     expect(fromSenders).toContain('id="form-peran"');
     expect(fromSenders).toContain("Muncul di menu Penerima dan bisa dipilih sebagai tujuan kiriman.");
@@ -336,7 +340,8 @@ describe("contact route render contracts", () => {
 
   it("renders contact creation with truthful outlet readiness", async () => {
     const unavailable = renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({}) }));
-    expect(unavailable).toContain("Buat kontak");
+    // T-202 V-7: the H1 repeats the "<Peran> baru" button that opened the form.
+    expect(unavailable).toContain("Pengirim baru");
     expect(unavailable).toContain("Outlet belum siap");
     expect(unavailable).toContain("Simpan kontak");
 
@@ -375,7 +380,8 @@ describe("contact route render contracts", () => {
 
     const html = await renderDetail({ dari: "pengirim", diarsipkan: "1" });
     expect(html).toContain("Data kontak diarsipkan; hanya dapat dibaca.");
-    expect(html.match(/<header[\s\S]*?<\/header>/)?.[0]).toMatch(/data-variant="destructive"[^>]*>Diarsipkan</);
+    // T-202 V-13: status badges carry an icon and the neutral tone (archive is not a failure).
+    expect(html.match(/<header[\s\S]*?<\/header>/)?.[0]).toMatch(/bg-muted text-muted-foreground"><svg[\s\S]*?<\/svg>Diarsipkan</);
     expect(html).not.toContain('href="#form-kontak"');
     expect(html).not.toContain("arsipkan=1");
     const archivedWithoutNotice = await renderDetail({ dari: "pengirim" });

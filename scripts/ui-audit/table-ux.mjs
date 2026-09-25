@@ -107,7 +107,7 @@ try {
   for (const role of ['tenant','super']) {
     await login(role);
     const routes = role === 'tenant'
-      ? ['/app?support=created','/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/label','/app/analitik','/app/keuangan']
+      ? ['/app?support=created','/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/label']
       : ['/platform','/platform/tenant','/platform/audit'];
     if (!process.argv.includes('--interactions-only')) {
       for (const route of routes) for (const width of [390,768,1440]) await observe(route,width);
@@ -116,16 +116,16 @@ try {
       await session.send('Network.setExtraHTTPHeaders',{headers:{'x-geraicuan-ui-audit':'shipment-queue-paginated'}});
       await viewport(390);
       await session.goto(origin+'/app/pengiriman');await ready();
-      const pager = await session.evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Paginasi antrean kiriman"]');return [...nav.querySelectorAll(':scope > div > a,:scope > div > button')].map(e=>({y:e.getBoundingClientRect().y,h:e.getBoundingClientRect().height,w:e.getBoundingClientRect().width}))})()`);
+      const pager = await session.evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Paginasi histori kiriman"]');return [...nav.querySelectorAll(':scope > div > a,:scope > div > button')].map(e=>({y:e.getBoundingClientRect().y,h:e.getBoundingClientRect().height,w:e.getBoundingClientRect().width}))})()`);
       assert.equal(pager.length,4);assert.equal(new Set(pager.map(p=>p.y)).size,1);assert(pager.every(p=>p.h>=44&&p.w>=44));
       await session.evaluate(`document.querySelector('a[aria-label="Halaman berikutnya"]').click()`);
       await waitFor(`new URLSearchParams(location.search).get('page') === '2'`);await ready();
-      assert((await session.evaluate(`document.querySelector('nav[aria-label="Paginasi antrean kiriman"]').textContent`)).includes('Halaman 2'));
+      assert((await session.evaluate(`document.querySelector('nav[aria-label="Paginasi histori kiriman"]').textContent`)).includes('Halaman 2'));
       await session.goto(await session.evaluate('location.href'));await ready();
       assert.equal(await session.evaluate(`new URLSearchParams(location.search).get('page')`),'2');
       await session.evaluate(`document.querySelector('a[aria-label="Halaman sebelumnya"]').click()`);
       await waitFor(`new URLSearchParams(location.search).get('page') !== '2'`);await ready();
-      await session.evaluate(`document.querySelector('nav[aria-label="Paginasi antrean kiriman"]').scrollIntoView({block:'end',behavior:'instant'})`);
+      await session.evaluate(`document.querySelector('nav[aria-label="Paginasi histori kiriman"]').scrollIntoView({block:'end',behavior:'instant'})`);
       await screenshot('pagination-mobile');
       // Attempt native keyboard input, recording a programmatic scroll fallback when unavailable.
       await session.send('Page.bringToFront');
@@ -160,20 +160,15 @@ try {
       await waitFor(`new URLSearchParams(location.search).get('status') === 'DRAFT'`);await ready();
       await session.goto(await session.evaluate('location.href'));await ready();
       assert.equal(await session.evaluate(`document.getElementById('status-kiriman').textContent.trim()`),'Draf');
-      await session.evaluate(`[...document.querySelectorAll('a')].find(e=>e.textContent.trim()==='Reset').click()`);
+      await session.evaluate(`[...document.querySelectorAll('a')].find(e=>e.textContent.trim()==='Hapus filter').click()`);
       await waitFor(`!new URLSearchParams(location.search).has('status')`);await ready();
       await session.send('Network.setExtraHTTPHeaders',{headers:{'x-geraicuan-ui-audit':'shipment-queue-empty'}});
       await session.goto(origin+'/app/pengiriman');await ready();
       assert.equal(await session.evaluate(`document.querySelectorAll('[data-slot=table-scroll-shell]').length`),0);
       assert(await session.evaluate(`document.body.textContent.includes('Belum ada kiriman tersimpan.')`));
       await session.send('Network.setExtraHTTPHeaders',{headers:{}});
-      await session.goto(origin+'/app/impor');await ready();
-      await viewport(390);
-      await session.evaluate(`[...document.querySelectorAll('details')].find(d=>d.querySelector('table')).querySelector('summary').click()`);
-      await pause(200);
-      await session.evaluate(`[...document.querySelectorAll('details')].find(d=>d.querySelector('table')).querySelector('summary').click()`);
-      await waitFor(`(()=>{const d=[...document.querySelectorAll('details')].find(d=>d.querySelector('table')),r=d.querySelector('[role=region]'),p=d.querySelector('[data-slot=table-scroll-shell] > p');return d.open && p.hidden === (r.scrollWidth-r.clientWidth<=1)})()`);
-      results.push({interaction:'status filter, reload, reset, empty state and native CSV disclosure'});
+      // T-204: /app/impor (the native CSV disclosure check) was removed with Impor CSV.
+      results.push({interaction:'status filter, reload, reset and empty state'});
     } else {
       await session.goto(origin+'/platform/tenant');await ready();await viewport(390);
       const name='Gerai Nusantara Cabang Jakarta Selatan dengan Nama Tenant Sangat Panjang';

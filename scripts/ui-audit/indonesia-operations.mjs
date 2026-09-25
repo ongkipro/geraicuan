@@ -17,7 +17,7 @@ for(const d of ['Page','Runtime','Network'])await s.send(d+'.enable');
 await login('tenant');
 for(const width of [1440,390]){
 await s.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<768});
-for(const [route,scenario] of [['/app','dashboard-period-demo'],['/app/analitik','analytics-first-run'],['/app/keuangan','finance-empty']]){
+for(const [route,scenario] of [['/app','dashboard-period-demo']]){
 await s.send('Network.setExtraHTTPHeaders',{headers:{'x-geraicuan-ui-audit':scenario}});
 await s.goto(origin+route+'?rentang=kustom&dari=2026-08-01&sampai=2026-08-31&tz=Asia%2FJayapura');await wait(`document.readyState==='complete'&&!document.querySelector('[data-slot=skeleton]')`);await pause(350);
 assert.equal(await s.evaluate(`document.querySelectorAll('select[name=tz]').length`),0);
@@ -27,7 +27,7 @@ const dateValues=await s.evaluate(`Array.from(document.querySelectorAll('input[t
 await shot(route.replaceAll('/','-')+'-'+width);results.push({route,width,wib:true,dateValues});
 }
 await s.send('Network.setExtraHTTPHeaders',{headers:{}});
-for(const route of ['/app/pengiriman','/app/analitik','/app']){
+for(const route of ['/app/pengiriman','/app']){
 await s.goto(origin+route);await wait(`document.readyState==='complete'&&!document.querySelector('[data-slot=skeleton]')`);await pause(350);
 const references=await s.evaluate(`Array.from(document.querySelectorAll('main a[href^="/app/pengiriman/"]')).filter(e=>/^[A-Z0-9]{2,5}-[0-9]{5,}$/.test(e.textContent.trim())).map(e=>{const r=e.getBoundingClientRect(),c=e.closest('td')?.getBoundingClientRect();return {width:r.width,cellWidth:c?.width,clipped:e.scrollWidth>e.clientWidth+1}})`);
 assert(references.length>0,route+' populated public reference');assert(references.every(r=>r.width<=161&&!r.clipped&&(!r.cellWidth||r.cellWidth<=200)),route+' bounded public reference');

@@ -17,7 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
   SidebarMenu,
@@ -99,22 +98,25 @@ export function CmsShell(props: CmsShellProps) {
         )}
         <SidebarInset className="min-w-0" id="konten-utama" tabIndex={-1}>
           {/* PR-51: Cek tarif moved into the sidebar "Cek" group, so both scopes share one header row. */}
-          <header className="sticky top-0 z-30 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b border-border/60 bg-background/80 backdrop-blur-xl px-4 md:h-16 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:rounded-t-xl" data-slot="cms-header">
-            <div className="flex h-16 items-center gap-3">
-              <SidebarTrigger aria-label="Buka atau tutup navigasi" className="size-11 md:size-8" variant="outline" />
-              <Separator className="hidden h-6! md:block" orientation="vertical" />
+          {/* T-204 reference top bar: store, role and scope on the left; page search and the WIB clock on the right. */}
+          <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b bg-background px-4 md:px-6 lg:px-8" data-slot="cms-header">
+            <div className="flex min-w-0 items-center gap-3">
+              <SidebarTrigger aria-label="Buka atau tutup navigasi" className="-ms-2 size-11 shrink-0 text-muted-foreground md:size-10" variant="ghost" />
+              <div className="flex min-w-0 flex-col">
+                <span className="flex min-w-0 items-center gap-2">
+                  <strong className="min-w-0 truncate text-sm font-semibold" title={props.scopeTitle}>{props.scopeTitle}</strong>
+                  <Badge className="shrink-0 max-sm:hidden" variant="secondary">{props.roleLabel}</Badge>
+                </span>
+                <span className="hidden truncate text-xs text-muted-foreground sm:block">{props.scopeDescription}</span>
+              </div>
             </div>
-            <div className="flex min-w-0 flex-col">
-              <span className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                <strong className="max-w-full truncate text-sm font-medium" title={props.scopeTitle}>{props.scopeTitle}</strong>
-                <Badge className="shrink-0" variant="secondary">{props.roleLabel}</Badge>
-              </span>
-              <span className="hidden truncate text-xs text-muted-foreground sm:block">{props.scopeDescription}</span>
+            <div className="flex shrink-0 items-center gap-4">
+              {props.scope === "tenant" ? <CmsHeaderSearch role={props.navigationRole} scope="tenant" /> : <CmsHeaderSearch scope="platform" />}
+              {/* V-30: below md the clock would crowd the bar; pages carry their own WIB times. */}
+              <div className="hidden md:block"><CmsHeaderClock /></div>
             </div>
-            {props.scope === "tenant" ? <CmsHeaderSearch role={props.navigationRole} scope="tenant" /> : <CmsHeaderSearch scope="platform" />}
-            <div className="col-span-3 flex h-8 items-center border-t md:col-span-1 md:h-auto md:border-t-0 md:border-l md:pl-3"><CmsHeaderClock /></div>
           </header>
-          <div className="cms-main min-w-0 self-center [&_[id]]:scroll-mt-28 md:[&_[id]]:scroll-mt-20">
+          <div className="cms-main min-w-0 self-center [&_[id]]:scroll-mt-20">
             {props.notice}
             {props.children}
           </div>
@@ -154,16 +156,16 @@ function AccountMenu({
               size="lg"
               type="button"
             >
-              <Avatar className="size-8 rounded-lg">
-                <AvatarFallback className="rounded-lg">{props.account.initials}</AvatarFallback>
+              <Avatar className="size-8 rounded-full">
+                <AvatarFallback className="rounded-full bg-muted text-sm font-semibold text-foreground">{props.account.initials}</AvatarFallback>
               </Avatar>
-              <span className="grid flex-1 text-start text-sm leading-tight">
-                <span className="truncate font-semibold">{props.account.label}</span>
+              <span className="grid flex-1 text-start leading-tight">
+                <span className="truncate text-sm font-semibold">{props.account.label}</span>
                 {props.account.secondary ? (
-                  <span className="truncate text-xs">{props.account.secondary}</span>
+                  <span className="truncate text-xs text-muted-foreground">{props.account.secondary}</span>
                 ) : null}
               </span>
-              <ChevronsUpDown aria-hidden="true" className="ms-auto size-4" />
+              <ChevronsUpDown aria-hidden="true" className="ms-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent

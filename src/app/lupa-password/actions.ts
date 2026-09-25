@@ -33,7 +33,7 @@ export async function requestPasswordReset(
     const raw = formData.get("email");
     return {
       email: typeof raw === "string" ? raw.slice(0, 254) : undefined,
-      error: "Isi alamat email yang benar, misalnya nama@toko.com.",
+      error: "Isi alamat email yang benar, misalnya nama@gerai.com.",
       status: "invalid",
     };
   }

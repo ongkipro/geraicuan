@@ -21,12 +21,11 @@ vi.mock("@/app/app/estimate-actions", () => ({ loadShipmentEstimate: vi.fn() }))
 vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-import { AnalyticsFinancialRegion } from "@/app/app/analitik/analytics-regions";
 import { ShipmentDraftForm } from "@/app/app/shipment-draft-form";
-import type { ShipmentKpiComparison, ShipmentKpis } from "@/db/analytics-repository";
+import type { ShipmentKpis } from "@/db/analytics-repository";
 import type { ShipmentReportCourierTotal, ShipmentReportRow } from "@/db/shipment-report-repository";
 import type { TenantDashboardPeriodMetrics } from "@/db/tenant-dashboard-repository";
-import { serializeAnalyticsCsv, serializeShipmentReportCsv } from "@/lib/analytics-export";
+import { serializeShipmentReportCsv } from "@/lib/analytics-export";
 import type { ShipmentDraftInput } from "@/lib/shipment-draft";
 import { SHIPMENT_REPORT_COLUMNS } from "@/lib/shipment-report";
 
@@ -61,34 +60,7 @@ export function withdrawnFieldsStayWithdrawn(
   void draft.cogsAmountIdr;
 }
 
-const kpis: ShipmentKpis = {
-  codDisbursementEstimateIdr: 202_000,
-  codFeeIdr: 7_160,
-  codFeeVatIncludedIdr: 710,
-  createdCount: 3,
-  issuedCount: 2,
-  providerShippingIdr: 25_000,
-  resolvedSubmissionCount: 2,
-};
-const comparison: ShipmentKpiComparison = {
-  backlogSnapshot: { asOf: new Date("2026-09-15T01:00:00Z"), awaitingPaymentCount: 0, needsActionCount: 0 },
-  current: kpis,
-  eventGeneratedAt: new Date("2026-09-15T01:00:00Z"),
-  previous: kpis,
-};
-
 describe("merchandise figures are withdrawn (T-177)", () => {
-  it("renders the analytics money region as shipping, COD fee and Mengantar's disbursement only", async () => {
-    const text = visible(renderToStaticMarkup(await AnalyticsFinancialRegion({ promise: Promise.resolve(comparison) })));
-
-    expect(text).not.toMatch(MERCHANDISE_FIGURE);
-    expect(text).toContain("Biaya kirim Mengantar");
-    expect(text).toContain("Biaya COD");
-    expect(text).toContain("Estimasi dana dicairkan Mengantar");
-    // T-193: the COD fee card is Mengantar's fee, VAT inside it.
-    expect(text).toContain("Rp 7.160");
-  });
-
   it("no longer asks the operator for a goods cost on Buat kiriman", () => {
     const markup = renderToStaticMarkup(createElement(ShipmentDraftForm, {
       autoFocusFirstField: false,
@@ -127,8 +99,5 @@ describe("merchandise figures are withdrawn (T-177)", () => {
     expect(header).toContain('"biaya_kirim_mengantar_idr","biaya_cod_idr","estimasi_dana_cair_mengantar_idr"');
     expect(body).toContain('"13000","7160","202000"');
     expect(SHIPMENT_REPORT_COLUMNS.map((column) => column.label).join(" ")).not.toMatch(MERCHANDISE_FIGURE);
-
-    const [analyticsHeader] = serializeAnalyticsCsv([]).replace("﻿", "").split("\r\n");
-    expect(analyticsHeader).not.toMatch(MERCHANDISE_FIGURE);
   });
 });

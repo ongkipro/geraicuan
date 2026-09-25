@@ -123,7 +123,7 @@ function PickupOptionPicker({
   const helpId = `pickup-help-${outletId}`;
   const errorId = `pickup-error-${outletId}`;
   const sourceHelp = connectionSource === "platform_default"
-    ? "Daftar pickup dari Default GeraiCUAN."
+    ? "Daftar pickup dari koneksi bawaan GeraiCUAN."
     : "Daftar pickup dari akun Mengantar outlet.";
 
   if (loading || loadState.message || (loadState.success && options?.length === 0)) {
@@ -146,12 +146,12 @@ function PickupOptionPicker({
           </span>
         </Button>
         {loading ? (
-          <div aria-live="polite" className="space-y-2 rounded-lg border p-3">
+          <div aria-live="polite" className="space-y-2">
             <p className="text-sm text-muted-foreground">Memuat pickup Mengantar…</p>
             {[0, 1, 2].map((item) => <Skeleton className="h-11 w-full" key={item} />)}
           </div>
         ) : loadState.message ? (
-          <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-3">
             <p className="text-sm leading-6 text-destructive" role="alert">{loadState.message}</p>
             <Button className="min-h-11" onClick={loadOptions} ref={retryRef} size="sm" type="button" variant="outline">
               <RefreshCw aria-hidden="true" />
@@ -159,7 +159,7 @@ function PickupOptionPicker({
             </Button>
           </div>
         ) : (
-          <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">Belum ada alamat pickup</p>
               <p className="text-sm leading-6 text-muted-foreground">
@@ -277,25 +277,24 @@ export function PickupPointsManager({
   return (
     <div className="grid min-w-0 gap-6">
       <SettingsCard
-        badge={<Badge variant="secondary">{points.length} titik</Badge>}
-        description={`Alamat penjemputan Mengantar yang dapat dipakai outlet ${outletName}. Satu titik menjadi utama dan dipakai secara default saat membuat kiriman.`}
+        badge={<Badge variant="secondary"><span className="tabular-nums">{points.length}</span> titik terdaftar</Badge>}
+        description={`Lokasi kurir mengambil paket outlet ${outletName}. Titik utama dipakai otomatis saat membuat kiriman.`}
         id="pickup-points-title"
-        title="Titik pickup"
+        title="Daftar titik pickup"
       >
         {points.length === 0 ? (
           <Alert>
             <CircleAlert aria-hidden="true" />
             <AlertTitle>Belum ada titik pickup</AlertTitle>
             <AlertDescription>
-              Outlet ini belum dapat mengirim. Tambahkan minimal satu alamat pickup dari akun
-              Mengantar aktif.
+              Outlet ini belum dapat mengirim. Tambahkan minimal satu alamat pickup di bawah.
             </AlertDescription>
           </Alert>
         ) : (
-          <ul aria-label="Daftar titik pickup" className="grid gap-3">
+          <ul aria-label="Daftar titik pickup" className="grid divide-y">
             {points.map((point) => (
               <li
-                className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+                className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
                 key={point.pickupAddressId}
               >
                 <div className="grid min-w-0 gap-1">
@@ -308,7 +307,7 @@ export function PickupPointsManager({
                       </Badge>
                     ) : null}
                   </p>
-                  <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                  <p className="text-sm text-muted-foreground wrap-anywhere">
                     Area asal: {point.originAreaLabel}
                   </p>
                 </div>
@@ -317,7 +316,7 @@ export function PickupPointsManager({
                     <form action={defaultAction}>
                       <input name="outletId" type="hidden" value={outletId} />
                       <input name="pickupAddressId" type="hidden" value={point.pickupAddressId} />
-                      <Button className="min-h-11 md:min-h-9" disabled={busy} size="sm" type="submit" variant="outline">
+                      <Button className="min-h-11 md:min-h-10" disabled={busy} size="sm" type="submit" variant="outline">
                         Jadikan utama
                       </Button>
                     </form>
@@ -325,7 +324,7 @@ export function PickupPointsManager({
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
-                        className="min-h-11 md:min-h-9"
+                        className="min-h-11 text-destructive hover:text-destructive md:min-h-10"
                         disabled={busy}
                         size="sm"
                         variant="ghost"
@@ -381,10 +380,10 @@ export function PickupPointsManager({
       </SettingsCard>
 
       <SettingsCard
-        description="Pilih alamat dari daftar pickup akun Mengantar yang aktif untuk outlet ini. Area asal terisi otomatis dari alamat yang dipilih."
+        description="Pilih dari daftar pickup akun Mengantar aktif. Area asal terisi otomatis."
         footer={
           <Button
-            className="min-h-11 md:min-h-9"
+            className="min-h-11 md:min-h-10"
             disabled={busy || !selection}
             form="add-pickup-point-form"
             type="submit"
@@ -393,7 +392,7 @@ export function PickupPointsManager({
           </Button>
         }
         id="add-pickup-point-title"
-        title="Tambah titik pickup"
+        title="Tambah titik pickup baru"
       >
         <form action={addAction} aria-busy={addPending} className="grid gap-4" id="add-pickup-point-form" noValidate>
           <input name="outletId" type="hidden" value={outletId} />
@@ -408,7 +407,7 @@ export function PickupPointsManager({
             selection={selection}
             triggerRef={pickupRef}
           />
-          <Field className="rounded-md bg-muted/50 px-3 py-3">
+          <Field>
             <FieldLabel htmlFor={`origin-${outletId}`}>
               Area asal <span className="font-normal text-muted-foreground">(otomatis)</span>
             </FieldLabel>

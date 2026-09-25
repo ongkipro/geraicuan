@@ -1,12 +1,114 @@
+import { ArrowDown } from "lucide-react";
+import type { ReactNode } from "react";
+
 import type { ShipmentContactSelection } from "@/app/app/actions";
 import {
+  BASIS_POINTS,
   codChargeBreakdown,
   codOngkirBreakEvenIdr,
   codOngkirSellerDifferenceIdr,
   MAX_COD_AMOUNT_IDR,
+  MENGANTAR_COD_FEE_BASIS_POINTS,
   mengantarCodFeeIdr,
   shippingMengantarDeductsIdr,
 } from "@/lib/mengantar-cod-fee";
+import { cn } from "@/lib/utils";
+
+/** "3,33%": Mengantar's COD fee rate, read from the one constant the fee helpers use. */
+export const MENGANTAR_COD_FEE_RATE_LABEL = `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(
+  (MENGANTAR_COD_FEE_BASIS_POINTS / BASIS_POINTS) * 100,
+)}%`;
+
+/** T-205: one product line on Buat kiriman — a name and how many of it. */
+export type ProductRow = { name: string; quantity: string };
+
+const PRODUCT_PART = /^(.*?\S)(?: \((\d+)\))?$/;
+
+function wholeQuantity(value: string) {
+  return /^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN;
+}
+
+/**
+ * T-205: the product rows become the two fields the draft already stores — no new
+ * column. `packageContent` lists each named row as "Nama (qty)" (the name alone for one), joined by ", ";
+ * `packageQuantity` is the sum of those rows. A blank name is an unused row and is
+ * left out of both. Any unreadable quantity sends an empty total, so the server's
+ * own "Jumlah paket harus 1–1.000." message answers it rather than a guess.
+ */
+export function composeProductRows(rows: readonly ProductRow[]) {
+  const named = rows.filter((row) => row.name.trim() !== "");
+  const counted = named.length > 0 ? named : rows;
+  const quantities = counted.map((row) => wholeQuantity(row.quantity));
+  return {
+    // A quantity of 1 (or none yet) prints the name alone: "Kain batik (2), Daster".
+    packageContent: named.map((row) => {
+      const quantity = row.quantity.trim();
+      return quantity && quantity !== "1" ? `${row.name.trim()} (${quantity})` : row.name.trim();
+    }).join(", "),
+    packageQuantity: quantities.length > 0 && quantities.every(Number.isSafeInteger)
+      ? String(quantities.reduce((sum, quantity) => sum + quantity, 0))
+      : "",
+  };
+}
+
+/**
+ * The inverse, for a form the server handed back after a refusal. Only content that
+ * recomposes to exactly itself is split; anything else (a name containing ", ", a
+ * pre-T-205 free-text content) stays one row, so no typed text is ever lost.
+ */
+export function parseProductRows(packageContent = "", packageQuantity = ""): ProductRow[] {
+  const parts = packageContent.split(", ").map((part) => PRODUCT_PART.exec(part));
+  // Split only T-205 text: every part parses and at least one carries an explicit "(n)",
+  // so a free-text content such as "Baju, celana" stays one row.
+  if (packageContent !== "" && parts.every(Boolean) && parts.some((match) => match![2] !== undefined)) {
+    const rows = parts.map((match) => ({ name: match![1], quantity: match![2] ?? "1" }));
+    const composed = composeProductRows(rows);
+    if (composed.packageContent === packageContent && composed.packageQuantity === packageQuantity) return rows;
+  }
+  return [{ name: packageContent, quantity: packageQuantity || "1" }];
+}
+
+/** A summary line on the flow's rail: a muted label and its value. */
+export type SummaryRow = { label: string; value: ReactNode };
+
+/**
+ * T-205 rail summary, shared by the draft form, the estimate wait and the service
+ * choice so the three states read the same. Presentational only.
+ */
+export function ShipmentFlowSummary({ destination, origin, rows }: {
+  destination: string | null;
+  origin: string | null;
+  rows: readonly SummaryRow[];
+}) {
+  return (
+    <div className="grid gap-4 text-sm">
+      <div className="grid gap-1">
+        <p className="text-xs font-medium text-muted-foreground">Rute</p>
+        <p className={cn("wrap-anywhere", origin ? "font-medium" : "text-muted-foreground")}>{origin ?? "Asal belum dipilih"}</p>
+        <ArrowDown aria-hidden="true" className="size-4 text-muted-foreground" />
+        <p className="sr-only">ke</p>
+        <p className={cn("wrap-anywhere", destination ? "font-medium" : "text-muted-foreground")}>{destination ?? "Tujuan belum dipilih"}</p>
+      </div>
+      <dl className="grid gap-2 border-t pt-4">
+        {rows.map((row) => (
+          <div className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-baseline gap-3" key={row.label}>
+            <dt className="text-muted-foreground">{row.label}</dt>
+            <dd className="wrap-anywhere text-right font-medium">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** "1.250 g · 3 barang" — the package line of the rail. */
+export function packageSummaryLabel(weightGrams: string | number, quantity: string | number) {
+  const weight = Number(weightGrams);
+  const count = Number(quantity);
+  const weightText = Number.isSafeInteger(weight) && weight > 0 ? `${new Intl.NumberFormat("id-ID").format(weight)} g` : "— g";
+  const countText = Number.isSafeInteger(count) && count > 0 ? `${new Intl.NumberFormat("id-ID").format(count)} barang` : "— barang";
+  return `${weightText} · ${countText}`;
+}
 
 type ContactSearchKeyEvent = {
   isComposing: boolean;
@@ -39,7 +141,7 @@ export function SelectedContactProvenance({
   return (
     <div
       aria-label={`Kontak ${partyLabel} terpilih`}
-      className="grid gap-3 rounded-lg border bg-card p-4"
+      className="grid gap-3 rounded-lg bg-muted p-4"
       role="status"
     >
       <p className="text-sm font-medium">Kontak tersimpan dipilih</p>
@@ -206,7 +308,7 @@ export function DraftCodBreakdown({
 }: DraftCodBreakdownProps) {
   const charge = codChargeBreakdown(breakdown);
   return (
-    <article className="min-w-0 rounded-lg border bg-card p-4">
+    <article className="min-w-0">
       <h4 className="mb-3 wrap-anywhere text-sm font-medium">{providerService}</h4>
       <dl className="text-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 first:border-t-0">

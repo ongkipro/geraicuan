@@ -27,7 +27,7 @@ export default async function ConfirmEmailPage({
   return (
     <AuthShell
       description={token
-        ? "Masukkan kata sandi yang Anda buat saat mendaftarkan toko. Email terverifikasi setelah kata sandinya cocok."
+        ? "Masukkan kata sandi yang Anda buat saat mendaftarkan gerai. Email terverifikasi setelah kata sandinya cocok."
         : "Tautan ini tidak dapat dipakai."}
       footer={<Link className="auth-link" href="/login/tenant">Kembali ke halaman masuk</Link>}
       surface="tenant"

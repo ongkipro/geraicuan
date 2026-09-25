@@ -136,7 +136,8 @@ function contactStatusFilter(status: ContactStatusFilter) {
 export async function listContactDirectory(
   tx: TenantTransaction,
   context: TenantContext,
-  input: { query: string; role: ContactDirectoryRole; status: ContactStatusFilter },
+  // `limit`/`offset` page the directory list; search passes neither and reads every match.
+  input: { query: string; role: ContactDirectoryRole; status: ContactStatusFilter; limit?: number; offset?: number },
 ): Promise<ContactDirectoryRow[]> {
   const roleFilter = contactRoleFilter(input.role);
   const contactRows = await tx
@@ -159,7 +160,9 @@ export async function listContactDirectory(
           : undefined,
       ),
     )
-    .orderBy(asc(contacts.name), asc(contacts.createdAt));
+    .orderBy(asc(contacts.name), asc(contacts.createdAt), asc(contacts.id))
+    .limit(input.limit ?? Number.MAX_SAFE_INTEGER)
+    .offset(input.offset ?? 0);
   if (contactRows.length === 0) return [];
 
   const contactIds = contactRows.map((row) => row.id);
@@ -539,7 +542,7 @@ export type ContactDirectorySummary = Record<ContactStatusFilter, number>;
 export async function loadContactDirectoryPage(
   tx: TenantTransaction,
   context: TenantContext,
-  input: { query: string; role: ContactDirectoryRole; status: ContactStatusFilter },
+  input: { query: string; role: ContactDirectoryRole; status: ContactStatusFilter; limit?: number; offset?: number },
 ): Promise<{ rows: ContactDirectoryRow[]; summary: ContactDirectorySummary }> {
   const [summaryRow] = await tx
     .select({

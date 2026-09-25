@@ -255,6 +255,12 @@ describe("label route render contracts", () => {
     expect(html).not.toContain("••••");
     expect(html).toContain("Permintaan cetak");
     expect(html).not.toMatch(/>Cetak<\/th>/);
+    // T-203: below md the same rows are record cards; the table is md and up.
+    const list = html.match(/<ul[^>]*aria-label="Daftar label kiriman"[^>]*>[\s\S]*?<\/ul>/)?.[0] ?? "";
+    expect(list).toMatch(/^<ul[^>]*class="[^"]*\bmd:hidden\b/);
+    expect(list).toMatch(/href="\/app\/label\/[^"]*">GC-10431<\/a>/);
+    expect(list).toContain('<span class="font-mono">JNE-LABEL-000431</span>');
+    expect(scroller).toContain("max-md:hidden");
   });
 
   it("describes history as recorded print requests rather than physical print results", async () => {

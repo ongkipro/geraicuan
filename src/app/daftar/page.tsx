@@ -5,7 +5,7 @@ import { RegistrationForm } from "@/app/daftar/registration-form";
 import { AuthShell } from "@/app/login/_components/auth-shell";
 import { resolveHostRouting } from "@/lib/auth-config";
 
-export const metadata: Metadata = { robots: { index: false }, title: "Daftarkan toko · GeraiCUAN" };
+export const metadata: Metadata = { robots: { index: false }, title: "Daftarkan gerai · GeraiCUAN" };
 
 const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
 
@@ -13,11 +13,11 @@ const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
 export default function RegistrationPage() {
   return (
     <AuthShell
-      description="Isi data toko dan pemilik. Setelah email terverifikasi, Anda bisa menyiapkan toko sambil menunggu persetujuan Super Admin."
+      description="Isi data gerai dan pemilik. Setelah email terverifikasi, Anda bisa menyiapkan gerai sambil menunggu persetujuan Super Admin."
       footer={<Link className="auth-link" href="/login/tenant">Sudah punya akun? Masuk</Link>}
       homeHref={homeHref}
       surface="tenant"
-      title="Daftarkan toko Anda"
+      title="Daftarkan gerai Anda"
       width="wide"
     >
       <RegistrationForm />

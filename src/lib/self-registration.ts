@@ -59,8 +59,8 @@ export function validateRegistration(formData: FormData): RegistrationValidation
   const storeName = personOrStoreName(text(formData, "storeName"));
   // T-198: the server refuses emoji in a store name as the form does (T-199's
   // BUSINESS_NAME class); digits and punctuation stay allowed.
-  const storeNameClass = storeName && characterClassError("BUSINESS_NAME", "Nama toko", storeName);
-  if (!storeName) errors.storeName = "Isi nama toko, 2 sampai 120 karakter.";
+  const storeNameClass = storeName && characterClassError("BUSINESS_NAME", "Nama gerai", storeName);
+  if (!storeName) errors.storeName = "Isi nama gerai, 2 sampai 120 karakter.";
   else if (storeNameClass) errors.storeName = storeNameClass;
 
   const ownerName = personOrStoreName(text(formData, "ownerName"));
@@ -70,7 +70,7 @@ export function validateRegistration(formData: FormData): RegistrationValidation
   else if (ownerNameClass) errors.ownerName = ownerNameClass;
 
   const email = normalizeEmailInput(formData.get("email"));
-  if (!email) errors.email = "Isi alamat email yang benar, misalnya nama@toko.com.";
+  if (!email) errors.email = "Isi alamat email yang benar, misalnya nama@gerai.com.";
 
   const rawWhatsapp = text(formData, "whatsapp").trim();
   const whatsapp = normalizePartyPhone(rawWhatsapp);

@@ -17,7 +17,7 @@ export default function TrackingLookupError({ reset }: {
 
   return (
     <PageContainer>
-      <PageHeader focusTargetId={HEADING_ID} title="Cek resi" />
+      <PageHeader eyebrow="Cek" focusTargetId={HEADING_ID} title="Cek resi" />
       <Alert role="alert" variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Cek resi belum dapat dimuat</AlertTitle>

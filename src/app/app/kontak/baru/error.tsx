@@ -26,7 +26,7 @@ export default function NewContactError({ reset }: { reset: () => void }) {
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Data" title="Buat kontak" />
+      <PageHeader eyebrow="Data" title={`${contactRoleLabel(role)} baru`} />
       <Alert ref={alertRef} tabIndex={-1} variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Formulir kontak belum dapat dimuat</AlertTitle>

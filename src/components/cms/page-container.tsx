@@ -30,7 +30,8 @@ export function PageContainer({
       className={cn(
         // `@container/page` lets the content patterns split on the frame's own
         // width instead of the viewport's, which the sidebar rail distorts.
-        "@container/page mx-auto grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-6 md:gap-8 [&>*]:min-w-0",
+        // T-204: 24px between sections at every width, as in the owner's reference.
+        "@container/page mx-auto grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-6 [&>*]:min-w-0",
         widths[width],
         className,
       )}

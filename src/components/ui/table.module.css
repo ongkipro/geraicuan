@@ -1,5 +1,6 @@
 .table {
-  --table-header: var(--muted);
+  /* T-204 (owner HTML reference): plain header on the card, separated by its rule only. */
+  --table-header: var(--card);
   --table-highlight: var(--accent);
 }
 

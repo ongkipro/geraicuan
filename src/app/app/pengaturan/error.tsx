@@ -27,9 +27,9 @@ export default function TenantProfileSettingsError({ reset }: { reset: () => voi
         currentHref="/app/pengaturan"
         header={
           <PageHeader
-            description="Identitas toko dan format angka, tanggal, dan nomor kiriman."
-            eyebrow="Pengaturan"
-            title="Profil toko"
+            description="Profil gerai: nama, awalan nomor kiriman, serta format tanggal dan angka."
+            eyebrow="Pengelolaan"
+            title="Pengaturan"
           />
         }
         indexHref={SETTINGS_INDEX_HREF}
@@ -38,7 +38,7 @@ export default function TenantProfileSettingsError({ reset }: { reset: () => voi
       >
         <Alert className="lg:max-w-xl" role="alert" variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <AlertTitle ref={errorTitleRef} tabIndex={-1}>Profil toko belum dapat dimuat</AlertTitle>
+          <AlertTitle ref={errorTitleRef} tabIndex={-1}>Profil gerai belum dapat dimuat</AlertTitle>
           <AlertDescription className="space-y-4">
             <p>Coba lagi. Jika masalah berlanjut, hubungi pengelola platform tanpa mengirim kredensial.</p>
             <div className="flex flex-wrap gap-2">

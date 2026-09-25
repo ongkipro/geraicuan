@@ -72,7 +72,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
         // selection stay stronger than the stripe so they still read as state.
         // Every one of these fills is opaque because a pinned first column takes
         // `bg-inherit` from this row and would otherwise be see-through.
-        "border-b bg-card transition-colors even:bg-(--table-stripe) hover:bg-accent has-aria-expanded:bg-accent data-[state=selected]:bg-accent",
+        "border-b bg-card transition-colors hover:bg-accent has-aria-expanded:bg-accent data-[state=selected]:bg-accent",
         className
       )}
       {...props}
@@ -85,7 +85,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-11 px-4 text-left align-middle text-xs font-semibold whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-11 px-4 text-left align-middle text-xs font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

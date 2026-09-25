@@ -17,10 +17,6 @@ import {
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import { shipmentQueueHref } from "@/lib/shipment-queue";
-import {
-  parseFinanceExceptionFilter,
-  reconciliationVarianceHref,
-} from "@/lib/finance-exception-filter";
 import { buildAnalyticsDecisionContext } from "@/lib/analytics-decision-context";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 
@@ -710,10 +706,6 @@ describe("tenant dashboard read model", () => {
         varianceIdr: 500,
       }),
     ]);
-    expect(reconciliationVarianceHref()).toBe(
-      "/app/keuangan?status=VARIANCE#reconciliation-history-title",
-    );
-    expect(parseFinanceExceptionFilter("VARIANCE")).toBe("VARIANCE");
 
     await expect(
       withTenantContext(appDb, operatorA, tenantA, (tx, context) =>

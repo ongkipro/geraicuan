@@ -90,6 +90,23 @@ export function formatDistrictCity(areaLabel: string) {
 }
 
 /**
+ * Presentation-only casing for area text (V-28): the provider sends some areas in
+ * UPPERCASE ("COBLONG, BANDUNG") and others in Title Case. A comma segment written
+ * entirely in capitals is shown in Title Case; mixed-case segments are left as stored.
+ * The stored label is never changed.
+ */
+export function areaDisplayCase(text: string) {
+  return text
+    .split(",")
+    .map((segment) => /\p{Lu}/u.test(segment) && segment === segment.toUpperCase()
+      ? segment.toLowerCase()
+        .replace(/(^|[\s(\-/.])(\p{L})/gu, (_, lead: string, letter: string) => lead + letter.toUpperCase())
+        .replace(/\b(Dki|Diy|Ntb|Ntt)\b/g, (acronym) => acronym.toUpperCase())
+      : segment)
+    .join(",");
+}
+
+/**
  * Postal code from a Mengantar area label ("subdistrict, district, city, province, zip"),
  * read from the trailing part so a comma inside an earlier segment never shifts the
  * result (mirrors `formatDistrictCity`'s counted-from-the-end rule). Returns null when

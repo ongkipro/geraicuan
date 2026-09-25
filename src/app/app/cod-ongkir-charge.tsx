@@ -18,6 +18,8 @@ type CodOngkirChargeProps = {
   idPrefix: string;
   /** Submitted under this name when set; a preview leaves it unset. */
   name?: string;
+  /** T-205: the valid charge as typed (null while refused), for the summary rail's total. */
+  onChargeChange?: (chargeIdr: number | null) => void;
   onValidityChange?: (valid: boolean) => void;
   providerService: string;
   shippingDeductedIdr: number;
@@ -37,6 +39,7 @@ type CodOngkirChargeProps = {
 export function CodOngkirCharge({
   idPrefix,
   name,
+  onChargeChange,
   onValidityChange,
   providerService,
   shippingDeductedIdr,
@@ -53,7 +56,9 @@ export function CodOngkirCharge({
     onChange: (event) => {
       setTouched(true);
       setValue(event.target.value);
-      onValidityChange?.(evaluateCodOngkirCharge(event.target.value, shippingDeductedIdr).kind === "valid");
+      const next = evaluateCodOngkirCharge(event.target.value, shippingDeductedIdr);
+      onValidityChange?.(next.kind === "valid");
+      onChargeChange?.(next.kind === "valid" ? next.chargeIdr : null);
     },
   });
   const [refusalAnnouncement, setRefusalAnnouncement] = useState("");
@@ -94,9 +99,10 @@ export function CodOngkirCharge({
     };
   }, [announceRefusal, lockRef]);
 
+  // Spec 10 §1.6 (T-203): it sits inside a card, so it is grouped by spacing, not a frame.
   return (
-    <article aria-labelledby={`${idPrefix}-title`} className="grid min-w-0 gap-3 rounded-lg border bg-card p-4">
-      <h4 className="wrap-anywhere text-sm font-medium" id={`${idPrefix}-title`}>{providerService}</h4>
+    <article aria-labelledby={`${idPrefix}-title`} className="grid min-w-0 gap-3">
+      <h4 className="wrap-anywhere text-sm font-semibold" id={`${idPrefix}-title`}>{providerService}</h4>
       <dl className="text-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 py-2" data-metric-id={COD_ONGKIR_METRIC_IDS.shippingDeducted}>
           <dt className="text-muted-foreground">Ongkir dipotong Mengantar</dt>
@@ -112,7 +118,7 @@ export function CodOngkirCharge({
         <input
           aria-describedby={state.kind === "invalid" ? `${hintId} ${errorId}` : hintId}
           aria-invalid={state.kind === "invalid"}
-          className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-base tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-destructive sm:max-w-56 md:min-h-9"
+          className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-base tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-destructive sm:max-w-56 md:min-h-10"
           data-metric-id={COD_ONGKIR_METRIC_IDS.charge}
           id={inputId}
           data-character-class="RUPIAH"
@@ -124,7 +130,7 @@ export function CodOngkirCharge({
           value={value}
         />
         <CharacterClassHint hint={chargeHint} id={inputId} />
-        <p className="text-xs leading-5 text-muted-foreground" id={hintId}>
+        <p className="text-sm text-muted-foreground" id={hintId}>
           Kurir hanya menagih ongkir ini; barang sudah dibayar. Boleh dinaikkan dari titik impas, tidak boleh diturunkan.
         </p>
         {state.kind === "invalid" ? (

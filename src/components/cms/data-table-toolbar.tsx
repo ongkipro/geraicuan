@@ -1,4 +1,4 @@
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -50,6 +50,7 @@ function hiddenInputs(params: DataTableSearch["hiddenParams"]) {
 /**
  * shadcn-admin table toolbar as URL navigation: a GET search form, faceted
  * filter links, a Reset link when filtered, and a right slot. Server component.
+ * T-203: unframed row of 40px controls (44px below md), every trigger named in words.
  */
 export function DataTableToolbar({ actions, children, className, facets, isFiltered, resetHref, search }: DataTableToolbarProps) {
   const filtered = isFiltered
@@ -65,7 +66,7 @@ export function DataTableToolbar({ actions, children, className, facets, isFilte
             <label className="sr-only" htmlFor={searchId}>{search.label}</label>
             <Search aria-hidden="true" className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
             <Input
-              className="h-8 w-[150px] pl-8 max-md:min-h-11 lg:w-[250px]"
+              className="h-10 w-40 pl-8 max-md:min-h-11 lg:w-64"
               defaultValue={search.defaultValue}
               id={searchId}
               name={search.name}
@@ -79,11 +80,9 @@ export function DataTableToolbar({ actions, children, className, facets, isFilte
         {facets?.map((facet) => <DataTableFacetFilter key={facet.title} {...facet} />)}
         {children}
         {filtered && resetHref ? (
-          <Button asChild className="h-8 px-2 max-md:min-h-11 lg:px-3" size="sm" variant="ghost">
-            <Link href={resetHref} prefetch={false}>
-              Reset
-              <X aria-hidden="true" />
-            </Link>
+          // T-204: the reference's plain "Hapus filter" link, the same one the range filter row uses.
+          <Button asChild className="h-10 px-1 text-xs font-normal text-muted-foreground underline hover:text-foreground max-md:min-h-11" variant="link">
+            <Link href={resetHref} prefetch={false}>Hapus filter</Link>
           </Button>
         ) : null}
       </div>

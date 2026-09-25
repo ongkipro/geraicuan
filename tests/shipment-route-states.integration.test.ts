@@ -76,6 +76,15 @@ vi.mock("@/lib/sanctioned-unpaid-recovery-fixture", () => ({
 vi.mock("@/lib/sanctioned-reconciliation-fixture", () => ({
   isSanctionedReconciliationFixtureEnabled: () => false,
 }));
+// T-204: the queue lists the tenant's outlets for the Tenant Admin status pull.
+vi.mock("@/db/tenant-repository", () => ({
+  listTenantOutlets: vi.fn(async () => [{ id: "00000000-0000-4000-8000-000000020611", name: "Gerai utama" }]),
+}));
+// T-204 review: the queue shows when Mengantar statuses were last pulled (Tenant Admin only).
+vi.mock("@/db/provider-settlement-repository", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/db/provider-settlement-repository")>()),
+  loadProviderDeliveryStatusBasis: vi.fn(async () => ({ lastObservedAt: null, observationVisible: true })),
+}));
 vi.mock("@/db/shipment-queue-repository", () => ({
   loadShipmentQueuePage: vi.fn(async () => ({
     generatedAt,
@@ -225,11 +234,28 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(cells.find(cell => cell.includes("Gerai utama"))).toMatch(/class="[^"]*max-w-44[^"]*whitespace-normal/);
   });
 
+  it("offers the read-only Mengantar status pull to Tenant Admin only, without Impor CSV (T-204)", async () => {
+    const html = await renderQueue();
+    expect(html).toContain("Perbarui status dari Mengantar");
+    expect(html).toMatch(/<form[^>]*>[\s\S]*?name="outletId"[^>]*value="00000000-0000-4000-8000-000000020611"/);
+    expect(html).not.toContain("/app/impor");
+    expect(html).not.toContain("Impor CSV");
+    // The admin sees how fresh the statuses are, as on Retur.
+    expect(html).toContain("Status dari Mengantar belum pernah diperbarui.");
+
+    fixture.role = "OPERATOR";
+    const operatorHtml = await renderQueue();
+    expect(operatorHtml).not.toContain("Perbarui status dari Mengantar");
+    expect(operatorHtml).not.toContain("Status dari Mengantar");
+  });
+
   it("renders a URL-addressable shadcn queue with grouped taxonomy, named local scroll, freshness, and pagination", async () => {
     const html = await renderQueue();
 
     expect(html).toContain('id="shipment-queue-heading"');
-    expect(html).toContain("Tampilan antrean");
+    // T-203: the status control names itself in words and paints the chosen view server-side.
+    expect(html).toContain("Status kiriman");
+    expect(html).toMatch(/<button[^>]*id="status-kiriman"[^>]*>[\s\S]*?Status:[\s\S]*?Semua status/);
     expect(html.replace(/<[^>]+>/g, " ")).toContain("GC-10039");
     expect(html.replace(/<[^>]+>/g, " ")).not.toContain(shipmentId);
     expect(html).toContain('role="combobox"');
@@ -258,13 +284,27 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     // Date and time are two lines of one <time>, and the shipment number never wraps.
     expect(html).toMatch(/<time[^>]*dateTime="2026-09-01T02:00:00.000Z"[^>]*><span class="block">1 Sep 2026<\/span><span class="block text-xs text-muted-foreground">09.00 WIB<\/span><\/time>/);
     // T-163 review: the row link carries the queue's resolved range so the
-    // detail's "Kembali ke antrean" returns to the list the operator left.
+    // detail's "Kembali ke histori kiriman" returns to the list the operator left.
     expect(html).toMatch(/<a[^>]*class="[^"]*whitespace-nowrap[^"]*"[^>]*href="\/app\/pengiriman\/10039\?[^"]*rentang=/);
     // Below md the toolbar stacks and the status filter spans the row, so it
     // cannot overlap the freshness control at 390px.
     expect(html).toMatch(/class="[^"]*max-md:flex-col[^"]*"/);
     const trigger = html.match(/<button[^>]*id="status-kiriman"[^>]*>/)?.[0] ?? "";
-    expect(trigger).toMatch(/class="(?:[^"]* )?w-full [^"]*md:w-\[13\.5rem\]/);
+    expect(trigger).toMatch(/class="(?:[^"]* )?w-full [^"]*md:w-auto md:min-w-54/);
+    expect(trigger).not.toContain("border-dashed");
+  });
+
+  it("renders the queue as a record list below md and the table from md (T-203)", async () => {
+    const html = await renderQueue();
+    const list = html.match(/<ul[^>]*aria-label="Daftar kiriman"[^>]*>[\s\S]*?<\/ul>/)?.[0] ?? "";
+    expect(list).toMatch(/^<ul[^>]*class="[^"]*\bmd:hidden\b/);
+    expect(list).toMatch(/<a[^>]*class="[^"]*min-h-11[^"]*font-mono[^"]*"[^>]*href="\/app\/pengiriman\/10039\?[^"]*">GC-10039<\/a>/);
+    expect(list).toContain("Draf");
+    expect(list).toContain("Penerima audit");
+    expect(list).toContain("Belum ada resi");
+    expect(list).toContain("WIB");
+    expect(html).toMatch(/<div[^>]*data-slot="table-container"[^>]*class="[^"]*max-md:hidden/);
+    expect(html).toContain("page=2");
   });
 
   it("reports invalid filters without losing the safe queue", async () => {
@@ -334,8 +374,12 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(retired).toContain('href="/app/pengiriman/baru"');
     expect(confirmButton.exec(retired)?.[0]).toContain("disabled");
     // No service can be picked, so no current-formula breakdown can appear.
-    expect(retired).toMatch(/<fieldset class="grid gap-3" disabled="">/);
-    expect(current).toMatch(/<fieldset class="grid gap-3">/);
+    // T-205: the service fieldset is matched by its legend, not its layout classes
+    // (the choice became radio cards; the class list changed with it).
+    const serviceFieldset = /<fieldset[^>]*>(?=<legend[^>]*>Layanan Mengantar yang tersimpan)/;
+    expect(serviceFieldset.exec(retired)?.[0]).toContain('disabled=""');
+    expect(serviceFieldset.exec(current)?.[0]).toBeDefined();
+    expect(serviceFieldset.exec(current)?.[0]).not.toContain("disabled");
 
     // The dev-only scenario reaches the same state on any seeded shipment.
     fixture.codFormulaRetired = false;
@@ -441,11 +485,41 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(aside).toContain(action);
     expect(main).not.toContain(action);
     expect(aside).toContain('id="status-lifecycle-heading"');
-    expect(aside).toContain('id="riwayat-label-heading"');
-    for (const data of ['id="konteks-heading"', 'id="snapshot-pihak-heading"', 'id="hasil-penyedia-heading"']) {
+    // T-206 (owner reference detail-kiriman.html): "Resi dan label" leads the main column;
+    // the label link itself stays the rail's one "Tindakan berikutnya" action (V-23).
+    expect(aside).not.toContain('id="riwayat-label-heading"');
+    for (const data of ['id="riwayat-label-heading"', 'id="konteks-heading"', 'id="snapshot-pihak-heading"', 'id="hasil-penyedia-heading"']) {
       expect(main).toContain(data);
       expect(aside).not.toContain(data);
     }
+  });
+
+  // T-202: V-6 provider values in Indonesian, V-5 service display name, V-23 one label
+  // link, V-10 rail first below the split, V-11 no nested rail scroll.
+  it("renders provider results in Indonesian with one label link and a page-scrolled rail", async () => {
+    fixture.status = "ISSUED";
+    fixture.batchStatus = "COMPLETED";
+    const html = await renderDetail();
+    const aside = /<aside[^>]*aria-label="Status kiriman"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? "";
+    const text = html.replace(/<[^>]+>/g, " ");
+
+    expect(text).toContain("Resi terbit");
+    expect(text).toContain("Selesai");
+    expect(text).toContain("JNE Reg");
+    for (const raw of [">ISSUED<", ">COMPLETED<", "ORDER_ACCEPTED", "JNE · JNE REG"]) expect(html).not.toContain(raw);
+    expect(html.match(/href="\/app\/label\/10039"/g)).toHaveLength(1);
+    // T-206: the resi card shows the courier logo (decorative beside the service name) and a copy action.
+    const resiCard = /<div[^>]*aria-labelledby="riwayat-label-heading"[\s\S]*?id="konteks-heading"/.exec(html)?.[0] ?? "";
+    expect(resiCard).toMatch(/<span aria-hidden="true"[^>]*><img[^>]*src="\/couriers\/jne.svg"/);
+    expect(resiCard).toContain("Salin nomor resi");
+    expect(resiCard).not.toContain('href="/app/label/');
+    const asideTag = /<aside[^>]*>/.exec(aside)?.[0] ?? "";
+    // V-10: the rail leads in the DOM (focus and reading order), not only visually.
+    expect(html.indexOf('aria-label="Status kiriman"')).toBeLessThan(html.indexOf('id="hasil-penyedia-heading"'));
+    expect(asideTag).not.toContain("order-first");
+    expect(asideTag).toContain("@4xl/page:static");
+    expect(asideTag).toContain("@4xl/page:overflow-visible");
+    expect(asideTag).not.toContain("@4xl/page:sticky");
   });
 
   it("rejects malformed detail identifiers before repository data can render", async () => {
@@ -464,7 +538,7 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(detailError).toContain('id="shipment-detail-error-heading"');
     expect(queueError).toContain('aria-live="polite"');
     expect(detailError).toContain('aria-live="polite"');
-    expect(queueLoading).toContain("Memuat filter dan antrean kiriman");
+    expect(queueLoading).toContain("Memuat filter dan histori kiriman"); // V-7: the page is "Histori kiriman"
     expect(detailLoading).toContain("Memuat status dan konteks kiriman");
     expect(queueLoading).not.toContain("Memuat status dan konteks kiriman");
   });

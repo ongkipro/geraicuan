@@ -219,7 +219,7 @@ describe("PR-46 Koneksi Mengantar page", () => {
       expect(source).toContain(component);
     }
     expect(source).toContain("Akun Mengantar sendiri");
-    expect(source).toContain("Gunakan Default GeraiCUAN untuk {outlet.name}?");
+    expect(source).toContain("Gunakan koneksi bawaan GeraiCUAN untuk {outlet.name}?");
     expect(source).toContain('variant="destructive"');
     expect(source).toContain("Hapus API key & gunakan default");
     expect(source).toContain('key={credentialState.resultToken');

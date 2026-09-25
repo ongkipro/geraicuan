@@ -17,13 +17,13 @@ describe("dashboard UI audit scenario", () => {
     expect(parseUiAuditScenario("unknown", "development")).toBeNull();
     expect(parseUiAuditScenario("dashboard-action-error", "production"))
       .toBeNull();
-    expect(parseUiAuditScenario("analytics-stream", "production"))
-      .toBeNull();
-    expect(parseUiAuditScenario("analytics-first-run", "development"))
-      .toBe("analytics-first-run");
-    expect(parseUiAuditScenario("analytics-page-error", "development"))
-      .toBe("analytics-page-error");
-    expect(parseUiAuditScenario("analytics-page-error", "production"))
+    // T-204 removed the Analitik, Keuangan and Impor CSV scenarios with their pages.
+    expect(parseUiAuditScenario("analytics-first-run", "development")).toBeNull();
+    expect(parseUiAuditScenario("finance-stream", "development")).toBeNull();
+    expect(parseUiAuditScenario("bulk-import-error", "development")).toBeNull();
+    expect(parseUiAuditScenario("shipment-report-error", "development"))
+      .toBe("shipment-report-error");
+    expect(parseUiAuditScenario("shipment-report-error", "production"))
       .toBeNull();
     expect(parseUiAuditScenario("dashboard-period-demo", "development"))
       .toBe("dashboard-period-demo");
@@ -49,13 +49,13 @@ describe("dashboard UI audit scenario", () => {
     }
 
     expect(parseUiAuditScenarioForRoute(
-      "analytics-first-run",
+      "shipment-report-error",
       "/app",
       "development",
     )).toBeNull();
     expect(parseUiAuditScenarioForRoute(
       "dashboard-stale",
-      "/app/analitik",
+      "/app/laporan/pengiriman",
       "development",
     )).toBeNull();
   });

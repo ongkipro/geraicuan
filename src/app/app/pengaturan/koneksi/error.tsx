@@ -27,8 +27,8 @@ export default function MengantarConnectionSettingsError({ reset }: { reset: () 
         currentHref="/app/pengaturan/koneksi"
         header={
           <PageHeader
-            description="Sumber koneksi Mengantar tiap outlet: default GeraiCUAN atau akun sendiri."
-            eyebrow="Pengaturan"
+            description="Sumber koneksi Mengantar tiap outlet: koneksi bawaan GeraiCUAN atau akun sendiri."
+            eyebrow="Pengelolaan"
             title="Koneksi Mengantar"
           />
         }

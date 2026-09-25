@@ -26,7 +26,7 @@ export const PRINT_REASON_PRESENTATION = {
 
 export const PRINT_ACTOR_ROLE_PRESENTATION = {
   OPERATOR: "Operator",
-  TENANT_ADMIN: "Admin tenant",
+  TENANT_ADMIN: "Tenant Admin",
 } as const satisfies Record<string, string>;
 
 export function printReasonLabel(reasonCode: string | null) {

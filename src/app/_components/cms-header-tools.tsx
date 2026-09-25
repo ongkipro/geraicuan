@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { platformCmsNavigation, tenantCmsNavigation, type TenantCmsRole } from "@/lib/cms-shell-navigation";
+import { formatWibDateTimeParts } from "@/lib/label-format";
 
 type SearchProps = { scope: "tenant"; role: TenantCmsRole } | { scope: "platform" };
 
@@ -45,10 +46,11 @@ export function CmsHeaderSearch(props: SearchProps) {
   return (
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger asChild>
-        <Button aria-label="Cari halaman" aria-keyshortcuts="Control+k Meta+k" className="size-11 shrink-0 gap-3 lg:w-60 lg:justify-start lg:px-3" type="button" variant="outline">
+        {/* T-204 reference: an input-shaped trigger (muted ground, search icon, ⌘K hint) from lg; an icon button below. */}
+        <Button aria-label="Cari halaman" aria-keyshortcuts="Control+k Meta+k" className="size-11 shrink-0 gap-2 text-muted-foreground md:size-10 lg:w-64 lg:justify-start lg:bg-muted lg:px-3 lg:font-normal lg:hover:bg-muted lg:hover:text-foreground" type="button" variant="outline">
           <Search aria-hidden="true" />
-          <span className="hidden min-w-0 truncate text-muted-foreground lg:inline">Cari halaman…</span>
-          <kbd aria-hidden="true" className="ml-auto hidden shrink-0 rounded border bg-muted px-1 text-[10px] text-muted-foreground lg:inline">⌘/Ctrl K</kbd>
+          <span className="hidden min-w-0 truncate text-xs lg:inline">Cari halaman…</span>
+          <kbd aria-hidden="true" className="ms-auto hidden shrink-0 rounded border bg-background px-1.5 font-mono text-xs text-muted-foreground lg:inline">⌘K</kbd>
         </Button>
       </DialogTrigger>
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-3 p-3 sm:max-w-lg" onOpenAutoFocus={(event) => { event.preventDefault(); searchRef.current?.focus(); }} showCloseButton={false}>
@@ -80,26 +82,24 @@ export function CmsHeaderSearch(props: SearchProps) {
   );
 }
 
-const dateFormatter = new Intl.DateTimeFormat("id-ID", {
-  day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Jakarta",
-});
-const timeFormatter = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: "Asia/Jakarta",
-});
-
-export function CmsHeaderClock({ compact = false }: { compact?: boolean }) {
+// V-30: minutes, not seconds (a ticking second is noise), and the zone reads "WIB" as on every page.
+// T-203: nothing is shown until the browser knows the time — no "--.--" stand-in; the reserved
+// width keeps the header from shifting when the first tick lands (one animation frame later).
+export function CmsHeaderClock() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     const tick = () => setNow(new Date());
     const frame = requestAnimationFrame(tick);
-    const interval = window.setInterval(tick, 1_000);
+    const interval = window.setInterval(tick, 15_000);
     return () => { cancelAnimationFrame(frame); window.clearInterval(interval); };
   }, []);
+  if (!now) return <span aria-hidden="true" className="block w-44" data-slot="cms-clock-pending" />;
+  const parts = formatWibDateTimeParts(now);
 
+  // T-204 reference: one muted line, "25 Sep 2026 · 18.54 WIB".
   return (
-    <time aria-live="off" className={compact ? "flex w-40 flex-col items-end gap-0.5 whitespace-nowrap text-xs tabular-nums" : "flex w-full items-center justify-between gap-3 whitespace-nowrap text-xs tabular-nums md:w-40 md:flex-col md:items-end md:gap-0.5"} dateTime={now?.toISOString()}>
-      <span className="text-muted-foreground">{now ? dateFormatter.format(now) : "— — —"}</span>
-      <span className="font-medium">{now ? timeFormatter.format(now) : "--:--:--"} <span className="font-normal text-muted-foreground">GMT+7</span></span>
+    <time aria-live="off" className="block w-44 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums" dateTime={now.toISOString()}>
+      {parts.date} · {parts.time}
     </time>
   );
 }

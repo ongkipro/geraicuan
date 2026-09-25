@@ -48,7 +48,7 @@ export function getPageNumbers(page: number, totalPages: number): (number | "ell
   ];
 }
 
-const iconButton = "size-8 max-md:size-11";
+const iconButton = "size-10 max-md:size-11";
 
 function PageLink({
   children,
@@ -107,15 +107,14 @@ export function DataTablePagination({
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={`Baris per halaman: ${pageSize}`}
-                  className="h-8 w-[4.5rem] justify-between max-md:min-h-11"
-                  size="sm"
+                  className="w-18 justify-between max-md:min-h-11"
                   variant="outline"
                 >
                   {pageSize}
                   <ChevronDown aria-hidden="true" className="opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[4.5rem]">
+              <DropdownMenuContent align="end" className="min-w-18">
                 {pageSizeOptions.map((size) => (
                   <DropdownMenuItem asChild className="max-md:min-h-11" key={size}>
                     <Link aria-current={size === pageSize ? "true" : undefined} href={hrefForPageSize(size)} prefetch={false}>
@@ -145,7 +144,7 @@ export function DataTablePagination({
                   {item === "ellipsis" ? (
                     <span aria-hidden="true" className="px-1 text-sm text-muted-foreground">…</span>
                   ) : (
-                    <Button asChild className="h-8 w-auto min-w-8 px-2" size="icon" variant={item === current ? "default" : "outline"}>
+                    <Button asChild className={cn("w-auto min-w-10 px-2", item === current && "border-primary bg-accent font-semibold text-accent-foreground hover:bg-accent")} size="icon" variant={item === current ? "outline" : "ghost"}>
                       <Link
                         aria-current={item === current ? "page" : undefined}
                         aria-label={`Halaman ${item}`}

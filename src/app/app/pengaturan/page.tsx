@@ -23,7 +23,7 @@ import {
 } from "@/lib/ui-audit-scenario";
 import { suggestShipmentPrefix } from "@/lib/shipment-number";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Pengaturan · GeraiCUAN", robots: { index: false } };
 
 const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
   dateStyle: "medium",
@@ -91,9 +91,9 @@ export default async function TenantProfileSettingsPage({
         currentHref="/app/pengaturan"
         header={
           <PageHeader
-            description="Identitas toko dan format angka, tanggal, dan nomor kiriman."
-            eyebrow="Pengaturan"
-            title="Profil toko"
+            description="Identitas gerai, awalan nomor kiriman, dan format tanggal."
+            eyebrow="Pengelolaan"
+            title="Pengaturan"
           />
         }
         indexHref={SETTINGS_INDEX_HREF}
@@ -102,13 +102,16 @@ export default async function TenantProfileSettingsPage({
       >
         <div className="grid min-w-0 gap-6">
           <SettingsCard
-            description="Nama yang tampil di GeraiCUAN. Hubungi Super Admin bila nama toko perlu diubah."
+            description="Hubungi Super Admin bila nama gerai perlu diubah."
             id="tenant-name-title"
-            title="Nama toko"
+            title="Identitas gerai"
           >
-            <p className="text-base font-medium [overflow-wrap:anywhere]" id="tenant-name-value">
-              {shipmentPrefix.tenantName}
-            </p>
+            <dl className="grid gap-1">
+              <dt className="text-sm text-muted-foreground">Nama gerai</dt>
+              <dd className="text-base font-semibold [overflow-wrap:anywhere]" id="tenant-name-value">
+                {shipmentPrefix.tenantName}
+              </dd>
+            </dl>
           </SettingsCard>
 
           <ShipmentPrefixForm
@@ -126,17 +129,14 @@ export default async function TenantProfileSettingsPage({
           >
             <dl className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">Bahasa dan format</dt>
+                <dt className="text-sm text-muted-foreground">Bahasa dan format</dt>
                 <dd className="text-sm">Indonesia (<span className="font-mono">id-ID</span>)</dd>
               </div>
               <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">Zona waktu</dt>
-                <dd className="text-sm">WIB (<span className="font-mono">Asia/Jakarta</span>, UTC+7)</dd>
+                <dt className="text-sm text-muted-foreground">Zona waktu</dt>
+                <dd className="text-sm">WIB (<span className="font-mono">Asia/Jakarta</span>, UTC+7) · dasar semua rekap harian</dd>
               </div>
             </dl>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Semua tanggal, jam, dan rekap harian di GeraiCUAN dihitung pada dasar WIB.
-            </p>
           </SettingsCard>
         </div>
       </SettingsLayout>

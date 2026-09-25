@@ -1,7 +1,11 @@
-import { renderToReadableStream } from "react-dom/server";
+import { createElement } from "react";
+import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DashboardOutcomeRegion } from "@/app/app/dashboard-regions";
+import { KpiDelta } from "@/app/app/kpi-delta";
 import TenantDashboardPage from "@/app/app/page";
+import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 
 const fixture = vi.hoisted(() => ({
@@ -178,7 +182,8 @@ describe("analytics-led tenant dashboard", () => {
     expect(codLink).toContain("support=cod");
     const describedBy = codLink?.match(/aria-describedby="([^"]+)"/)?.[1];
     expect(describedBy).toBeTruthy();
-    expect(html).toMatch(new RegExp(`id="${describedBy}"[^>]*>(?:(?!</a>).)*\\+2 \\(40%\\) vs 7 hari sebelumnya`));
+    // V-18: the signed change is its own non-wrapping pill; the basis follows it as plain text.
+    expect(html).toMatch(new RegExp(`id="${describedBy}"[^>]*>(?:(?!</a>).)*Naik 2 \\(40%\\)</span> vs 7 hari sebelumnya`));
     expect(html).toContain("Grafik kiriman");
     expect(fixture.periodTrend).toHaveBeenCalledWith(
       expect.anything(), expect.anything(),
@@ -256,7 +261,7 @@ describe("analytics-led tenant dashboard", () => {
 
     expect(html).toContain("Rincian kiriman:");
     expect(html).toContain("kiriman COD dan COD Ongkir dibuat");
-    expect(html).toContain("Data mengikuti periode, zona waktu, outlet, dan jenis aktivitas");
+    expect(html).toContain("Menampilkan");
     expect(html).toContain("Tabel rincian kiriman");
     expect(fixture.periodSupport).toHaveBeenCalledWith(
       expect.anything(),
@@ -278,7 +283,8 @@ describe("analytics-led tenant dashboard", () => {
     expect(html).toContain("Grafik kiriman");
     expect(html).toContain("Lihat tabel data tren");
     expect(html).toContain("Outlet dashboard");
-    expect(html).toContain("Analitik lengkap");
+    expect(html).toContain(">Laporan pengiriman<");
+    expect(html).not.toContain("/app/analitik");
     expect(fixture.periodSummary).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -468,10 +474,12 @@ describe("analytics-led tenant dashboard", () => {
   });
 
   it("leads KPI comparisons with the absolute change and keeps the shared percentage", async () => {
-    const html = await renderDashboard();
+    // V-18: pill and basis are separate elements now, so compare the visible text.
+    const visibleText = (markup: string) => markup.replace(/<[^>]+>/g, "");
+    const html = visibleText(await renderDashboard());
     // created 12 vs 9, COD 7 vs 5 (fixture): absolute first, percentage from the shared formula.
-    expect(html).toContain("+3 (33%) vs 7 hari sebelumnya");
-    expect(html).toContain("+2 (40%) vs 7 hari sebelumnya");
+    expect(html).toContain("Naik 3 (33%) vs 7 hari sebelumnya");
+    expect(html).toContain("Naik 2 (40%) vs 7 hari sebelumnya");
     expect(html).toContain("33% lebih tinggi dari periode sebelumnya.");
 
     fixture.periodSummary.mockResolvedValueOnce({
@@ -479,10 +487,55 @@ describe("analytics-led tenant dashboard", () => {
       generatedAt: new Date("2026-08-31T12:00:00.000Z"),
       previous: { codCount: 5, createdCount: 0, issuedCount: 4, nonCodCount: 0 },
     });
-    const edgeHtml = await renderDashboard();
-    expect(edgeHtml).toContain("+5 (naik dari 0) vs 7 hari sebelumnya");
+    const edgeHtml = visibleText(await renderDashboard());
+    expect(edgeHtml).toContain("Naik 5 (dari 0) vs 7 hari sebelumnya");
     expect(edgeHtml).toContain("Tidak berubah vs 7 hari sebelumnya");
-    expect(edgeHtml).toContain("−4 (100%) vs 7 hari sebelumnya");
+    expect(edgeHtml).toContain("Turun 4 (100%) vs 7 hari sebelumnya");
+  });
+
+  // T-203 / spec 10 §1.9: a count is never green or red because it is a count.
+  it("keeps KPI deltas and outcome totals neutral; direction reads from the arrow and the word", async () => {
+    const html = await renderDashboard();
+    const pills = html.match(/<span[^>]*data-slot="kpi-delta"[^>]*>/g) ?? [];
+    expect(pills.length).toBeGreaterThanOrEqual(4);
+    for (const pill of pills) {
+      expect(pill).not.toMatch(/var\(--(?:ok|danger|warn)/);
+      expect(pill).not.toContain("data-attention");
+    }
+    const count = (totalCount: number) => ({ codCount: totalCount, nonCodCount: 0, totalCount });
+    const outcome = await renderToReadableStream(await DashboardOutcomeRegion({
+      context: { periodLabel: "25 – 31 Agu 2026", previousPeriodLabel: "18 – 24 Agu 2026", range: parseAnalyticsRange({ rentang: "7-hari" }, new Date()), timezoneLabel: "WIB (UTC+07:00)" },
+      promise: Promise.resolve({ basis: { lastObservedAt: null, observationVisible: false }, cohortCount: 9, delivered: count(5), failed: count(2), generatedAt: new Date(), inProgress: count(1), returned: count(1) } as never),
+    }));
+    await outcome.allReady;
+    const outcomeHtml = await new Response(outcome).text();
+    expect(outcomeHtml).toContain("Hasil pengiriman");
+    // T-206 (owner HTML reference): each outcome name carries a small status dot, the one
+    // colour cue in this table; it is decorative (the word names the outcome) and the
+    // counts themselves stay neutral.
+    const dots = outcomeHtml.match(/<span[^>]*data-slot="outcome-dot"[^>]*>/g) ?? [];
+    expect(dots).toHaveLength(4);
+    for (const dot of dots) expect(dot).toContain('aria-hidden="true"');
+    expect(outcomeHtml.replace(/<span[^>]*data-slot="outcome-dot"[^>]*><\/span>/g, "")).not.toMatch(/var\(--(?:ok|danger|warn)\)/);
+    // Only the change a caller names as a decision signal carries a tone.
+    const delta = (current: number, previous: number) => renderToStaticMarkup(createElement(KpiDelta, { attention: "fall", current, previous, previousLabel: "periode sebelumnya" }));
+    expect(delta(80, 90)).toContain('data-attention="true"');
+    expect(delta(80, 90)).toContain("var(--warn)");
+    expect(delta(90, 80)).not.toContain("data-attention");
+    expect(delta(90, 80).replace(/<[^>]+>/g, "")).toContain("Naik 10 (13%)");
+  });
+
+  it("renders the KPI drill-down rows as record cards below md and keeps the table for md and up", async () => {
+    fixture.periodSupport.mockResolvedValueOnce({
+      rows: [{ occurredAt: new Date("2026-08-30T03:00:00.000Z"), outletName: "Outlet dashboard", paymentMethod: "COD", publicReference: "GC-10901", shipmentId: "00000000-0000-3605-0000-000000000001", status: "ISSUED" }],
+      totalCount: 1,
+    });
+    const html = await renderDashboard({ support: "cod" });
+    const list = html.match(/<ul[^>]*aria-label="Daftar rincian kiriman"[^>]*>(?:(?!<\/ul>).)*<\/ul>/)?.[0] ?? "";
+    expect(list).toMatch(/class="[^"]*\bmd:hidden\b/);
+    expect(list).toContain('href="/app/pengiriman/10901"');
+    expect(list).toContain("Outlet dashboard");
+    expect(html.match(/<[^>]*aria-label="Tabel rincian kiriman"[^>]*>/)?.[0]).toContain("max-md:hidden");
   });
 
   it("keeps the counting method in one disclosure and one compact freshness line per data scope", async () => {
@@ -498,13 +551,14 @@ describe("analytics-led tenant dashboard", () => {
     expect(html.match(/Diperbarui(?:<!-- -->)? <time dateTime="2026-08-31T12:00:00.000Z">19\.00<\/time>/g)?.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("offers scoped full analytics to Tenant Admin even when no trend card renders", async () => {
+  // T-204: Analitik is gone; the scoped drill-down is Laporan pengiriman, which is Tenant Admin only.
+  it("offers the scoped shipment report to Tenant Admin even when no trend card renders", async () => {
     const html = await renderDashboard({ rentang: "hari-ini" });
     expect(html).not.toContain("Grafik kiriman");
-    expect(html).toMatch(/href="\/app\/analitik\?[^"]*rentang=hari-ini[^"]*"[^>]*>Analitik lengkap/);
+    expect(html).toMatch(/href="\/app\/laporan\/pengiriman\?[^"]*rentang=hari-ini[^"]*"[^>]*>Laporan pengiriman/);
 
     fixture.role = "OPERATOR";
-    expect(await renderDashboard({ rentang: "hari-ini" })).not.toContain("Analitik lengkap");
+    expect(await renderDashboard({ rentang: "hari-ini" })).not.toMatch(/href="\/app\/laporan\/pengiriman/);
   });
 
   it("returns the filter form and reset to the visible page heading", async () => {

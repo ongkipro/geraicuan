@@ -12,7 +12,7 @@ export default function NewShipmentLoading() {
       <PageHeader
         description="Navigasi dan lingkup tenant tetap tersedia saat formulir draf dimuat."
         eyebrow="Pengiriman"
-        title="Buat draf kiriman"
+        title="Buat kiriman"
       />
       <div aria-busy="true" aria-label="Memuat formulir draf kiriman" className="grid gap-6" role="status">
         <Skeleton className="h-20 w-full rounded-xl" />

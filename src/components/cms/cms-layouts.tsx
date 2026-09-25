@@ -22,7 +22,17 @@ export function FormLayout({ aside, children, className, ...props }: ComponentPr
 }
 
 /** Detail pages: data and history on the left, "what is true now" on the rail. */
-export function DetailLayout({ aside, children, className, ...props }: ComponentProps<"div"> & { aside?: ReactNode }) {
+export function DetailLayout({ aside, asideFirst = false, children, className, ...props }: ComponentProps<"div"> & { aside?: ReactNode; asideFirst?: boolean }) {
+  // `asideFirst`: the rail leads in the DOM (and so in focus and reading order) and on mobile,
+  // and is placed in the right column at the split, so visual and focus order agree below it.
+  if (asideFirst) {
+    return (
+      <div className={cn(twoColumn, className)} {...props}>
+        <div className="grid min-w-0 gap-4 @4xl/page:col-start-2 @4xl/page:row-start-1">{aside}</div>
+        <div className="grid min-w-0 gap-6 @4xl/page:col-start-1 @4xl/page:row-start-1">{children}</div>
+      </div>
+    );
+  }
   return (
     <div className={cn(twoColumn, className)} {...props}>
       <div className="grid min-w-0 gap-6">{children}</div>
@@ -63,8 +73,8 @@ export const fieldWidth = {
   md: "w-full sm:w-48 sm:shrink-0",
   money: "w-full sm:w-56 sm:shrink-0",
   lg: "w-full sm:w-80 sm:shrink-0",
-  xl: "w-full sm:w-[26rem] sm:shrink-0",
-  full: "w-full max-w-[42rem]",
+  xl: "w-full sm:w-104 sm:shrink-0",
+  full: "w-full max-w-2xl",
 } as const;
 
 /** One row of fields: wraps to content instead of forcing a fixed column grid. */
@@ -77,11 +87,11 @@ export function FieldRow({ className, ...props }: ComponentProps<"div">) {
  * margin spans the band across the card because `Card` owns the vertical padding, and
  * `border-b` makes `CardHeader` add its own bottom padding.
  */
-export const cardBandClassName = "-mt-(--card-spacing) rounded-t-xl border-b bg-muted/40 pt-(--card-spacing)";
+/** Spec 10 v2 frame budget: card headers carry no band or rule; kept as a hook for existing callers. */
+export const cardBandClassName = "";
 
 /**
- * Page-level section heading: a 3px brand rule to the left of the label. Cards already
- * carry the muted band; this is for headings that sit directly on the page ground, where
- * bold text alone left every block looking the same weight.
+ * Page-level section heading for a region that sits directly on the ground. Spec 10 §1.9
+ * (T-203): neutral like a card title — the brand blue marks interaction, not headings.
  */
-export const sectionHeadingClassName = "flex items-center gap-2 text-lg font-semibold tracking-tight before:h-5 before:w-[3px] before:rounded-full before:bg-primary before:content-['']";
+export const sectionHeadingClassName = "text-base font-semibold text-foreground";

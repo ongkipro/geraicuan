@@ -67,7 +67,7 @@ try {
   if (phase === 'all' || phase === 'roles') {
   for (const role of ['operator','super','tenant']) {
     await login(role);
-    const routes = role === 'super' ? ['/platform'] : role === 'tenant' ? ['/app?rentang=30-hari', '/app/analitik?rentang=30-hari'] : ['/app?rentang=30-hari'];
+    const routes = role === 'super' ? ['/platform'] : role === 'tenant' ? ['/app?rentang=30-hari', '/app/laporan/pengiriman?rentang=30-hari'] : ['/app?rentang=30-hari'];
     for (const width of [390,768,1280]) {
       await session.send('Emulation.setDeviceMetricsOverride', { width, height: 960, deviceScaleFactor: 1, mobile: width < 768 });
       for (const path of routes) {
@@ -104,7 +104,7 @@ try {
           const order = await session.evaluate(`(() => {const text=document.querySelector('main').innerText;return {summary:text.indexOf('Ringkasan periode'), work:text.indexOf('Pekerjaan yang perlu diperhatikan'), trend:text.indexOf('Grafik kiriman')};})()`);
           assert(order.summary >= 0 && order.trend > order.summary && order.work > order.trend, JSON.stringify(order));
         }
-        await capture(`${role}-${path.includes('analitik') ? 'analytics' : 'home'}-${width}`);
+        await capture(`${role}-${path.includes('laporan') ? 'report' : 'home'}-${width}`);
         results.push({role,path,width,contrastInspected:probe.contrastInspected,focusProbed:probe.focusProbed});
       }
       if (width === 390) {
@@ -141,8 +141,6 @@ try {
     for (const [path,scenario,text] of [
       ['/app?rentang=30-hari','dashboard-first-run','Belum ada kiriman'],
       ['/app?rentang=30-hari','dashboard-period-error','Ringkasan periode tidak dapat dimuat'],
-      ['/app/analitik?rentang=30-hari','analytics-trend-error','Tren tidak dapat dimuat'],
-      ['/app/analitik?rentang=30-hari','analytics-stale','Perlu diperbarui'],
     ]) {
       console.log(`Checking ${scenario} at ${width}px`);
       await visit(path,scenario);
@@ -159,8 +157,6 @@ try {
     await session.send('Emulation.setDeviceMetricsOverride',{width,height:960,deviceScaleFactor:1,mobile:width<768});
     for (const [path,selector,names] of [
       ['/app','#dashboard-rentang',['rentang','outlet','tz','dari','sampai']],
-      ['/app/analitik','#analytics-rentang',['rentang','outlet','tz','dari','sampai','kurir','status','basis']],
-      ['/app/keuangan','#finance-range',['rentang','outlet','tz','dari','sampai','status']],
     ]) {
       await visit(path);
       let hydrated = false;

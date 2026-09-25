@@ -23,11 +23,11 @@ const ready=`document.readyState==='complete'&&!!document.querySelector('main h1
 // T-150's data pattern pages, and the frame measurement the screening loop reads:
 // the title's x and the x of the first card or table scroll region below the
 // page header.
-const DATA_ROUTES=['/app','/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/label','/app/keuangan','/app/analitik'];
+const DATA_ROUTES=['/app','/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/label'];
 const FRAME_EDGES=`JSON.stringify((()=>{const h=document.querySelector('main h1');const frame=document.querySelector('[class*="container/page"]');const header=frame?.querySelector(':scope > header');const surface=[...(frame?.querySelectorAll('[data-slot=card],[data-slot=table-container]')??[])].find(e=>!header?.contains(e)&&e.getBoundingClientRect().width>0);return {x:Math.round(h.getBoundingClientRect().left),surfaceX:surface?Math.round(surface.getBoundingClientRect().left):null}})())`;
 const STATIC_ROUTES=[
- '/app','/app/pengiriman','/app/pengiriman/rts','/app/pengiriman/baru','/app/impor',
- '/app/kontak/pengirim','/app/kontak/penerima','/app/kontak/baru','/app/label','/app/analitik','/app/keuangan',
+ '/app','/app/pengiriman','/app/pengiriman/rts','/app/pengiriman/baru',
+ '/app/kontak/pengirim','/app/kontak/penerima','/app/kontak/baru','/app/label',
  '/app/cek-resi','/app/cek-tarif',
  // T-165/T-166 (PR-55): the two Laporan pages join the screening inventory in
  // the change that created them, not a later round.
@@ -181,7 +181,7 @@ try {
  // underneath it showed through on every second row. Measure the rendered fill.
  // Every route that pins a column, not one sample: the defect was per-file.
  await viewport(1440);
- for(const route of ['/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/analitik','/app/keuangan','/app/label','/app/laporan/pengiriman','/app/laporan/cetak-resi']){
+ for(const route of ['/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/label','/app/laporan/pengiriman','/app/laporan/cetak-resi']){
  await s.goto(origin+route);await wait(ready);await pause(700);
  const pinned=JSON.parse(await s.evaluate(`JSON.stringify((()=>{
   // Chrome serializes an oklch fill as lab()/oklch(), so the alpha is the value

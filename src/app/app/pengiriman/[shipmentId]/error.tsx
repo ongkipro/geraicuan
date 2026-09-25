@@ -13,7 +13,7 @@ export default function ShipmentDetailError({ reset }: { error: Error & { digest
   useFocusTargetOnMount(HEADING_ID);
   return (
     <PageContainer>
-      <PageHeader description="Detail internal tidak ditampilkan ketika pembacaan gagal." eyebrow="Detail pengiriman" focusTargetId={HEADING_ID} title="Detail kiriman" />
+      <PageHeader description="Detail internal tidak ditampilkan ketika pembacaan gagal." eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Detail kiriman" />
       <Alert role="alert" variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Detail kiriman tidak dapat dimuat</AlertTitle>

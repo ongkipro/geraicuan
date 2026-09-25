@@ -118,6 +118,10 @@ vi.mock("@/db/tenant-context", () => ({
     work: (tx: unknown, context: unknown) => Promise<unknown>,
   ) => work({}, { role: "TENANT_ADMIN", tenantId, userId })),
 }));
+// T-204: Retur lists the tenant's outlets for the Tenant Admin status pull.
+vi.mock("@/db/tenant-repository", () => ({
+  listTenantOutlets: vi.fn(async () => [{ id: "00000000-0000-4000-8000-000000020621", name: "Gerai retur" }]),
+}));
 vi.mock("@/db/rts-repository", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/db/rts-repository")>()),
   loadRtsShipmentsPage: vi.fn(async () => fixture.page),
@@ -280,6 +284,17 @@ describe("return queue presentation", () => {
     }
   });
 
+  it("renders one record card per row below md, linked by shipment number (T-203)", () => {
+    const list = html.match(/<ul[^>]*aria-label="Daftar kiriman retur"[^>]*>[\s\S]*?<\/ul>/)?.[0] ?? "";
+    expect(list).toMatch(/^<ul[^>]*class="[^"]*\bmd:hidden\b/);
+    expect(list.match(/<li\b/g) ?? []).toHaveLength(fixture.page.rows.length);
+    for (const row of fixture.page.rows) {
+      expect(list).toContain(`>${row.publicReference}</a>`);
+      expect(list).toContain(row.recipientName);
+    }
+    expect(html).toMatch(/<div[^>]*data-slot="table-container"[^>]*class="[^"]*max-md:hidden/);
+  });
+
   it("uses one complete primary identifier per row", () => {
     const body = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
     const rows = [...body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)];
@@ -328,6 +343,14 @@ describe("return queue states its provider basis", () => {
     expect(text).toContain(formatWibDateTime(new Date("2026-09-08T09:45:00.000Z")));
   });
 
+  it("offers the Tenant Admin the pull that feeds these states, on the page's own range (T-204)", async () => {
+    fixture.auditHeader = null;
+    const html = await render();
+    expect(html).toContain("Perbarui status dari Mengantar");
+    expect(html).toMatch(/name="outletId"[^>]*value="00000000-0000-4000-8000-000000020621"/);
+    expect(html).toMatch(/name="rentang"[^>]*value="30-hari"/);
+  });
+
   it("states the mechanism, not an invented time, for a reader who may not", async () => {
     fixture.auditHeader = null;
     fixture.page.basis = { lastObservedAt: null, observationVisible: false };
@@ -335,7 +358,7 @@ describe("return queue states its provider basis", () => {
     const text = (await render()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
     expect(text).toContain("dilaporkan Mengantar");
-    expect(text).toContain("menarik data Mengantar di Keuangan");
+    expect(text).toContain("memperbarui status dari Mengantar di Histori kiriman atau Retur");
     expect(text).not.toMatch(/tarikan terakhir/);
   });
 });

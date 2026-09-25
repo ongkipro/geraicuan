@@ -35,8 +35,8 @@ export function DefinitionGrid({
     <dl className="grid min-w-0 gap-x-8 sm:grid-cols-2">
       {items.map((item, index) => (
         <div className={cn("grid min-w-0 gap-1 border-b py-3")} key={index}>
-          <dt className="text-xs font-medium text-muted-foreground">{item.label}</dt>
-          <dd className="min-w-0 break-words text-sm font-medium tabular-nums">{item.value}</dd>
+          <dt className="text-sm text-muted-foreground">{item.label}</dt>
+          <dd className="min-w-0 break-words text-sm font-medium tabular-nums text-foreground">{item.value}</dd>
         </div>
       ))}
     </dl>

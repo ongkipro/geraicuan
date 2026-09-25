@@ -16,7 +16,7 @@ export default function OutletSettingsLoading() {
         header={
           <PageHeader
             description="Kelola lokasi pickup dan koneksi pengiriman outlet."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Outlet"
           />
         }
@@ -27,10 +27,10 @@ export default function OutletSettingsLoading() {
         <div className="grid min-w-0 gap-6">
           <section
             aria-label="Memuat ringkasan kesiapan outlet"
-            className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border xl:grid-cols-4"
+            className="grid grid-cols-2 gap-4 rounded-xl bg-card p-4 border xl:grid-cols-4"
           >
             {Array.from({ length: 4 }, (_, index) => (
-              <div className="grid gap-2 bg-background px-4 py-3" key={index}>
+              <div className="grid gap-2" key={index}>
                 <Skeleton className="h-3 w-24 max-w-full" />
                 <Skeleton className="h-7 w-10" />
               </div>
@@ -38,40 +38,27 @@ export default function OutletSettingsLoading() {
           </section>
           <section
             aria-label="Memuat pengaturan outlet"
-            className="grid min-w-0 gap-6 xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10"
+            className="grid min-w-0 gap-6"
             role="status"
           >
             <div className="min-w-0">
-              <Skeleton className="h-14 w-full xl:hidden" />
-              <div className="hidden gap-1 xl:grid">
-                {Array.from({ length: 6 }, (_, index) => (
-                  <div className="grid min-h-11 gap-2 px-3 py-2" key={index}>
-                    <Skeleton className="h-4 w-32 max-w-full" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                ))}
-              </div>
+              <Skeleton className="h-14 w-full" />
             </div>
-            <div className="grid min-w-0 gap-8">
-              <div className="grid gap-2 border-b pb-5">
-                <Skeleton className="h-3 w-20" />
-                <Skeleton className="h-7 w-48 max-w-full" />
-                <Skeleton className="h-4 w-64 max-w-full" />
-              </div>
-              {Array.from({ length: 2 }, (_, index) => (
-                <div className="grid gap-4" key={index}>
-                  <div className="grid gap-2">
-                    <Skeleton className="h-6 w-40 max-w-full" />
-                    <Skeleton className="h-4 w-72 max-w-full" />
-                  </div>
-                  <Separator />
-                  <div className="grid gap-4 lg:max-w-xl">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-11 w-40 max-sm:w-full sm:ml-auto" />
-                  </div>
+            {/* T-206: mirrors OutletDetail — one card with title, badge, rows and footer actions. */}
+            <div className="grid min-w-0 gap-4 rounded-xl border bg-card p-4 md:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div className="grid gap-2">
+                  <Skeleton className="h-6 w-48 max-w-full" />
+                  <Skeleton className="h-4 w-64 max-w-full" />
                 </div>
-              ))}
+                <Skeleton className="h-6 w-20" />
+              </div>
+              {Array.from({ length: 3 }, (_, index) => <Skeleton className="h-12 w-full" key={index} />)}
+              <Separator />
+              <div className="flex flex-wrap justify-end gap-2">
+                <Skeleton className="h-10 w-40 max-sm:w-full" />
+                <Skeleton className="h-10 w-48 max-sm:w-full" />
+              </div>
             </div>
           </section>
         </div>

@@ -6,7 +6,7 @@ import {
   type SafeOutletReadiness,
 } from "@/app/app/pengaturan/outlet-settings-types";
 import { SettingsCard } from "@/components/cms/settings-layout";
-import { Badge } from "@/components/ui/badge";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -14,100 +14,83 @@ import { Button } from "@/components/ui/button";
  * default pickup point produces. Read-only, so it stays a server component:
  * choosing a pickup point lives on `/app/pengaturan/pickup`, and the connection
  * on `/app/pengaturan/koneksi`.
+ *
+ * T-206 reference (`pengaturan.html`, Outlet tab): one card per outlet — name and
+ * readiness badge, then label/value rows divided by hairlines, then the two
+ * "Kelola" actions in the footer.
  */
 export function OutletDetail({ outlet }: { outlet: SafeOutletReadiness }) {
   const missing = missingOutletConfiguration(outlet);
+  const rowClassName = "grid min-w-0 gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4";
 
   return (
-    <section aria-labelledby="outlet-detail-title" className="grid min-w-0 gap-8">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-5">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">Outlet aktif</p>
-          <h2
-            className="mt-1 rounded-sm text-xl font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            id="outlet-detail-title"
-            tabIndex={-1}
-          >
-            {outlet.name}
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {missing.length > 0
-              ? `Periksa ${missing.join(", ")}.`
-              : "Dapat dipakai untuk membuat kiriman."}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Terakhir diperbarui {outlet.updatedAtLabel}.
-          </p>
-        </div>
-        <Badge variant={outlet.readinessStatus === "ready" ? "secondary" : "destructive"}>
-          {outlet.readinessStatus === "ready" ? "Siap" : "Perlu dilengkapi"}
-        </Badge>
-      </header>
-
-      <SettingsCard
-        description="Titik pickup utama outlet ini. Area asal Mengantar mengikuti alamat pickup yang dipilih."
-        footer={
-          <Button asChild className="min-h-11 md:min-h-9" variant="outline">
+    <SettingsCard
+      badge={<ToneBadge label={outlet.readinessStatus === "ready" ? "Siap" : "Perlu dilengkapi"} tone={outlet.readinessStatus === "ready" ? "ok" : "warn"} />}
+      description={missing.length > 0
+        ? `Periksa ${missing.join(", ")}.`
+        : "Dapat dipakai untuk membuat kiriman."}
+      footer={(
+        <>
+          <Button asChild className="min-h-11 md:min-h-10" variant="outline">
             <Link href={`/app/pengaturan/pickup?outlet=${encodeURIComponent(outlet.id)}`}>
               Kelola titik pickup
             </Link>
           </Button>
-        }
-        id="outlet-location-title"
-        title="Lokasi pengiriman"
-      >
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div className="grid min-w-0 gap-1">
-            <dt className="text-xs font-medium text-muted-foreground">Alamat pickup utama</dt>
-            <dd className="flex items-start gap-2 text-sm leading-6 [overflow-wrap:anywhere]">
-              <MapPin aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground" />
-              {outlet.defaultPickupAddressLabel ?? (
-                <span className="text-muted-foreground">Belum ada titik pickup</span>
-              )}
-            </dd>
-          </div>
-          <div className="grid min-w-0 gap-1">
-            <dt className="text-xs font-medium text-muted-foreground">
-              Area asal <span className="font-normal">(otomatis)</span>
-            </dt>
-            <dd className="text-sm leading-6 [overflow-wrap:anywhere]" id={`origin-${outlet.id}`}>
-              {outlet.defaultOriginAreaLabel ?? (
-                <span className="text-muted-foreground">Akan terisi setelah pickup dipilih</span>
-              )}
-            </dd>
-          </div>
-        </dl>
-      </SettingsCard>
-
-      <SettingsCard
-        badge={
-          <Badge variant={outlet.connectionStatus === "private_attention" ? "destructive" : "secondary"}>
-            {outlet.connectionSource === "private"
-              ? "Akun sendiri"
-              : outlet.privateConnectionRequired ? "Belum terhubung" : "Default GeraiCUAN"}
-          </Badge>
-        }
-        description="Akun Mengantar yang dipakai outlet ini untuk estimasi dan pembuatan order."
-        footer={
-          <Button asChild className="min-h-11 md:min-h-9" variant="outline">
+          <Button asChild className="min-h-11 md:min-h-10" variant="outline">
             <Link href={`/app/pengaturan/koneksi?outlet=${encodeURIComponent(outlet.id)}`}>
               Kelola koneksi Mengantar
             </Link>
           </Button>
-        }
-        id="outlet-connection-summary-title"
-        title="Koneksi Mengantar"
-      >
-        <p className="text-sm leading-6 text-muted-foreground">
-          {outlet.connectionStatus === "private_attention"
-            ? "Koneksi privat outlet ini perlu diperiksa sebelum kiriman baru dapat dibuat."
-            : outlet.connectionStatus === "private_ready"
-              ? "Outlet ini memakai API key Mengantar miliknya sendiri."
-              : outlet.privateConnectionRequired
-                ? "Toko ini mengirim dengan akun Mengantar miliknya sendiri. Hubungkan API key akun tersebut sebelum membuat kiriman."
-                : "Outlet ini memakai koneksi Mengantar yang dikelola GeraiCUAN."}
-        </p>
-      </SettingsCard>
-    </section>
+        </>
+      )}
+      id="outlet-detail-title"
+      title={outlet.name}
+    >
+      <dl className="grid divide-y">
+        <div className={rowClassName}>
+          <dt className="text-sm text-muted-foreground" id="outlet-location-title">Lokasi pengiriman</dt>
+          <dd className="grid min-w-0 gap-1 text-sm">
+            <span className="flex items-start gap-2 font-medium [overflow-wrap:anywhere]">
+              <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              {outlet.defaultPickupAddressLabel ?? (
+                <span className="font-normal text-muted-foreground">Belum ada titik pickup</span>
+              )}
+            </span>
+            <span className="text-muted-foreground [overflow-wrap:anywhere]">
+              Area asal (otomatis):{" "}
+              <span className="text-foreground" id={`origin-${outlet.id}`}>
+                {outlet.defaultOriginAreaLabel ?? "Akan terisi setelah pickup dipilih"}
+              </span>
+            </span>
+          </dd>
+        </div>
+        <div className={rowClassName}>
+          <dt className="text-sm text-muted-foreground" id="outlet-connection-summary-title">Koneksi Mengantar</dt>
+          <dd className="grid min-w-0 justify-items-start gap-1 text-sm">
+            <ToneBadge
+              label={outlet.connectionSource === "private"
+                ? "Akun sendiri"
+                : outlet.privateConnectionRequired ? "Belum terhubung" : "Bawaan GeraiCUAN"}
+              tone={outlet.connectionStatus === "private_attention"
+                ? "danger"
+                : outlet.connectionSource !== "private" && outlet.privateConnectionRequired ? "warn" : "ok"}
+            />
+            <span className="text-muted-foreground">
+              {outlet.connectionStatus === "private_attention"
+                ? "Koneksi privat perlu diperiksa sebelum kiriman baru dapat dibuat."
+                : outlet.connectionStatus === "private_ready"
+                  ? "Memakai API key Mengantar milik outlet."
+                  : outlet.privateConnectionRequired
+                    ? "Hubungkan API key akun Mengantar gerai sebelum membuat kiriman."
+                    : "Memakai koneksi Mengantar yang dikelola GeraiCUAN."}
+            </span>
+          </dd>
+        </div>
+        <div className={rowClassName}>
+          <dt className="text-sm text-muted-foreground">Diperbarui</dt>
+          <dd className="text-sm tabular-nums">{outlet.updatedAtLabel}</dd>
+        </div>
+      </dl>
+    </SettingsCard>
   );
 }

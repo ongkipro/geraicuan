@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -44,10 +44,10 @@ const initialCredentialState: MengantarCredentialActionState = {};
 function ConnectionStatus({ outlet }: { outlet: SafeOutletReadiness }) {
   if (outlet.connectionStatus === "private_ready") {
     return (
-      <div className="space-y-2 rounded-md border px-4 py-3">
+      <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <strong className="text-sm">API key tersimpan</strong>
-          <Badge variant="secondary">Tersimpan, belum diverifikasi</Badge>
+          <ToneBadge label="Tersimpan, belum diverifikasi" tone="warn" />
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           {outlet.connectionUpdatedAtLabel
@@ -148,18 +148,14 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
             {missing.length > 0
               ? `Periksa ${missing.join(", ")}.`
               : "Dapat dipakai untuk membuat kiriman."}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Terakhir diperbarui {outlet.updatedAtLabel}.
+            {" "}<span className="text-xs">Diperbarui {outlet.updatedAtLabel}.</span>
           </p>
         </div>
-        <Badge variant={outlet.readinessStatus === "ready" ? "secondary" : "destructive"}>
-          {outlet.readinessStatus === "ready" ? "Siap" : "Perlu dilengkapi"}
-        </Badge>
+        <ToneBadge label={outlet.readinessStatus === "ready" ? "Siap" : "Perlu dilengkapi"} tone={outlet.readinessStatus === "ready" ? "ok" : "warn"} />
       </header>
 
       <SettingsCard
-        description="Gunakan koneksi GeraiCUAN atau akun Mengantar milik outlet."
+        description="Pilih koneksi bawaan GeraiCUAN atau akun Mengantar milik outlet."
         id="outlet-connection-title"
         title="Koneksi Mengantar"
       >
@@ -171,13 +167,12 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
                 <CircleAlert aria-hidden="true" />
                 <AlertTitle>
                   {outlet.connectionSource === "private"
-                    ? "Toko ini memakai akun Mengantar sendiri"
-                    : "Hubungkan akun Mengantar milik toko"}
+                    ? "Gerai ini memakai akun Mengantar sendiri"
+                    : "Hubungkan akun Mengantar milik gerai"}
                 </AlertTitle>
                 <AlertDescription>
-                  Toko yang mendaftar sendiri mengirim dengan akun Mengantar miliknya, bukan
-                  koneksi yang dikelola GeraiCUAN. Salin API key dari akun Mengantar Anda, lalu
-                  simpan di bawah.
+                  Gerai yang mendaftar sendiri mengirim dengan akun Mengantar miliknya. Salin API
+                  key dari akun Mengantar Anda, lalu simpan di bawah.
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -207,8 +202,8 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
                     />
                     <FieldContent>
                       <FieldTitle className="flex-wrap">
-                        Default GeraiCUAN
-                        {outlet.connectionSource === "platform_default" ? <Badge variant="secondary">Digunakan</Badge> : null}
+                        Koneksi bawaan GeraiCUAN
+                        {outlet.connectionSource === "platform_default" ? <ToneBadge label="Digunakan" tone="ok" /> : null}
                       </FieldTitle>
                       <FieldDescription>Dikelola GeraiCUAN, tanpa memasukkan API key.</FieldDescription>
                     </FieldContent>
@@ -227,7 +222,7 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
                     <FieldContent>
                       <FieldTitle className="flex-wrap">
                         Akun Mengantar sendiri
-                        {outlet.connectionSource === "private" ? <Badge variant="secondary">Digunakan</Badge> : null}
+                        {outlet.connectionSource === "private" ? <ToneBadge label="Digunakan" tone="ok" /> : null}
                       </FieldTitle>
                       <FieldDescription>
                         Gunakan API key dari akun Mengantar milik outlet.
@@ -309,23 +304,23 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
                   <CircleAlert aria-hidden="true" />
                   <AlertTitle>Konfirmasi diperlukan</AlertTitle>
                   <AlertDescription>
-                    API key privat tetap dipertahankan sampai Default GeraiCUAN terbukti lengkap.
+                    API key privat tetap dipertahankan sampai koneksi bawaan GeraiCUAN terbukti lengkap.
                   </AlertDescription>
                 </Alert>
 
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button className="min-h-11 max-sm:w-full sm:ml-auto sm:flex" disabled={isBusy} variant="outline">
-                      Gunakan Default GeraiCUAN
+                      Gunakan koneksi bawaan GeraiCUAN
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>
-                        Gunakan Default GeraiCUAN untuk {outlet.name}?
+                        Gunakan koneksi bawaan GeraiCUAN untuk {outlet.name}?
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        API key privat baru dihapus setelah server memastikan Default GeraiCUAN
+                        API key privat baru dihapus setelah server memastikan koneksi bawaan GeraiCUAN
                         lengkap. Untuk kembali ke akun sendiri, Anda harus memasukkan API key lagi.
                       </AlertDialogDescription>
                     </AlertDialogHeader>

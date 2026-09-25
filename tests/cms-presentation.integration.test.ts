@@ -115,7 +115,7 @@ describe("CMS presentation contract", () => {
   it.each([
     ["/app/cek-resi", () => import("@/app/app/cek-resi/page"), "Bantuan cek resi"],
     ["/app/cek-tarif", () => import("@/app/app/cek-tarif/page"), "Bantuan cek tarif"],
-    ["/app/impor", () => import("@/app/app/impor/page"), "Bantuan impor massal"],
+    // T-204 removed /app/impor (Impor CSV) from the product, so its row went with it.
   ] as const)("keeps %s inside the shared rail geometry", async (_route, load, asideLabel) => {
     const { default: Page } = await load();
     const html = renderToStaticMarkup(await (Page as () => Promise<ReactElement>)());

@@ -6,8 +6,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 
-import AnalyticsError from "@/app/app/analitik/error";
-import AnalyticsLoading from "@/app/app/analitik/loading";
 import TenantError from "@/app/app/error";
 import TenantLoading from "@/app/app/loading";
 
@@ -78,9 +76,7 @@ function skeletonOrder(route: string, file: string) {
 // page's eyebrow, title, and width.
 const STATIC_HEADER_ROUTES = [
   "",
-  "analitik",
   "anggota",
-  "keuangan",
   "kontak/baru",
   "label",
   "pengaturan",
@@ -89,12 +85,12 @@ const STATIC_HEADER_ROUTES = [
   "pengiriman/rts",
 ];
 
-// Exempt from title parity only: `impor` and `label/[shipmentId]` show a
+// Exempt from title parity only: `label/[shipmentId]` shows a
 // progress title while loading, and detail pages title themselves from data.
 // Their eyebrow and width must still match. The
 // shared `/platform` loading and error states stand in for four pages with
 // different titles and are covered by the platform eyebrow check below.
-const TITLE_EXEMPT_ROUTES = ["impor", "kontak/[contactId]", "label/[shipmentId]", "pengiriman/[shipmentId]"];
+const TITLE_EXEMPT_ROUTES = ["kontak/[contactId]", "label/[shipmentId]", "pengiriman/[shipmentId]"];
 
 function assertStatesMirror(route: string, compareTitle: boolean) {
   const page = header(route, "page.tsx");
@@ -115,8 +111,7 @@ function assertStatesMirror(route: string, compareTitle: boolean) {
 
 describe("dashboard route error and loading states", () => {
   it.each([
-    ["Ringkasan", TenantError, "dashboard-page-heading"],
-    ["Analitik", AnalyticsError, "analytics-page-heading"],
+    ["Dasbor", TenantError, "dashboard-page-heading"],
   ] as const)(
     "renders the %s error with a stable focus target and retry announcements",
     (_, ErrorState, headingId) => {
@@ -208,13 +203,5 @@ describe("dashboard route error and loading states", () => {
     expect(skeletonOrder("", "loading.tsx")).toEqual(
       skeletonOrder("", "page.tsx").filter((name) => !conditional.has(name)),
     );
-  });
-
-  it("uses the analytics region skeletons in the page's own order", () => {
-    const html = renderToStaticMarkup(createElement(AnalyticsLoading));
-
-    expect(html).toContain('aria-label="Memuat ringkasan analitik"');
-    expect(html).toContain('aria-label="Memuat tabel kiriman"');
-    expect(skeletonOrder("analitik", "loading.tsx")).toEqual(skeletonOrder("analitik", "page.tsx"));
   });
 });

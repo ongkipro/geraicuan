@@ -1,12 +1,16 @@
-import { CircleAlert, PackageSearch, Plus, Upload } from "lucide-react";
-import { CourierAwbStack, PaymentStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { randomUUID } from "node:crypto";
+
+import { CircleAlert, PackageSearch, Plus } from "lucide-react";
+import { CourierAwbStack, PaymentStack, RecipientStack, shipmentIdLinkClassName, ShipmentRecordItem, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { MengantarStatusPull } from "@/app/app/pengiriman/mengantar-status-pull";
 import { ShipmentQueueFilter } from "@/app/app/pengiriman/shipment-queue-filter";
+import { pullMengantarStatus } from "@/app/app/pengiriman/status-sync-actions";
 import { DataFreshnessControl } from "@/components/cms/data-freshness-control";
 import { DataTablePagination } from "@/components/cms/data-table-pagination";
 import { DataTableToolbar } from "@/components/cms/data-table-toolbar";
@@ -14,10 +18,12 @@ import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { RangeFilterForm } from "@/components/cms/range-filter-form";
+import { desktopTableClassName, RecordList } from "@/components/cms/record-list";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
 import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -30,8 +36,10 @@ import {
 import { db } from "@/db/client";
 import { loadShipmentQueuePage } from "@/db/shipment-queue-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { listTenantOutlets } from "@/db/tenant-repository";
+import { loadProviderDeliveryStatusBasis } from "@/db/provider-settlement-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { isDataStale } from "@/lib/data-freshness";
 import { formatWibDateTime, formatWeight } from "@/lib/label-format";
 import {
@@ -44,7 +52,20 @@ import {
 } from "@/lib/shipment-queue";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+/** T-203: one short line per summary entry; the full meaning lives with each status on the detail page. */
+const SUMMARY_HINTS: Record<(typeof SHIPMENT_QUEUE_SUMMARY_ENTRIES)[number]["metricId"], string> = {
+  "QUE-ALL": "Semua tahap",
+  "QUE-ATTENTION": "Kendala/pelunasan",
+  "QUE-AWAITING-PICKUP": "Tunggu dijemput",
+  "QUE-DELIVERED": "Sampai penerima",
+  "QUE-IN-TRANSIT": "Sedang diantar",
+  "QUE-NEEDS-AWB": "Belum punya resi",
+};
+
+/** The table sits inside the list card, so its scroll region keeps only the focus ring (spec 10 §1.6). */
+const inCardTableRegionClassName = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
+export const metadata: Metadata = { title: "Histori kiriman · GeraiCUAN", robots: { index: false } };
 
 type SearchValue = string | string[] | undefined;
 type ShipmentQueuePageProps = {
@@ -99,6 +120,14 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
   );
   if (auditScenario === "shipment-queue-stream") dataPromise = delayResult(dataPromise, 1_200);
   const loadedData = await dataPromise;
+  // T-204: the status pull moved here from Keuangan; Tenant Admin only, as before.
+  const pullOutlets = principal.role === "TENANT_ADMIN"
+    ? await withTenantContext(db, principal.userId, principal.tenantId, listTenantOutlets)
+    : [];
+  // T-204 review: the same "last pulled" line Retur shows, so an admin knows how fresh statuses are.
+  const statusBasis = principal.role === "TENANT_ADMIN"
+    ? await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadProviderDeliveryStatusBasis(tx, context))
+    : null;
   const data = auditScenario === "shipment-queue-empty"
     ? { ...loadedData, page: 1, rows: [], totalCount: 0, totalPages: 1 }
     : auditScenario === "shipment-queue-stale"
@@ -119,30 +148,22 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Operasional kiriman"
+      <PageHeader eyebrow="Pengiriman"
         actions={
-          <>
-            <Button asChild variant="outline">
-              <Link href="/app/impor">
-                <Upload aria-hidden="true" />
-                Impor CSV
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href="/app/pengiriman/baru">
-                <Plus aria-hidden="true" />
-                Buat kiriman
-              </Link>
-            </Button>
-          </>
+          <Button asChild>
+            <Link href="/app/pengiriman/baru">
+              <Plus aria-hidden="true" />
+              Buat kiriman
+            </Link>
+          </Button>
         }
         focusTargetId="shipment-queue-heading"
         description="Kelola draf, penerbitan resi, dan tindak lanjut kiriman."
-        title="Pengiriman"
+        title="Histori kiriman"
       />
 
       {issues.length > 0 ? (
-        <Alert variant="destructive">
+        <Alert>
           <CircleAlert aria-hidden="true" />
           <AlertTitle>Filter disesuaikan</AlertTitle>
           <AlertDescription>
@@ -163,13 +184,31 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
 
         <RangeFilterForm action="/app/pengiriman" idPrefix="shipment-queue" now={now} preserved={{ status: query.status === "ALL" ? undefined : query.status }} range={range} />
 
+        {pullOutlets.length > 0 ? (
+          <MengantarStatusPull
+            action={pullMengantarStatus}
+            attemptId={randomUUID()}
+            idPrefix="shipment-queue"
+            outlets={pullOutlets}
+            periodLabel={formatRangeLabel(range).periodLabel}
+            range={{ presetId: range.presetId, timezone: range.timezone, startDate: range.startDate, lastIncludedDate: range.lastIncludedDate }}
+          />
+        ) : null}
+        {statusBasis?.observationVisible ? (
+          <p className="text-xs text-muted-foreground" data-metric-id="QUEUE-STATUS-BASIS">
+            {statusBasis.lastObservedAt
+              ? `Status dari Mengantar · diperbarui ${formatWibDateTime(statusBasis.lastObservedAt)}`
+              : "Status dari Mengantar belum pernah diperbarui."}
+          </p>
+        ) : null}
+
         {/* PR-52: every entry writes this page's own `status` URL state, and
             its count comes from the same tenant-scoped pass as the rows below. */}
         <StateSummaryPanel
           action="/app/pengiriman"
           entries={SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => ({
             count: data.summary[entry.metricId],
-            description: entry.description,
+            description: SUMMARY_HINTS[entry.metricId],
             label: entry.label,
             metricId: entry.metricId,
             value: entry.value,
@@ -183,10 +222,13 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
           }
         />
 
+        {/* T-206 reference: the status toolbar, the records and the pagination share one
+            bordered card; the toolbar and the pagination are divided from the rows by one rule. */}
+        <Card className="min-w-0 gap-0 py-0">
         {/* Below md the toolbar stacks: the status filter takes the full width
             and the freshness control gets its own row, so neither overlaps. */}
         <DataTableToolbar
-          className="max-md:flex-col max-md:items-stretch max-md:[&>*:last-child]:ms-0 max-md:[&>*:last-child>*]:flex-1"
+          className="border-b p-4 max-md:flex-col max-md:items-stretch max-md:[&>*:last-child]:ms-0 max-md:[&>*:last-child>*]:flex-1"
           actions={
             <DataFreshnessControl
               formattedGeneratedAt={formatWibDateTime(data.generatedAt)}
@@ -203,7 +245,8 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
         {data.rows.length === 0 ? (
           <EmptyState
             action={
-              <Button asChild>
+              // Outline: "Buat kiriman" in the header stays the page's one filled primary.
+              <Button asChild variant="outline">
                 <Link href={selectedStatus ? shipmentQueueHref("ALL", 1, carry) : "/app/pengiriman/baru"}>
                   {selectedStatus ? "Tampilkan semua kiriman" : "Buat kiriman pertama"}
                 </Link>
@@ -211,7 +254,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             }
             description={
               selectedStatus
-                ? "Pilih status lain atau tampilkan seluruh antrean."
+                ? "Pilih status lain atau tampilkan semua kiriman."
                 : "Kiriman akan muncul di sini setelah draf pertama disimpan."
             }
             icon={PackageSearch}
@@ -222,13 +265,29 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
             }
           />
         ) : (
-          // Six columns, secondary facts stacked under their primary value, so
-          // the queue fits the data container at desktop widths without a
-          // horizontal scroll; narrower viewports still scroll inside the
-          // labelled region.
+          <>
+          <RecordList className="rounded-none border-0" label="Daftar kiriman">
+            {data.rows.map((row) => (
+              <ShipmentRecordItem
+                areaLabel={row.destinationAreaLabel}
+                at={row.updatedAt}
+                awb={row.awb}
+                href={shipmentDetailHref(row.publicReference, carry)}
+                key={row.shipmentId}
+                payment={row}
+                recipientName={row.recipientName}
+                reference={row.publicReference}
+                service={row.providerService}
+                status={SHIPMENT_STATUS_PRESENTATION[row.status]}
+              />
+            ))}
+          </RecordList>
+          {/* Six columns, secondary facts stacked under their primary value, so
+              the queue fits the data container at desktop widths without a
+              horizontal scroll; below md the record list above replaces it. */}
           <Table
             className="min-w-[56rem]"
-            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName={`${inCardTableRegionClassName} ${desktopTableClassName}`}
             containerProps={{
               "aria-label": "Daftar kiriman; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -252,10 +311,10 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
               {data.rows.map((row) => {
                 const status = SHIPMENT_STATUS_PRESENTATION[row.status];
                 return (
-                  <TableRow className="group transition-colors hover:bg-muted/30" key={row.shipmentId}>
-                    <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                  <TableRow key={row.shipmentId}>
+                    <TableCell className="sticky left-0 z-10 bg-inherit px-3">
                       <Link
-                        className="inline-flex min-h-11 items-center whitespace-nowrap text-primary underline-offset-4 hover:underline md:min-h-8"
+                        className={`inline-flex min-h-11 items-center whitespace-nowrap md:min-h-8 ${shipmentIdLinkClassName}`}
                         href={shipmentDetailHref(row.publicReference, carry)}
                       >
                         {row.publicReference}
@@ -289,18 +348,21 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
               })}
             </TableBody>
           </Table>
+          </>
         )}
 
         {data.totalCount > 0 ? (
           <DataTablePagination
+            className="border-t p-4"
             hrefForPage={(page) => shipmentQueueHref(query.status, page, carry)}
-            label="Paginasi antrean kiriman"
+            label="Paginasi histori kiriman"
             page={data.page}
             summary={<span className="tabular-nums">{data.totalCount} kiriman</span>}
             totalCount={data.totalCount}
             totalPages={data.totalPages}
           />
         ) : null}
+        </Card>
       </section>
     </PageContainer>
   );

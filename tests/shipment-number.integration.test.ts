@@ -31,7 +31,7 @@ describe("PR-44 shipment number helpers", () => {
     expect(shipmentDetailHref("TKP-100000")).toBe("/app/pengiriman/100000");
     expect(shipmentLabelHref("GC-10013")).toBe("/app/label/10013");
     expect(() => shipmentDetailHref("95758-260901-039")).toThrow();
-    // T-163 review: the detail replays the queue's range so "Kembali ke antrean"
+    // T-163 review: the detail replays the queue's range so "Kembali ke histori kiriman"
     // returns to the list the operator left, not to the default 30-day window
     // where the shipment just opened may not appear. Empty values never travel.
     expect(shipmentDetailHref("GC-10013", { rentang: "30-hari", dari: "", tz: "Asia/Jakarta" }))

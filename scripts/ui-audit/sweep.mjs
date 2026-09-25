@@ -20,9 +20,9 @@ const CONCRETE = {
 
 const TENANT = [
   "/app", "/app/pengiriman", "/app/pengiriman/rts", "/app/pengiriman/baru",
-  CONCRETE["/app/pengiriman/[shipmentId]"], "/app/impor", "/app/kontak/pengirim", "/app/kontak/penerima", "/app/kontak/baru",
+  CONCRETE["/app/pengiriman/[shipmentId]"], "/app/kontak/pengirim", "/app/kontak/penerima", "/app/kontak/baru",
   CONCRETE["/app/kontak/[contactId]"], "/app/label", CONCRETE["/app/label/[shipmentId]"],
-  "/app/analitik", "/app/keuangan", "/app/pengaturan", "/app/anggota",
+  "/app/pengaturan", "/app/anggota",
 ];
 const PLATFORM = ["/platform", "/platform/tenant", CONCRETE["/platform/tenant/[tenantId]"], "/platform/audit"];
 const PUBLIC = ["/", "/login/tenant", "/login/super-admin"];

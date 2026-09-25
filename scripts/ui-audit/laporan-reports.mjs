@@ -17,7 +17,7 @@ async function header(value){await s.send('Network.setExtraHTTPHeaders',{headers
 async function login(){await s.send('Network.clearBrowserCookies');await s.goto(origin+'/login/tenant');await wait(`(()=>{const f=document.querySelector('form');return f&&Object.keys(f).some(k=>k.startsWith('__reactProps$')&&typeof f[k]?.onSubmit==='function')})()`);await s.evaluate(`(()=>{for(const[id,value]of[['email','tenant@geraicuan.com'],['password','admin123']]){const e=document.getElementById(id);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event('input',{bubbles:true}))}})()`);await pause(200);await s.evaluate(`document.querySelector('.auth-submit').click()`);await wait(`location.pathname==='/app'`)}
 
 // PR-55 columns, in the order `src/lib/shipment-report.ts` declares them.
-const REPORT_COLUMNS=['Nomor kiriman','Dibuat','Resi terbit','Area penerima','Kurir','Layanan','Lifecycle','Pembayaran','Biaya kirim Mengantar (IDR)','Biaya COD (IDR)','Estimasi dana dicairkan Mengantar (IDR)','Status cetak'];
+const REPORT_COLUMNS=['Nomor kiriman','Dibuat','Resi terbit','Area penerima','Kurir','Layanan','Status','Pembayaran','Biaya kirim Mengantar (IDR)','Biaya COD (IDR)','Estimasi dana dicairkan Mengantar (IDR)','Status cetak'];
 const HISTORY_COLUMNS=['Nomor kiriman','Waktu cetak','Peran pelaku','Hasil','Alasan','Urutan cetak','Cetak ulang'];
 
 // One GET form on the route, one range control, and the table this page owns.
@@ -104,7 +104,7 @@ try {
   assert(!filteredView.exportLink.includes('halaman'),'the export is the filtered set, not one page of it');
  }
  assert(/Total per kurir/.test(filteredView.text),'the report states its per-courier totals');
- assert(/Total per lifecycle/.test(filteredView.text),'the report states its per-lifecycle totals');
+ assert(/Total per status/.test(filteredView.text),'the report states its per-status totals');
  await shot('pengiriman-filtered-1440');
  results.push({step:'export-link',exportLink:filteredView.exportLink,rows:filteredView.rows});
 

@@ -23,7 +23,6 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegen
 import { Checkbox } from "@/components/ui/checkbox";
 import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/character-class-input";
 import { partyNameClass } from "@/lib/field-character-classes";
-import { CopyPhoneButton, WhatsAppLink } from "@/app/app/kontak/contact-ui";
 import {
   CONTACT_ROLE_EFFECTS,
   CONTACT_ROLE_NAME_CONFLICT_MESSAGE,
@@ -33,9 +32,10 @@ import {
   type ContactRole,
 } from "@/lib/contact-role-filter";
 
+// V-24: the header "Pakai di kiriman baru" is the page's one filled primary; each section save is outline.
 function MutationButton({ idle, pending }: { idle: string; pending: string }) {
   const status = useFormStatus();
-  return <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={status.pending} type="submit">{status.pending ? pending : idle}</Button>;
+  return <Button className="min-h-11 max-md:w-full md:min-h-10" disabled={status.pending} type="submit" variant="outline">{status.pending ? pending : idle}</Button>;
 }
 
 function MutationFeedback({ state, targetRef }: { state: ContactAddressState | ContactIdentityState; targetRef: React.RefObject<HTMLDivElement | null> }) {
@@ -90,7 +90,7 @@ export function ContactDetailsForm({ contact }: { contact: IdentityContact }) {
   const values = state.values;
   return (
     <Card>
-      <CardHeader><CardTitle>Kontak</CardTitle><CardDescription>Perubahan berlaku untuk draf baru. Data pada kiriman sebelumnya tetap tersimpan.</CardDescription></CardHeader>
+      <CardHeader className="border-b"><CardTitle>Kontak</CardTitle><CardDescription>Perubahan berlaku untuk draf baru. Data pada kiriman sebelumnya tetap tersimpan.</CardDescription></CardHeader>
       <CardContent>
         <form action={action} aria-busy={pending} className="grid gap-5" id="form-kontak" noValidate>
           <input name="contactId" type="hidden" value={contact.id} />
@@ -102,11 +102,8 @@ export function ContactDetailsForm({ contact }: { contact: IdentityContact }) {
             <Field className={fieldWidth.lg} data-invalid={Boolean(errors.contactName)}><FieldLabel htmlFor="contactName">Nama kontak</FieldLabel><CharacterClassInput aria-describedby={errors.contactName ? "contactName-error" : undefined} aria-invalid={Boolean(errors.contactName)} characterClass={partyNameClass(contact)} className="min-h-11" defaultValue={values?.contactName ?? contact.name} id="contactName" maxLength={120} name="contactName" required /><FieldError id="contactName-error">{errors.contactName}</FieldError></Field>
             <Field className={fieldWidth.md} data-invalid={Boolean(errors.contactPhone)}><FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel><CharacterClassInput aria-describedby={errors.contactPhone ? "contactPhone-error" : undefined} aria-invalid={Boolean(errors.contactPhone)} characterClass="PHONE" className="min-h-11" defaultValue={values?.contactPhone ?? contact.phone} id="contactPhone" name="contactPhone" required type="tel" /><FieldError id="contactPhone-error">{errors.contactPhone}</FieldError></Field>
           </FieldRow></FieldGroup></FieldSet>
-          <div className="flex flex-col gap-3 border-t pt-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <CopyPhoneButton label="Salin nomor" name={contact.name} phone={contact.phone} showLabel />
-              <WhatsAppLink name={contact.name} phone={contact.phone} showLabel />
-            </div>
+          {/* T-206: WhatsApp and copy moved to the page header actions (owner reference). */}
+          <div className="flex justify-end border-t pt-4">
             <MutationButton idle="Simpan kontak" pending="Menyimpan…" />
           </div>
         </form>
@@ -122,7 +119,7 @@ export function ContactRolesForm({ contact }: { contact: IdentityContact }) {
   const nameConflict = errors.roles === CONTACT_ROLE_NAME_CONFLICT_MESSAGE;
   return (
     <Card>
-      <CardHeader><CardTitle>Peran</CardTitle><CardDescription>Kontak dengan dua peran muncul di menu Pengirim dan Penerima.</CardDescription></CardHeader>
+      <CardHeader className="border-b"><CardTitle>Peran kontak</CardTitle><CardDescription>Kontak dengan dua peran muncul di menu Pengirim dan Penerima.</CardDescription></CardHeader>
       <CardContent>
         <form action={action} aria-busy={pending} className="grid gap-5" id="form-peran" noValidate>
           <input name="contactId" type="hidden" value={contact.id} />
@@ -140,7 +137,7 @@ export function ContactRolesForm({ contact }: { contact: IdentityContact }) {
                 const name = role === "pengirim" ? "roleSender" : "roleRecipient";
                 const held = role === "pengirim" ? contact.isSender : contact.isRecipient;
                 return (
-                  <FieldLabel className="min-h-11 w-full items-start rounded-lg border p-3 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-muted/60" htmlFor={name} key={role}>
+                  <FieldLabel className="min-h-11 w-full items-start rounded-lg border p-3 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-accent" htmlFor={name} key={role}>
                     <Checkbox aria-describedby={`${name}-effect`} className="mt-0.5" defaultChecked={values ? values[name] === "on" : held} id={name} key={`${role}-${values ? values[name] ?? "off" : "initial"}`} name={name} />
                     <span className="grid gap-0.5 font-normal">
                       <span className="font-medium">{contactRoleLabel(role)}</span>
@@ -201,7 +198,7 @@ export function ContactAddressForm({
       <MutationFeedback state={state} targetRef={feedbackRef} />
       {Object.keys(errors).length > 0 ? <Alert role="alert" variant="destructive"><AlertTitle>{address ? "Periksa perubahan alamat" : "Periksa alamat baru"}</AlertTitle><AlertDescription><ul className="list-disc pl-5">{Object.entries(errors).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul></AlertDescription></Alert> : null}
       <FieldSet><FieldLegend>{address ? `Edit ${address.label}` : "Alamat baru"}</FieldLegend><FieldGroup>
-        <Field className={fieldWidth.lg} data-invalid={Boolean(errors.addressLabel)}><FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel><CharacterClassInput aria-describedby={errors.addressLabel ? "addressLabel-hint addressLabel-error" : "addressLabel-hint"} aria-invalid={Boolean(errors.addressLabel)} characterClass="BUSINESS_NAME" className="min-h-11" defaultValue={values.addressLabel ?? address?.label} id="addressLabel" maxLength={60} name="addressLabel" required /><FieldDescription id="addressLabel-hint">Contoh: Gudang Bandung, Rumah, Toko Pusat.</FieldDescription><FieldError id="addressLabel-error">{errors.addressLabel}</FieldError></Field>
+        <Field className={fieldWidth.lg} data-invalid={Boolean(errors.addressLabel)}><FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel><CharacterClassInput aria-describedby={errors.addressLabel ? "addressLabel-hint addressLabel-error" : "addressLabel-hint"} aria-invalid={Boolean(errors.addressLabel)} characterClass="BUSINESS_NAME" className="min-h-11" defaultValue={values.addressLabel ?? address?.label} id="addressLabel" maxLength={60} name="addressLabel" required /><FieldDescription id="addressLabel-hint">Contoh: Gudang Bandung, Rumah, Gerai Pusat.</FieldDescription><FieldError id="addressLabel-error">{errors.addressLabel}</FieldError></Field>
         <Field className={fieldWidth.full} data-invalid={Boolean(errors.addressText)}><FieldLabel htmlFor="addressText">Alamat lengkap</FieldLabel><CharacterClassTextarea aria-describedby={errors.addressText ? "addressText-error" : undefined} aria-invalid={Boolean(errors.addressText)} characterClass="ADDRESS" defaultValue={values.addressText ?? address?.address} id="addressText" maxLength={500} name="addressText" required rows={3} /><FieldError id="addressText-error">{errors.addressText}</FieldError></Field>
         <DestinationAreaSelector
           defaultArea={address?.destinationAreaId && address.destinationAreaLabel ? { areaId: address.destinationAreaId, areaLabel: address.destinationAreaLabel } : null}

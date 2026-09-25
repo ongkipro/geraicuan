@@ -30,7 +30,6 @@ type PrintHistoryFiltersProps = {
   values: PrintHistoryFilterValues;
 };
 
-const HINT_ID = "print-history-filter-hint";
 const selectClassName =
   "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -42,8 +41,8 @@ export function PrintHistoryFilters({
   todayLocalDate,
   values,
 }: PrintHistoryFiltersProps) {
-  const controlClassName = "h-11 md:h-9";
-  const fieldClassName = "grid min-w-0 gap-1.5 text-xs font-medium text-foreground";
+  const controlClassName = "h-11 md:h-10";
+  const fieldClassName = "grid min-w-0 text-sm font-medium text-foreground";
 
   return (
     <div className="grid min-w-0 gap-2">
@@ -51,8 +50,9 @@ export function PrintHistoryFilters({
       <form action="/app/laporan/cetak-resi#print-history-heading" className="cms-filter-bar" id="print-history-filter-fields" method="get">
         <div>
           <div className="grid gap-3 md:grid-cols-[minmax(0,20rem)_minmax(0,14rem)]">
-            <div aria-describedby={HINT_ID} className={fieldClassName}>
-              <span id="print-history-range-label">Periode</span>
+            {/* T-206: the reference's one-line row — controls carry sr-only names, no stacked labels. */}
+            <div aria-labelledby="print-history-range-label" className={fieldClassName} role="group">
+              <span className="sr-only" id="print-history-range-label">Periode</span>
               <DateRangeFilter
                 endDate={values.endDate}
                 idPrefix="print-history"
@@ -64,7 +64,7 @@ export function PrintHistoryFilters({
               />
             </div>
             <label className={fieldClassName} htmlFor="print-history-outlet">
-              Outlet
+              <span className="sr-only">Outlet</span>
               <select className={cn(selectClassName, controlClassName)} defaultValue={values.outletId ?? ""} id="print-history-outlet" name="outlet">
                 <option value="">Semua outlet</option>
                 {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
@@ -72,14 +72,15 @@ export function PrintHistoryFilters({
             </label>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button className="min-h-11 md:min-h-9" type="submit">Terapkan</Button>
-          {activeCount > 0 ? <Button asChild className="min-h-11 md:min-h-9" variant="ghost"><Link href="/app/laporan/cetak-resi#print-history-heading">Reset</Link></Button> : null}
+        <div className="flex items-center gap-3">
+          <Button className="max-md:min-h-11" type="submit" variant="outline">Terapkan</Button>
+          {activeCount > 0 ? (
+            <Button asChild className="h-10 px-1 text-xs font-normal text-muted-foreground underline hover:text-foreground max-md:min-h-11" variant="link">
+              <Link href="/app/laporan/cetak-resi#print-history-heading" prefetch={false}>Hapus filter</Link>
+            </Button>
+          ) : null}
         </div>
       </form>
-      <p className="max-w-2xl text-xs leading-5 text-muted-foreground" id={HINT_ID}>
-        Periode memakai waktu permintaan cetak tercatat. Outlet diambil dari kiriman yang dicetak.
-      </p>
     </div>
   );
 }

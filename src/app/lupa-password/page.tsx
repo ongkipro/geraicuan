@@ -10,7 +10,7 @@ export const metadata: Metadata = { robots: { index: false }, title: "Lupa kata 
 export default function ForgotPasswordPage() {
   return (
     <AuthShell
-      description="Masukkan email akun toko Anda. Kami kirim tautan untuk membuat kata sandi baru."
+      description="Masukkan email akun gerai Anda. Kami kirim tautan untuk membuat kata sandi baru."
       footer={<Link className="auth-link" href="/login/tenant">Kembali ke halaman masuk</Link>}
       surface="tenant"
       title="Lupa kata sandi"

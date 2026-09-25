@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+
+import { RangeFilterForm } from "@/components/cms/range-filter-form";
+import { parseAnalyticsRange } from "@/lib/analytics-range";
 
 const repositoryRoot = process.cwd();
 
@@ -27,22 +32,7 @@ describe("responsive GET filter form composition", () => {
       names: ["rentang", "outlet", "dari", "sampai"],
       route: "/app",
     },
-    {
-      advancedDisclosure: true,
-      files: ["src/app/app/analitik/analytics-filters.tsx", "src/app/app/analitik/analytics-filter-fields.tsx", RANGE_CONTROL],
-      ids: ["analytics-outlet", "analytics-kurir", "analytics-status", "analytics-basis"],
-      idPrefix: "analytics",
-      names: ["rentang", "dari", "sampai", "outlet", "kurir", "status", "basis"],
-      route: "/app/analitik",
-    },
-    {
-      advancedDisclosure: true,
-      files: ["src/app/app/keuangan/components/finance-filters.tsx", RANGE_CONTROL],
-      ids: ["finance-outlet", "finance-status"],
-      idPrefix: "finance",
-      names: ["rentang", "dari", "sampai", "outlet", "status"],
-      route: "/app/keuangan",
-    },
+    // T-204 removed /app/analitik and /app/keuangan with their filter forms.
     // T-165/T-166 (PR-55). Registered in the change that created them: the same
     // shared range control, the same one-GET-form rule, no second period
     // control and no timezone control.
@@ -64,12 +54,47 @@ describe("responsive GET filter form composition", () => {
     },
   ] as const;
 
-  it("defines the filter bar layout for narrow screens and switches it at the md breakpoint", () => {
+  // T-204 replaced the two-column grid (labels stacked above, actions in a
+  // second column pushed down by 1.5rem) with the reference's one wrapping row.
+  it("lays the filter bar out as one wrapping row of controls with the actions inline", () => {
     const css = source("src/app/globals.css");
-    expect(css).toMatch(/\.cms-filter-bar\s*\{[^}]*display:\s*grid/);
+    expect(css).toMatch(/\.cms-filter-bar\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*align-items:\s*flex-end/);
+    expect(css).not.toMatch(/\.cms-filter-bar\s*\{[^}]*display:\s*grid/);
+    // Field wrappers dissolve so each control is a row item; the advanced disclosure gets its own line.
+    expect(css).toMatch(/\.cms-filter-bar > :first-child,\s*\.cms-filter-bar > :first-child > div:first-of-type:not\(\[role="group"\]\) \{ display:contents; \}/);
+    expect(css).toMatch(/\.cms-filter-bar > :first-child > \.cms-filter-advanced \{[^}]*order:1;[^}]*flex:1 1 100%/);
     expect(css).toMatch(/\.cms-filter-advanced\s*>\s*summary\s*\{[^}]*min-height:\s*44px/);
     const desktopBlocks = [...css.matchAll(/@media \(min-width:\s*768px\)\s*\{([\s\S]*?)\n\}/g)].map((match) => match[1]);
-    expect(desktopBlocks.some((block) => /\.cms-filter-bar\s*>\s*:last-child[^{]*\{[^}]*grid-row:\s*1/.test(block))).toBe(true);
+    expect(desktopBlocks.some((block) => /\[role="group"\] \{ flex:0 1 auto; \}/.test(block))).toBe(true);
+    expect(css).not.toMatch(/padding-top:1\.5rem/);
+  });
+
+  it("renders RangeFilterForm as one row: an sr-only Periode name, outline Terapkan, and Hapus filter only off the default range", () => {
+    const now = new Date("2026-09-16T05:00:00.000Z");
+    const render = (query: Record<string, string>) => renderToStaticMarkup(createElement(RangeFilterForm, {
+      action: "/app/pengiriman",
+      idPrefix: "shipment-queue",
+      now,
+      preserved: { status: "ISSUED", kosong: "" },
+      range: parseAnalyticsRange(query, now),
+    }));
+
+    const standard = render({});
+    const form = /<form[^>]*>/.exec(standard)?.[0] ?? "";
+    expect(form).toContain('class="cms-filter-bar"');
+    expect(form).toContain('action="/app/pengiriman"');
+    expect(form).toContain('method="get"');
+    expect(standard).toMatch(/<div aria-labelledby="shipment-queue-range-label" role="group"><span class="sr-only" id="shipment-queue-range-label">Periode<\/span>/);
+    expect(standard).toMatch(/<input(?=[^>]*type="hidden")(?=[^>]*name="status")[^>]*value="ISSUED"\/>/);
+    expect(standard).not.toContain('name="kosong"');
+    expect(standard).toMatch(/<button(?=[^>]*data-variant="outline")[^>]*type="submit"[^>]*>Terapkan<\/button>/);
+    // No visible label sits above the controls any more.
+    expect(standard).not.toMatch(/<span id="shipment-queue-range-label">/);
+    expect(standard).not.toContain("Hapus filter");
+
+    const narrowed = render({ rentang: "7-hari" });
+    expect(narrowed).toMatch(/<a[^>]*href="\/app\/pengiriman\?status=ISSUED"[^>]*>Hapus filter<\/a>/);
+    expect(render({ rentang: "kustom", dari: "2026-09-01", sampai: "2026-09-10" })).toContain("Hapus filter");
   });
 
   it.each(surfaces)("keeps one SSR-native form and one control set on $route", ({ advancedDisclosure, files, idPrefix, ids, names, route }) => {

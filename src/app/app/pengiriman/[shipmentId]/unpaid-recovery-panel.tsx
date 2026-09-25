@@ -53,7 +53,7 @@ export function ShipmentUnpaidRecoveryPanel({
           <Alert>
             <ShieldCheck aria-hidden="true" />
             <AlertTitle>Pemulihan dikunci</AlertTitle>
-            <AlertDescription>Pemulihan hanya aktif dengan fixture non-produksi yang disetujui. Tidak ada transport penyedia eksternal dari kondisi ini.</AlertDescription>
+            <AlertDescription>Pemulihan hanya aktif dengan data uji non-produksi yang disetujui. Tidak ada panggilan ke penyedia dari kondisi ini.</AlertDescription>
           </Alert>
         ) : null}
 
@@ -75,7 +75,7 @@ export function ShipmentUnpaidRecoveryPanel({
           </FieldSet>
           <div className="flex border-t pt-4">
             <Button
-              className="min-h-11 max-md:w-full md:min-h-8"
+              className="min-h-11 max-md:w-full md:min-h-10"
               disabled={!fixtureEnabled || pending}
               type="submit"
             >
@@ -104,7 +104,7 @@ export function ShipmentUnpaidRecoveryPanel({
               {state.recovered.shipments.map((shipment) => (
                 <li className="flex flex-wrap items-center gap-2" key={shipment.shipmentId}>
                   <strong>AWB {shipment.awb}</strong>{" "}
-                  <Button asChild className="min-h-11 max-md:w-full md:min-h-8" size="sm" variant="outline"><Link href={shipment.labelHref}>Buka label 10 × 15 atau 10 × 10 cm</Link></Button>
+                  <Button asChild className="min-h-11 max-md:w-full md:min-h-10" size="sm" variant="outline"><Link href={shipment.labelHref}>Buka label 10 × 15 atau 10 × 10 cm</Link></Button>
                 </li>
               ))}
             </ul></AlertDescription>

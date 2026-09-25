@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { RegistrationReviewControls } from "@/app/platform/pendaftaran/registration-review-controls";
 import { resolvePlatformAccess } from "@/app/platform/platform-access";
 import { EmptyState } from "@/components/cms/empty-state";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { db } from "@/db/client";
 import { withPlatformContext } from "@/db/platform-context";
 import { listRegistrationQueue } from "@/db/tenant-registration-repository";
 
-export const metadata: Metadata = { robots: { index: false }, title: "Pendaftaran toko · GeraiCUAN" };
+export const metadata: Metadata = { robots: { index: false }, title: "Pendaftaran · GeraiCUAN" };
 export const dynamic = "force-dynamic";
 
 const registeredAtFormatter = new Intl.DateTimeFormat("id-ID", {
@@ -42,28 +43,36 @@ export default async function RegistrationQueuePage() {
   return (
     <PageContainer>
       <PageHeader
-        description="Toko yang mendaftar sendiri menunggu keputusan Anda. Toko yang disetujui langsung dapat membuat kiriman dengan akun Mengantar miliknya sendiri."
+        description="Tinjau gerai yang mendaftar sendiri sebelum dapat mengirim."
         eyebrow="Platform"
-        title="Pendaftaran toko"
+        title="Pendaftaran"
       />
       {queue.length === 0 ? (
         <EmptyState
-          description="Pendaftaran baru muncul di sini setelah pemilik toko mengisi formulir di app.geraicuan.com/daftar."
+          description="Pendaftaran baru muncul di sini setelah pemilik gerai mengisi formulir di app.geraicuan.com/daftar."
           icon={Inbox}
           title="Tidak ada pendaftaran yang menunggu"
         />
       ) : (
-        <section aria-label={`${queue.length} pendaftaran menunggu persetujuan`} className="grid gap-4">
-          <p className="text-sm text-muted-foreground">{queue.length} pendaftaran menunggu, terlama di atas.</p>
+        <section aria-labelledby="registration-queue-title" className="grid gap-4">
+          {/* T-206 reference: the queue heading carries its count; oldest first. */}
+          <div className="grid gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold" id="registration-queue-title">Menunggu persetujuan</h2>
+              <Badge variant="secondary"><span className="tabular-nums">{queue.length}</span> antrean</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">Terlama di atas.</p>
+          </div>
           {queue.map((entry) => (
             <Card aria-labelledby={`registration-${entry.tenantId}`} key={entry.tenantId} role="article">
               <CardHeader>
                 <CardTitle id={`registration-${entry.tenantId}`}>{entry.storeName}</CardTitle>
                 <CardDescription>Terdaftar {registeredAtFormatter.format(entry.registeredAt)} WIB</CardDescription>
                 <CardAction>
-                  <Badge variant={entry.ownerEmailVerified ? "secondary" : "outline"}>
-                    {entry.ownerEmailVerified ? "Email terverifikasi" : "Email belum terverifikasi"}
-                  </Badge>
+                  <ToneBadge
+                    label={entry.ownerEmailVerified ? "Email terverifikasi" : "Email belum terverifikasi"}
+                    tone={entry.ownerEmailVerified ? "ok" : "warn"}
+                  />
                 </CardAction>
               </CardHeader>
               <CardContent className="grid gap-5">
@@ -82,14 +91,16 @@ export default async function RegistrationQueuePage() {
                   </div>
                   <div className="min-w-0">
                     <dt className="text-muted-foreground">Akun Mengantar</dt>
-                    <dd className="font-medium">{entry.privateOnly ? "Wajib akun sendiri" : "Default platform diizinkan"}</dd>
+                    <dd className="font-medium">{entry.privateOnly ? "Wajib akun sendiri" : "Akun bawaan platform diizinkan"}</dd>
                   </div>
                 </dl>
-                <RegistrationReviewControls
-                  emailVerified={entry.ownerEmailVerified}
-                  storeName={entry.storeName}
-                  tenantId={entry.tenantId}
-                />
+                <div className="border-t pt-4">
+                  <RegistrationReviewControls
+                    emailVerified={entry.ownerEmailVerified}
+                    storeName={entry.storeName}
+                    tenantId={entry.tenantId}
+                  />
+                </div>
               </CardContent>
             </Card>
           ))}

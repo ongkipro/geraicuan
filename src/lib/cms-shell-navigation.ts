@@ -48,12 +48,6 @@ const navigationGroups: readonly {
         shortLabel: "BK",
       },
       {
-        href: "/app/impor",
-        key: "import",
-        label: "Impor CSV",
-        shortLabel: "IM",
-      },
-      {
         href: "/app/pengiriman",
         key: "shipments",
         label: "Histori kiriman",
@@ -112,13 +106,6 @@ const navigationGroups: readonly {
   {
     label: "Laporan",
     items: [
-      {
-        href: "/app/analitik",
-        key: "analytics",
-        label: "Analitik",
-        roles: ["TENANT_ADMIN"],
-        shortLabel: "AN",
-      },
       // T-165 and T-166 (PR-55): both reports are a Tenant Admin record, so
       // they carry the same role restriction Analitik already has.
       {
@@ -140,13 +127,6 @@ const navigationGroups: readonly {
   {
     label: "Pengelolaan",
     items: [
-      {
-        href: "/app/keuangan",
-        key: "finance",
-        label: "Keuangan",
-        roles: ["TENANT_ADMIN"],
-        shortLabel: "KE",
-      },
       {
         href: "/app/pengaturan",
         key: "settings",

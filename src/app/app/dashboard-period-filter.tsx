@@ -26,8 +26,14 @@ type DashboardPeriodFilterProps = {
 };
 
 const selectClassName =
-  "w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "w-full rounded-lg border border-input bg-background px-2.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+/**
+ * T-206 reference one-line filter row (spec 10 §3 "Filter row"): range trigger · outlet
+ * select · outline "Terapkan" · plain "Hapus filter" link. The controls keep "Periode" and
+ * "Outlet" as sr-only accessible names instead of visible labels above them, as
+ * `RangeFilterForm` does on the list pages.
+ */
 function FilterFields({
   comparisonLabel,
   outlets,
@@ -36,16 +42,13 @@ function FilterFields({
   todayLocalDate,
   values,
 }: Omit<DashboardPeriodFilterProps, "activeCount">) {
-  const controlClassName = "h-11 md:h-8";
-  const fieldClassName = "grid min-w-0 gap-1.5 text-xs font-medium text-foreground";
-
   return (
     <div>
       {/* T-163: one date-range control replaces the period select and the
           "Tanggal khusus" disclosure that used to sit beside it. */}
-      <div className="grid gap-3 md:grid-cols-[minmax(0,20rem)_minmax(0,14rem)]">
-        <div className={fieldClassName}>
-          <span id="dashboard-range-label">Periode</span>
+      <div>
+        <div aria-labelledby="dashboard-range-label" role="group">
+          <span className="sr-only" id="dashboard-range-label">Periode</span>
           <DateRangeFilter
             comparisonLabel={comparisonLabel}
             endDate={values.endDate}
@@ -57,9 +60,9 @@ function FilterFields({
             todayLocalDate={todayLocalDate}
           />
         </div>
-        <label className={fieldClassName} htmlFor="dashboard-outlet">
-          Outlet
-          <select className={cn(selectClassName, controlClassName)} defaultValue={values.outletId ?? ""} id="dashboard-outlet" name="outlet">
+        <label className="min-w-0 md:w-56" htmlFor="dashboard-outlet">
+          <span className="sr-only">Outlet</span>
+          <select className={cn(selectClassName, "h-11 text-base md:h-10 md:text-sm")} defaultValue={values.outletId ?? ""} id="dashboard-outlet" name="outlet">
             <option value="">Semua outlet</option>
             {outlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}
           </select>
@@ -76,9 +79,14 @@ export function DashboardPeriodFilter({
   return (
     <form action="/app#dashboard-page-heading" className="cms-filter-bar" method="get" id="dashboard-filter-fields">
       <FilterFields {...fields} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button className="min-h-11 md:min-h-8" type="submit">Terapkan</Button>
-        {activeCount > 0 ? <Button asChild className="min-h-11 md:min-h-8" variant="ghost"><Link href="/app#dashboard-page-heading">Reset</Link></Button> : null}
+      <div className="flex items-center gap-3">
+        <Button className="max-md:min-h-11" type="submit" variant="outline">Terapkan</Button>
+        {activeCount > 0 ? (
+          // The same plain link RangeFilterForm and DataTableToolbar use for "Hapus filter".
+          <Button asChild className="h-10 px-1 text-xs font-normal text-muted-foreground underline hover:text-foreground max-md:min-h-11" variant="link">
+            <Link href="/app#dashboard-page-heading" prefetch={false}>Hapus filter</Link>
+          </Button>
+        ) : null}
       </div>
     </form>
   );

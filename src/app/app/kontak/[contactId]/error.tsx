@@ -26,7 +26,7 @@ export default function ContactDetailError({ reset }: { reset: () => void }) {
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Kontak" title="Detail kontak" />
+      <PageHeader eyebrow="Data" title="Detail kontak" />
       <Alert ref={alertRef} tabIndex={-1} variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Detail kontak belum dapat dimuat</AlertTitle>

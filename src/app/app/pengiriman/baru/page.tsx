@@ -1,36 +1,41 @@
 import { randomUUID } from "node:crypto";
 
-import { shipmentDetailHref } from "@/lib/shipment-number";
-import { and, eq, inArray } from "drizzle-orm";
+import { shipmentDetailHref, shipmentLabelHref } from "@/lib/shipment-number";
+import { and, eq } from "drizzle-orm";
 import type { Metadata } from "next";
-import { CheckCircle2, Settings2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { DraftEstimatePanel } from "@/app/app/draft-estimate-panel";
-import { CompactShipmentStepIndicator, ShipmentStepIndicator, type ShipmentStep } from "@/app/app/pengiriman/baru/shipment-step-indicator";
+import { DraftEstimatePanel, EstimateRefreshForm } from "@/app/app/draft-estimate-panel";
+import { ShipmentIssuancePanel } from "@/app/app/pengiriman/[shipmentId]/issuance-panel";
+import { ShipmentStepIndicator, type ShipmentStep } from "@/app/app/pengiriman/baru/shipment-step-indicator";
 import { ShipmentDraftForm } from "@/app/app/shipment-draft-form";
+import { packageSummaryLabel, ShipmentFlowSummary } from "@/app/app/shipment-draft-experience";
 import { FormLayout, PageAside } from "@/components/cms/cms-layouts";
 import { PageHeader } from "@/components/cms/page-header";
 import { PageContainer } from "@/components/cms/page-container";
+import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
+import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FocusRegion } from "@/app/app/focus-region";
 import { db } from "@/db/client";
-import { calculateCodAmountsOrNull } from "@/db/cod-totals-repository";
+import { shipmentCodFormulaRetired } from "@/db/cod-totals-repository";
 import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { listOutletPickupPoints } from "@/db/outlet-pickup-point-repository";
-import { outlets, shipmentDrafts, shipments } from "@/db/schema";
+import { outlets, shipmentDrafts, shipmentParties, shipments, tenants } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { formatIdr } from "@/lib/label-format";
 import { PAYMENT_METHOD_LABELS, paymentMethodOf } from "@/lib/payment-method";
+import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture";
+import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Buat kiriman · GeraiCUAN", robots: { index: false } };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type NewShipmentPageProps = { searchParams: Promise<{ draft?: string }> };
@@ -75,7 +80,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
   }];
   const dataPromise = withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
     if (auditScenario === "shipment-draft-pickup-choice") {
-      return { configuredOutlets: auditPickupOutlets, estimateSnapshot: null, savedDraft: undefined };
+      return { codFormulaRetired: false, configuredOutlets: auditPickupOutlets, estimateSnapshot: null, savedDraft: undefined, senderIdentity: null };
     }
     const readyOutlets = await listReadyShipmentOutlets(tx, context);
     // T-157: the pickup points each ready outlet may ship from, so the draft
@@ -102,7 +107,12 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
             publicReference: shipments.publicReference,
             isCod: shipmentDrafts.isCod,
             codShippingOnly: shipmentDrafts.codShippingOnly,
+            outletId: shipments.outletId,
             outletName: outlets.name,
+            packageQuantity: shipmentDrafts.packageQuantity,
+            packageWeightGrams: shipmentDrafts.packageWeightGrams,
+            pickupAddressId: shipmentDrafts.pickupAddressId,
+            senderName: shipmentParties.name,
             status: shipments.status,
           })
           .from(shipments)
@@ -120,21 +130,42 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
               eq(outlets.tenantId, shipments.tenantId),
             ),
           )
+          // T-205: the sender printed on the label, for the rail.
+          .leftJoin(
+            shipmentParties,
+            and(
+              eq(shipmentParties.shipmentId, shipments.id),
+              eq(shipmentParties.tenantId, shipments.tenantId),
+              eq(shipmentParties.role, "SENDER"),
+            ),
+          )
           .where(
             and(
               eq(shipments.id, requestedDraftId),
               eq(shipments.tenantId, context.tenantId),
-              inArray(shipments.status, ["DRAFT", "ESTIMATED"]),
             ),
           )
           .limit(1)
       : [];
 
     const saved = savedDraft[0];
-    const estimateSnapshot = saved
+    const estimateSnapshot = saved && (saved.status === "DRAFT" || saved.status === "ESTIMATED")
       ? await loadLatestEstimateSnapshot(tx, context, saved.id)
       : null;
-    return { configuredOutlets, estimateSnapshot, savedDraft: saved };
+    // T-199 on this page too: a never-submitted version 1 COD row cannot be confirmed.
+    const codFormulaRetired = saved?.status === "ESTIMATED" && saved.isCod
+      ? await shipmentCodFormulaRetired(tx, context, saved.id)
+      : false;
+    // T-205: the "Alamat gerai" sender source — the gerai's own name and WhatsApp.
+    // Only the new-draft form uses it.
+    const [tenant] = saved
+      ? []
+      : await tx
+          .select({ name: tenants.name, phone: tenants.contactWhatsapp })
+          .from(tenants)
+          .where(eq(tenants.id, context.tenantId))
+          .limit(1);
+    return { codFormulaRetired, configuredOutlets, estimateSnapshot, savedDraft: saved, senderIdentity: tenant ?? null };
   });
   const loadedData = auditScenario === "shipment-draft-stream"
     ? await dataPromise.then((value) => new Promise<typeof value>((resolve) => {
@@ -148,6 +179,11 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
     id: auditDraftId,
     publicReference: "GC-10001",
     isCod: true,
+    outletId: "79000000-0000-4000-8000-000000000005",
+    packageQuantity: 1,
+    packageWeightGrams: 1_000,
+    pickupAddressId: null,
+    senderName: "Gerai Audit",
     // T-186: the COD Ongkir scenario is the same synthetic draft, paid for
     // outside GeraiCUAN, so the courier collects shipping alone.
     codShippingOnly: auditScenario === "shipment-draft-saved-cod-ongkir",
@@ -209,162 +245,162 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
       ? { ...loadedData, estimateSnapshot: auditSnapshot, savedDraft: auditSavedDraft }
       : loadedData;
 
+  const saved = data.savedDraft;
+  const processed = saved !== undefined && saved.status !== "DRAFT" && saved.status !== "ESTIMATED";
+  const paymentMethod = saved ? paymentMethodOf(saved.isCod, saved.codShippingOnly) : null;
+  const issuanceReady = saved?.status === "ESTIMATED" && data.estimateSnapshot !== null
+    && auditScenario !== "shipment-draft-estimate-error";
+
+  // T-200/T-205: three steps on one page — fill, check rates, choose the service and issue.
   const steps: ShipmentStep[] = [
     {
-      detail: data.savedDraft ? `Selesai · ${data.savedDraft.outletName}` : undefined,
-      label: "Draf",
-      state: data.savedDraft ? "done" : "current",
+      detail: saved ? `Selesai · ${saved.outletName}` : undefined,
+      label: "Isi data",
+      state: saved ? "done" : "current",
     },
     {
-      label: "Estimasi",
-      state: data.estimateSnapshot ? "done" : data.savedDraft ? "current" : "pending",
+      label: "Cek tarif",
+      state: issuanceReady || processed ? "done" : saved ? "current" : "pending",
     },
-    { label: "Konfirmasi", state: "pending" },
-    { label: "AWB", state: "pending" },
+    {
+      label: "Terbitkan resi",
+      state: processed ? "done" : issuanceReady ? "current" : "pending",
+    },
   ];
 
-  const summaryRows: Array<[string, string]> = [
-    ["Outlet asal", data.savedDraft?.outletName ?? "—"],
-    ["Tujuan", data.savedDraft?.destinationAreaLabel ?? "—"],
-    ["Nilai barang", data.savedDraft ? formatIdr(data.savedDraft.declaredValueIdr) : "—"],
-    ["Pembayaran", data.savedDraft
-      ? PAYMENT_METHOD_LABELS[paymentMethodOf(data.savedDraft.isCod, data.savedDraft.codShippingOnly)]
-      : "—"],
-  ];
+  // T-205: the rail's route starts at the pickup point the draft snapshotted.
+  const savedPickup = saved
+    ? data.configuredOutlets
+        .find((outlet) => outlet.id === saved.outletId)
+        ?.pickupPoints.find((point) => saved.pickupAddressId ? point.pickupAddressId === saved.pickupAddressId : point.isDefault)
+    : undefined;
+  const savedSummary = saved ? {
+    declaredValueIdr: saved.declaredValueIdr,
+    destination: saved.destinationAreaLabel,
+    draftHref: shipmentDetailHref(saved.publicReference),
+    origin: savedPickup ? `${saved.outletName} · ${savedPickup.originAreaLabel}` : saved.outletName,
+    packageLabel: packageSummaryLabel(saved.packageWeightGrams, saved.packageQuantity),
+    sender: saved.senderName ?? "—",
+  } : null;
 
-  const showDraftForm = !data.savedDraft && data.configuredOutlets.length > 0;
+  const showDraftForm = !saved && data.configuredOutlets.length > 0;
 
   return (
     <PageContainer>
       <PageHeader
-        description="Isi penerima dan paket, lalu pilih layanan Mengantar."
+        description="Isi data kiriman, cek tarif Mengantar, lalu pilih layanan dan terbitkan resi di halaman ini."
         eyebrow="Pengiriman"
-        title="Buat draf kiriman"
+        title="Buat kiriman"
       />
 
-      <CompactShipmentStepIndicator steps={steps} />
+      <ShipmentStepIndicator steps={steps} />
 
-      <FormLayout
-        aside={(
-          <PageAside label="Ringkasan pembuatan kiriman">
-            <Card>
-              <CardHeader><CardTitle>Tahapan</CardTitle></CardHeader>
-              <CardContent><ShipmentStepIndicator steps={steps} /></CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>Ringkasan kiriman</CardTitle></CardHeader>
-              <CardContent>
-                <dl className="grid gap-2 text-sm">
-                  {summaryRows.map(([label, value]) => (
-                    <div className="flex items-baseline justify-between gap-3" key={label}>
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd className="wrap-anywhere text-right font-medium">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
-
-            {data.savedDraft ? (
-              <DraftEstimatePanel
-                auditState={auditScenario === "shipment-draft-estimate-error" ? "error" : null}
-                draftId={data.savedDraft.id}
-                isCod={data.savedDraft.isCod}
-                paymentMethod={paymentMethodOf(data.savedDraft.isCod, data.savedDraft.codShippingOnly)}
-                snapshot={
-                  data.estimateSnapshot
-                    ? {
-                        retrievedAt: data.estimateSnapshot.retrievedAt.toISOString(),
-                        services: data.estimateSnapshot.services.map((service) => {
-                          // COD only: a COD Ongkir total is the operator's charge, not a formula.
-                          const fullCod = data.savedDraft.isCod && !data.savedDraft.codShippingOnly;
-                          const codBreakdown = fullCod && service.codEligible
-                            ? calculateCodAmountsOrNull(
-                                data.savedDraft.declaredValueIdr,
-                                service.shippingAmountIdr,
-                              )
-                            : null;
-                          return {
-                            ...service,
-                            codBreakdown,
-                            codEligible: service.codEligible && (!fullCod || codBreakdown !== null),
-                          };
-                        }),
-                      }
-                    : null
-                }
-              />
-            ) : null}
-
-            {showDraftForm ? (
-              <Card>
-                <CardContent className="grid gap-2">
-                  <Button className="min-h-11 w-full" form="form-kiriman" type="submit">Simpan draf</Button>
-                  <p className="text-xs text-muted-foreground">Menyimpan draf belum membuat pesanan ke penyedia.</p>
-                </CardContent>
-              </Card>
-            ) : null}
-          </PageAside>
-        )}
-      >
-        {data.savedDraft ? (
-          <FocusRegion className="rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10 outline-none focus-visible:ring-2 focus-visible:ring-ring" role="status">
-            <div className="flex gap-3">
-              <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
-              <div className="grid min-w-0 gap-1">
-                <h2 className="font-medium">Draf kiriman tersimpan</h2>
-                <p>Nomor kiriman: <span className="font-mono">{data.savedDraft.publicReference}</span> · <strong className="font-medium">{data.savedDraft.status}</strong></p>
-                <p className="wrap-anywhere text-muted-foreground">{data.savedDraft.outletName} → {data.savedDraft.destinationAreaLabel}</p>
-                <p className="text-muted-foreground">Muat estimasi pada panel di ringkasan untuk membandingkan layanan. Belum ada pesanan yang dikirim ke penyedia.</p>
-                <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:flex-wrap">
-                  <Button asChild className="min-h-11 md:min-h-8" size="sm">
-                    <Link href={shipmentDetailHref(data.savedDraft.publicReference)}>Buka detail kiriman</Link>
+      {saved ? (
+        <FocusRegion className="rounded-xl bg-card p-4 text-sm text-card-foreground border outline-none focus-visible:ring-2 focus-visible:ring-ring" role="status">
+          <div className="flex gap-3">
+            <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="grid min-w-0 gap-1">
+              <h2 className="text-base font-semibold">{saved.status === "ISSUED" ? "Resi sudah terbit" : processed ? "Kiriman sudah diajukan ke Mengantar" : "Draf kiriman tersimpan"}</h2>
+              <p className="flex flex-wrap items-center gap-2">Nomor kiriman: <span className="font-mono font-medium tabular-nums whitespace-nowrap">{saved.publicReference}</span> <ShipmentStatusBadge label={SHIPMENT_STATUS_PRESENTATION[saved.status].label} tone={SHIPMENT_STATUS_PRESENTATION[saved.status].tone} /></p>
+              <p className="wrap-anywhere text-muted-foreground">{saved.outletName} → {saved.destinationAreaLabel}</p>
+              <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:flex-wrap">
+                <Button asChild className="min-h-11 md:min-h-10" size="sm" variant={processed ? "default" : "outline"}>
+                  <Link href={shipmentDetailHref(saved.publicReference)}>Buka detail kiriman</Link>
+                </Button>
+                {saved.status === "ISSUED" ? (
+                  <Button asChild className="min-h-11 md:min-h-10" size="sm" variant="outline">
+                    <Link href={shipmentLabelHref(saved.publicReference)}>Buka label <ExternalLink aria-hidden="true" /></Link>
                   </Button>
-                  <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="outline">
-                    <Link href="/app/pengiriman">Lihat antrean</Link>
-                  </Button>
-                  <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="ghost">
-                    <Link href="/app/pengiriman/baru">Buat draf berikutnya</Link>
-                  </Button>
-                </div>
+                ) : null}
+                <Button asChild className="min-h-11 md:min-h-10" size="sm" variant="ghost">
+                  <Link href="/app/pengiriman/baru">Buat kiriman berikutnya</Link>
+                </Button>
               </div>
             </div>
-          </FocusRegion>
-        ) : null}
+          </div>
+        </FocusRegion>
+      ) : null}
 
-        {!data.savedDraft && data.configuredOutlets.length === 0 ? (
-          <Alert>
-            <Settings2 aria-hidden="true" />
-            <AlertTitle>Outlet belum siap digunakan</AlertTitle>
-            <AlertDescription className="grid gap-3">
-              <p>
-              {principal.role === "TENANT_ADMIN"
-                ? "Lengkapi alamat pickup dan area asal outlet sebelum membuat draf."
-                : "Hubungi Tenant Admin untuk mengatur alamat pickup outlet."}
-              </p>
-            {principal.role === "TENANT_ADMIN" ? (
-              <Button asChild className="min-h-11 max-md:w-full md:min-h-8 md:w-fit" size="sm">
-                <Link href="/app/pengaturan/outlet">Atur outlet &amp; koneksi</Link>
-              </Button>
-            ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : showDraftForm ? (
-          <ShipmentDraftForm
-            autoFocusFirstField={!data.savedDraft}
-            outlets={data.configuredOutlets}
-            submissionId={randomUUID()}
+      {saved && savedSummary && !processed ? (
+        issuanceReady && data.estimateSnapshot && paymentMethod ? (
+          <ShipmentIssuancePanel
+            codFormulaRetired={data.codFormulaRetired}
+            fixtureEnabled={isSanctionedOrderFixtureEnabled()}
+            headerAction={<EstimateRefreshForm draftId={saved.id} />}
+            isCod={saved.isCod}
+            options={buildShipmentEstimateOptions({
+              codFormulaRetired: data.codFormulaRetired,
+              declaredValueIdr: saved.declaredValueIdr,
+              paymentMethod,
+              services: data.estimateSnapshot.services,
+            })}
+            paymentMethod={paymentMethod}
+            shipmentId={saved.id}
+            snapshotId={data.estimateSnapshot.snapshotId}
+            summary={savedSummary}
           />
-        ) : null}
-      </FormLayout>
+        ) : (
+          <FormLayout
+            aside={(
+              <PageAside label="Ringkasan pembuatan kiriman">
+                <Card>
+                  <CardHeader><CardTitle>Ringkasan kiriman</CardTitle></CardHeader>
+                  <CardContent className="grid gap-5">
+                    <ShipmentFlowSummary
+                      destination={savedSummary.destination}
+                      origin={savedSummary.origin}
+                      rows={[
+                        { label: "Pengirim di label", value: savedSummary.sender },
+                        { label: "Berat & jumlah", value: savedSummary.packageLabel },
+                        { label: "Pembayaran", value: paymentMethod ? PAYMENT_METHOD_LABELS[paymentMethod] : "—" },
+                      ]}
+                    />
+                    <p className="border-t pt-4 text-sm text-muted-foreground">Ongkir dan total muncul setelah tarif Mengantar dimuat.</p>
+                    <Button asChild className="min-h-11 w-full md:min-h-10" variant="outline">
+                      <Link href={savedSummary.draftHref}>Simpan draf, terbitkan nanti</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </PageAside>
+            )}
+          >
+            <DraftEstimatePanel
+              auditState={auditScenario === "shipment-draft-estimate-error" ? "error" : null}
+              autoLoad
+              draftId={saved.id}
+              isCod={saved.isCod}
+              paymentMethod={paymentMethod ?? undefined}
+              snapshot={null}
+            />
+          </FormLayout>
+        )
+      ) : null}
 
-      {showDraftForm ? (
-        <div className="sticky bottom-0 z-20 -mx-4 border-t border-[color:var(--hairline)] bg-card px-4 pt-3 shadow-[var(--shadow-overlay,0_-4px_16px_-8px_rgb(0_0_0/0.18))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6 @4xl/page:hidden">
-          <p className="text-xs text-muted-foreground">Langkah 1 dari 4 · Draf</p>
-          <p className="text-sm font-semibold">Isi data pengirim, penerima, dan paket</p>
-          <Button className="mt-2 min-h-11 w-full" form="form-kiriman" type="submit">Simpan draf</Button>
-        </div>
+      {!saved && data.configuredOutlets.length === 0 ? (
+        <Alert>
+          <Settings2 aria-hidden="true" />
+          <AlertTitle>Outlet belum siap digunakan</AlertTitle>
+          <AlertDescription className="grid gap-3">
+            <p>
+            {principal.role === "TENANT_ADMIN"
+              ? "Lengkapi alamat pickup dan area asal outlet sebelum membuat draf."
+              : "Hubungi Tenant Admin untuk mengatur alamat pickup outlet."}
+            </p>
+          {principal.role === "TENANT_ADMIN" ? (
+            <Button asChild className="min-h-11 max-md:w-full md:min-h-10 md:w-fit" size="sm">
+              <Link href="/app/pengaturan/outlet">Atur outlet &amp; koneksi</Link>
+            </Button>
+          ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : showDraftForm ? (
+        // T-205: the form lays out its own rail and bottom bar — its summary follows what is typed.
+        <ShipmentDraftForm
+          autoFocusFirstField={!saved}
+          outlets={data.configuredOutlets}
+          senderIdentity={data.senderIdentity}
+          submissionId={randomUUID()}
+        />
       ) : null}
     </PageContainer>
   );

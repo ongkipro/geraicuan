@@ -15,7 +15,7 @@ export default function PickupSettingsLoading() {
         header={
           <PageHeader
             description="Alamat penjemputan Mengantar yang boleh dipakai tiap outlet."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Titik pickup"
           />
         }
@@ -24,12 +24,12 @@ export default function PickupSettingsLoading() {
         navLabel="Menu pengaturan"
       >
         <div aria-label="Memuat titik pickup" className="grid min-w-0 gap-6" role="status">
-          <div className="grid gap-3 rounded-xl p-4 shadow-resting ring-1 ring-foreground/10">
+          <div className="grid gap-3 rounded-xl p-4 border">
             <Skeleton className="h-5 w-40 max-w-full" />
             <Skeleton className="h-4 w-72 max-w-full" />
             {[0, 1, 2].map((index) => <Skeleton className="h-16 w-full" key={index} />)}
           </div>
-          <div className="grid gap-3 rounded-xl p-4 shadow-resting ring-1 ring-foreground/10">
+          <div className="grid gap-3 rounded-xl p-4 border">
             <Skeleton className="h-5 w-48 max-w-full" />
             <Skeleton className="h-11 w-full" />
             <Skeleton className="h-16 w-full" />

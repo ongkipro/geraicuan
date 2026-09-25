@@ -18,23 +18,25 @@ export default function TenantLoading() {
       aria-label="Memuat ringkasan operasional tenant"
       role="status"
     >
-      <PageHeader eyebrow="Operasional tenant"
-        title="Ringkasan"
+      <PageHeader description="Ringkasan operasional pengiriman, status paket, dan kinerja ekspedisi." eyebrow="Utama"
+        title="Dasbor"
       />
       <ReadinessSkeleton />
-      <div className="grid gap-4">
-        <div className="space-y-3">
-          <Skeleton className="h-24 w-full" />
+      <div className="grid gap-6">
+        <div className="grid gap-2">
+          <Skeleton className="h-11 w-full max-w-xl md:h-10" />
           <Skeleton className="h-4 w-72 max-w-full" />
         </div>
         <PeriodSummarySkeleton />
       </div>
-      <OutcomeSkeleton />
       <div className={dashboardOverviewGridClassName}>
+        <OutcomeSkeleton />
         <PeriodTrendSkeleton />
-        <RecentSkeleton />
       </div>
-      <CourierRecapSkeleton />
+      <div className={dashboardOverviewGridClassName}>
+        <RecentSkeleton />
+        <CourierRecapSkeleton />
+      </div>
     </PageContainer>
   );
 }

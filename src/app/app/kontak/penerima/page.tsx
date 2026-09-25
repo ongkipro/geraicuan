@@ -8,7 +8,7 @@ import {
 } from "@/app/app/kontak/contact-role-directory";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Penerima · GeraiCUAN", robots: { index: false } };
 
 // T-188: the Penerima menu — the contact directory scoped to contacts.is_recipient.
 export default async function RecipientDirectoryPage({ searchParams }: { searchParams: ContactRoleDirectorySearchParams }) {

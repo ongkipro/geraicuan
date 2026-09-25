@@ -1,19 +1,25 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { contactRoleLabel, DEFAULT_CONTACT_ROLE, parseContactRole } from "@/lib/contact-role-filter";
 
 export default function NewContactLoading() {
+  const role = parseContactRole(useSearchParams().get("peran")) ?? DEFAULT_CONTACT_ROLE;
   return (
     <PageContainer aria-busy="true">
       <PageHeader
-        description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya."
+        description="Simpan sekali, lalu pilih saat membuat draf kiriman."
         eyebrow="Data"
-        title="Buat kontak"
+        title={`${contactRoleLabel(role)} baru`}
       />
       <div aria-label="Memuat formulir kontak" className="grid gap-6" role="status">
-        <Card className="shadow-none">
-          <CardHeader className="border-b">
+        <Card>
+          <CardHeader>
             <Skeleton className="h-5 w-32" />
             <Skeleton className="h-4 w-64 max-w-full" />
           </CardHeader>
@@ -23,8 +29,8 @@ export default function NewContactLoading() {
             <Skeleton className="h-16 w-full max-w-[42rem]" />
           </CardContent>
         </Card>
-        <Card className="shadow-none">
-          <CardHeader className="border-b">
+        <Card>
+          <CardHeader>
             <Skeleton className="h-5 w-36" />
             <Skeleton className="h-4 w-72 max-w-full" />
           </CardHeader>

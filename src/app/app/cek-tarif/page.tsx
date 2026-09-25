@@ -8,13 +8,13 @@ import { QuickRateForm } from "@/app/app/cek-tarif/quick-rate-form";
 import { FormLayout, PageAside } from "@/components/cms/cms-layouts";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 
-export const metadata: Metadata = { title: "Cek Tarif", robots: { index: false } };
+export const metadata: Metadata = { title: "Cek tarif · GeraiCUAN", robots: { index: false } };
 
 export default async function QuickRatePage() {
   let principal;
@@ -40,18 +40,19 @@ export default async function QuickRatePage() {
     } } : {};
   return (
     <PageContainer>
-      <PageHeader title="Cek Tarif" description="Bandingkan estimasi ongkir dari outlet ke area tujuan sebelum membuat kiriman." />
+      <PageHeader eyebrow="Cek" title="Cek tarif" description="Bandingkan ongkir semua kurir Mengantar sebelum membuat kiriman." />
       <FormLayout
         aside={(
           <PageAside label="Bantuan cek tarif">
-            <Card className="ios-glass-card rounded-2xl border-border/60 shadow-xs">
-              <CardHeader>
+            <Card>
+              <CardHeader className="border-b">
                 <CardTitle>Perlu diingat</CardTitle>
-                <CardDescription>Estimasi ini belum membuat kiriman apa pun.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-2 text-sm text-muted-foreground">
-                <p>Area asal mengikuti pickup Mengantar yang tersimpan pada outlet.</p>
-                <p>Biaya akhir dapat berbeda mengikuti detail kiriman dan layanan yang dipilih saat membuat draf.</p>
+              <CardContent>
+                <ul className="grid list-disc gap-2 pl-5 text-sm text-muted-foreground">
+                  <li>Area asal mengikuti pickup Mengantar pada outlet.</li>
+                  <li>Biaya akhir dapat berbeda sesuai detail kiriman dan layanan yang dipilih.</li>
+                </ul>
               </CardContent>
             </Card>
           </PageAside>

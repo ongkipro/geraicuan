@@ -100,7 +100,7 @@ export function SettingsLayout({
                     <Link
                       aria-current={current ? "true" : undefined}
                       className={cn(
-                        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground lg:min-h-9 lg:py-1.5",
+                        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground lg:min-h-10 lg:py-1.5",
                         current ? "bg-muted font-semibold text-foreground" : "text-muted-foreground",
                       )}
                       href={href}
@@ -169,7 +169,7 @@ export function SettingsCard({
 }: SettingsCardProps) {
   return (
     <section aria-labelledby={id} className={cn("min-w-0", className)}>
-      <Card className="ios-glass-card rounded-2xl border-border/60 shadow-xs">
+      <Card>
         <CardHeader>
           {/* `tabIndex={-1}` makes the heading a valid `#hash` focus target, which
             is how the outlet selector moves focus into the card it just changed. */}
@@ -179,7 +179,7 @@ export function SettingsCard({
         </CardHeader>
         <CardContent className="min-w-0">{children}</CardContent>
         {footer ? (
-          <CardFooter className="flex-wrap justify-end gap-2 max-md:flex-col max-md:items-stretch [&>*]:min-h-11 md:[&>*]:min-h-9">
+          <CardFooter className="flex-wrap justify-end gap-2 max-md:flex-col max-md:items-stretch max-md:[&>*]:min-h-11">
             {footer}
           </CardFooter>
         ) : null}
@@ -207,7 +207,7 @@ export function ContentSection({ children, className, contentClassName, descript
   return (
     <section aria-labelledby={id} className={cn("grid min-w-0 gap-4", className)}>
       <div>
-        <Heading className="text-lg font-medium" id={id}>{title}</Heading>
+        <Heading className="text-base font-semibold" id={id}>{title}</Heading>
         {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
       </div>
       <Separator />

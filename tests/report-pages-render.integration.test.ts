@@ -136,6 +136,11 @@ vi.mock("@/db/tenant-context", () => ({
 vi.mock("@/db/analytics-repository", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/db/analytics-repository")>()),
   loadAnalyticsFilterOptions: vi.fn(async () => options),
+  // T-204: Performa kurir moved here from Analitik.
+  loadCourierPerformance: vi.fn(async () => [
+    { courier: "SAP", issuedCount: 2, resolvedSubmissionCount: 2 },
+    { courier: "JNE", issuedCount: 9, resolvedSubmissionCount: 12 },
+  ]),
 }));
 vi.mock("@/db/shipment-report-repository", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/db/shipment-report-repository")>()),
@@ -175,17 +180,41 @@ describe("Laporan pengiriman presentation", () => {
     // documented columns, in the documented order and nothing besides.
     const rowHeaders = headers.slice(-SHIPMENT_REPORT_COLUMNS.length);
     expect(rowHeaders).toEqual(SHIPMENT_REPORT_COLUMNS.map((column) => column.label));
-    expect(headers.length).toBe(SHIPMENT_REPORT_COLUMNS.length + 7);
+    // 5 per-courier total + 2 per-status + 4 courier performance (T-204) headers precede it.
+    expect(headers.length).toBe(SHIPMENT_REPORT_COLUMNS.length + 11);
+  });
+
+  it("shows courier performance on the page's own period and filters (T-204)", async () => {
+    const { loadCourierPerformance } = await import("@/db/analytics-repository");
+    vi.mocked(loadCourierPerformance).mockClear();
+    const html = await renderReport({ rentang: "30-hari", kurir: "JNE" });
+    expect(html).toContain('id="shipment-report-courier-performance-title"');
+    expect(html).toContain('aria-label="Tabel performa kurir"');
+    const table = html.slice(html.indexOf('aria-label="Tabel performa kurir"'));
+    expect(table.indexOf(">JNE<")).toBeLessThan(table.indexOf(">SAP<"));
+    expect(table).toContain("Volume rendah (n = 2)");
+    expect(loadCourierPerformance).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tenantId: fixture.principal.tenantId }),
+      expect.objectContaining({ presetId: "30-hari" }),
+      expect.objectContaining({ courier: "JNE" }),
+    );
   });
 
   it("states the per-courier and per-lifecycle totals of the filtered set", async () => {
     const visible = text(await renderReport());
 
     expect(visible).toContain("Total per kurir");
-    expect(visible).toContain("Total per lifecycle");
+    expect(visible).toContain("Total per status");
     expect(visible).toContain("Belum ada kurir");
     expect(visible).toContain("3 kiriman");
-    expect(visible).toMatch(/bukan hanya halaman ini/);
+    // T-206: the "whole filtered set, not this page" explanation moved into the
+    // "?" popover beside the heading (reduced on-screen text). Popover content is
+    // not server-rendered, so pin the trigger here and the sentence in the source.
+    const html = await renderReport();
+    expect(html).toMatch(/<button[^>]*aria-label="Penjelasan ringkasan periode"/);
+    expect(readFileSync(join(process.cwd(), "src/app/app/laporan/pengiriman/page.tsx"), "utf8"))
+      .toMatch(/bukan hanya halaman ini/);
     // T-177: shipping, COD fee and Mengantar's disbursement — no merchandise figure.
     expect(visible).not.toMatch(/margin|laba|profit|keuntungan|omset|omzet|cogs|\bhpp\b|pokok cod|nilai barang|pendapatan|revenue/i);
     expect(visible).toContain("Biaya kirim Mengantar");
@@ -248,7 +277,7 @@ describe("Riwayat cetak resi presentation", () => {
     expect(visible).toContain("Ditolak sistem");
     expect(visible).toContain(SHIPMENT_STATUS_PRESENTATION.AWAITING_UPSTREAM_PAYMENT.label);
     expect(visible).toContain("Operator");
-    expect(visible).toContain("Admin tenant");
+    expect(visible).toContain("Tenant Admin");
     expect(visible).toContain("#3");
     expect(visible).toContain("2×");
     // Raw enum values never reach the reader.
@@ -261,8 +290,13 @@ describe("Riwayat cetak resi presentation", () => {
     const visible = text(await renderHistory());
 
     expect(visible).toContain("Cetak ulang");
-    expect(visible).toMatch(/cetak pertama bukan cetak ulang/i);
     expect(visible).toContain("1 kiriman pernah dicetak ulang");
+    // T-206: the counting rule moved into the "?" popover beside the list heading
+    // (reduced on-screen text); popover content is not server-rendered, so pin
+    // the trigger in the page and the sentence in the source.
+    expect(await renderHistory()).toMatch(/<button[^>]*aria-label="Penjelasan cetak ulang"/);
+    expect(readFileSync(join(process.cwd(), "src/app/app/laporan/cetak-resi/page.tsx"), "utf8"))
+      .toMatch(/cetak pertama bukan cetak ulang/i);
   });
 
   it("exposes no actor identity beyond the role the record stores", async () => {
@@ -278,7 +312,7 @@ describe("Riwayat cetak resi presentation", () => {
     const visible = text(await renderHistory());
 
     expect(visible).toContain("Belum ada permintaan cetak pada periode ini.");
-    expect(visible).toContain("Buka Cetak resi");
+    expect(visible).toContain("Buka cetak resi"); // V-8: sentence case
     expect(visible).not.toContain("Cetak ulang</th>");
   });
 

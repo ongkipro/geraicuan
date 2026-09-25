@@ -21,14 +21,10 @@ const expectedStatesByRoute = {
   "/app/cek-resi": ["healthy-empty", "loading", "populated", "route-error", "invalid-query", "not-found", "partial-error", "pending", "unauthorized"],
   "/app/cek-tarif": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/app": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
-  "/app/analitik": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "stale", "filtered-empty", "invalid-query", "unauthorized"],
-  "/app/analitik/export.csv": ["invalid-query", "primary-success", "route-error", "unauthorized"],
   "/app/pengiriman": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "stale", "unauthorized"],
   "/app/pengiriman/rts": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/pengiriman/[shipmentId]": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/app/pengiriman/baru": ["healthy-empty", "loading", "populated", "partial-error", "pending", "primary-success", "route-error", "unauthorized"],
-  "/app/impor": ["healthy-empty", "loading", "partial-error", "pending", "populated", "primary-success", "route-error", "unauthorized"],
-  "/app/impor/template.csv": ["primary-success", "route-error", "unauthorized"],
   "/app/kontak/pengirim": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/kontak/penerima": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/kontak/baru": ["healthy-empty", "loading", "populated", "partial-error", "pending", "primary-success", "route-error", "unauthorized"],
@@ -38,7 +34,6 @@ const expectedStatesByRoute = {
   "/app/laporan/pengiriman": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/laporan/pengiriman/export.csv": ["invalid-query", "primary-success", "route-error", "unauthorized"],
   "/app/laporan/cetak-resi": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
-  "/app/keuangan": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/app/pengaturan": ["loading", "populated", "route-error", "pending", "primary-success", "unauthorized"],
   "/app/pengaturan/pickup": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
   "/app/pengaturan/outlet": ["first-run", "healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
@@ -55,14 +50,10 @@ const expectedOwnerByRoute = {
   "/app/cek-resi": "T-161",
   "/app/cek-tarif": "T-143",
   "/app": "T-38",
-  "/app/analitik": "T-38",
-  "/app/analitik/export.csv": "T-38",
   "/app/pengiriman": "T-39",
   "/app/pengiriman/rts": "T-72",
   "/app/pengiriman/[shipmentId]": "T-39",
   "/app/pengiriman/baru": "T-40",
-  "/app/impor": "T-41",
-  "/app/impor/template.csv": "T-41",
   "/app/kontak/pengirim": "T-188",
   "/app/kontak/penerima": "T-188",
   "/app/kontak/baru": "T-42",
@@ -72,7 +63,6 @@ const expectedOwnerByRoute = {
   "/app/laporan/pengiriman": "T-165",
   "/app/laporan/pengiriman/export.csv": "T-165",
   "/app/laporan/cetak-resi": "T-166",
-  "/app/keuangan": "T-44",
   "/app/pengaturan": "T-156",
   "/app/pengaturan/pickup": "T-157",
   "/app/pengaturan/outlet": "T-45",
@@ -99,8 +89,6 @@ const expectedT66Actions = [
   "src/app/app/anggota/actions.ts:changeMemberRoleAction",
   "src/app/app/anggota/actions.ts:deactivateMemberAction",
   "src/app/app/anggota/actions.ts:inviteMemberAction",
-  "src/app/app/keuangan/actions.ts:reverseLedgerEntry",
-  "src/app/app/keuangan/actions.ts:runLedgerReconciliation",
   "src/app/app/pengaturan/actions.ts:addOutletPickupPoint",
   "src/app/app/pengaturan/actions.ts:loadMengantarPickupOptions",
   "src/app/app/pengaturan/actions.ts:removeOutletPickupPoint",
@@ -407,9 +395,9 @@ describe("CMS UI audit inventory", () => {
     }
 
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "page"))
-      .toHaveLength(28);
+      .toHaveLength(25);
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "endpoint"))
-      .toHaveLength(3);
+      .toHaveLength(1);
 
     const registeredPageSources = CMS_UI_AUDIT_ROUTE_CONTRACTS
       .filter(({ kind }) => kind === "page")
@@ -488,8 +476,7 @@ describe("CMS UI audit inventory", () => {
     expect(
       CMS_UI_AUDIT_ACTION_CONTRACTS
         .filter(({ source }) => (
-          source.startsWith("src/app/app/keuangan/")
-          || source.startsWith("src/app/app/pengaturan/")
+          source.startsWith("src/app/app/pengaturan/")
           || source.startsWith("src/app/app/anggota/")
         ))
         .map(({ exportName, source }) => `${source}:${exportName}`)
@@ -602,17 +589,6 @@ describe("CMS UI audit inventory", () => {
         files: ["src/app/app/dashboard-period-filter.tsx"],
         route: "/app",
       },
-      {
-        files: [
-          "src/app/app/analitik/page.tsx",
-          "src/app/app/analitik/analytics-filters.tsx",
-        ],
-        route: "/app/analitik",
-      },
-      {
-        files: ["src/app/app/keuangan/components/finance-filters.tsx"],
-        route: "/app/keuangan",
-      },
       // T-77 round 20 found this list was a fixed allowlist of the three
       // routes T-69 fixed, not "every route" as the test's own name reads:
       // /app/label has the identical GET filter form pattern and post-dates
@@ -687,6 +663,8 @@ describe("CMS UI audit inventory", () => {
       "src/app/app/pengiriman/[shipmentId]/page.tsx",
       "src/app/app/pengiriman/[shipmentId]/reconciliation-actions.ts",
       "src/app/app/pengiriman/[shipmentId]/unpaid-recovery-actions.ts",
+      // T-200: the one-page flow renders the same issuance panel, behind the same order-fixture gate.
+      "src/app/app/pengiriman/baru/page.tsx",
       "src/lib/shipment-reconciliation.ts",
     ]);
     const actualFixtureImporters = sourceFiles("src").filter((file) => (
@@ -827,11 +805,8 @@ describe("CMS UI audit inventory", () => {
     const allowedImporters = new Set([
       "src/app/app/cek-resi/page.tsx",
       "src/app/app/cek-tarif/page.tsx",
-      "src/app/app/analitik/page.tsx",
       "src/app/app/anggota/page.tsx",
       "src/app/app/page.tsx",
-      "src/app/app/impor/page.tsx",
-      "src/app/app/keuangan/page.tsx",
       "src/app/app/kontak/pengirim/page.tsx",
       "src/app/app/kontak/penerima/page.tsx",
       "src/app/app/kontak/baru/page.tsx",
@@ -904,10 +879,7 @@ describe("CMS UI audit inventory", () => {
 
     for (const [file, route] of [
       ["src/app/app/page.tsx", "/app"],
-      ["src/app/app/analitik/page.tsx", "/app/analitik"],
       ["src/app/app/anggota/page.tsx", "/app/anggota"],
-      ["src/app/app/impor/page.tsx", "/app/impor"],
-      ["src/app/app/keuangan/page.tsx", "/app/keuangan"],
       ["src/app/app/kontak/pengirim/page.tsx", "/app/kontak/pengirim"],
       ["src/app/app/kontak/penerima/page.tsx", "/app/kontak/penerima"],
       ["src/app/app/pengaturan/page.tsx", "/app/pengaturan"],

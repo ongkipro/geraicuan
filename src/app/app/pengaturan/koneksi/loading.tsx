@@ -15,8 +15,8 @@ export default function MengantarConnectionSettingsLoading() {
         currentHref="/app/pengaturan/koneksi"
         header={
           <PageHeader
-            description="Sumber koneksi Mengantar tiap outlet: default GeraiCUAN atau akun sendiri."
-            eyebrow="Pengaturan"
+            description="Sumber koneksi Mengantar tiap outlet: koneksi bawaan GeraiCUAN atau akun sendiri."
+            eyebrow="Pengelolaan"
             title="Koneksi Mengantar"
           />
         }
@@ -27,19 +27,11 @@ export default function MengantarConnectionSettingsLoading() {
         <div className="grid min-w-0 gap-6">
           <section
             aria-label="Memuat koneksi Mengantar"
-            className="grid min-w-0 gap-6 xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10"
+            className="grid min-w-0 gap-6"
             role="status"
           >
             <div className="min-w-0">
-              <Skeleton className="h-14 w-full xl:hidden" />
-              <div className="hidden gap-1 xl:grid">
-                {Array.from({ length: 6 }, (_, index) => (
-                  <div className="grid min-h-11 gap-2 px-3 py-2" key={index}>
-                    <Skeleton className="h-4 w-32 max-w-full" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                ))}
-              </div>
+              <Skeleton className="h-14 w-full" />
             </div>
             <div className="grid min-w-0 gap-8">
               <div className="grid gap-2 border-b pb-5">

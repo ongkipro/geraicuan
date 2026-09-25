@@ -95,7 +95,7 @@ beforeEach(() => {
   prefixState.value = { prefix: "GC", lockedAt: null, tenantName: "Toko Kopi Pagi" };
 });
 
-describe("PR-46 Profil toko page", () => {
+describe("PR-46 Profil gerai page", () => {
   it("redirects an unauthenticated request before entering tenant context", async () => {
     mocks.authorizationDenied = true;
     const { default: TenantProfileSettingsPage } = await import("@/app/app/pengaturan/page");
@@ -128,7 +128,7 @@ describe("PR-46 Profil toko page", () => {
     expect(html).toContain("Hubungi Super Admin");
     // No input, textarea or submit binds the tenant name on this page.
     expect(html).not.toMatch(/<input[^>]*name="(?:name|tenantName)"/);
-    expect(html).not.toContain("Simpan nama toko");
+    expect(html).not.toContain("Simpan nama gerai");
     expect(html).not.toContain(SECRET_SENTINEL);
   });
 
@@ -167,7 +167,7 @@ describe("PR-46 Profil toko page", () => {
     expect(html).not.toContain("Simpan dan kunci awalan");
   });
 
-  it("renders the settings menu in PR-46 order and marks Profil toko current", async () => {
+  it("renders the settings menu in PR-46 order and marks Profil gerai current", async () => {
     const html = await renderPage();
     const menu = html.match(/<nav[^>]*aria-label="Menu pengaturan"[\s\S]*?<\/nav>/)?.[0] ?? "";
 
@@ -205,7 +205,7 @@ describe("PR-46 Profil toko page", () => {
   });
 });
 
-describe("Profil toko route boundaries", () => {
+describe("Profil gerai route boundaries", () => {
   it("keeps loading semantics local to the page", async () => {
     const { default: TenantProfileSettingsLoading } = await import(
       "@/app/app/pengaturan/loading"
@@ -214,8 +214,8 @@ describe("Profil toko route boundaries", () => {
 
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain('role="status"');
-    expect(html).toContain('aria-label="Memuat profil toko"');
-    expect(html).toContain("Profil toko");
+    expect(html).toContain('aria-label="Memuat profil gerai"');
+    expect(html).toContain("Profil gerai");
   });
 
   it("renders a sanitized focusable route error with retry and escape actions", async () => {
@@ -225,7 +225,7 @@ describe("Profil toko route boundaries", () => {
     }));
 
     expect(html).toContain('role="alert"');
-    expect(html).toMatch(/tabindex="-1">Profil toko belum dapat dimuat/);
+    expect(html).toMatch(/tabindex="-1">Profil gerai belum dapat dimuat/);
     expect(html).toContain("Coba lagi");
     expect(html).toContain('href="/app"');
     expect(html).not.toContain(SECRET_SENTINEL);

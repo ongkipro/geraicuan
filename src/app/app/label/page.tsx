@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CourierAwbStack, PaymentStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { CourierAwbStack, PaymentStack, RecipientStack, ShipmentRecordItem, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { shipmentLabelHref } from "@/lib/shipment-number";
 import { Check, CircleAlert, Printer, Search } from "lucide-react";
 import Link from "next/link";
@@ -12,9 +12,12 @@ import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { RangeFilterForm } from "@/components/cms/range-filter-form";
+import { desktopTableClassName, RecordList } from "@/components/cms/record-list";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -31,9 +34,13 @@ import { loadLabelIndexPage, type LabelPrintStateFilter } from "@/db/label-print
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Cetak resi · GeraiCUAN", robots: { index: false } };
+
+/** The table sits inside the list card, so its scroll region keeps only the focus ring (spec 10 §1.6). */
+const inCardTableRegionClassName = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 type SearchValue = string | string[] | undefined;
 type LabelIndexPageProps = {
@@ -42,9 +49,9 @@ type LabelIndexPageProps = {
 
 /** PR-52 print-state entries; the label of each is the vocabulary the table column already uses. */
 const PRINT_STATE_ENTRIES = [
-  { description: "Seluruh kiriman pada tampilan status ini.", label: "Semua resi", metricId: "LBL-ALL", value: "semua" },
-  { description: "Belum pernah tercatat dicetak sekali pun.", label: "Belum dicetak", metricId: "LBL-UNPRINTED", value: "belum" },
-  { description: "Sudah punya minimal satu permintaan cetak berhasil.", label: "Sudah dicetak", metricId: "LBL-PRINTED", value: "sudah" },
+  { description: "Dicetak & belum", label: "Semua resi", metricId: "LBL-ALL", value: "semua" },
+  { description: "Perlu dicetak", label: "Belum dicetak", metricId: "LBL-UNPRINTED", value: "belum" },
+  { description: "Minimal sekali", label: "Sudah dicetak", metricId: "LBL-PRINTED", value: "sudah" },
 ] as const satisfies readonly { description: string; label: string; metricId: string; value: LabelPrintStateFilter }[];
 
 function parsePrintState(value: string | undefined): LabelPrintStateFilter {
@@ -134,7 +141,7 @@ export default async function LabelIndexPage({
 
   return (
     <PageContainer>
-      <PageHeader description="Label tersedia setelah nomor resi resmi terbit dari Mengantar." eyebrow="Pengiriman" focusTargetId="label-index-heading" title="Label & riwayat cetak" />
+      <PageHeader description="Label tersedia setelah nomor resi resmi terbit dari Mengantar." eyebrow="Pengiriman" focusTargetId="label-index-heading" title="Cetak resi" />
 
       {/* One GET form (search) owned by this page; the status facet is a
           DataTableFacetFilter whose options keep the current suffix. */}
@@ -145,63 +152,6 @@ export default async function LabelIndexPage({
         preserved={{ cetak: printState === "semua" ? undefined : printState, q: awbSuffix || undefined, status: status === "unpaid" ? "unpaid" : undefined }}
         range={range}
       />
-
-      <div className="grid gap-2">
-        <DataTableToolbar isFiltered={Boolean(awbSuffix) || status !== "issued" || printState !== "semua"} resetHref={labelIndexHref("issued", "", "semua", carry)}>
-          <form className="relative flex items-center" method="get" role="search">
-            {status === "unpaid" ? <input name="status" type="hidden" value="unpaid" /> : null}
-            {printState !== "semua" ? <input name="cetak" type="hidden" value={printState} /> : null}
-            {Object.entries(carry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
-            <label className="sr-only" htmlFor="q-label">Akhiran nomor resi</label>
-            <Search aria-hidden="true" className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
-            <Input
-              aria-describedby={queryError ? "q-label-help q-label-error" : "q-label-help"}
-              aria-invalid={Boolean(queryError)}
-              className="h-8 w-[150px] pl-8 max-md:min-h-11 lg:w-[250px]"
-              defaultValue={awbSuffix}
-              id="q-label"
-              inputMode="text"
-              maxLength={24}
-              minLength={3}
-              name="q"
-              pattern="[A-Za-z0-9]{3,24}"
-              placeholder="Akhiran resi, mis. 123ABC"
-              type="search"
-            />
-            {/* Enter submits; the button exists for implicit submission only, so it is kept out of the tab order rather than taking an invisible focus stop. */}
-            <button className="sr-only" tabIndex={-1} type="submit">Terapkan filter</button>
-          </form>
-          <DataTableFacetFilter
-            clearHref={status !== "issued" ? labelIndexHref("issued", awbSuffix, printState, carry) : undefined}
-            options={[
-              { href: labelIndexHref("issued", awbSuffix, printState, carry), label: "Resi sudah terbit", selected: status === "issued" },
-              { href: labelIndexHref("unpaid", awbSuffix, printState, carry), label: "Menunggu pelunasan", selected: status === "unpaid" },
-            ]}
-            title="Status kiriman"
-          />
-        </DataTableToolbar>
-        {/* The facet popover needs JavaScript. Without it the same two status
-            views stay reachable as plain links that keep the current suffix. */}
-        <noscript>
-          <nav aria-label="Status kiriman" className="flex flex-wrap items-center gap-2">
-            {([["issued", "Resi sudah terbit"], ["unpaid", "Menunggu pelunasan"]] as const).map(([value, label]) => (
-              <Button asChild className="h-8 max-md:min-h-11" key={value} size="sm" variant={status === value ? "secondary" : "outline"}>
-                <Link aria-current={status === value ? "true" : undefined} href={labelIndexHref(value, awbSuffix, printState, carry)} prefetch={false}>
-                  {status === value ? <Check aria-hidden="true" /> : null}
-                  {label}
-                </Link>
-              </Button>
-            ))}
-          </nav>
-        </noscript>
-        <p className="text-xs text-muted-foreground" id="q-label-help">
-          Gunakan 3–24 huruf atau angka terakhir, tanpa data penerima.
-        </p>
-      </div>
-
-    {queryError ? (
-      <AlertRegion className="rounded-lg" id="q-label-error"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Filter tidak dapat diproses</AlertTitle><AlertDescription><Button asChild className="h-auto min-h-11 justify-start whitespace-normal px-0 text-left" variant="link"><a href="#q-label">{queryError}</a></Button></AlertDescription></Alert></AlertRegion>
-    ) : null}
 
     <section aria-labelledby="hasil-label-title" className="grid min-w-0 gap-3 overflow-hidden" id="hasil-label">
       <h2 className="sr-only" id="hasil-label-title">Hasil label</h2>
@@ -221,14 +171,73 @@ export default async function LabelIndexPage({
         preserved={{ ...carry, q: awbSuffix || undefined, status: status === "unpaid" ? "unpaid" : undefined }}
         selected={printState}
       />
-      {/* The list is capped at 100 newest rows and has no pagination, so the
-          panel's count can legitimately exceed what is listed. Say so rather
-          than letting the two numbers disagree silently. */}
-      {selectedCount > rows.length ? (
-        <p className="text-xs tabular-nums text-muted-foreground">
-          Menampilkan {rows.length} dari {selectedCount} kiriman terbaru. Persempit dengan akhiran nomor resi untuk melihat sisanya.
-        </p>
+      {queryError ? (
+        <AlertRegion className="rounded-lg" id="q-label-error"><Alert role="presentation" variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>Filter tidak dapat diproses</AlertTitle><AlertDescription><Button asChild className="h-auto min-h-11 justify-start whitespace-normal px-0 text-left" variant="link"><a href="#q-label">{queryError}</a></Button></AlertDescription></Alert></AlertRegion>
       ) : null}
+      {/* T-206 reference: search, status facet and the records share one bordered card. */}
+      <Card className="min-w-0 gap-0 py-0">
+        <div className="grid gap-2 border-b p-4">
+        <DataTableToolbar isFiltered={Boolean(awbSuffix) || status !== "issued" || printState !== "semua"} resetHref={labelIndexHref("issued", "", "semua", carry)}>
+          <form className="relative flex items-center" method="get" role="search">
+            {status === "unpaid" ? <input name="status" type="hidden" value="unpaid" /> : null}
+            {printState !== "semua" ? <input name="cetak" type="hidden" value={printState} /> : null}
+            {Object.entries(carry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
+            <label className="sr-only" htmlFor="q-label">Akhiran nomor resi</label>
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
+            <Input
+              aria-describedby={queryError ? "q-label-help q-label-error" : "q-label-help"}
+              aria-invalid={Boolean(queryError)}
+              className="h-10 w-40 pl-8 max-md:min-h-11 lg:w-64"
+              defaultValue={awbSuffix}
+              id="q-label"
+              inputMode="text"
+              maxLength={24}
+              minLength={3}
+              name="q"
+              pattern="[A-Za-z0-9]{3,24}"
+              placeholder="Akhiran resi, mis. 123ABC"
+              type="search"
+            />
+            {/* Enter submits; the button exists for implicit submission only, so it is kept out of the tab order rather than taking an invisible focus stop. */}
+            <button className="sr-only" tabIndex={-1} type="submit">Terapkan</button>
+          </form>
+          <DataTableFacetFilter
+            clearHref={status !== "issued" ? labelIndexHref("issued", awbSuffix, printState, carry) : undefined}
+            options={[
+              { href: labelIndexHref("issued", awbSuffix, printState, carry), label: "Resi sudah terbit", selected: status === "issued" },
+              { href: labelIndexHref("unpaid", awbSuffix, printState, carry), label: "Menunggu pelunasan", selected: status === "unpaid" },
+            ]}
+            title="Status kiriman"
+          />
+        </DataTableToolbar>
+        {/* The facet popover needs JavaScript. Without it the same two status
+            views stay reachable as plain links that keep the current suffix. */}
+        <noscript>
+          <nav aria-label="Status kiriman" className="flex flex-wrap items-center gap-2">
+            {([["issued", "Resi sudah terbit"], ["unpaid", "Menunggu pelunasan"]] as const).map(([value, label]) => (
+              <Button asChild className="max-md:min-h-11" key={value} variant={status === value ? "secondary" : "outline"}>
+                <Link aria-current={status === value ? "true" : undefined} href={labelIndexHref(value, awbSuffix, printState, carry)} prefetch={false}>
+                  {status === value ? <Check aria-hidden="true" /> : null}
+                  {label}
+                </Link>
+              </Button>
+            ))}
+          </nav>
+        </noscript>
+        {/* T-206: the rule is spoken with the field; the placeholder shows it, and an invalid value gets the visible error below. */}
+        <p className="sr-only" id="q-label-help">
+          Gunakan 3–24 huruf atau angka terakhir, tanpa data penerima.
+        </p>
+        {/* The list is capped at 100 newest rows and has no pagination, so the
+            panel's count can legitimately exceed what is listed. Say so rather
+            than letting the two numbers disagree silently. */}
+        {selectedCount > rows.length ? (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Menampilkan {rows.length} dari {selectedCount} kiriman terbaru. Persempit dengan akhiran nomor resi untuk melihat sisanya.
+          </p>
+        ) : null}
+        </div>
+
       {rows.length === 0 ? (
         <EmptyState
           description={awbSuffix
@@ -242,13 +251,34 @@ export default async function LabelIndexPage({
             : "Belum ada label yang dapat dicetak."}
         />
       ) : (
-          // The standard PageContainer is 64rem and the scroll container adds a
-          // 1px border on each side, so a 64rem minimum overflowed its own
-          // region by 2px at desktop widths. Keep the minimum below the
-          // container and let the destination wrap instead of forcing width.
+        <>
+          {/* Inside the card the "Tampilkan N lainnya" toggle keeps the rows' 16px inset. */}
+          <div className="[&_summary]:px-4">
+            <RecordList className="rounded-none border-0" initial={10} label="Daftar label kiriman">
+              {rows.map((row) => (
+                <ShipmentRecordItem
+                  areaLabel={row.destinationAreaLabel}
+                  at={row.issuedAt}
+                  awb={row.awb}
+                  courier={row.courier}
+                  href={shipmentLabelHref(row.publicReference)}
+                  key={row.shipmentId}
+                  payment={{ ...row, declaredValueIdr: null }}
+                  recipientName={row.recipientName}
+                  reference={row.publicReference}
+                  service={row.providerService}
+                  status={SHIPMENT_STATUS_PRESENTATION[row.status]}
+                />
+              ))}
+            </RecordList>
+          </div>
+          {/* The standard PageContainer is 64rem and the scroll container adds a
+              1px border on each side, so a 64rem minimum overflowed its own
+              region by 2px at desktop widths. Keep the minimum below the
+              container and let the destination wrap instead of forcing width. */}
           <Table
             className="min-w-[56rem]"
-            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName={`${inCardTableRegionClassName} ${desktopTableClassName}`}
             containerProps={{ "aria-label": "Daftar label kiriman; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
           >
             <TableCaption className="sr-only">
@@ -258,11 +288,11 @@ export default async function LabelIndexPage({
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-20 bg-background">Ekspedisi / Resi</TableHead>
+                <TableHead className="sticky left-0 z-20">Ekspedisi / Resi</TableHead>
                 <TableHead>Terbit</TableHead>
                 <TableHead>Penerima</TableHead>
                 <TableHead>Pembayaran</TableHead>
-                <TableHead className="text-right">Permintaan cetak</TableHead>
+                <TableHead>Permintaan cetak</TableHead>
                 <TableHead>Tindakan</TableHead>
               </TableRow>
             </TableHeader>
@@ -281,11 +311,17 @@ export default async function LabelIndexPage({
                   <TableCell>
                     <PaymentStack facts={{ ...row, declaredValueIdr: null }} />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{row.printCount}×</TableCell>
                   <TableCell>
-                    <Button asChild className="min-h-11" variant="ghost">
+                    {/* T-206 reference highlight: an unprinted label is the one that needs a hand. */}
+                    {row.printCount === 0
+                      ? <ToneBadge label="Belum dicetak" tone="warn" />
+                      : <ToneBadge label={`${row.printCount}× dicetak`} tone="ok" />}
+                  </TableCell>
+                  <TableCell>
+                    <Button asChild className="max-md:min-h-11" size="sm" variant="outline">
                       <Link href={shipmentLabelHref(row.publicReference)}>
-                      {row.status === "ISSUED" ? "Buka label" : "Lihat status"}
+                      {row.status === "ISSUED" ? <Printer aria-hidden="true" /> : null}
+                      {row.status !== "ISSUED" ? "Lihat status" : row.printCount === 0 ? "Buka label" : "Cetak ulang"}
                       </Link>
                     </Button>
                   </TableCell>
@@ -293,7 +329,9 @@ export default async function LabelIndexPage({
               ))}
             </TableBody>
           </Table>
+        </>
       )}
+      </Card>
     </section>
     </PageContainer>
   );

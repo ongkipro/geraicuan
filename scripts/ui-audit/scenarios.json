@@ -1,26 +1,4 @@
 {
- "/app/impor": [
-  {
-   "scenario": "bulk-import-error",
-   "state": "route-error"
-  },
-  {
-   "scenario": "bulk-import-mixed",
-   "state": "partial-error"
-  },
-  {
-   "scenario": "bulk-import-no-valid",
-   "state": "partial-error"
-  },
-  {
-   "scenario": "bulk-import-stream",
-   "state": "loading"
-  },
-  {
-   "scenario": "bulk-import-unconfigured",
-   "state": "healthy-empty"
-  }
- ],
  "/app/kontak/pengirim": [
   {
    "scenario": "contacts-sender-error",
@@ -95,28 +73,6 @@
    "state": "loading"
   }
  ],
- "/app/analitik": [
-  {
-   "scenario": "analytics-first-run",
-   "state": "first-run"
-  },
-  {
-   "scenario": "analytics-page-error",
-   "state": "route-error"
-  },
-  {
-   "scenario": "analytics-stale",
-   "state": "stale"
-  },
-  {
-   "scenario": "analytics-stream",
-   "state": "loading"
-  },
-  {
-   "scenario": "analytics-trend-error",
-   "state": "partial-error"
-  }
- ],
  "/app": [
   {
    "scenario": "dashboard-action-error",
@@ -153,28 +109,6 @@
   {
    "scenario": "dashboard-stale",
    "state": "stale"
-  }
- ],
- "/app/keuangan": [
-  {
-   "scenario": "finance-empty",
-   "state": "healthy-empty"
-  },
-  {
-   "scenario": "finance-error",
-   "state": "route-error"
-  },
-  {
-   "scenario": "finance-partial-error",
-   "state": "partial-error"
-  },
-  {
-   "scenario": "finance-stale",
-   "state": "stale"
-  },
-  {
-   "scenario": "finance-stream",
-   "state": "loading"
   }
  ],
  "/app/anggota": [

@@ -23,7 +23,7 @@ try {
   const form=JSON.parse(await s.evaluate(`JSON.stringify((()=>{const i=document.getElementById('shipment-prefix'),section=document.getElementById('shipment-prefix-title').closest('section'),button=[...section.querySelectorAll('button[type=submit]')].find(b=>/kunci awalan/.test(b.textContent));return {value:i.value,maxLength:i.maxLength,preview:/[A-Z0-9]{2,5}-10013/.test(section.innerText),inputHeight:i.getBoundingClientRect().height,buttonHeight:button.getBoundingClientRect().height,locked:/Awalan terkunci/.test(section.innerText)}})())`));
   assert.equal(form.locked,false,'dev tenant prefix is still choosable');assert.equal(form.value,'SBN');assert.equal(form.maxLength,5);assert(form.preview);assert(form.buttonHeight>=44||width>=768&&form.buttonHeight>=36,JSON.stringify(form));
   const probe=JSON.parse(await s.evaluate(PROBE));
-  // T-156: Profil toko is short, so `scrollbar-gutter: stable` can leave the
+  // T-156: Profil gerai is short, so `scrollbar-gutter: stable` can leave the
   // document narrower than the viewport. Only a positive value is overflow.
   assert(probe.overflow<=0,'overflow '+probe.overflow);assert.equal(probe.weakFocusRing,0);assert.equal(probe.contrastFails,0,JSON.stringify(probe.contrast));
   await s.evaluate(`document.getElementById('shipment-prefix-title').scrollIntoView({block:'start',behavior:'instant'})`);await shot('prefix-unlocked-'+width);

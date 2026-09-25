@@ -7,11 +7,11 @@ import { TrackingLookupForm } from "@/app/app/cek-resi/tracking-lookup-form";
 import { FormLayout, PageAside } from "@/components/cms/cms-layouts";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { title: "Cek resi", robots: { index: false } };
+export const metadata: Metadata = { title: "Cek resi · GeraiCUAN", robots: { index: false } };
 
 const AUDIT_STATES: Record<string, TrackingLookupState> = {
   "resi-lookup-found": {
@@ -73,20 +73,23 @@ export default async function TrackingLookupPage() {
   return (
     <PageContainer>
       <PageHeader
-        description="Cari kiriman tenant ini dengan nomor kiriman GeraiCUAN atau nomor resi, lalu lihat status terakhirnya."
+        description="Lacak status terakhir kiriman dengan nomor kiriman atau nomor resi."
+        eyebrow="Cek"
         title="Cek resi"
       />
       <FormLayout
         aside={(
           <PageAside label="Bantuan cek resi">
-            <Card className="ios-glass-card rounded-2xl border-border/60 shadow-xs">
-              <CardHeader>
+            <Card>
+              <CardHeader className="border-b">
                 <CardTitle>Tips pencarian</CardTitle>
-                <CardDescription>Pencarian hanya mencakup kiriman milik tenant ini.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-2 text-sm text-muted-foreground">
-                <p>Gunakan nomor kiriman GeraiCUAN (contoh GC-10013) untuk hasil paling cepat.</p>
-                <p>Nomor resi kurir dari luar tenant tidak akan ditemukan.</p>
+              <CardContent>
+                <ul className="grid list-disc gap-2 pl-5 text-sm text-muted-foreground">
+                  <li>Nomor kiriman GeraiCUAN (contoh <span className="font-mono">GC-10013</span>) paling cepat.</li>
+                  <li>Nomor resi kurir juga bisa dipakai.</li>
+                  <li>Resi dari luar tenant ini tidak akan ditemukan.</li>
+                </ul>
               </CardContent>
             </Card>
           </PageAside>

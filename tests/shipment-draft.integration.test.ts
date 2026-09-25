@@ -16,12 +16,10 @@ import { checkDuplicateShipment } from "@/db/shipment-draft-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import * as schema from "@/db/schema";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
-import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
-import { deriveBulkRowSubmissionId, previewBulkShipmentCsv } from "@/lib/bulk-shipment-intake";
 import {
-  BulkImportRateLimitedError,
-  enforceBulkImportRateLimit,
-} from "@/lib/bulk-import-rate-limit";
+  EstimateRateLimitedError,
+  enforceEstimateRateLimit,
+} from "@/lib/estimate-rate-limit";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
@@ -70,10 +68,6 @@ function submission(values: Record<string, string> = {}) {
 
   for (const [key, value] of Object.entries(defaults)) formData.set(key, value);
   return formData;
-}
-
-function bulkCsv(rows: string[][]) {
-  return [BULK_TEMPLATE_HEADERS.join(","), ...rows.map((row) => row.join(","))].join("\n");
 }
 
 beforeAll(async () => {
@@ -369,49 +363,6 @@ describe("tenant shipment drafts", () => {
     }
   });
 
-  it("creates only CSV rows that passed validation in the tenant transaction", async () => {
-    const validRow = [
-      "Pengirim", "081212345678", "Jl. Asia Afrika 8", "Penerima", "081234567890",
-      "Jl. Medan Merdeka Barat 1", "Gambir Jakarta Pusat", "Pakaian", "500",
-      "1", "", "", "", "150000", "NON_COD",
-    ];
-    const invalidRow = [...validRow];
-    invalidRow[4] = "not-a-phone";
-    const preview = await previewBulkShipmentCsv(
-      new File([bulkCsv([validRow, invalidRow])], "kiriman.csv", { type: "text/csv" }),
-      outletA,
-      async () => ({
-        option: { areaId: "3171010", areaLabel: "Gambir, Jakarta Pusat" },
-        status: "resolved",
-      }),
-    );
-
-    expect("code" in preview).toBe(false);
-    if ("code" in preview) return;
-    expect(preview.validRows).toHaveLength(1);
-    const bulkSubmissionId = "00000000-0000-4000-8000-000000000142";
-    const before = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
-    for (let replay = 0; replay < 2; replay += 1) {
-      await withTenantContext(appDb, "draft-user-a", tenantA, async (tx, context) => {
-        for (const row of preview.validRows) {
-          await createShipmentDraft(
-            tx,
-            context,
-            row.input,
-            deriveBulkRowSubmissionId(bulkSubmissionId, row.row),
-          );
-        }
-      });
-    }
-    const after = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
-
-    expect(after).toHaveLength(before.length + 1);
-    expect(after).toContainEqual({ id: deriveBulkRowSubmissionId(bulkSubmissionId, 2) });
-    const otherTenantRows = await withTenantContext(appDb, "draft-user-b", tenantB, (tx) =>
-      tx.select({ id: schema.shipments.id }).from(schema.shipments),
-    );
-    expect(otherTenantRows).toEqual([]);
-  });
   it("keeps shipment quota when Better Auth prunes expired auth limiter rows", async () => {
     await adminPool.query("DELETE FROM shipment_rate_limits");
     await adminPool.query("DELETE FROM rate_limits");
@@ -421,7 +372,7 @@ describe("tenant shipment drafts", () => {
     try {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-          enforceBulkImportRateLimit(tx, context),
+          enforceEstimateRateLimit(tx, context),
         );
       }
     } finally {
@@ -442,15 +393,15 @@ describe("tenant shipment drafts", () => {
     const persisted = await adminPool.query<{ count: number }>(
       `SELECT count
        FROM shipment_rate_limits
-       WHERE tenant_id = $1 AND actor_id = $2 AND operation = 'bulk-import'`,
+       WHERE tenant_id = $1 AND actor_id = $2 AND operation = 'estimate'`,
       [tenantA, "draft-user-a"],
     );
     expect(persisted.rows).toEqual([{ count: 5 }]);
     await expect(
       withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
-        enforceBulkImportRateLimit(tx, context),
+        enforceEstimateRateLimit(tx, context),
       ),
-    ).rejects.toBeInstanceOf(BulkImportRateLimitedError);
+    ).rejects.toBeInstanceOf(EstimateRateLimitedError);
 
     const otherTenantLimits = await withTenantContext(
       appDb,
@@ -671,63 +622,6 @@ describe("tenant shipment drafts", () => {
 
     secondFormData.set("confirmDuplicate", "true");
     await expect(saveShipmentDraft({}, secondFormData)).resolves.toBeUndefined();
-  });
-
-  it("commits invalid-outlet bulk attempts before returning the generic error", async () => {
-    await adminPool.query("DELETE FROM shipment_rate_limits");
-    vi.resetModules();
-    vi.doMock("@/db/client", () => ({ db: appDb }));
-    vi.doMock("@/lib/cms-auth", () => ({
-      CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
-      requireCmsScope: vi.fn(async () => ({
-        scope: "tenant",
-        userId: "draft-user-a",
-        tenantId: tenantA,
-        role: "OPERATOR",
-      })),
-    }));
-    vi.doMock("next/navigation", () => ({
-      redirect: vi.fn(() => {
-        throw new Error("Unexpected redirect.");
-      }),
-    }));
-    const { uploadBulkIntake } = await import("@/app/app/impor/actions");
-
-    async function invalidOutletAttempt() {
-      const formData = new FormData();
-      formData.set("csv", new File(["unused"], "kiriman.csv", { type: "text/csv" }));
-      formData.set("outletId", outletB);
-      return uploadBulkIntake({}, formData);
-    }
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await expect(invalidOutletAttempt()).resolves.toEqual({
-        fileError: { code: "file", field: "outletId", message: "Pilih outlet asal." },
-      });
-    }
-
-    const persisted = await adminPool.query<{ count: number }>(
-      `SELECT count
-       FROM shipment_rate_limits
-       WHERE tenant_id = $1 AND actor_id = $2 AND operation = 'bulk-import'`,
-      [tenantA, "draft-user-a"],
-    );
-    expect(persisted.rows).toEqual([{ count: 5 }]);
-    await expect(invalidOutletAttempt()).resolves.toEqual({
-      fileError: {
-        code: "file",
-        field: "csv",
-        message: "Terlalu banyak percobaan impor. Coba lagi dalam beberapa menit.",
-      },
-    });
-
-    const afterRejection = await adminPool.query<{ count: number }>(
-      `SELECT count
-       FROM shipment_rate_limits
-       WHERE tenant_id = $1 AND actor_id = $2 AND operation = 'bulk-import'`,
-      [tenantA, "draft-user-a"],
-    );
-    expect(afterRejection.rows).toEqual([{ count: 5 }]);
   });
 });
 

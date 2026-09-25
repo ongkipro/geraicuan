@@ -24,7 +24,7 @@ export default async function ResetPasswordPage({
 
   return (
     <AuthShell
-      description={token ? "Buat kata sandi baru untuk akun toko Anda." : "Tautan ini tidak dapat dipakai lagi."}
+      description={token ? "Buat kata sandi baru untuk akun gerai Anda." : "Tautan ini tidak dapat dipakai lagi."}
       footer={<Link className="auth-link" href="/login/tenant">Kembali ke halaman masuk</Link>}
       surface="tenant"
       title="Atur ulang kata sandi"

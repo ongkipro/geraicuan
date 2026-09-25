@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { CircleAlert, Printer } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -9,8 +9,8 @@ import { notFound, redirect } from "next/navigation";
 import { awbBarcodeFits } from "@/app/app/label/[shipmentId]/label-barcode";
 import { LabelPrintPanel } from "@/app/app/label/[shipmentId]/label-print-panel";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
+import { BackLink } from "@/components/cms/back-link";
 import { resolveShipmentRoute } from "@/app/app/shipment-route";
-import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -36,7 +36,7 @@ import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatWibDateTime, recipientDensity } from "@/lib/label-format";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Label kiriman · GeraiCUAN", robots: { index: false } };
 
 type LabelDetailPageProps = {
   params: Promise<{ shipmentId: string }>;
@@ -94,17 +94,17 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
   }
 
   if (detail.kind === "not-found") notFound();
-  const heading = detail.kind === "ready" ? `Label ${detail.label.awb}` : "Label kiriman";
+  const heading = detail.kind === "ready" ? <>Label <span className="font-mono">{detail.label.awb}</span></> : "Label kiriman";
 
   if (detail.kind === "blocked") {
     const awaiting = detail.reason === "AWAITING_UPSTREAM_PAYMENT";
     return (
       <PageContainer className="label-page print:block print:max-w-none print:gap-0">
-        <div className="label-hide">
+        <div className="label-hide grid gap-1">
+          <BackLink href="/app/label">Kembali ke daftar label</BackLink>
           <PageHeader
-            actions={<Button asChild className="min-h-11 max-md:w-full md:min-h-8" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
             description="Pratinjau cetak tersedia setelah nomor resi diterbitkan."
-            eyebrow="Label termal"
+            eyebrow="Pengiriman"
             focusTargetId="label-detail-heading"
             title={heading}
           />
@@ -117,7 +117,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
               ? "Kiriman non-COD ini belum berstatus lunas di Mengantar, sehingga belum memiliki nomor resi. Tenant Admin perlu memulihkannya lebih dulu."
               : "Label hanya dapat dicetak setelah Mengantar mengembalikan nomor resi."}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button asChild className="min-h-11 max-md:w-full md:min-h-8"><Link href={`/app/pengiriman/${routeKey}`}>Buka detail kiriman</Link></Button>
+              <Button asChild className="min-h-11 max-md:w-full md:min-h-10"><Link href={`/app/pengiriman/${routeKey}`}>Buka detail kiriman</Link></Button>
               <Button asChild className="min-h-11" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>
             </div>
           </AlertDescription>
@@ -135,11 +135,11 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
 
   return (
     <PageContainer className="label-page print:block print:max-w-none print:gap-0">
-      <div className="label-hide">
+      <div className="label-hide grid gap-1">
+        <BackLink href="/app/label">Kembali ke daftar label</BackLink>
         <PageHeader
-          actions={<Button asChild className="min-h-11 max-md:w-full md:min-h-8" variant="outline"><Link href="/app/label">Kembali ke daftar label</Link></Button>}
-          description="Pilih ukuran label, periksa pratinjau, lalu cetak. 10 × 15 cm menyertakan bukti serah terima untuk pengirim."
-          eyebrow="Label termal"
+          description="Pilih ukuran label, periksa pratinjau, lalu cetak."
+          eyebrow="Pengiriman"
           focusTargetId="label-detail-heading"
           title={heading}
         />
@@ -151,7 +151,7 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
           <AlertTitle>Alamat melebihi kapasitas label</AlertTitle>
           <AlertDescription>
             <p>Alamat penerima {detail.label.recipient.address.length} karakter melebihi kapasitas label; sebagian tidak tercetak. Verifikasi alamat sebelum menyerahkan paket.</p>
-            <details className="mt-3 rounded-lg border px-3">
+            <details className="mt-3">
               <summary className="min-h-11 cursor-pointer py-3 font-medium">Lihat alamat penerima lengkap</summary>
               <p className="min-w-0 wrap-anywhere whitespace-pre-wrap pb-3">{detail.label.recipient.address}</p>
             </details>
@@ -176,6 +176,38 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
       )}
 
       <LabelPrintPanel
+        history={(
+          <Card aria-labelledby="riwayat-cetak-heading" role="region">
+            <CardHeader className="border-b">
+              <CardTitle id="riwayat-cetak-heading">Riwayat permintaan cetak</CardTitle>
+              <CardDescription>Setiap permintaan cetak tercatat dengan waktu dan aktor.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {detail.events.length === 0 ? (
+                <p className="text-sm text-muted-foreground" role="status">Belum ada riwayat cetak. Permintaan cetak pertama akan tercatat setelah tombol cetak digunakan.</p>
+              ) : (
+                <Table
+                  className="min-w-[38rem]"
+                  containerClassName="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  containerProps={{ "aria-label": "Riwayat permintaan cetak label; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
+                >
+                  <TableCaption className="sr-only">Riwayat permintaan cetak label</TableCaption>
+                  <TableHeader><TableRow><TableHead className="sticky left-0 z-20 bg-card">Permintaan ke-</TableHead><TableHead>Waktu (WIB)</TableHead><TableHead>Aktor</TableHead><TableHead>Hasil</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {detail.events.map((event, index) => (
+                      <TableRow key={`${event.printedAt.toISOString()}-${index}`}>
+                        <TableCell className="sticky left-0 z-10 bg-inherit tabular-nums">{event.sequence ?? "—"}</TableCell>
+                        <TableCell>{formatWibDateTime(event.printedAt)}</TableCell>
+                        <TableCell className="whitespace-normal">{event.actorRole === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"} · {event.actorNameMasked}</TableCell>
+                        <TableCell className="whitespace-normal">{event.outcome === "PRINTED" ? "Tercatat" : event.reasonCode === "AWAITING_UPSTREAM_PAYMENT" ? "Diblokir: menunggu pelunasan" : "Diblokir: resi belum terbit"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
         initialAttemptId={randomUUID()}
         lastPrintedAt={detail.label.lastPrintedAt?.toISOString() ?? null}
         operatorId={principal.userId}
@@ -184,41 +216,6 @@ export default async function LabelDetailPage({ params }: LabelDetailPageProps) 
       >
         <LabelSheet label={detail.label} />
       </LabelPrintPanel>
-
-      <Card aria-labelledby="riwayat-cetak-heading" className="label-hide" role="region">
-        <CardHeader>
-          <CardTitle id="riwayat-cetak-heading">Riwayat permintaan cetak</CardTitle>
-          <CardDescription>Setiap permintaan cetak tercatat dengan waktu dan aktor.</CardDescription>
-        </CardHeader>
-        <CardContent>
-        {detail.events.length === 0 ? (
-          <EmptyState
-            description="Permintaan cetak pertama akan tercatat setelah tombol cetak digunakan."
-            icon={Printer}
-            title="Belum ada riwayat cetak"
-          />
-        ) : (
-            <Table
-              className="min-w-[38rem]"
-              containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              containerProps={{ "aria-label": "Riwayat permintaan cetak label; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
-            >
-              <TableCaption className="sr-only">Riwayat permintaan cetak label</TableCaption>
-              <TableHeader><TableRow><TableHead className="sticky left-0 z-20 bg-card">Permintaan ke-</TableHead><TableHead>Waktu (WIB)</TableHead><TableHead>Aktor</TableHead><TableHead>Hasil</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {detail.events.map((event, index) => (
-                  <TableRow key={`${event.printedAt.toISOString()}-${index}`}>
-                    <TableCell className="sticky left-0 z-10 bg-inherit tabular-nums">{event.sequence ?? "—"}</TableCell>
-                    <TableCell>{formatWibDateTime(event.printedAt)}</TableCell>
-                    <TableCell className="whitespace-normal">{event.actorRole === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"} · {event.actorNameMasked}</TableCell>
-                    <TableCell className="whitespace-normal">{event.outcome === "PRINTED" ? "Tercatat" : event.reasonCode === "AWAITING_UPSTREAM_PAYMENT" ? "Diblokir: menunggu pelunasan" : "Diblokir: resi belum terbit"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-        )}
-        </CardContent>
-      </Card>
     </PageContainer>
   );
 }

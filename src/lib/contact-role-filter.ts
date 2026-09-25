@@ -15,7 +15,7 @@ export const DEFAULT_CONTACT_ROLE: ContactRole = "pengirim";
 
 export const CONTACT_ROLE_DESCRIPTIONS: Record<ContactRole, string> = {
   penerima: "Pembeli tujuan kiriman, siap dipilih saat membuat draf.",
-  pengirim: "Toko atau gudang asal kiriman, siap dipilih saat membuat draf.",
+  pengirim: "Gerai atau gudang asal kiriman, siap dipilih saat membuat draf.",
 };
 
 /** What holding a role does, shown beside the role checkbox on create and detail. */
@@ -26,7 +26,7 @@ export const CONTACT_ROLE_EFFECTS: Record<ContactRole, string> = {
 
 /**
  * T-199: the Peran card cannot drop Pengirim while the stored name only fits
- * the sender rule ("Toko 88"), because a recipient-only name is a person's name.
+ * the sender rule ("Gerai 88"), because a recipient-only name is a person's name.
  * The card says exactly what to do and links to the name field.
  */
 export const CONTACT_ROLE_NAME_CONFLICT_MESSAGE =

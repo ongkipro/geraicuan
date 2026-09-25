@@ -13,7 +13,7 @@ describe("Public and authentication render contracts", () => {
   it("keeps every public decision action at least 44px without exposing CMS controls", () => {
     const html = renderToStaticMarkup(createElement(Home));
     const actions = [
-      ...html.matchAll(/<a[^>]+href="(?:\/login\/(?:tenant|super-admin)|#cara-kerja)"[^>]*>/g),
+      ...html.matchAll(/<a[^>]+href="(?:\/login\/(?:tenant|super-admin)|\/daftar)"[^>]*>/g),
     ].map(([tag]) => tag);
 
     expect(actions).toHaveLength(6);
@@ -26,7 +26,7 @@ describe("Public and authentication render contracts", () => {
   });
 
   it.each([
-    ["Tenant", TenantLoginPage, "Masuk ke toko Anda", "/app"],
+    ["Tenant", TenantLoginPage, "Masuk ke gerai Anda", "/app"],
     ["Super Admin", SuperAdminLoginPage, "Masuk Super Admin", "/platform"],
   ] as const)("renders one role-specific %s login job", async (_label, Page, heading, destination) => {
     const html = renderToStaticMarkup(await Page({}));
@@ -47,12 +47,12 @@ describe("Public and authentication render contracts", () => {
     expect(tenant).toContain('data-surface="tenant"');
     expect(tenant).toContain('href="/daftar"');
     expect(tenant).toContain('href="/lupa-password"');
-    expect(tenant).toContain("Untuk toko");
+    expect(tenant).toContain("Untuk gerai");
     expect(platform).toContain('data-surface="platform"');
     expect(platform).toContain("Khusus Super Admin");
     expect(platform).not.toContain('href="/daftar"');
     expect(platform).not.toContain('href="/lupa-password"');
-    expect(platform).not.toMatch(/<a[^>]*>(?:[^<]*Daftarkan toko|Lupa kata sandi\?)<\/a>/);
+    expect(platform).not.toMatch(/<a[^>]*>(?:[^<]*Daftarkan gerai|Lupa kata sandi\?)<\/a>/);
     expect(platform).toContain("Hubungi pengelola platform");
     // Both keep the contract the browser audits sign in with.
     for (const html of [tenant, platform]) {

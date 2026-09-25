@@ -271,7 +271,7 @@ export async function updateContactAction(
     throw error;
   }
   revalidatePath(`/app/kontak/${contactId}`);
-  return { message: "Perubahan kontak tersimpan. Kiriman lama tetap memakai snapshot sebelumnya.", success: true };
+  return { message: "Perubahan kontak tersimpan. Kiriman lama tetap memakai data saat kiriman dibuat.", success: true };
 }
 
 export async function addContactAddressAction(
@@ -427,7 +427,7 @@ export async function updateContactAddressAction(
     throw error;
   }
   revalidatePath(`/app/kontak/${contactId}`);
-  return { message: "Perubahan alamat tersimpan. Snapshot kiriman lama tidak berubah.", success: true };
+  return { message: "Perubahan alamat tersimpan. Data pada kiriman lama tidak berubah.", success: true };
 }
 
 export async function archiveContactAction(
@@ -446,7 +446,7 @@ export async function archiveContactAction(
       error instanceof ContactArchiveDeniedError ||
       error instanceof ContactUnavailableError
     ) {
-      return { error: "Kontak tidak tersedia atau actor tidak memiliki izin Tenant Admin." };
+      return { error: "Kontak tidak tersedia atau akun Anda tidak memiliki izin Tenant Admin." };
     }
     throw error;
   }

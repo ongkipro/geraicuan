@@ -58,7 +58,7 @@ const PANEL_ROUTES = [
   { entries: 3, param: 'status', route: '/app/kontak/pengirim' },
   { entries: 3, param: 'status', route: '/app/kontak/penerima' },
 ];
-const RANGE_ROUTES = ['/app', '/app/analitik', '/app/keuangan', '/app/pengiriman', '/app/pengiriman/rts', '/app/label'];
+const RANGE_ROUTES = ['/app', '/app/pengiriman', '/app/pengiriman/rts', '/app/label'];
 
 const PANEL_MEASURE = `JSON.stringify((()=>{
   const form=document.querySelector('form[data-slot="state-summary-panel"]');

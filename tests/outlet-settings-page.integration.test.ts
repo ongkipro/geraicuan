@@ -179,7 +179,7 @@ describe("Outlet settings page acceptance", () => {
     expect(html).toContain("Outlet Belum Siap");
     expect(html).toContain("Perlu dilengkapi");
     expect(html).toContain("Periksa alamat pickup, area asal.");
-    expect(html).toContain("Default GeraiCUAN");
+    expect(html).toContain("Bawaan GeraiCUAN");
     // T-157: choosing a pickup point belongs to Titik pickup; this page states
     // the resulting pair and links there instead of carrying a second editor.
     expect(html).toContain("Belum ada titik pickup");
@@ -291,7 +291,7 @@ describe("Outlet settings page acceptance", () => {
 
     const fallback = await renderPage("00000000-0000-4000-8000-999999999999");
     expect(fallback).toContain("A — Belum siap");
-    expect(fallback).toContain("Default GeraiCUAN");
+    expect(fallback).toContain("Bawaan GeraiCUAN");
     expect(occurrences(fallback, "<form")).toBe(0);
   });
 

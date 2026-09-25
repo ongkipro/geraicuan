@@ -124,6 +124,23 @@ const AREAS = {
   panakkukang: ["Panaikang", "Panakkukang", "Kota Makassar", "Sulawesi Selatan", "90231", "LUAR_JAWA"],
   dauhPuriKauh: ["Dauh Puri Kauh", "Denpasar Barat", "Kota Denpasar", "Bali", "80113", "LUAR_JAWA"],
   ilirTimur: ["20 Ilir D. I", "Ilir Timur I", "Kota Palembang", "Sumatera Selatan", "30128", "LUAR_JAWA"],
+  // Added for a fuller demo (2026-09-25): more cities so lists, reports and courier recaps have spread.
+  cilandakBarat: ["Cilandak Barat", "Cilandak", "Kota Jakarta Selatan", "DKI Jakarta", "12430", "JABODETABEK"],
+  rawamangun: ["Rawamangun", "Pulo Gadung", "Kota Jakarta Timur", "DKI Jakarta", "13220", "JABODETABEK"],
+  lengkongGudang: ["Lengkong Gudang", "Serpong", "Kota Tangerang Selatan", "Banten", "15321", "JABODETABEK"],
+  pakansari: ["Pakansari", "Cibinong", "Kabupaten Bogor", "Jawa Barat", "16915", "JABODETABEK"],
+  pasteur: ["Pasteur", "Sukajadi", "Kota Bandung", "Jawa Barat", "40161", "JAWA"],
+  kotabaru: ["Kotabaru", "Gondokusuman", "Kota Yogyakarta", "DI Yogyakarta", "55224", "JAWA"],
+  sondakan: ["Sondakan", "Laweyan", "Kota Surakarta", "Jawa Tengah", "57147", "JAWA"],
+  pekiringan: ["Pekiringan", "Kesambi", "Kota Cirebon", "Jawa Barat", "45131", "JAWA"],
+  sidokare: ["Sidokare", "Sidoarjo", "Kabupaten Sidoarjo", "Jawa Timur", "61214", "JAWA"],
+  simpangTiga: ["Simpang Tiga", "Bukit Raya", "Kota Pekanbaru", "Riau", "28288", "LUAR_JAWA"],
+  gunungSariIlir: ["Gunung Sari Ilir", "Balikpapan Tengah", "Kota Balikpapan", "Kalimantan Timur", "76121", "LUAR_JAWA"],
+  sungaiBangkong: ["Sungai Bangkong", "Pontianak Kota", "Kota Pontianak", "Kalimantan Barat", "78113", "LUAR_JAWA"],
+  sarioUtara: ["Sario Utara", "Sario", "Kota Manado", "Sulawesi Utara", "95114", "LUAR_JAWA"],
+  cakranegaraBarat: ["Cakranegara Barat", "Cakranegara", "Kota Mataram", "Nusa Tenggara Barat", "83231", "LUAR_JAWA"],
+  alaiParakKopi: ["Alai Parak Kopi", "Padang Utara", "Kota Padang", "Sumatera Barat", "25131", "LUAR_JAWA"],
+  kertakBaruIlir: ["Kertak Baru Ilir", "Banjarmasin Tengah", "Kota Banjarmasin", "Kalimantan Selatan", "70111", "LUAR_JAWA"],
 };
 const area = (key) => {
   const [subdistrict, district, city, province, zip, zone] = AREAS[key];
@@ -210,6 +227,46 @@ const contactDefinitions = [
   [21, "Yusuf Maulana", { sender: true, recipient: false, archivedDaysAgo: 20 }, [["Rumah", "Jl. Nusantara Raya No. 55", "kemiriMuka"]]],
   [22, "Kevin Wijaya", { sender: true, recipient: true }, [["Rumah", "Jl. Dharmahusada Indah Utara No. 60", "gubeng"]]],
   [23, "Joko Susanto", { sender: false, recipient: true, archivedDaysAgo: 5 }, [["Rumah", "Jl. Imam Bonjol No. 38", "karawaci"]]],
+  // Added for a fuller demo (2026-09-25): recipients 24–53, senders 54–59.
+  [24, "Ratna Sari Dewi", { sender: false, recipient: true }, [["Rumah", "Jl. Cilandak KKO No. 14", "cilandakBarat"]]],
+  [25, "Budi Santoso", { sender: false, recipient: true }, [["Rumah", "Jl. Pemuda Rawamangun No. 23", "rawamangun"]]],
+  [26, "Eka Putri Lestari", { sender: false, recipient: true }, [
+    ["Rumah", "Perumahan BSD Sektor 1.2, Jl. Kenari Blok D No. 7", "lengkongGudang"],
+    ["Kantor", "Ruko Golden Boulevard Blok K No. 3", "lengkongGudang"],
+  ]],
+  [27, "Hadi Kurniawan", { sender: false, recipient: true }, [["Rumah", "Jl. Raya Tegar Beriman No. 45", "pakansari"]]],
+  [28, "Nia Ramadhani", { sender: false, recipient: true }, [["Kos", "Jl. Sukajadi Gg. Sirnagalih No. 11", "pasteur"]]],
+  [29, "Teguh Wibowo", { sender: false, recipient: true }, [["Rumah", "Jl. Suroto No. 9", "kotabaru"]]],
+  [30, "Sri Mulyani", { sender: false, recipient: true }, [["Rumah", "Jl. Dr. Rajiman No. 201", "sondakan"]]],
+  [31, "Dedi Supriadi", { sender: false, recipient: true }, [["Rumah", "Jl. Pekiringan Gg. Melati No. 6", "pekiringan"]]],
+  [32, "Wulan Anggraini", { sender: false, recipient: true }, [["Rumah", "Perum Pondok Jati Blok AF No. 12", "sidokare"]]],
+  [33, "Arif Rahman", { sender: false, recipient: true }, [["Rumah", "Jl. Kaharuddin Nasution No. 88", "simpangTiga"]]],
+  [34, "Lestari Handayani", { sender: false, recipient: true }, [["Rumah", "Jl. Ahmad Yani Gg. Mawar No. 17", "gunungSariIlir"]]],
+  [35, "Herman Susilo", { sender: false, recipient: true }, [["Rumah", "Jl. Gajah Mada No. 57", "sungaiBangkong"]]],
+  [36, "Grace Wenas", { sender: false, recipient: true }, [["Rumah", "Jl. Sam Ratulangi No. 120", "sarioUtara"]]],
+  [37, "Lalu Hamdani", { sender: false, recipient: true }, [["Rumah", "Jl. Pejanggik No. 34", "cakranegaraBarat"]]],
+  [38, "Rini Oktavia", { sender: false, recipient: true }, [["Rumah", "Jl. Khatib Sulaiman No. 72", "alaiParakKopi"]]],
+  [39, "Muhammad Rizki", { sender: false, recipient: true }, [["Rumah", "Jl. Lambung Mangkurat No. 19", "kertakBaruIlir"]]],
+  [40, "Indah Permata", { sender: false, recipient: true }, [["Rumah", "Jl. Fatmawati Raya No. 31", "cilandakBarat"]]],
+  [41, "Slamet Riyadi", { sender: false, recipient: true }, [["Rumah", "Jl. Balai Pustaka Timur No. 8", "rawamangun"]]],
+  [42, "Vina Melati", { sender: false, recipient: true }, [["Kantor", "Gedung Setiabudi Atrium Lt. 5", "kuninganTimur"]]],
+  [43, "Anton Saputra", { sender: false, recipient: true }, [["Rumah", "Jl. Setiabudi No. 229", "pasteur"]]],
+  [44, "Yuliana Tanjung", { sender: false, recipient: true }, [["Rumah", "Jl. Iskandar Muda No. 66", "petisahTengah"]]],
+  [45, "Bayu Aji Nugraha", { sender: false, recipient: true }, [["Rumah", "Jl. Kaliurang Km 5 Gg. Pandega No. 3", "caturtunggal"]]],
+  [46, "Citra Kirana", { sender: false, recipient: true }, [["Rumah", "Jl. Raya Darmo Permai III No. 10", "gubeng"]]],
+  [47, "Doni Firmansyah", { sender: false, recipient: true }, [["Rumah", "Jl. Veteran No. 12", "lowokwaru"]]],
+  [48, "Mega Wati Purba", { sender: false, recipient: true }, [["Rumah", "Jl. Teuku Umar No. 90", "dauhPuriKauh"]]],
+  [49, "Irfan Hakim", { sender: false, recipient: true }, [["Rumah", "Jl. Perintis Kemerdekaan Km 10 No. 5", "panakkukang"]]],
+  [50, "Novi Andriani", { sender: false, recipient: true, archivedDaysAgo: 9 }, [["Rumah lama", "Jl. Kemang Raya No. 4", "cilandakBarat"]]],
+  [51, "Reza Pahlevi", { sender: false, recipient: true }, [["Rumah", "Jl. Sudirman No. 150", "simpangTiga"]]],
+  [52, "Kartika Sari", { sender: false, recipient: true }, [["Rumah", "Jl. Pandanaran No. 44", "pleburan"]]],
+  [53, "Agung Laksono", { sender: true, recipient: true }, [["Rumah", "Jl. Kyai Tapa No. 2", "karawaci"]]],
+  [54, "Galeri Batik Laweyan", { sender: true, recipient: false }, [["Galeri", "Jl. Sidoluhur No. 11", "sondakan"]]],
+  [55, "Butik Kirana Bandung", { sender: true, recipient: false }, [["Butik", "Jl. Riau No. 27", "pasteur"]]],
+  [56, "Dewi Anjani", { sender: true, recipient: true }, [["Rumah", "Jl. Tebet Timur Dalam II No. 5", "tebetBarat"]]],
+  [57, "Konveksi Berkah Jaya", { sender: true, recipient: false }, [["Workshop", "Jl. Raya Bogor Km 29 No. 3", "pakansari"]]],
+  [58, "Hartono Wijaya", { sender: true, recipient: false }, [["Gudang", "Jl. Daan Mogot Km 11 No. 8", "kebonJeruk"]]],
+  [59, "Suryani Hasibuan", { sender: true, recipient: false, archivedDaysAgo: 15 }, [["Rumah", "Jl. Pemuda Rawamangun No. 40", "rawamangun"]]],
 ];
 const contacts = contactDefinitions.map(([index, name, roles, addresses]) => ({
   id: fixedUuid("71", index),
@@ -364,6 +421,31 @@ const plan = [
   ["DRAFT", "NON_COD", 0], ["DRAFT", "COD", 0], ["DRAFT", "COD_ONGKIR", 1], ["DRAFT", "NON_COD", 3],
 ];
 
+// Added for a fuller demo (2026-09-25): 120 more shipments over the last 58 days, generated
+// deterministically after the authored plan, so ids 72…001–059 (the ones audits open) are unchanged.
+// Delivered, problem and return outcomes are at least 5 days old so a settlement pull can observe them.
+const EXTRA_PAYMENTS = ["COD", "NON_COD", "COD", "COD_ONGKIR", "NON_COD", "COD"];
+const EXTRA_MIX = [
+  ["DELIVERED", 62, (i) => 5 + ((i * 7) % 54)],
+  ["ISSUED", 18, (i) => i % 5, (i) => ({ printed: i % 3 !== 0 })],
+  ["RTS_QUEUED", 4, (i) => 6 + i * 3],
+  ["RTS_IN_TRANSIT", 4, (i) => 9 + i * 4],
+  ["RTS_RECEIVED", 4, (i) => 14 + i * 6],
+  ["PROBLEM", 4, (i) => 7 + i * 5],
+  ["FAILED", 4, (i) => 1 + i * 6],
+  ["AWAITING_UPSTREAM_PAYMENT", 2, (i) => i],
+  ["ESTIMATED", 9, (i) => i % 3],
+  ["DRAFT", 9, (i) => i % 4],
+];
+const extraPlan = EXTRA_MIX.flatMap(([status, count, daysAgoOf, flagsOf]) =>
+  // An order awaiting upstream payment is non-COD by constraint (provider_order_snapshots_unpaid_state_valid).
+  Array.from({ length: count }, (_, i) => [status, status === "AWAITING_UPSTREAM_PAYMENT" ? "NON_COD" : EXTRA_PAYMENTS[(i + status.length) % EXTRA_PAYMENTS.length], daysAgoOf(i), flagsOf?.(i) ?? {}]),
+);
+const AUTHORED_PLAN_LENGTH = plan.length;
+const fullPlan = [...plan, ...extraPlan];
+const EXTRA_SENDER_ROTATION = [2, 54, 1, 55, 20, 56, 3, 57, 22, 58, 53];
+const EXTRA_RECIPIENT_ROTATION = [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 5, 8, 10, 11, 14, 15, 17, 56];
+
 const ISSUED_AT_SOME_POINT = new Set(["ISSUED", "DELIVERED", "PROBLEM", "RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED"]);
 const SENDER_ROTATION = [2, 2, 1, 2, 3, 20, 2, 22];
 const RECIPIENT_ROTATION = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 1, 3, 22];
@@ -371,7 +453,8 @@ const ARCHIVED_RECIPIENTS = [16, 23];
 const INSTRUCTIONS = [null, "Mohon telepon penerima sebelum diantar.", null, "Titip ke satpam jika penerima tidak di tempat.", null, null];
 const LANDMARKS = [null, "Dekat masjid Al-Ikhlas", null, null, "Seberang minimarket", null, "Pagar hitam, rumah pojok"];
 
-const shipmentDefinitions = plan.map(([status, paymentMethod, daysAgo, flags = {}], index) => {
+const shipmentDefinitions = fullPlan.map(([status, paymentMethod, daysAgo, flags = {}], index) => {
+  const authored = index < AUTHORED_PLAN_LENGTH;
   const n = index + 1;
   const isCod = paymentMethod !== "NON_COD";
   const codShippingOnly = paymentMethod === "COD_ONGKIR";
@@ -381,10 +464,12 @@ const shipmentDefinitions = plan.map(([status, paymentMethod, daysAgo, flags = {
   const creator = index % 3 === 1 ? "OPERATOR" : "TENANT_ADMIN";
   const product = products[index % products.length];
   const quantity = 1 + (index % 4 === 0 ? 1 : 0);
-  const sender = contactById.get(SENDER_ROTATION[index % SENDER_ROTATION.length]);
+  const senderRotation = authored ? SENDER_ROTATION : EXTRA_SENDER_ROTATION;
+  const recipientRotation = authored ? RECIPIENT_ROTATION : EXTRA_RECIPIENT_ROTATION;
+  const sender = contactById.get(senderRotation[index % senderRotation.length]);
   const recipientIndex = daysAgo >= 30 && index % 4 === 1
     ? ARCHIVED_RECIPIENTS[index % 2]
-    : RECIPIENT_ROTATION[index % RECIPIENT_ROTATION.length];
+    : recipientRotation[index % recipientRotation.length];
   const recipient = contactById.get(recipientIndex === sender.index ? 4 : recipientIndex);
   const recipientAddress = recipient.addresses[index % recipient.addresses.length];
   const pickup = pickupPoints[index % 7 === 3 ? 1 : index % 7 === 5 ? 2 : 0];

@@ -14,9 +14,9 @@ export default function TenantProfileSettingsLoading() {
         currentHref="/app/pengaturan"
         header={
           <PageHeader
-            description="Identitas toko dan format angka, tanggal, dan nomor kiriman."
-            eyebrow="Pengaturan"
-            title="Profil toko"
+            description="Profil gerai: nama, awalan nomor kiriman, serta format tanggal dan angka."
+            eyebrow="Pengelolaan"
+            title="Pengaturan"
           />
         }
         indexHref={SETTINGS_INDEX_HREF}
@@ -24,12 +24,12 @@ export default function TenantProfileSettingsLoading() {
         navLabel="Menu pengaturan"
       >
         <div
-          aria-label="Memuat profil toko"
+          aria-label="Memuat profil gerai"
           className="grid min-w-0 gap-6"
           role="status"
         >
           {Array.from({ length: 3 }, (_, index) => (
-            <div className="grid gap-3 rounded-xl p-4 shadow-resting ring-1 ring-foreground/10" key={index}>
+            <div className="grid gap-3 rounded-xl p-4 border" key={index}>
               <Skeleton className="h-5 w-40 max-w-full" />
               <Skeleton className="h-4 w-72 max-w-full" />
               <Skeleton className="h-11 w-56 max-w-full" />

@@ -29,7 +29,7 @@ const packageBars = encodeCode128B(label.awb);
 const cod = label.cod;
 
 const steps = [
-  ["Daftar dan hubungkan Mengantar", "Verifikasi email, simpan API key akun Mengantar milik toko Anda, dan atur titik pickup. Toko mulai mengirim setelah disetujui Super Admin GeraiCUAN."],
+  ["Daftar dan hubungkan Mengantar", "Verifikasi email, simpan API key akun Mengantar milik gerai Anda, dan atur titik pickup. Gerai mulai mengirim setelah disetujui Super Admin GeraiCUAN."],
   ["Buat order", "Masukkan kiriman satu per satu atau impor dari file CSV. Pilih Non-COD, COD, atau COD Ongkir, lalu cek tarif kurir sebelum memilih."],
   ["Cetak label thermal", "Resi dari Mengantar langsung menjadi label 10 × 15 cm yang siap dicetak dan ditempel."],
   ["Pantau kiriman dan laporan", "Lihat status setiap kiriman, cek resi, dan baca laporan ongkir serta COD per periode."],
@@ -49,7 +49,7 @@ const paymentMethods = [
     key: "COD",
     name: "COD",
     when: "Pembeli membayar saat paket tiba",
-    text: "Total COD dihitung otomatis, bukan diketik: harga barang, ongkir, dan biaya COD Mengantar 3,33%. Dana yang cair tetap menutup harga barang, jadi toko tidak nombok.",
+    text: "Total COD dihitung otomatis, bukan diketik: harga barang, ongkir, dan biaya COD Mengantar 3,33%. Dana yang cair tetap menutup harga barang, jadi gerai tidak nombok.",
     collects: "Harga barang + ongkir + biaya COD",
     input: "Nilai barang; totalnya dihitung sistem",
   },
@@ -57,7 +57,7 @@ const paymentMethods = [
     key: "COD_ONGKIR",
     name: "COD Ongkir",
     when: "Barang sudah dibayar, ongkir dibayar saat paket tiba",
-    text: "Kurir hanya menagih ongkir. Nilainya dimulai dari titik impas dan boleh Anda naikkan; selisihnya untuk toko. Nilai di bawah titik impas ditolak.",
+    text: "Kurir hanya menagih ongkir. Nilainya dimulai dari titik impas dan boleh Anda naikkan; selisihnya untuk gerai. Nilai di bawah titik impas ditolak.",
     collects: "Ongkir saja",
     input: "Ongkir yang ditagih, minimal titik impas",
   },
@@ -69,7 +69,7 @@ const reports = [
   ["Panel status kiriman", "Langsung terlihat berapa kiriman yang siap dilanjutkan, sudah terbit resinya, dalam perjalanan, terkirim, atau perlu perhatian. Klik untuk menyaring daftarnya."],
   ["Cek resi dan cek tarif", "Cari kiriman dari nomor resi atau nomor kiriman, dan bandingkan tarif kurir sebelum membuat order."],
   ["Rekap per kurir", "Dasbor merangkum jumlah kiriman, yang terkirim, retur, dan biaya kirim untuk setiap kurir."],
-  ["Data toko terpisah", "Setiap toko hanya melihat datanya sendiri. Undang anggota tim sebagai admin toko atau operator, dan aksesnya mengikuti peran itu."],
+  ["Data gerai terpisah", "Setiap gerai hanya melihat datanya sendiri. Undang anggota tim sebagai admin gerai atau operator, dan aksesnya mengikuti peran itu."],
 ];
 ---
 <!doctype html>
@@ -129,11 +129,11 @@ const reports = [
               cetak di printer thermal, lalu lihat ongkir, biaya COD, dan estimasi dana cair tanpa hitung manual.
             </p>
             <div class="cta-row">
-              <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan toko</a>
+              <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan gerai</a>
               <a class="btn btn-outline btn-lg" href={signInUrl} data-cta="masuk">Masuk</a>
             </div>
             <p class="fine-print">
-              Setelah mendaftar, verifikasi email Anda. Hubungkan akun Mengantar milik toko Anda; toko bisa mulai mengirim setelah pendaftaran disetujui Super Admin GeraiCUAN.
+              Setelah mendaftar, verifikasi email Anda. Hubungkan akun Mengantar milik gerai Anda; gerai bisa mulai mengirim setelah pendaftaran disetujui Super Admin GeraiCUAN.
             </p>
           </div>
 
@@ -233,14 +233,14 @@ const reports = [
         <div class="container split">
           <div class="section-head">
             <p class="eyebrow">COD dan COD Ongkir presisi</p>
-            <h2 id="judul-cod">Nilai COD dihitung supaya toko tidak nombok</h2>
+            <h2 id="judul-cod">Nilai COD dihitung supaya gerai tidak nombok</h2>
             <p>
               Mengantar memotong biaya COD sebesar 3,33% dari nilai yang ditagih ke pembeli. GeraiCUAN menghitung nilai COD
               terkecil, dibulatkan ke rupiah penuh, yang setelah dipotong biaya itu tetap menutup harga barang dan ongkir.
             </p>
             <p>
               Untuk COD Ongkir, titik impas adalah ongkir terkecil yang setelah dipotong 3,33% tetap menutup ongkir Mengantar.
-              Anda boleh menagih lebih tinggi, dan GeraiCUAN menampilkan selisih untuk toko saat Anda mengetik.
+              Anda boleh menagih lebih tinggi, dan GeraiCUAN menampilkan selisih untuk gerai saat Anda mengetik.
             </p>
             <p>Biaya COD adalah potongan Mengantar, bukan biaya dari GeraiCUAN.</p>
           </div>
@@ -261,10 +261,10 @@ const reports = [
               <tbody>
                 <tr><th scope="row">Ongkir Mengantar</th><td data-cod-ongkir="shipping">{formatIdr(codOngkir.shippingIdr)}</td></tr>
                 <tr><th scope="row">Titik impas<span class="note">batas terendah yang bisa ditagih</span></th><td data-cod-ongkir="break-even">{formatIdr(codOngkir.breakEvenIdr)}</td></tr>
-                <tr><th scope="row">Ongkir ditagih ke pembeli<span class="note">dinaikkan oleh toko</span></th><td data-cod-ongkir="charge">{formatIdr(codOngkir.chargeIdr)}</td></tr>
+                <tr><th scope="row">Ongkir ditagih ke pembeli<span class="note">dinaikkan oleh gerai</span></th><td data-cod-ongkir="charge">{formatIdr(codOngkir.chargeIdr)}</td></tr>
                 <tr><th scope="row">Biaya COD Mengantar (3,33%)</th><td data-cod-ongkir="fee">− {formatIdr(codOngkir.mengantarFeeIdr)}</td></tr>
                 <tr><th scope="row">Ongkir dibayar dari dana COD</th><td>− {formatIdr(codOngkir.shippingIdr)}</td></tr>
-                <tr class="is-total"><th scope="row">Selisih untuk toko<span class="note">barang tidak ditagih kurir</span></th><td data-cod-ongkir="difference">{formatIdr(codOngkir.sellerDifferenceIdr)}</td></tr>
+                <tr class="is-total"><th scope="row">Selisih untuk gerai<span class="note">barang tidak ditagih kurir</span></th><td data-cod-ongkir="difference">{formatIdr(codOngkir.sellerDifferenceIdr)}</td></tr>
               </tbody>
             </table>
           </div>
@@ -311,7 +311,7 @@ const reports = [
           <div class="section-head">
             <p class="eyebrow">Laporan</p>
             <h2 id="judul-laporan">Laporan pengiriman yang langsung bisa dibaca</h2>
-            <p>Tidak perlu menyusun rekap sendiri di spreadsheet. Laporan disusun dari kiriman toko Anda di GeraiCUAN.</p>
+            <p>Tidak perlu menyusun rekap sendiri di spreadsheet. Laporan disusun dari kiriman gerai Anda di GeraiCUAN.</p>
           </div>
           <ul class="cards">
             {reports.map(([heading, text]) => (
@@ -324,11 +324,11 @@ const reports = [
       <section class="cta-band" aria-labelledby="judul-mulai">
         <div class="container">
           <div>
-            <h2 id="judul-mulai">Mulai kirim dari toko Anda</h2>
-            <p>Daftar dengan email dan nomor WhatsApp toko, lalu hubungkan akun Mengantar milik toko Anda. Setelah email terverifikasi dan pendaftaran disetujui Super Admin, toko Anda siap membuat order.</p>
+            <h2 id="judul-mulai">Mulai kirim dari gerai Anda</h2>
+            <p>Daftar dengan email dan nomor WhatsApp gerai, lalu hubungkan akun Mengantar milik gerai Anda. Setelah email terverifikasi dan pendaftaran disetujui Super Admin, gerai Anda siap membuat order.</p>
           </div>
           <div class="cta-row">
-            <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan toko</a>
+            <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan gerai</a>
             <a class="btn btn-outline btn-lg" href={signInUrl} data-cta="masuk">Sudah punya akun? Masuk</a>
           </div>
         </div>

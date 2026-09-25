@@ -15,7 +15,7 @@ export default function LabelIndexError({ reset }: { reset: () => void }) {
   useFocusTargetOnMount(HEADING_ID);
   return (
     <PageContainer>
-      <PageHeader eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Label & riwayat cetak" />
+      <PageHeader eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Cetak resi" />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Daftar label belum dapat dimuat</AlertTitle>

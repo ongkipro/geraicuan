@@ -20,7 +20,8 @@ export type HostRouteDecision =
   | { kind: "redirect"; location: string; status: 307 | 308 }
   | { kind: "rewrite"; pathname: string };
 
-const SHARED_PREFIXES = ["/api/auth"] as const;
+// "/couriers": static courier logos (public/couriers/*.svg) used on both hosts.
+const SHARED_PREFIXES = ["/api/auth", "/couriers"] as const;
 const SHARED_FILES = ["/favicon.ico", "/icon.svg"] as const;
 
 /**

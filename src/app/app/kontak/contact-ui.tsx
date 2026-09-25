@@ -57,7 +57,7 @@ export function CopyPhoneButton({ label = "Salin nomor", name, phone, showLabel 
     <>
       <Button
         aria-label={showLabel ? undefined : `${label} ${name}`}
-        className={showLabel ? "min-h-11 md:min-h-8" : "size-11 md:size-8"}
+        className={showLabel ? "min-h-11 md:min-h-10" : "size-11 md:size-8"}
         onClick={copy}
         size={showLabel ? "sm" : "icon"}
         type="button"
@@ -75,7 +75,7 @@ export function CopyPhoneButton({ label = "Salin nomor", name, phone, showLabel 
 
 export function WhatsAppLink({ name, phone, showLabel = false }: { name: string; phone: string; showLabel?: boolean }) {
   return (
-    <Button asChild className={showLabel ? "min-h-11 md:min-h-8" : "size-11 md:size-8"} size={showLabel ? "sm" : "icon"} variant={showLabel ? "outline" : "ghost"}>
+    <Button asChild className={showLabel ? "min-h-11 md:min-h-10" : "size-11 md:size-8"} size={showLabel ? "sm" : "icon"} variant={showLabel ? "outline" : "ghost"}>
       <a aria-label={showLabel ? undefined : `Kirim WhatsApp ke ${name}`} href={whatsappHref(phone)} rel="noreferrer" target="_blank">
         <MessageCircle aria-hidden="true" />
         {showLabel ? "WhatsApp" : null}

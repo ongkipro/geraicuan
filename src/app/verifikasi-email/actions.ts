@@ -41,7 +41,7 @@ export async function resendVerificationEmail(
   const requestHeaders = await headers();
   const email = normalizeEmailInput(formData.get("email"));
   if (!email) {
-    return { error: "Isi alamat email yang benar, misalnya nama@toko.com.", status: "invalid" };
+    return { error: "Isi alamat email yang benar, misalnya nama@gerai.com.", status: "invalid" };
   }
 
   return withMinimumDuration<VerificationResendState>(RESEND_MINIMUM_MS, async () => {
@@ -138,7 +138,7 @@ export async function confirmEmailVerification(
     return { status: "expired" };
   }
   if (typeof password !== "string" || password.length === 0 || password.length > PASSWORD_MAX_LENGTH) {
-    return { error: "Isi kata sandi yang Anda buat saat mendaftarkan toko.", status: "invalid" };
+    return { error: "Isi kata sandi yang Anda buat saat mendaftarkan gerai.", status: "invalid" };
   }
 
   return withMinimumDuration<EmailConfirmationState>(CONFIRM_MINIMUM_MS, async () => {

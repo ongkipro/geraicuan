@@ -93,7 +93,7 @@ export const SAMPLE_LABEL = {
   recipientPhone: "0812-0000-0000",
   recipientArea: "Coblong, Kota Bandung",
   recipientAddress: "Jl. Contoh No. 1, RT 01/RW 02",
-  senderName: "Toko Contoh",
+  senderName: "Gerai Contoh",
   outletName: "Outlet Contoh",
   content: "Pakaian",
   weight: "1 kg",

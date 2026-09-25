@@ -112,7 +112,6 @@ function revalidateOutletConfigurationPaths() {
   revalidatePath("/app/pengaturan/koneksi");
   revalidatePath("/app");
   revalidatePath("/app/pengiriman/baru");
-  revalidatePath("/app/impor");
   // Cek tarif quotes from the outlet's origin area too, so a promoted pickup
   // point changes what it should answer.
   revalidatePath("/app/cek-tarif");
@@ -158,7 +157,7 @@ export async function loadMengantarPickupOptions(
     if (error instanceof MengantarPlatformCredentialsRefusedError) {
       return {
         message:
-          "Hubungkan dulu akun Mengantar milik toko di Pengaturan › Koneksi Mengantar. Daftar pickup diambil dari akun itu.",
+          "Hubungkan dulu akun Mengantar milik gerai di Pengaturan › Koneksi Mengantar. Daftar pickup diambil dari akun itu.",
       };
     }
     if (
@@ -295,7 +294,7 @@ export async function switchMengantarToPlatformDefault(
     }
     if (error instanceof MengantarPlatformCredentialsRefusedError) {
       return credentialFailureState(
-        "Toko ini mengirim dengan akun Mengantar sendiri, jadi default platform tidak tersedia. Koneksi privat tetap dipertahankan.",
+        "Gerai ini mengirim dengan akun Mengantar sendiri, jadi default platform tidak tersedia. Koneksi privat tetap dipertahankan.",
       );
     }
     if (error instanceof MengantarConfigurationError) {

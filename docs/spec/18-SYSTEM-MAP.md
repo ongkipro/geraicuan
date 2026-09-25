@@ -34,16 +34,16 @@ Every change touching routes, handlers, actions, data models, or navigation must
 
 ### Current Repository Inventory (2026-09-17)
 
-- **36 `page.tsx` files**:
+- **33 `page.tsx` files**:
   - 8 Public & Authentication pages (`/`, `/login/tenant`, `/login/super-admin`, `/daftar`, `/verifikasi-email`, `/verifikasi-email/konfirmasi`, `/lupa-password`, `/atur-ulang-password`).
-  - 23 Authenticated Tenant CMS pages reached from 15 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
+  - 20 Authenticated Tenant CMS pages reached from 12 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
   - 5 Authenticated Platform CMS pages (Ringkasan, Tenant, Detail Tenant, Pendaftaran, Audit).
-- **5 `route.ts` Route Handlers**:
+- **3 `route.ts` Route Handlers**:
   - Better Auth handler (`/api/auth/[...all]`).
-  - 3 CSV export / template handlers (`/app/impor/template.csv`, `/app/analitik/export.csv`, `/app/laporan/pengiriman/export.csv`).
+  - 1 CSV export handler (`/app/laporan/pengiriman/export.csv`); T-204 removed `/app/impor/template.csv` and `/app/analitik/export.csv` with their pages.
   - 1 closed provider webhook (`/api/webhooks/mengantar`, strictly returns 404).
-- **23 files declaring Server Actions** (`"use server"`), exporting 44 Server Actions (`export async function`).
-- **3 `layout.tsx` files**, **24 `loading.tsx`** (23 tenant, 1 platform), **24 `error.tsx`** (23 tenant, 1 platform), **3 `not-found.tsx`** (Section 10).
+- **22 files declaring Server Actions** (`"use server"`), exporting 40 Server Actions (`export async function`).
+- **3 `layout.tsx` files**, **21 `loading.tsx`** (20 tenant, 1 platform), **21 `error.tsx`** (20 tenant, 1 platform), **3 `not-found.tsx`** (Section 10).
 - **34 repository and data-layer modules** in `src/db/`.
 - These counts are checked against the filesystem by `tests/system-map-inventory.integration.test.ts` (T-199); a drifted number fails the suite.
 - **Apex landing site**: Standalone Astro 7 static site in `apps/landing` for `https://geraicuan.com` (zero JS, self-contained, builds to `apps/landing/dist/`).
@@ -76,7 +76,7 @@ flowchart TD
     Apex[Apex geraicuan.com - Astro Static Landing] --> PublicSales[Public Sales Page - Dev Fallback]
     PublicSales --> TenantLogin[Tenant Login /login/tenant]
     PublicSales --> PlatformLogin[Platform Login /login/super-admin]
-    PublicSales --> Register[Daftar Toko /daftar]
+    PublicSales --> Register[Daftar Gerai /daftar]
     
     Register --> EmailVerify[Verifikasi Email /verifikasi-email]
     Register --> EmailConfirm[Konfirmasi Email /verifikasi-email/konfirmasi]
@@ -92,7 +92,6 @@ flowchart TD
 
         TenantShell --> GroupPengiriman[Pengiriman]
         GroupPengiriman --> NewShipment[Buat Kiriman /app/pengiriman/baru]
-        GroupPengiriman --> BulkImport[Impor CSV /app/impor]
         GroupPengiriman --> ShipmentQueue[Histori Kiriman /app/pengiriman]
         ShipmentQueue --> ShipmentDetail[Detail Kiriman /app/pengiriman/:id]
         GroupPengiriman --> RtsQueue[Retur RTS /app/pengiriman/rts]
@@ -112,14 +111,12 @@ flowchart TD
         GroupCek --> TrackAwb[Cek Resi & Tracking /app/cek-resi]
 
         TenantShell --> GroupLaporan[Laporan - Admin Only]
-        GroupLaporan --> Analytics[Analitik Performa /app/analitik]
         GroupLaporan --> ShipmentReport[Laporan Pengiriman /app/laporan/pengiriman]
         GroupLaporan --> PrintHistory[Riwayat Cetak Resi /app/laporan/cetak-resi]
 
         TenantShell --> GroupPengelolaan[Pengelolaan - Admin Only]
-        GroupPengelolaan --> Finance[Keuangan & Rekonsiliasi /app/keuangan]
         GroupPengelolaan --> SettingsMenu[Pengaturan /app/pengaturan]
-        SettingsMenu --> ProfileSettings[Profil Toko & Prefix /app/pengaturan]
+        SettingsMenu --> ProfileSettings[Profil Gerai & Prefix /app/pengaturan]
         SettingsMenu --> PickupSettings[Titik Pickup /app/pengaturan/pickup]
         SettingsMenu --> OutletSettings[Outlet & Origin /app/pengaturan/outlet]
         SettingsMenu --> ConnectionSettings[Koneksi Mengantar /app/pengaturan/koneksi]
@@ -130,7 +127,7 @@ flowchart TD
         PlatformShell --> PlatformSummary[Ringkasan Monitoring /platform]
         PlatformShell --> PlatformTenants[Daftar Tenant /platform/tenant]
         PlatformTenants --> PlatformTenantDetail[Detail Tenant /platform/tenant/:id]
-        PlatformShell --> RegistrationQueue[Pendaftaran Toko Mandiri /platform/pendaftaran]
+        PlatformShell --> RegistrationQueue[Pendaftaran Gerai Mandiri /platform/pendaftaran]
         PlatformShell --> AuditLog[Log Audit Platform /platform/audit]
     end
 
@@ -158,7 +155,7 @@ In production, GeraiCUAN runs across distinct subdomains mediated by `src/proxy.
 
 ### Tenant Navigation Registry (`src/lib/cms-shell-navigation.ts`)
 
-The Tenant CMS sidebar lists **15 navigation items** in 6 groups, in the order of `navigationGroups` (`tenantCmsNavigation`); the other 8 tenant pages (contact create and detail, shipment detail, label sheet, settings sub-pages, `/app/anggota`) resolve one of these items as current. Dasbor is the single top-level row; every other group is a collapsible header. Icons mark top-level rows only (`navigationIcons` and `navigationGroupIcons` in `src/app/_components/cms-navigation.tsx`); submenu items are text.
+The Tenant CMS sidebar lists **12 navigation items** in 6 groups, in the order of `navigationGroups` (`tenantCmsNavigation`); the other 8 tenant pages (contact create and detail, shipment detail, label sheet, settings sub-pages, `/app/anggota`) resolve one of these items as current. Dasbor is the single top-level row; every other group is a collapsible header. Icons mark top-level rows only (`navigationIcons` and `navigationGroupIcons` in `src/app/_components/cms-navigation.tsx`); submenu items are text.
 
 **Active match rule (all items).** The current item is the one whose `href` is the longest match of the path: `/app` matches only exactly, every other `href` matches itself or any sub-path (`routeMatches`). Before matching, `/app/anggota` resolves as `/app/pengaturan`, and a contact page outside the role lists resolves as `/app/kontak/<role>`: `/app/kontak/baru` takes the role from `peran`, `/app/kontak/[contactId]` from `dari`, each defaulting to `pengirim` (`contactNavigationPath`). A path matching no item marks nothing current.
 
@@ -166,7 +163,6 @@ The Tenant CMS sidebar lists **15 navigation items** in 6 groups, in the order o
 |---|---|---|---|---|---|
 | **Utama** | `LayoutDashboard` (on the Dasbor row) | Dasbor | `/app` | Admin, Operator | — (exact match only) |
 | **Pengiriman** | `Package` | Buat kiriman | `/app/pengiriman/baru` | Admin, Operator | — |
-| | | Impor CSV | `/app/impor` | Admin, Operator | `/app/impor/*` |
 | | | Histori kiriman | `/app/pengiriman` | Admin, Operator | `/app/pengiriman/[shipmentId]` (not `baru` or `rts`, which match longer items) |
 | | | Retur (RTS) | `/app/pengiriman/rts` | Admin, Operator | — |
 | | | Cetak resi | `/app/label` | Admin, Operator | `/app/label/[shipmentId]` |
@@ -174,13 +170,11 @@ The Tenant CMS sidebar lists **15 navigation items** in 6 groups, in the order o
 | | | Penerima | `/app/kontak/penerima` | Admin, Operator | `/app/kontak/baru?peran=penerima`, `/app/kontak/[contactId]?dari=penerima` |
 | **Cek** | `ScanSearch` | Cek resi | `/app/cek-resi` | Admin, Operator | — |
 | | | Cek tarif | `/app/cek-tarif` | Admin, Operator | — |
-| **Laporan** | `BarChart3` | Analitik | `/app/analitik` | **Admin only** | — |
-| | | Laporan pengiriman | `/app/laporan/pengiriman` | **Admin only** | — |
+| **Laporan** | `BarChart3` | Laporan pengiriman | `/app/laporan/pengiriman` | **Admin only** | — |
 | | | Riwayat cetak resi | `/app/laporan/cetak-resi` | **Admin only** | — |
-| **Pengelolaan** | `Settings2` | Keuangan | `/app/keuangan` | **Admin only** | — |
-| | | Pengaturan | `/app/pengaturan` | **Admin only** | `/app/pengaturan/*`, `/app/anggota` |
+| **Pengelolaan** | `Settings2` | Pengaturan | `/app/pengaturan` | **Admin only** | `/app/pengaturan/*`, `/app/anggota` |
 
-*Note on Pengaturan Layout*: `/app/pengaturan` uses `SettingsLayout`. Desktop (`lg+`) renders a secondary internal rail with Profil toko, Titik pickup, Outlet, Koneksi Mengantar, and Anggota & akses (`/app/anggota`). Below `lg`, `/app/pengaturan` serves as the index hub with direct back-link navigation.
+*Note on Pengaturan Layout*: `/app/pengaturan` uses `SettingsLayout`. Desktop (`lg+`) renders a secondary internal rail with Profil gerai, Titik pickup, Outlet, Koneksi Mengantar, and Anggota & akses (`/app/anggota`). Below `lg`, `/app/pengaturan` serves as the index hub with direct back-link navigation.
 
 ### Platform Navigation Registry (`src/lib/cms-shell-navigation.ts`, `platformNavigationGroups`)
 
@@ -210,18 +204,17 @@ One group, "Platform", with the group icon `ShieldCheck` (`navigationGroupIcons`
 
 ---
 
-## 5. Tenant CMS Pages Tables (23 Routes)
+## 5. Tenant CMS Pages Tables (20 Routes)
 
-### 5.1 Command Center & Pengiriman (8 Routes)
+### 5.1 Command Center & Pengiriman (7 Routes)
 
 | Route | Source File | Actor & Primary Job | Canonical URL State | Reads & Mutation Owners | Required States | Maturity |
 |---|---|---|---|---|---|---|
 | `/app` | `src/app/app/page.tsx` | Dasbor: Daily overview, period delivery outcomes, per-courier recap, recent shipments. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `support` (`created`, `cod`, `non-cod`, `issued`), `persetujuan` (`diperlukan`). | `tenant-dashboard-repository.ts`, `outlet-readiness-repository.ts`. Read-only. | First-run setup checklist, pending approval banner, healthy empty, populated outcomes, courier recap table, partial/stale. | WORKTREE |
-| `/app/pengiriman/baru` | `src/app/app/pengiriman/baru/page.tsx` | Buat kiriman: Create individual shipment draft, select sender/recipient, calculate COD. | `draft`: Optional UUID to resume. | `saveShipmentDraft`, `loadShipmentEstimate`, `searchSenderShipmentContacts`, `searchRecipientShipmentContacts`. | Pristine form, contact selector dialog, destination search, COD arithmetic preview, duplicate warning banner, saved draft. | WORKTREE |
-| `/app/pengiriman` | `src/app/app/pengiriman/page.tsx` | Histori kiriman: Operational shipment queue, status grouping, bulk actions. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `status` (`ALL`, `NEEDS_ATTENTION`, lifecycle enums), `page`. | `loadShipmentQueuePage` in `shipment-queue-repository.ts`. | State summary count panel, empty queue, filtered empty, populated table with stacked cells, server pagination. | WORKTREE |
+| `/app/pengiriman/baru` | `src/app/app/pengiriman/baru/page.tsx` | Buat kiriman (T-200, one page): five numbered sections → "Simpan & cek tarif" → the estimate loads automatically once → service choice and AWB confirmation on the same page. | `draft`: Optional UUID to resume; any status of the tenant's own shipment (DRAFT/ESTIMATED continue the flow, later statuses show links to detail and label). | `saveShipmentDraft`, `loadShipmentEstimate` (auto-submitted once when no snapshot), `confirmShipmentIssuance` (via the shared `ShipmentIssuancePanel`, same order-fixture gate), `searchSenderShipmentContacts`, `searchRecipientShipmentContacts`. | Pristine form, contact selector dialog, destination search, duplicate warning banner, saved draft with automatic estimate, estimate error with manual retry, issuance choice, processed shipment. | WORKTREE |
+| `/app/pengiriman` | `src/app/app/pengiriman/page.tsx` | Histori kiriman: Operational shipment queue, status grouping; Tenant Admin "Perbarui status dari Mengantar" (T-204). | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `status` (`ALL`, `NEEDS_ATTENTION`, lifecycle enums), `page`. | `loadShipmentQueuePage` in `shipment-queue-repository.ts`; `pullMengantarStatus` (Tenant Admin, outlet list from `listTenantOutlets`; the page range is the pull period). | State summary count panel, empty queue, filtered empty, populated table with stacked cells, server pagination. | WORKTREE |
 | `/app/pengiriman/[shipmentId]` | `src/app/app/pengiriman/[shipmentId]/page.tsx` | Detail kiriman: Complete shipment record, status timeline, issuance, recovery, reconciliation. | Route param: shipment UUID, canonical integer `10013`, or prefixed `GC-10013`. | `loadShipmentDetail`, `confirmShipmentIssuance`, `checkStaleShipmentOperation`, `reconcileShipmentUnknownSubmission`, `recoverShipmentUnpaidPayment`. | Populated status rail, timeline, package details, payment breakdown, stale operation alert, retired COD formula refusal (a never-submitted version 1 COD totals row: guidance up front, services and confirm disabled, `shipmentCodFormulaRetired`, T-199), safe not-found (404). | WORKTREE |
-| `/app/pengiriman/rts` | `src/app/app/pengiriman/rts/page.tsx` | Retur (RTS): Triage returned / problem shipments with courier basis notes. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `status` (`ALL`, `RTS_QUEUED`, `RTS_IN_TRANSIT`, `RTS_RECEIVED`, `PROBLEM`), `page`. | `loadRtsShipmentsPage` in `rts-repository.ts`. Read-only. | State summary panel, provider observation basis caption, empty, filtered empty, populated table, sticky AWB column. | WORKTREE |
-| `/app/impor` | `src/app/app/impor/page.tsx` | Impor CSV: Upload spreadsheet, validate rows, create batches of drafts. | Form state (ephemeral upload session). | `uploadBulkIntake`, `createSelectedDrafts` in `src/app/app/impor/actions.ts`. | File dropzone, parsing error, row-level validation table, preview with selectable valid rows, creation progress. | WORKTREE |
+| `/app/pengiriman/rts` | `src/app/app/pengiriman/rts/page.tsx` | Retur (RTS): Triage returned / problem shipments with courier basis notes; Tenant Admin "Perbarui status dari Mengantar" (T-204). | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `status` (`ALL`, `RTS_QUEUED`, `RTS_IN_TRANSIT`, `RTS_RECEIVED`, `PROBLEM`), `page`. | `loadRtsShipmentsPage` in `rts-repository.ts`; `pullMengantarStatus` (Tenant Admin). | State summary panel, provider observation basis caption, empty, filtered empty, populated table, sticky AWB column. | WORKTREE |
 | `/app/label` | `src/app/app/label/page.tsx` | Antrean label: Find issued shipments ready for thermal printing. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `cetak` (`semua`, `belum`, `sudah`), `q` (AWB suffix 3–24 chars). | `loadLabelIndexPage` in `label-print-repository.ts`. | State summary panel, search input, print status tabs, populated table, print trigger links. | WORKTREE |
 | `/app/label/[shipmentId]` | `src/app/app/label/[shipmentId]/page.tsx` | Cetak resi: Thermal print preview (10×15 cm with stub or 10×10 cm standard). | Route param: shipment ID. LocalStorage: `geraicuan.label-size.<userId>`. | `loadPrintableLabel`, `recordLabelPrint` in `label-print-repository.ts`. | Print sheet preview, size selector toggle, cut-line & sender stub (10×15), Code 128 barcode, print execution. | WORKTREE |
 
@@ -242,20 +235,18 @@ One group, "Platform", with the group icon `ShieldCheck` (`navigationGroupIcons`
 | `/app/cek-tarif` | `src/app/app/cek-tarif/page.tsx` | Cek tarif ongkir: Ephemeral courier rate calculation without creating orders. | None (transient form state). | `checkShippingRates` in `src/app/app/cek-tarif/actions.ts`. Direct server read to Mengantar estimate API. | Origin ready outlet select, destination district search, weight input, courier quote comparison cards. | WORKTREE |
 | `/app/cek-resi` | `src/app/app/cek-resi/page.tsx` | Cek resi: Track shipment status by AWB suffix, tracking key, or shipment number. | None (AWB posted via Server Action to prevent URL logging). | `lookupShipmentTracking` in `src/app/app/cek-resi/actions.ts`, `shipment-tracking-lookup-repository.ts`. | Tracking input form, pending spinner, tracking history timeline with courier observation events, not-found state. | WORKTREE |
 
-### 5.4 Laporan (Tenant Admin Only - 3 Routes)
+### 5.4 Laporan (Tenant Admin Only - 2 Routes)
 
 | Route | Source File | Actor & Primary Job | Canonical URL State | Reads & Mutation Owners | Required States | Maturity |
 |---|---|---|---|---|---|---|
-| `/app/laporan/pengiriman` | `src/app/app/laporan/pengiriman/page.tsx` | Laporan pengiriman: Detailed period shipment report with courier breakdown & CSV export. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `kurir`, `status`, `halaman`. | `shipment-report-repository.ts`. Operator redirected to `/app`. | Date range filter, summary cards (Ongkir, Biaya COD, Estimasi Pencairan), courier breakdown, paginated table (50/page). | WORKTREE |
+| `/app/laporan/pengiriman` | `src/app/app/laporan/pengiriman/page.tsx` | Laporan pengiriman: Detailed period shipment report with courier breakdown, courier performance (moved from Analitik, T-204) & CSV export. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `kurir`, `status`, `halaman`. | `shipment-report-repository.ts`; `loadCourierPerformance` in `analytics-repository.ts` (resolved-outcome basis, own transaction). Operator redirected to `/app`. | Date range filter, summary cards (Ongkir, Biaya COD, Estimasi Pencairan), courier breakdown, Performa kurir chart + disclosed table (low volume ranked last; read failure degrades only that section), paginated table (50/page). | WORKTREE |
 | `/app/laporan/cetak-resi` | `src/app/app/laporan/cetak-resi/page.tsx` | Riwayat cetak: Audit log of print actions, reprint counts, and operator roles. | `rentang`, `dari`, `sampai`, `tz`, `outlet`. | `loadPrintHistoryPage` in `label-print-repository.ts`. Operator redirected to `/app`. | Filter bar, audit event table (AWB, printed timestamp, operator role, attempt status), max 200 rows notice. | WORKTREE |
-| `/app/analitik` | `src/app/app/analitik/page.tsx` | Analitik: Historical performance, courier trends, delivery success cohorts. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `kurir`, `status`, `basis`, `halaman`. | `analytics-repository.ts`. Operator redirected to `/app`. | Comparative KPI cards, delivery volume chart, courier distribution chart, financial summary (net money, no omset). | WORKTREE |
 
-### 5.5 Pengelolaan: Keuangan & Pengaturan (Tenant Admin Only - 6 Routes)
+### 5.5 Pengelolaan: Pengaturan (Tenant Admin Only - 5 Routes)
 
 | Route | Source File | Actor & Primary Job | Canonical URL State | Reads & Mutation Owners | Required States | Maturity |
 |---|---|---|---|---|---|---|
-| `/app/keuangan` | `src/app/app/keuangan/page.tsx` | Keuangan: Reconcile provider settlements, review ledger variances, reverse entries. | `rentang`, `dari`, `sampai`, `tz`, `outlet`, `status`, `halaman`, `rekonsiliasiId`. | `runLedgerReconciliation`, `pullMengantarSettlement`, `reverseLedgerEntry`, `ledger-repository.ts`. | Discrepancy queue, provider settlement pull button, ledger entry table, reversal confirmation modal. | WORKTREE |
-| `/app/pengaturan` | `src/app/app/pengaturan/page.tsx` | Profil toko: Store identity, lock shipment prefix (`GC-XXXXX`). | None (`?outlet=` redirected to `/app/pengaturan/outlet`). | `loadTenantShipmentPrefix`, `saveShipmentPrefix` in `pengaturan/actions.ts`. | Store name, shipment prefix setup, one-time irreversible lock dialog, locked badge. | WORKTREE |
+| `/app/pengaturan` | `src/app/app/pengaturan/page.tsx` | Profil gerai: Store identity, lock shipment prefix (`GC-XXXXX`). | None (`?outlet=` redirected to `/app/pengaturan/outlet`). | `loadTenantShipmentPrefix`, `saveShipmentPrefix` in `pengaturan/actions.ts`. | Store name, shipment prefix setup, one-time irreversible lock dialog, locked badge. | WORKTREE |
 | `/app/pengaturan/pickup` | `src/app/app/pengaturan/pickup/page.tsx` | Titik pickup: Manage Mengantar pickup addresses, set outlet default. | `outlet`: Tenant-scoped outlet ID. | `addOutletPickupPoint`, `setDefaultOutletPickupPoint`, `removeOutletPickupPoint`, `outlet-pickup-point-repository.ts`. | Active pickup points list, default badge, add pickup address dialog fetched from Mengantar, remove confirmation. | WORKTREE |
 | `/app/pengaturan/outlet` | `src/app/app/pengaturan/outlet/page.tsx` | Outlet & origin: View outlet readiness checklist, origin area mapping. | `outlet`: Tenant-scoped outlet ID. | `listOutletReadiness` in `outlet-readiness-repository.ts`. Read-only. | Readiness badge, pickup address checklist item, Mengantar connection checklist item, edit triggers. | WORKTREE |
 | `/app/pengaturan/koneksi` | `src/app/app/pengaturan/koneksi/page.tsx` | Koneksi Mengantar: Configure private API key or use platform default. | `outlet`: Tenant-scoped outlet ID. | `savePrivateMengantarCredential`, `switchMengantarToPlatformDefault`, `managed-secret-repository.ts`. | Connection mode radio (Platform Default vs Private API Key), masked key input, test connection button, switch warning. | WORKTREE |
@@ -283,16 +274,16 @@ All query parameters must be validated through route-specific parsers. Parsers m
 
 | Parameter | Accepted Values and Validating Owner | Target Routes | Behavior on Invalid or Absent Input |
 |---|---|---|---|
-| `rentang` | `hari-ini`, `kemarin`, `minggu-ini`, `bulan-ini`, `bulan-lalu`, `7-hari`, `30-hari`, `kustom`; validated by `src/lib/analytics-range.ts`. | Dasbor, Analitik, Keuangan, Kiriman, RTS, Label, Laporan, Platform. | Defaults to `7-hari` on Dasbor and `hari-ini` or `30-hari` on report routes. |
+| `rentang` | `hari-ini`, `kemarin`, `minggu-ini`, `bulan-ini`, `bulan-lalu`, `7-hari`, `30-hari`, `kustom`; validated by `src/lib/analytics-range.ts`. | Dasbor, Kiriman, RTS, Label, Laporan, Platform. | Defaults to `7-hari` on Dasbor and `hari-ini` or `30-hari` on report routes. |
 | `dari`, `sampai` | Calendar dates in `YYYY-MM-DD` format. Max span 366 days; future end dates forbidden. | Range-aware routes when `rentang=kustom`. | Reverts to default non-custom period if dates are malformed or illogical. |
 | `tz` | `Asia/Jakarta` (WIB), `Asia/Makassar` (WITA), `Asia/Jayapura` (WIT), `UTC`. Canonical display is WIB. | Range-aware routes. | Normalizes unknown timezone to `Asia/Jakarta`. |
-| `outlet` | Tenant-scoped outlet UUID. | Dasbor, Kiriman, Analitik, Keuangan, Laporan, Pengaturan, Platform. | Foreign or invalid ID is stripped from query; falls back to all tenant outlets. |
-| `status` | Route-specific enums (Shipment queue: `ALL`, `NEEDS_ATTENTION`, lifecycle enums; RTS: `ALL`, `RTS_QUEUED`, `RTS_IN_TRANSIT`, `RTS_RECEIVED`, `PROBLEM`; Contacts: `all`, `active`, `archived`). | Kiriman, RTS, Kontak, Label, Laporan, Analitik, Keuangan, Platform. | Displays adjusted filter notification; falls back to default allowlist value (`ALL` or `active`). |
-| `page` / `halaman` | Positive integers (`1, 2, 3...`). `page` used in queues; `halaman` in analytics, finance, reports, and platform. | Paginated list surfaces. | Falls back to page `1`. |
-| `kurir` | Courier code from authorized catalogue (`jne`, `sicepat`, `jnt`, `sap`, `ninja`, `lion`, `spx`, etc.). | Analitik, Laporan pengiriman, Platform. | Silently dropped if not present in tenant courier catalogue. |
+| `outlet` | Tenant-scoped outlet UUID. | Dasbor, Kiriman, Laporan, Pengaturan, Platform. | Foreign or invalid ID is stripped from query; falls back to all tenant outlets. |
+| `status` | Route-specific enums (Shipment queue: `ALL`, `NEEDS_ATTENTION`, lifecycle enums; RTS: `ALL`, `RTS_QUEUED`, `RTS_IN_TRANSIT`, `RTS_RECEIVED`, `PROBLEM`; Contacts: `all`, `active`, `archived`). | Kiriman, RTS, Kontak, Label, Laporan, Platform. | Displays adjusted filter notification; falls back to default allowlist value (`ALL` or `active`). |
+| `page` / `halaman` | Positive integers (`1, 2, 3...`). `page` used in queues; `halaman` in reports and platform. | Paginated list surfaces. | Falls back to page `1`. |
+| `kurir` | Courier code from authorized catalogue (`jne`, `sicepat`, `jnt`, `sap`, `ninja`, `lion`, `spx`, etc.). | Laporan pengiriman, Platform. | Silently dropped if not present in tenant courier catalogue. |
 | `cetak` | `semua`, `belum`, `sudah`. | Cetak resi (`/app/label`). | Defaults to `semua`. |
 | `support` | `created`, `cod`, `non-cod`, `issued`. | Dasbor (`/app`). | Opens drill-down supporting records panel. |
-| `basis` | `created`, `issued`, `outcome`, `exceptions`. | Analitik (`/app/analitik`). | Defaults to `created`. Dropped on `/app/laporan/pengiriman`. |
+| `basis` | Retired with Analitik (T-204). | — | Dropped on `/app/laporan/pengiriman`; the courier performance section there always uses the resolved-outcome basis. |
 | `q` | 3–24 alphanumeric AWB suffix (Label); 2–80 char text query (Kontak, Platform Tenant). | Label, Kontak, Platform Tenant. | Ignored if empty or violates length/character constraints. |
 | `peran` | `pengirim`, `penerima`. | Kontak Baru (`/app/kontak/baru`). | Preselects initial contact role. Default `pengirim`. |
 | `dari` | `pengirim`, `penerima`. | Detail Kontak (`/app/kontak/[contactId]`). | Sets breadcrumb & back link context. If absent, redirects to contact's first held role. |
@@ -303,19 +294,17 @@ All query parameters must be validated through route-specific parsers. Parsers m
 
 ---
 
-## 8. Route Handlers and HTTP Surfaces Table (5 Endpoints)
+## 8. Route Handlers and HTTP Surfaces Table (3 Endpoints)
 
 | Endpoint | Source File | Method & Caller | Auth & Security Contract | Maturity |
 |---|---|---|---|---|
 | `/api/auth/[...all]` | `src/app/api/auth/[...all]/route.ts` | GET, POST by client browser auth forms. | Handled by Better Auth. Rate-limited, validates `x-geraicuan-login-scope`, sets `HttpOnly`, `SameSite=Lax` session cookies. | WORKTREE |
-| `/app/impor/template.csv` | `src/app/app/impor/template.csv/route.ts` | GET by authenticated tenant user. | Re-authorizes tenant session; streams static CSV template with standard column headers. | COMMITTED |
-| `/app/analitik/export.csv` | `src/app/app/analitik/export.csv/route.ts` | GET by Tenant Admin. | Re-authorizes Tenant Admin; canonicalizes query range; streams filtered analytics CSV export up to hard ceiling. | WORKTREE |
 | `/app/laporan/pengiriman/export.csv` | `src/app/app/laporan/pengiriman/export.csv/route.ts` | GET by Tenant Admin. | Re-authorizes Tenant Admin; parses report filters; streams filtered shipment CSV up to 10,000 rows. PII (recipient phone & street) excluded; area label included. | WORKTREE |
 | `/api/webhooks/mengantar` | `src/app/api/webhooks/mengantar/route.ts` | Intended POST from Mengantar. | **CLOSED**. Refuses all requests with HTTP 404. Pins refusal via `tests/provider-webhook-boundary.integration.test.ts`. | CLOSED |
 
 ---
 
-## 9. Mutation Ownership Map (23 Server Action Files, 44 Actions)
+## 9. Mutation Ownership Map (22 Server Action Files, 40 Actions)
 
 Every mutation follows the mandatory pipeline:
 `Authenticate -> Derive Scope -> Validate Input -> Enforce Invariants/Idempotency -> Write to DB -> Record Audit/Ledger -> Revalidate/Redirect`.
@@ -330,12 +319,10 @@ Every mutation follows the mandatory pipeline:
 | `searchMengantarDestinationAreas` | `src/app/app/location-actions.ts` | Draft form & Contact form | None (calls Mengantar location API) | Tenant Admin or Operator. Cached & rate-limited. |
 | `validateMengantarDestinationAreaSelection` | `src/app/app/location-actions.ts` | Draft form & Contact form | None (validates district ID against Mengantar) | Tenant Admin or Operator. Rate-limited. |
 | `loadShipmentEstimate` | `src/app/app/estimate-actions.ts` | `/app/pengiriman/baru` | `shipment_estimates` snapshot | Tenant Admin or Operator. Validates pickup & destination. |
-| `confirmShipmentIssuance` | `src/app/app/pengiriman/[shipmentId]/actions.ts` | `/app/pengiriman/[shipmentId]` | `shipments`, `provider_batches`, ledger, COD totals | Tenant Admin or Operator. Enforces approval & idempotency. |
+| `confirmShipmentIssuance` | `src/app/app/pengiriman/[shipmentId]/actions.ts` | `/app/pengiriman/[shipmentId]`, `/app/pengiriman/baru` (T-200) | `shipments`, `provider_batches`, ledger, COD totals | Tenant Admin or Operator. Enforces approval & idempotency. |
 | `reconcileShipmentUnknownSubmission` | `src/app/app/pengiriman/[shipmentId]/reconciliation-actions.ts` | `/app/pengiriman/[shipmentId]` | `shipments`, `shipment_reconciliations` | **Tenant Admin only**. Reconciles unknown submission. |
 | `checkStaleShipmentOperation` | `src/app/app/pengiriman/[shipmentId]/stale-operation-actions.ts` | `/app/pengiriman/[shipmentId]` | Clears locked/stale operation flag | Tenant Admin or Operator. |
 | `recoverShipmentUnpaidPayment` | `src/app/app/pengiriman/[shipmentId]/unpaid-recovery-actions.ts` | `/app/pengiriman/[shipmentId]` | `shipments`, ledger recovery entry | **Tenant Admin only**. Manually marks unpaid order resolved. |
-| `uploadBulkIntake` | `src/app/app/impor/actions.ts` | `/app/impor` | Validates intake rows in memory | Tenant Admin or Operator. Validates CSV schema. |
-| `createSelectedDrafts` | `src/app/app/impor/actions.ts` | `/app/impor` | Batch inserts `shipment_drafts` | Tenant Admin or Operator. Batch creation transaction. |
 | `recordLabelPrint` | `src/app/app/label/[shipmentId]/actions.ts` | `/app/label/[shipmentId]` | Appends `label_print_events` | Tenant Admin or Operator. Records actor and print outcome. |
 | `searchContacts` | `src/app/app/kontak/actions.ts` | `/app/kontak/pengirim`, `/penerima` | None (scoped contact text search) | Tenant Admin or Operator. Scoped to active tenant. |
 | `saveContact` | `src/app/app/kontak/actions.ts` | `/app/kontak/baru` | Inserts `contacts`, `contact_addresses` | Tenant Admin or Operator. Normalizes phone & role. |
@@ -345,9 +332,7 @@ Every mutation follows the mandatory pipeline:
 | `archiveContactAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/[contactId]` | Sets `archived_at` on `contacts` | **Tenant Admin only**. Operator denied. |
 | `checkShippingRates` | `src/app/app/cek-tarif/actions.ts` | `/app/cek-tarif` | None (ephemeral provider estimate fetch) | Tenant Admin or Operator. Scoped to ready outlet origin. |
 | `lookupShipmentTracking` | `src/app/app/cek-resi/actions.ts` | `/app/cek-resi` | None (reads tracking history & provider events) | Tenant Admin or Operator. Posts AWB via action. |
-| `runLedgerReconciliation` | `src/app/app/keuangan/actions.ts` | `/app/keuangan` | Writes `ledger_reconciliations` | **Tenant Admin only**. |
-| `pullMengantarSettlement` | `src/app/app/keuangan/actions.ts` | `/app/keuangan` | `provider_settlement_items`, lifecycle transitions | **Tenant Admin only**. Pulls provider settlement data. |
-| `reverseLedgerEntry` | `src/app/app/keuangan/actions.ts` | `/app/keuangan` | Appends compensating ledger entry | **Tenant Admin only**. Append-only, never updates old row. |
+| `pullMengantarStatus` | `src/app/app/pengiriman/status-sync-actions.ts` | `/app/pengiriman`, `/app/pengiriman/rts` | `provider_settlement_pulls` (claimed slot, 1/min per outlet account), settlement items and order observations, lifecycle transitions to DELIVERED/PROBLEM/RTS (T-204: moved from Keuangan, behaviour unchanged) | **Tenant Admin only**. Read-only on Mengantar (GET invoices/orders); outlet's own account re-checked before writing; period = page range, max 62 days. |
 | `loadMengantarPickupOptions` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/pickup` | Fetches provider pickup addresses | **Tenant Admin only**. Resolves outlet credentials. |
 | `savePrivateMengantarCredential` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/koneksi` | Encrypts & stores API key in `managed_secrets` | **Tenant Admin only**. AES-256 encrypted at rest. |
 | `switchMengantarToPlatformDefault` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/koneksi` | Deactivates private credential record | **Tenant Admin only**. Blocked for `PRIVATE_ONLY` tenants. |
@@ -379,8 +364,8 @@ Every mutation follows the mandatory pipeline:
 ### Error, Loading, and Not-Found Layouts
 
 - **Layouts (3)**: `src/app/layout.tsx` (root document, fonts, theme), `src/app/app/layout.tsx` (tenant CMS shell: `requireCmsScope("tenant")`, sidebar, header tools, approval banner), `src/app/platform/layout.tsx` (platform CMS shell behind `resolvePlatformAccess`).
-- **Tenant Loading Boundaries (23)**: `src/app/app/loading.tsx`, `analitik/loading.tsx`, `anggota/loading.tsx`, `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `impor/loading.tsx`, `keuangan/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/penerima/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
-- **Tenant Error Boundaries (23)**: `error.tsx` beside each of the 23 tenant loading boundaries above (the same directories, `src/app/app/error.tsx` included), providing localized retry and error feedback without unmounting the parent shell.
+- **Tenant Loading Boundaries (20)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/penerima/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
+- **Tenant Error Boundaries (20)**: `error.tsx` beside each of the 20 tenant loading boundaries above (the same directories, `src/app/app/error.tsx` included), providing localized retry and error feedback without unmounting the parent shell.
 - **Platform Boundaries (2)**: `src/app/platform/loading.tsx`, `src/app/platform/error.tsx`; platform sub-routes (including `/platform/pendaftaran`) use these.
 - **Dedicated Not-Found Boundaries (3)**: `src/app/app/label/[shipmentId]/not-found.tsx`, `src/app/app/pengiriman/[shipmentId]/not-found.tsx`, `src/app/platform/tenant/[tenantId]/not-found.tsx`. There is no tenant-wide not-found boundary directly under `src/app/app/`; other tenant paths fall through to the framework 404, and contact detail renders its own safe missing state.
 - **Public pages** (`/`, login, sign-up, verification and password pages) have no route-level `loading.tsx`, `error.tsx` or `not-found.tsx`; they use the root layout and framework defaults.
@@ -402,20 +387,17 @@ Defines deterministic development-only scenario mocks triggered via the header `
 | Self-registration & approval | `tests/tenant-registration.integration.test.ts`, `tests/tenant-approval-gate.integration.test.ts`, `tests/tenant-approval-shipment-paths.integration.test.ts`, `tests/field-character-classes.integration.test.ts`, `tests/public-auth-pages-render.integration.test.ts` | `scripts/ui-audit/sign-up-approval.mjs`, `scripts/ui-audit/field-character-classes.mjs` |
 | Host routing & proxy | `tests/host-routing.integration.test.ts`, `tests/host-auth-boundary.integration.test.ts` | `scripts/ui-audit/host-surfaces.mjs` |
 | Dasbor (`/app`) | `tests/tenant-dashboard.integration.test.ts`, `tests/dashboard-period-page.integration.test.ts`, `tests/dashboard-outcome-parity.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs` |
-| Histori Kiriman (`/app/pengiriman`) | `tests/shipment-queue.integration.test.ts`, `tests/shipment-route-states.integration.test.ts`, `tests/state-summary-panel.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs`, `scripts/ui-audit/table-compact.mjs` |
-| Buat Kiriman (`/app/pengiriman/baru`) | `tests/shipment-draft.integration.test.ts`, `tests/shipment-actions.integration.test.ts`, `tests/cod-amount-formula.integration.test.ts`, `tests/cod-ongkir.integration.test.ts`, `tests/bulk-shipment-intake.integration.test.ts`, `tests/field-character-classes.integration.test.ts` | `scripts/ui-audit/cod-draft-preview.mjs`, `scripts/ui-audit/payment-methods.mjs`, `scripts/ui-audit/field-character-classes.mjs` |
+| Histori Kiriman (`/app/pengiriman`) | `tests/shipment-queue.integration.test.ts`, `tests/shipment-route-states.integration.test.ts`, `tests/state-summary-panel.integration.test.ts`, `tests/mengantar-status-pull-action.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs`, `scripts/ui-audit/table-compact.mjs` |
+| Buat Kiriman (`/app/pengiriman/baru`) | `tests/shipment-draft.integration.test.ts`, `tests/shipment-actions.integration.test.ts`, `tests/cod-amount-formula.integration.test.ts`, `tests/cod-ongkir.integration.test.ts`, `tests/field-character-classes.integration.test.ts` | `scripts/ui-audit/cod-draft-preview.mjs`, `scripts/ui-audit/payment-methods.mjs`, `scripts/ui-audit/field-character-classes.mjs` |
 | Detail Kiriman (`/app/pengiriman/[shipmentId]`) | `tests/shipment-actions.integration.test.ts`, `tests/shipment-route-states.integration.test.ts`, `tests/shipment-reference-repository.integration.test.ts`, `tests/shipment-issuance.integration.test.ts` | `scripts/ui-audit/shipment-detail-rail.mjs`, `scripts/ui-audit/cod-ongkir-surfaces.mjs` |
-| Retur RTS (`/app/pengiriman/rts`) | `tests/rts-repository.integration.test.ts`, `tests/rts-presentation.integration.test.ts`, `tests/state-summary-panel.integration.test.ts` | `scripts/ui-audit/rts-a11y.mjs` |
-| Impor CSV (`/app/impor`) | `tests/bulk-import-actions.integration.test.ts`, `tests/bulk-import-envelope.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs` |
+| Retur RTS (`/app/pengiriman/rts`) | `tests/rts-repository.integration.test.ts`, `tests/rts-presentation.integration.test.ts`, `tests/state-summary-panel.integration.test.ts`, `tests/mengantar-status-pull-action.integration.test.ts`, `tests/mengantar-settlement.integration.test.ts` | `scripts/ui-audit/rts-a11y.mjs` |
 | Antrean & Cetak Label (`/app/label/*`) | `tests/label-render.integration.test.ts`, `tests/label-thermal.integration.test.ts`, `tests/label-print.integration.test.ts` | `scripts/ui-audit/thermal-label.mjs` |
 | Pengirim & Penerima (`/app/kontak/*`) | `tests/contact-directory.integration.test.ts`, `tests/contact-render.integration.test.ts`, `tests/contact-actions.integration.test.ts` | `scripts/ui-audit/kontak-check.mjs`, `scripts/ui-audit/t188-contact-menus.mjs`, `scripts/ui-audit/field-character-classes.mjs` |
 | Cek Tarif (`/app/cek-tarif`) | `tests/quick-rate-render.integration.test.ts`, `tests/quick-rate-actions.integration.test.ts` | `scripts/ui-audit/header-tools.mjs`, `scripts/ui-audit/field-character-classes.mjs` |
 | Cek Resi (`/app/cek-resi`) | `tests/tracking-lookup.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs` |
-| Laporan Pengiriman & Export | `tests/shipment-report.integration.test.ts`, `tests/report-pages-render.integration.test.ts` | `scripts/ui-audit/laporan-reports.mjs` |
+| Laporan Pengiriman & Export | `tests/shipment-report.integration.test.ts`, `tests/report-pages-render.integration.test.ts`, `tests/shipment-report-courier-performance.integration.test.ts`, `tests/analytics-repository.integration.test.ts` | `scripts/ui-audit/laporan-reports.mjs` |
 | Riwayat Cetak Resi | `tests/print-history-report.integration.test.ts`, `tests/report-pages-render.integration.test.ts` | `scripts/ui-audit/laporan-reports.mjs` |
-| Analitik (`/app/analitik`) | `tests/analytics-repository.integration.test.ts`, `tests/analytics-range.integration.test.ts`, `tests/merchandise-figures-withdrawn.integration.test.ts` | `scripts/ui-audit/analytics-disclosure.mjs` |
-| Keuangan & Settlement (`/app/keuangan`) | `tests/finance-page.integration.test.ts`, `tests/ledger-repository.integration.test.ts`, `tests/mengantar-settlement.integration.test.ts` | `scripts/ui-audit/provider-settlement.mjs` |
-| Pengaturan Toko, Pickup, Outlet, Koneksi | `tests/tenant-profile-settings-page.integration.test.ts`, `tests/pickup-settings-page.integration.test.ts`, `tests/outlet-pickup-points.integration.test.ts`, `tests/mengantar-connection-page.integration.test.ts` | `scripts/ui-audit/settings-ux.mjs`, `scripts/ui-audit/pickup-selector.mjs` |
+| Pengaturan Gerai, Pickup, Outlet, Koneksi | `tests/tenant-profile-settings-page.integration.test.ts`, `tests/pickup-settings-page.integration.test.ts`, `tests/outlet-pickup-points.integration.test.ts`, `tests/mengantar-connection-page.integration.test.ts` | `scripts/ui-audit/settings-ux.mjs`, `scripts/ui-audit/pickup-selector.mjs` |
 | Anggota & Akses (`/app/anggota`) | `tests/member-governance-page.integration.test.ts`, `tests/member-governance-actions.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs` |
 | Platform Monitoring & Tenant | `tests/platform-monitoring.integration.test.ts`, `tests/platform-tenant-actions.integration.test.ts` | `scripts/ui-audit/admin-programme.mjs` |
 | Deployment & Environment Docs | `tests/deploy-environment-documentation.integration.test.ts` | Scans DEP-4 table mechanically |
@@ -452,13 +434,13 @@ Before modifying or implementing any page or server boundary:
 Run these read-only verification commands before committing:
 
 ```bash
-# 1. Verify Page Count (Must equal 36)
+# 1. Verify Page Count (Must equal 33)
 find src/app -name 'page.tsx' | wc -l
 
-# 2. Verify Route Handler Count (Must equal 5)
+# 2. Verify Route Handler Count (Must equal 3)
 find src/app -name 'route.ts' | wc -l
 
-# 3. Verify Server Action Files Count (Must equal 23)
+# 3. Verify Server Action Files Count (Must equal 22)
 rg --files src/app | rg 'actions[.]ts$' | wc -l
 
 # 4. Verify Exported Server Actions List
@@ -491,7 +473,7 @@ If any command reports a mismatch against the inventory in Section 0, investigat
    - Code 128 barcode is rasterized at 203 DPI pure monochrome.
 5. **Strict Closed Webhook (T-79)**:
    - `/api/webhooks/mengantar` refuses all requests with 404 until an authenticated, signed, replay-safe provider push contract with sanitized fixtures is verified.
-   - Delivery status transitions are driven by manual settlement pulls via `pullMengantarSettlement` in Keuangan.
+   - Delivery status transitions are driven by the Tenant Admin's manual pull "Perbarui status dari Mengantar" (`pullMengantarStatus`) on Histori kiriman and Retur (T-204; it was on Keuangan until that page was removed).
 6. **Self-Service Registration & Admin Approval Gate (T-181–T-184)**:
    - Stores register self-service via `/daftar` in `PROVISIONING` status.
    - Owner must verify email. Once verified, store appears in Super Admin approval queue (`/platform/pendaftaran`).

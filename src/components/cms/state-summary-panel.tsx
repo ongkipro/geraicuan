@@ -13,13 +13,17 @@ import { cn } from "@/lib/utils";
  * The whole panel is a GET form, so it needs no JavaScript.
  *
  * The active entry is marked three ways, none of them colour alone:
- * `aria-pressed="true"` for assistive technology, a check glyph, and a solid
- * rather than dashed border.
+ * `aria-pressed="true"` for assistive technology, a check glyph, and the
+ * accent fill with a primary ring.
+ *
+ * T-203 (40+ readers): each card reads label → count → one short line. The
+ * line is kept to a few words by the caller and never wraps; its full text is
+ * also the entry's `title`, and it stays in the button's accessible name.
  */
 
 export type StateSummaryEntry = {
   count: number;
-  /** One line of meaning under the count. */
+  /** A few words under the count (one line, no wrap), e.g. "Belum punya resi". */
   description: string;
   label: string;
   /** Metric ID in `docs/spec/19-METRICS-ANALYTICS-CONTRACT.md`. */
@@ -79,7 +83,7 @@ export function StateSummaryPanel({
             ? null
             : <input key={name} name={name} type="hidden" value={value} />,
         )}
-        <ul aria-label={label} className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-border/60 bg-muted/60 backdrop-blur-md p-1">
+        <ul aria-label={label} className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1">
           {entries.map((entry) => {
             const active = entry.value === selected;
             return (
@@ -87,10 +91,10 @@ export function StateSummaryPanel({
                 <button
                   aria-pressed={active}
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-sm outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring md:min-h-10",
                     active
-                      ? "border-border/80 bg-background font-semibold text-foreground shadow-xs"
-                      : "border-transparent font-medium text-muted-foreground hover:bg-background/60 hover:text-foreground",
+                      ? "bg-background font-semibold text-foreground shadow-resting"
+                      : "font-medium text-muted-foreground hover:text-foreground",
                   )}
                   data-metric-id={entry.metricId}
                   name={param}
@@ -99,7 +103,7 @@ export function StateSummaryPanel({
                 >
                   {active ? <Check aria-hidden="true" className="size-4 shrink-0" /> : null}
                   <span>{entry.label}</span>
-                  <span className="font-mono tabular-nums">{countFormatter.format(entry.count)}</span>
+                  <span className="tabular-nums">{countFormatter.format(entry.count)}</span>
                   <span className="sr-only">. {entry.description}</span>
                 </button>
               </li>
@@ -129,24 +133,23 @@ export function StateSummaryPanel({
               <button
                 aria-pressed={active}
                 className={cn(
-                  "flex h-full min-h-11 w-full flex-col items-start gap-1 rounded-xl border px-3.5 py-2.5 text-left outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring",
-                  active
-                    ? "border-primary bg-primary/10 shadow-xs text-foreground font-medium"
-                    : "border-border/70 border-dashed bg-card/70 hover:border-border hover:bg-card hover:shadow-2xs",
+                  "flex h-full min-h-11 w-full flex-col items-start gap-1 rounded-xl px-3 py-3 text-left border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  active ? "bg-accent ring-1 ring-primary" : "bg-card hover:bg-accent",
                 )}
                 data-metric-id={entry.metricId}
                 name={param}
+                title={entry.description}
                 type="submit"
                 value={entry.value}
               >
-                <span className="flex w-full min-w-0 items-center gap-1.5">
+                <span className="flex w-full min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
                   {active ? <Check aria-hidden="true" className="size-4 shrink-0 text-primary" /> : null}
-                  <span className="min-w-0 flex-1 text-sm font-medium wrap-anywhere">{entry.label}</span>
-                  <span className="font-mono text-base font-bold tabular-nums">
-                    {countFormatter.format(entry.count)}
-                  </span>
+                  <span className="min-w-0">{entry.label}</span>
                 </span>
-                <span className={cn("text-xs wrap-anywhere", active ? "text-foreground/80" : "text-muted-foreground")}>{entry.description}</span>
+                <span className="text-2xl font-bold tabular-nums text-foreground">
+                  {countFormatter.format(entry.count)}
+                </span>
+                <span className="w-full truncate text-sm text-muted-foreground">{entry.description}</span>
               </button>
             </li>
           );

@@ -154,7 +154,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
   it("keeps issuance production-gated, then permits an Operator only through the sanctioned fixture", async () => {
     fixture.role = "OPERATOR";
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({
-      error: expect.stringContaining("fixture non-produksi"),
+      error: expect.stringContaining("data uji non-produksi"),
     });
     expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
 

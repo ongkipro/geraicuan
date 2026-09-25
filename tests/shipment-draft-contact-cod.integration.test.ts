@@ -70,10 +70,18 @@ describe("shipment draft contact and COD experience", () => {
     // PR-48: the contact picker is now the shared combobox — a role="combobox"
     // trigger (id kept stable) whose in-popup CommandInput only renders once
     // opened, so SSR markup asserts on the always-rendered trigger contract.
-    expect(occurrences(markup, 'role="combobox"')).toBeGreaterThanOrEqual(2);
-    expect(markup).toContain('id="senderContactQuery"');
+    //
+    // T-205: the sender is filled from one of three sources (Alamat gerai / Buku kontak /
+    // Input baru). The sender search renders only once "Buku kontak" is chosen, so its
+    // hidden contact fields are never submitted beside a sender typed or taken from the
+    // gerai. With no gerai identity the form starts on "Input baru"; the source choice
+    // offers the address book, and both searches keep their own ids (`<prefix>ContactQuery`).
+    expect(occurrences(markup, 'role="combobox"')).toBeGreaterThanOrEqual(1);
+    expect(markup).not.toContain('id="senderContactQuery"');
+    expect(markup).toMatch(/<input[^>]*name="senderSource"[^>]*value="kontak"/);
+    expect(visibleText(markup)).toContain("Buku kontak");
+    expect(visibleText(markup)).not.toContain("Alamat gerai");
     expect(markup).toContain('id="recipientContactQuery"');
-    expect(markup).toContain('aria-controls="senderContactQuery-list"');
     expect(markup).toContain('aria-controls="recipientContactQuery-list"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('noValidate=""');
@@ -87,32 +95,34 @@ describe("shipment draft contact and COD experience", () => {
   // Owner steering 2026-09-16: the form read as one long sheet with no visible break
   // between origin, sender, recipient and package. Each section is a card whose headline
   // sits on the shared muted band, and the first section is no longer unlabelled.
-  it("separates the draft form into named sections with banded headlines", () => {
+  it("separates the draft form into named sections without title bands", () => {
     const markup = renderToStaticMarkup(createElement(ShipmentDraftForm, {
       autoFocusFirstField: false,
       outlets: [{ id: "00000000-0000-0000-0000-000000000027", name: "Outlet fixture", pickupPoints: [] }],
       submissionId: "00000000-0000-4000-8000-000000000041",
     }));
 
-    // The headline now opens with a lucide marker, so read the heading's text content.
     const headings = [...markup.matchAll(/<h2[^>]*data-slot="card-title"[^>]*>([\s\S]*?)<\/h2>/g)]
       .map(([, inner]) => inner.replace(/<[^>]*>/g, "").trim());
+    // T-205: five numbered sections in the owner's reference order (asal, pengirim di
+    // label, penerima, pembayaran, produk & paket), then the rail's summary card; handling
+    // stays a sub-section of the package.
     expect(headings).toEqual([
-      "Gudang asal",
-      "Pengirim",
+      "Asal kiriman",
+      "Pengirim di label",
       "Penerima",
-      "Paket",
-      "Instruksi dan penanganan",
-      "Nilai dan pembayaran",
+      "Pembayaran",
+      "Produk &amp; paket",
+      "Ringkasan kiriman",
     ]);
-    // Every one of those headlines carries the band, not just the first.
+    expect(markup).toMatch(/<h3[^>]*id="draft-handling-heading"[^>]*>Instruksi dan penanganan<\/h3>/);
+    // Spec 10 v2 §1.6 (T-202): no title band — no card header carries a fill or a rule.
     const banded = [...markup.matchAll(/<div[^>]*data-slot="card-header"[^>]*class="([^"]*)"/g)]
-      .filter(([, className]) => className.includes("bg-muted/40") && className.includes("border-b"));
-    expect(banded).toHaveLength(headings.length);
-    // Every section headline carries an icon marker, and the icon is decorative only.
-    const markedHeadings = [...markup.matchAll(/<h2[^>]*data-slot="card-title"[^>]*>([\s\S]*?)<\/h2>/g)]
-      .filter(([, inner]) => /<svg[^>]*aria-hidden="true"/.test(inner));
-    expect(markedHeadings).toHaveLength(headings.length);
+      .filter(([, className]) => className.split(/\s+/).some((token) => token.startsWith("bg-muted") || token === "border-b"));
+    expect(banded).toHaveLength(0);
+    // Each section carries a decorative step number, 1 to 5, outside the heading text.
+    const numbers = [...markup.matchAll(/<span aria-hidden="true" class="flex size-7[^"]*rounded-full[^"]*">(\d)<\/span>/g)].map(([, n]) => n);
+    expect(numbers).toEqual(["1", "2", "3", "4", "5"]);
   });
 
   it("shows the selected contact and chosen address provenance", () => {

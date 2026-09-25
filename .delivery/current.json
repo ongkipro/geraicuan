@@ -1,23 +1,23 @@
 {
-  "activeRun": "RUN-20260917T013105Z-afc9fdd5",
-  "activeTask": "T-180",
-  "capability": "full-stack",
+  "activeRun": "RUN-20260925T160629Z-e0841844",
+  "activeTask": "T-207",
+  "capability": "frontend",
   "job": "implementation",
   "lastRun": {
-    "finishedAt": "2026-09-16T19:10:01Z",
+    "finishedAt": "2026-09-25T15:44:00Z",
     "result": "PASS",
-    "runId": "RUN-20260916T190650Z-c5c3fe5d"
+    "runId": "RUN-20260925T142607Z-783f7fc9"
   },
-  "model": "claude-opus-5",
-  "observedHead": "f17fd1bb163d58b43c5692d5b869fc9123366d27",
+  "model": "claude-opus-5-5",
+  "observedHead": "9b76fe873558a14ffde6218ff4d3230af63e0f63",
   "observedState": "IMPLEMENTING",
   "project": "geraicuan",
   "provider": "anthropic",
   "reasoningEffort": "high",
-  "requirement": "PR-58",
-  "risk": "R4",
+  "requirement": "PR-14",
+  "risk": "R2",
   "schemaVersion": 1,
   "statusAuthority": "STATUS.md",
-  "updatedAt": "2026-09-17T01:31:05Z",
-  "worker": "unknown"
+  "updatedAt": "2026-09-25T16:06:29Z",
+  "worker": "claude-main"
 }

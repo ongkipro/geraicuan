@@ -13,7 +13,7 @@ export default function NewShipmentError({ reset }: { error: Error; reset: () =>
   useFocusTargetOnMount(HEADING_ID);
   return (
     <PageContainer>
-      <PageHeader eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Buat draf kiriman" />
+      <PageHeader eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Buat kiriman" />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Formulir draf tidak dapat dimuat</AlertTitle>

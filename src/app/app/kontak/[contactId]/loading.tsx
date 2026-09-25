@@ -7,18 +7,18 @@ export default function ContactDetailLoading() {
   return (
     <PageContainer aria-busy="true">
       <PageHeader
-        actions={<Skeleton className="h-11 w-40" />}
+        actions={<Skeleton className="h-11 w-40 md:h-10" />}
         description="Data kontak dan alamat tersimpan sedang disiapkan."
-        eyebrow="Kontak"
+        eyebrow="Data"
         title="Detail kontak"
       />
       <div aria-label="Memuat detail kontak" className="grid gap-6" role="status">
-        <Card className="shadow-none">
-          <CardHeader className="border-b"><Skeleton className="h-5 w-28" /><Skeleton className="h-4 w-64 max-w-full" /></CardHeader>
+        <Card>
+          <CardHeader><Skeleton className="h-5 w-28" /><Skeleton className="h-4 w-64 max-w-full" /></CardHeader>
           <CardContent className="grid gap-5 sm:grid-cols-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-11 w-36 sm:col-span-2" /></CardContent>
         </Card>
-        <Card className="shadow-none">
-          <CardHeader className="border-b"><Skeleton className="h-5 w-24" /><Skeleton className="h-4 w-72 max-w-full" /></CardHeader>
+        <Card>
+          <CardHeader><Skeleton className="h-5 w-24" /><Skeleton className="h-4 w-72 max-w-full" /></CardHeader>
           <CardContent className="grid gap-4"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></CardContent>
         </Card>
         <span className="sr-only">Memuat detail kontak…</span>

@@ -4,7 +4,7 @@ import { Check, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 
 type OutletNavigationItem = {
   id: string;
@@ -40,13 +40,15 @@ export function OutletSettingsWorkspace({
 
   if (!activeOutlet) return null;
 
+  // V-25: the selector stays a disclosure above the content at every width, so a
+  // nested outlet column never narrows the settings content column.
   return (
-    <section className="grid min-w-0 gap-6 xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10">
+    <section className="grid min-w-0 gap-6">
       <div className="min-w-0">
         <button
           aria-controls="outlet-navigation-list"
           aria-expanded={open}
-          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring xl:hidden"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setOpen((current) => !current)}
           type="button"
         >
@@ -55,9 +57,7 @@ export function OutletSettingsWorkspace({
             <span className="truncate text-sm font-semibold">{activeOutlet.name}</span>
           </span>
           <span className="flex shrink-0 items-center gap-2">
-            <Badge variant={activeOutlet.readinessStatus === "ready" ? "secondary" : "destructive"}>
-              {activeOutlet.readinessStatus === "ready" ? "Siap" : "Perlu dilengkapi"}
-            </Badge>
+            <ToneBadge label={activeOutlet.readinessStatus === "ready" ? "Siap" : "Perlu dilengkapi"} tone={activeOutlet.readinessStatus === "ready" ? "ok" : "warn"} />
             <ChevronDown
               aria-hidden="true"
               className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
@@ -67,7 +67,7 @@ export function OutletSettingsWorkspace({
 
         <nav
           aria-label="Pilih outlet"
-          className={`${open ? "block" : "hidden"} mt-2 max-h-[50dvh] overflow-y-auto rounded-md border p-1 xl:sticky xl:top-4 xl:mt-0 xl:block xl:max-h-[calc(100dvh-8rem)] xl:border-0 xl:p-0`}
+          className={`${open ? "block" : "hidden"} mt-2 max-h-[50dvh] overflow-y-auto rounded-md border bg-popover p-1 shadow-md`}
           id="outlet-navigation-list"
         >
           <ul className="space-y-1">
@@ -86,8 +86,8 @@ export function OutletSettingsWorkspace({
                     onClick={() => setOpen(false)}
                   >
                     <span className="grid min-w-0 flex-1 gap-1">
-                      <span className="line-clamp-2 text-sm font-medium leading-5">{outlet.name}</span>
-                      <span className="text-xs leading-4 text-muted-foreground">
+                      <span className="line-clamp-2 text-sm font-medium">{outlet.name}</span>
+                      <span className="text-xs text-muted-foreground">
                         {outlet.readinessStatus === "ready" ? "Siap dipakai" : "Perlu dilengkapi"}
                       </span>
                     </span>

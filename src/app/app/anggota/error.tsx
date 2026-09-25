@@ -29,7 +29,7 @@ export default function TenantMembersError({ reset }: { reset: () => void }) {
         header={
           <PageHeader
             description="Undang anggota, ubah peran, dan nonaktifkan akses tenant."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Anggota & akses"
           />
         }

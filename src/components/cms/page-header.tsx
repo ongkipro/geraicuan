@@ -8,13 +8,17 @@ type PageHeaderProps = {
   title: ReactNode;
 };
 
-/** shadcn-admin page heading: eyebrow, bold title, muted description, actions on the right. */
+/**
+ * shadcn-admin page heading: eyebrow, bold title, muted description, actions on the right.
+ * T-204 reference spacing: 13px uppercase eyebrow, 4px to the 26px title, 4px to the 15px
+ * description; actions centred beside the text from md and full width (44px) below it.
+ */
 export function PageHeader({ actions, description, eyebrow, focusTargetId, title }: PageHeaderProps) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-2">
-      <div className="min-w-0 space-y-0.5">
+    <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0 space-y-1">
         {eyebrow ? (
-          <p className="text-xs font-medium text-muted-foreground">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {eyebrow}
           </p>
         ) : null}
@@ -31,7 +35,7 @@ export function PageHeader({ actions, description, eyebrow, focusTargetId, title
           </div>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 max-sm:w-full [&>*]:min-h-11 md:[&>*]:min-h-8">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-3 max-md:w-full max-md:[&>*]:min-h-11 max-md:[&>*]:flex-1">{actions}</div> : null}
     </header>
   );
 }

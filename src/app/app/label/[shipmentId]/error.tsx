@@ -15,7 +15,7 @@ export default function LabelDetailError({ reset }: { reset: () => void }) {
   useFocusTargetOnMount(HEADING_ID);
   return (
     <PageContainer>
-      <PageHeader eyebrow="Label termal" focusTargetId={HEADING_ID} title="Detail label" />
+      <PageHeader eyebrow="Pengiriman" focusTargetId={HEADING_ID} title="Detail label" />
       <Alert variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Detail label belum dapat dimuat</AlertTitle>

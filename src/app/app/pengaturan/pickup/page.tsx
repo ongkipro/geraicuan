@@ -30,7 +30,7 @@ import {
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Titik pickup · GeraiCUAN", robots: { index: false } };
 
 const auditUpdatedAt = new Date("2026-09-01T00:00:00.000Z");
 const AUDIT_OUTLET_ID = "79000000-0000-4000-8000-000000000004";
@@ -171,7 +171,7 @@ export default async function PickupSettingsPage({
         header={
           <PageHeader
             description="Alamat penjemputan Mengantar yang boleh dipakai tiap outlet."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Titik pickup"
           />
         }

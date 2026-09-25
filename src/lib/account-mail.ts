@@ -28,8 +28,8 @@ export function sendVerificationMail(to: string, url: string) {
     kind: "verify-email",
     paragraphs: [
       "Halo,",
-      "Email ini baru saja dipakai untuk mendaftarkan toko di GeraiCUAN. Jika itu Anda, tekan tombol di bawah, lalu masukkan kata sandi yang Anda buat saat mendaftar. Tautan berlaku 24 jam.",
-      "Setelah email terverifikasi, Anda sudah bisa masuk dan menyiapkan toko sambil menunggu persetujuan Super Admin.",
+      "Email ini baru saja dipakai untuk mendaftarkan gerai di GeraiCUAN. Jika itu Anda, tekan tombol di bawah, lalu masukkan kata sandi yang Anda buat saat mendaftar. Tautan berlaku 24 jam.",
+      "Setelah email terverifikasi, Anda sudah bisa masuk dan menyiapkan gerai sambil menunggu persetujuan Super Admin.",
       "Jika Anda tidak mendaftar, abaikan email ini. Email ini hanya terverifikasi dengan kata sandi pendaftarnya, jadi tidak ada yang bisa masuk dengan email Anda.",
     ],
     subject: "Verifikasi email GeraiCUAN Anda",
@@ -69,7 +69,7 @@ export function sendAccountExistsMail(to: string) {
     kind: "account-exists",
     paragraphs: [
       "Halo,",
-      "Seseorang mencoba mendaftarkan toko baru dengan email ini, tetapi email ini sudah memiliki akun GeraiCUAN. Tidak ada akun baru yang dibuat.",
+      "Seseorang mencoba mendaftarkan gerai baru dengan email ini, tetapi email ini sudah memiliki akun GeraiCUAN. Tidak ada akun baru yang dibuat.",
       "Jika itu Anda, silakan masuk. Lupa kata sandi? Pilih \"Lupa kata sandi\" di halaman masuk.",
     ],
     subject: "Email Anda sudah terdaftar di GeraiCUAN",
@@ -83,9 +83,9 @@ export function sendRegistrationApprovedMail(to: string, name: string, storeName
     kind: "registration-approved",
     paragraphs: [
       `Halo ${name},`,
-      `Toko ${storeName} sudah disetujui. Anda sekarang dapat membuat, mengestimasi dan menerbitkan kiriman dengan akun Mengantar milik toko.`,
+      `Gerai ${storeName} sudah disetujui. Anda sekarang dapat membuat, mengestimasi dan menerbitkan kiriman dengan akun Mengantar milik gerai.`,
     ],
-    subject: "Toko Anda sudah disetujui",
+    subject: "Gerai Anda sudah disetujui",
     to,
   }));
 }
@@ -100,11 +100,11 @@ export function sendRegistrationRejectedMail(to: string, reason: string) {
     kind: "registration-rejected",
     paragraphs: [
       "Halo,",
-      "Pendaftaran toko dengan email ini di GeraiCUAN belum dapat disetujui.",
+      "Pendaftaran gerai dengan email ini di GeraiCUAN belum dapat disetujui.",
       `Alasan: ${reason}`,
       "Jika menurut Anda ada kekeliruan, hubungi tim GeraiCUAN.",
     ],
-    subject: "Pendaftaran toko Anda belum dapat disetujui",
+    subject: "Pendaftaran gerai Anda belum dapat disetujui",
     to,
   }));
 }

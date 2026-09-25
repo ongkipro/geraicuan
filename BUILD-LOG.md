@@ -4817,3 +4817,43 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Gotcha.** pg's own deprecation fires only when a *third* query queues (the second waits silently) and only once per process, so a clean dev log is no proof. Check `client._activeQuery || client._queryQueue.length` at `query()` time instead.
 - **Gotcha.** Drizzle query builders are lazy (they run on `.then`), so `Promise.all([tx.select…, tx.execute…])` starts them all at once; building them in an array is harmless, awaiting the array together is not.
 - **Owed.** State sweep: `finance-stream` 390 overflow 10px; `dashboard-action-empty` and `platform-audit-paginated` indistinguishable from their base route on the current seed.
+
+## 2026-09-25 — T-200 one-page shipment creation (GeraiOS-style flow, spec 20 glass)
+
+- **Context.** Owner approved checkpoint commit `9b76fe8` of the Phase 14–15 worktree, then asked for a simple GeraiOS-like "new shipment" flow with shadcn and the spec 20 glass style. The stale T-180 ledger run was closed FAIL with a note (T-180 itself is recorded complete).
+- **Developer database.** The previous 55450 container no longer existed. A new local container `geraicuan-dev-55450` (volume `geraicuan_dev_55450`, 127.0.0.1 only) was created, migrated through 0053 and seeded with `pnpm db:seed-local`; its pickup IDs are synthetic, so live estimates need the sanctioned fixtures or a real pickup configured in Outlet & koneksi.
+- **Change.** See T-200 evidence in `TASKS.md`. No migration, no provider contract change, no new dependency.
+- **Checks.** tsc exit 0; lint exit 0; full suite 129 files / 1,507 passed on a disposable tmpfs database (55461); helper mutation caught; browser flow at 1440/390 with fixtures.
+
+## 2026-09-25 — T-201 global visual screening and design contract v2.0
+
+- Owner direction: GeraiOS professional shadcn pattern, no glass; spec 10 is the only design document. Spec 20 superseded.
+- Screening: 37 routes × {1440, 390}, 40 findings (4 added by the independent review), register `docs/visual-screening-register.md`; screenshots kept as local evidence only.
+- Code: `/app/pengiriman/baru` and the draft form back to solid shadcn cards (T-200's glass removed). No other route restyled in this task.
+- Checks: tsc, lint, two render test files (11 tests) pass.
+
+## 2026-09-25 — T-202 professional low-frame UI and register repairs
+
+- **What.** Spec 10 v2.0 applied across the app: shared foundation first, then four agents repaired disjoint route groups (detail + label; dashboard, analitik, keuangan; platform; lists, headers, contacts, settings, public/auth), integrated and re-screened here. Evidence and the review outcome are in `TASKS.md` T-202; per-finding status in `docs/visual-screening-register.md` (e).
+- **Decisions kept.** Keuangan settlement keeps the sen (T-178); money stays `font-mono` (spec 10 §2.2); V-9 untouched (owner decision).
+- **Checks.** tsc 0; lint 0; full suite 133 files / 1,520 passed on a disposable tmpfs postgres:16 (55461); browser re-screen of 32 routes at 1440/390 on the same database seeded with `db:seed-local`.
+- **Gotcha.** The integration suite and the dev server can share the disposable database, but the suite wipes the seeded users (re-seed before browsing again) and `BETTER_AUTH_URL` must be the test origin (`http://127.0.0.1:3110`) for the suite and the dev origin for the server — pointing the suite at the dev origin turns sign-in into 403s.
+- **Gotcha.** The runtime role for tests must be `geraicuan_test_runtime` on `127.0.0.1/geraicuan_test` (`tests/integration-runtime-role.ts` refuses anything else); the seeder sets that role's password to `DEV_LOCAL_PASSWORD`.
+- **Environment.** `geraicuan-dev-55450` had exited; it was started for a check, not used, and stopped again. No commit, push, deploy or provider call.
+
+## 2026-09-25 — T-203 precision for a 40+ audience
+
+- **What.** Spec 10 v2.1: 40+ rule, colour budget, type scale in `@theme`, control sizes, `RecordList` anatomy, list pages as cards below `md` (owner chose app-style cards; V-9). Foundation by the coordinator, route groups by four agents on disjoint files, integration, re-screen and review here. Details in `TASKS.md` T-203.
+- **Decisions.** Money, counts and phones in sans `tabular-nums`, mono only for AWB/shipment number/prefix/codes (delegated by the owner). Filter "Terapkan" is outline so the page's one primary stays the job's action. Long phone lists show 8–10 rows and a "Tampilkan N lainnya" disclosure; the keuangan reconciliation list is not sliced because `rekonsiliasiId` focuses a row in it.
+- **Checks.** tsc 0; lint 0; full suite 133 files / 1,527 passed; browser re-screen of 27 routes at 1440/390.
+- **Gotcha.** Turbopack can keep serving a stale compile of a page after several agents edit shared components; a page that ignores its source (here the queue still a table at 390) needs a dev-server restart before any screen evidence counts.
+- **Gotcha.** Scanning `getComputedStyle(...).color` for "coloured text" by parsing digits misreads `oklch()` values; compare in sRGB (canvas `fillStyle` round-trip) or check colour visually.
+
+## 2026-09-25 — Phase 17 (T-204–T-206) masking-first product on the owner's HTML reference
+
+- **What.** See `TASKS.md` Phase 17. Uncommitted T-200–T-203 work was backed up first to `~/.local/state/geraicuan-backups/worktree-before-t204.tgz` (+ `tracked-diff-before-t204.patch`, 0600).
+- **Mengantar alignment.** Built only what is stored and sent today. Stored orders show `TYPE` (PICKUP/DROP), `pickupDate`, `SHIPPER_NAME/PHONE` and `productOrders`, and the owner's integration note lists `POST /time` (slots 09:00–18:00, ≥ 90 min ahead) — none of the request keys is verified while `POST /order` is refused (T-153), so the form does not show those controls. No vehicle field exists. Masking is guaranteed on GeraiCUAN's own label.
+- **Checks.** tsc 0; lint 0; full suite 127 files / 1,476 passed; browser re-screen of 21 routes at 1440/390 on the seeded demo.
+- **Gotcha.** Parallel agents sharing one scratch folder and one test database: give each agent its own log path, and treat a DB-backed failure seen only under concurrency as contention until it reproduces alone.
+- **Gotcha.** `git mv` stages; this repository's rule is to stage nothing unless asked — follow any `git mv`/`git rm --cached` with `git restore --staged`.
+

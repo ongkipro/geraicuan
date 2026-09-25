@@ -16,10 +16,8 @@ async function login(){await s.send('Network.clearBrowserCookies');await s.goto(
 // Each page names the table (by a header) that must carry stacked cells.
 const PAGES=[
  {path:'/app/pengiriman',header:'Ekspedisi / Resi',recipient:true,time:true},
- {path:'/app/analitik',header:'Resi terbit',time:true,noScroll:true},
  {path:'/app/label',header:'Terbit',recipient:true,time:true},
  {path:'/app/pengiriman/rts',header:'Penerima',recipient:true,time:true,optional:true},
- {path:'/app/keuangan',header:'Efektif',time:true,optional:true},
 ];
 const INSPECT=header=>`JSON.stringify((()=>{
  const table=[...document.querySelectorAll('table')].find(t=>[...t.querySelectorAll('th')].some(th=>th.innerText.trim()===${JSON.stringify(header)}));

@@ -126,7 +126,7 @@ export async function submitPlatformTenantLifecycle(
     return {
       outcome: "success",
       message: action === "create"
-        ? `Tenant ${resultName} berhasil diprovisikan.`
+        ? `Tenant ${resultName} berhasil dibuat.`
         : action === "suspend"
           ? `Tenant ${resultName} berhasil ditangguhkan.`
           : `Tenant ${resultName} berhasil diaktifkan kembali.`,
@@ -138,7 +138,7 @@ export async function submitPlatformTenantLifecycle(
     if (error instanceof TenantLifecycleDeniedError) {
       return {
         errors: action === "create"
-          ? { confirmation: "Provisioning tidak dapat diselesaikan." }
+          ? { confirmation: "Tenant tidak dapat dibuat." }
           : { confirmationName: "Nama tenant tidak cocok atau status sudah berubah." },
         outcome: "denied",
         message: "Tenant tidak ditemukan, status berubah, atau nama konfirmasi tidak cocok.",

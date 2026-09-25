@@ -1,12 +1,9 @@
-import { shipmentDetailHref } from "@/lib/shipment-number";
 import {
   formatRangeLabel,
   previousAnalyticsRange,
   serializeAnalyticsRange,
   type AnalyticsRange,
 } from "@/lib/analytics-range";
-
-export type AnalyticsTenantRole = "TENANT_ADMIN" | "OPERATOR";
 
 export type AnalyticsComparisonPresentation = {
   cue: "↑" | "↓" | "→";
@@ -60,11 +57,4 @@ export function formatAnalyticsComparison(
     cue: increased ? "↑" : "↓",
     text: `${percentage}% ${increased ? "lebih tinggi" : "lebih rendah"} dari periode sebelumnya.`,
   };
-}
-
-export function analyticsShipmentDetailHref(
-  role: AnalyticsTenantRole,
-  publicReference: string,
-): string | null {
-  return role === "TENANT_ADMIN" ? shipmentDetailHref(publicReference) : null;
 }

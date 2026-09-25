@@ -296,7 +296,6 @@ describe("PR-46/PR-47 pickup point Server Actions", () => {
       "/app/pengaturan/koneksi",
       "/app",
       "/app/pengiriman/baru",
-      "/app/impor",
       "/app/cek-tarif",
     ]);
   });
@@ -546,7 +545,6 @@ describe("Mengantar credential Server Actions", () => {
       "/app/pengaturan/koneksi",
       "/app",
       "/app/pengiriman/baru",
-      "/app/impor",
       "/app/cek-tarif",
     ]);
   });
@@ -629,7 +627,6 @@ describe("Mengantar credential Server Actions", () => {
       "/app/pengaturan/koneksi",
       "/app",
       "/app/pengiriman/baru",
-      "/app/impor",
       "/app/cek-tarif",
     ]);
   });

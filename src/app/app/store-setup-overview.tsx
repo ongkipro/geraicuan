@@ -48,7 +48,7 @@ export function StoreSetupOverview({
     },
     {
       description:
-        "Toko yang mendaftar sendiri mengirim dengan akun Mengantar miliknya. Simpan API key akun tersebut.",
+        "Gerai yang mendaftar sendiri mengirim dengan akun Mengantar miliknya. Simpan API key akun tersebut.",
       href: "/app/pengaturan/koneksi",
       linkLabel: "Hubungkan akun Mengantar",
       state: progress.hasOwnConnection ? "done" : "todo",
@@ -63,7 +63,7 @@ export function StoreSetupOverview({
     },
     {
       description:
-        "Super Admin memeriksa pendaftaran toko. Kami kirim email ke alamat pemilik begitu toko disetujui atau ditolak.",
+        "Super Admin memeriksa pendaftaran gerai. Kami kirim email ke alamat pemilik begitu gerai disetujui atau ditolak.",
       state: "waiting",
       title: "Persetujuan Super Admin",
     },
@@ -72,9 +72,9 @@ export function StoreSetupOverview({
   return (
     <PageContainer>
       <PageHeader
-        description="Siapkan toko sambil menunggu persetujuan. Pengiriman terbuka setelah toko disetujui."
+        description="Siapkan gerai sambil menunggu persetujuan. Pengiriman terbuka setelah gerai disetujui."
         eyebrow="Dasbor"
-        title="Siapkan toko Anda"
+        title="Siapkan gerai Anda"
       />
       {refused ? (
         <Alert data-testid="tenant-approval-refused" role="status">
@@ -85,7 +85,7 @@ export function StoreSetupOverview({
       ) : null}
       <Card>
         <CardContent>
-          <ol aria-label="Langkah menyiapkan toko" className="grid gap-0 divide-y">
+          <ol aria-label="Langkah menyiapkan gerai" className="grid gap-0 divide-y">
             {steps.map((step, index) => (
               <li className="flex flex-wrap items-start gap-x-4 gap-y-3 py-5 first:pt-0 last:pb-0" key={step.title}>
                 <span aria-hidden="true" className="mt-0.5 shrink-0 text-muted-foreground">

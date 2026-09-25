@@ -5,12 +5,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PrintHistoryFilters } from "@/app/app/laporan/cetak-resi/print-history-filters";
+import { HelpHint } from "@/components/cms/help-hint";
 import { EmptyState } from "@/components/cms/empty-state";
 import { PageContainer } from "@/components/cms/page-container";
 import { PageHeader } from "@/components/cms/page-header";
+import { desktopTableClassName, RecordItem, RecordList } from "@/components/cms/record-list";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
-import { StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { dataTableSurfaceClassName } from "@/components/cms/data-table-shell";
+import { shipmentIdLinkClassName, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -32,10 +36,12 @@ import {
   PRINT_OUTCOME_PRESENTATION,
   printReasonLabel,
 } from "@/lib/print-history";
+import { formatWibDateTimeParts } from "@/lib/label-format";
 import { shipmentLabelHref } from "@/lib/shipment-number";
+import { cn } from "@/lib/utils";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Riwayat cetak resi · GeraiCUAN", robots: { index: false } };
 
 type PrintHistoryPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -103,29 +109,37 @@ export default async function PrintHistoryReportPage({ searchParams }: PrintHist
   return (
     <PageContainer>
       <PageHeader
-        description="Siapa meminta cetak resi, kapan, dengan hasil apa, dan berapa kali resi yang sama dicetak ulang."
+        description="Log cetak resi: siapa, kapan, hasilnya, dan cetak ulang."
         eyebrow="Laporan"
         focusTargetId="print-history-heading"
         title="Riwayat cetak resi"
       />
 
-      <PrintHistoryFilters
-        activeCount={activeCount}
-        outlets={options.outlets}
-        rangeLabel={periodLabel}
-        timezoneLabel={timezoneLabel}
-        todayLocalDate={todayLocalDate}
-        values={{
-          endDate: range.lastIncludedDate,
-          outletId,
-          presetId: range.presetId,
-          startDate: range.startDate,
-        }}
-      />
-
-      <p className="max-w-2xl text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-        {periodLabel} · {timezoneLabel} · {presetLabel}
-      </p>
+      <div className="grid min-w-0 gap-2">
+        <PrintHistoryFilters
+          activeCount={activeCount}
+          outlets={options.outlets}
+          rangeLabel={periodLabel}
+          timezoneLabel={timezoneLabel}
+          todayLocalDate={todayLocalDate}
+          values={{
+            endDate: range.lastIncludedDate,
+            outletId,
+            presetId: range.presetId,
+            startDate: range.startDate,
+          }}
+        />
+        {/* Spec 10 §3 filter row: the active range sits under the row in text-xs muted. */}
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="min-w-0 text-xs text-muted-foreground wrap-anywhere">
+            {periodLabel} · {timezoneLabel} · {presetLabel}
+          </p>
+          <HelpHint label="Penjelasan periode riwayat cetak">
+            <p>Periode memakai waktu permintaan cetak tercatat.</p>
+            <p>Outlet diambil dari kiriman yang dicetak.</p>
+          </HelpHint>
+        </div>
+      </div>
 
       {issues.length > 0 ? (
         <Alert>
@@ -140,21 +154,26 @@ export default async function PrintHistoryReportPage({ searchParams }: PrintHist
       ) : null}
 
       <section aria-labelledby="print-history-rows-title" className="grid min-w-0 gap-3">
-        <h2 className="text-sm font-medium text-foreground" id="print-history-rows-title">
-          Permintaan cetak pada periode ini
-        </h2>
-        <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
-          <span className="tabular-nums">{data.totalCount}</span> permintaan tercatat
-          {data.totalCount > data.rows.length ? ` (menampilkan ${data.rows.length} terbaru)` : ""}
-          {" · "}
-          <span className="tabular-nums">{reprintedShipments}</span> kiriman pernah dicetak ulang.
-          Cetak ulang dihitung dari urutan cetak berhasil kiriman itu sendiri, jadi cetak pertama bukan cetak ulang.
-        </p>
+        <div className="grid gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold text-foreground" id="print-history-rows-title">
+              Daftar aktivitas cetak
+            </h2>
+            <Badge variant="secondary"><span className="tabular-nums">{data.totalCount}</span> catatan</Badge>
+            <HelpHint label="Penjelasan cetak ulang">
+              <p>Cetak ulang dihitung dari urutan cetak berhasil kiriman itu sendiri, jadi cetak pertama bukan cetak ulang.</p>
+            </HelpHint>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            <span className="tabular-nums">{reprintedShipments}</span> kiriman pernah dicetak ulang
+            {data.totalCount > data.rows.length ? ` · menampilkan ${data.rows.length} terbaru` : ""}
+          </p>
+        </div>
 
         {data.rows.length === 0 ? (
           <EmptyState
             action={
-              <Button asChild><Link href="/app/label">Buka Cetak resi</Link></Button>
+              <Button asChild><Link href="/app/label">Buka cetak resi</Link></Button>
             }
             description={activeCount > 0
               ? "Longgarkan periode atau outlet untuk melihat permintaan cetak lainnya."
@@ -163,9 +182,32 @@ export default async function PrintHistoryReportPage({ searchParams }: PrintHist
             title="Belum ada permintaan cetak pada periode ini."
           />
         ) : (
+          <>
+          {/* Spec 10 §6/§9 (T-203): below md the requests are cards; the table keeps md and up. */}
+          <RecordList initial={10} label="Riwayat cetak resi">
+            {data.rows.map((row) => {
+              const outcome = PRINT_OUTCOME_PRESENTATION[row.outcome];
+              const printed = formatWibDateTimeParts(row.printedAt);
+              return (
+                <RecordItem
+                  key={row.printEventId}
+                  meta={<time dateTime={row.printedAt.toISOString()}>{printed.date}, {printed.time}</time>}
+                  primary={`Oleh ${PRINT_ACTOR_ROLE_PRESENTATION[row.actorRole]} · ${printReasonLabel(row.reasonCode)}`}
+                  secondary={row.outletName}
+                  status={<ShipmentStatusBadge label={outcome.label} tone={outcome.tone} />}
+                  title={(
+                    <Link className={`inline-flex min-h-11 items-center whitespace-nowrap ${shipmentIdLinkClassName}`} href={shipmentLabelHref(row.publicReference)}>
+                      {row.publicReference}
+                    </Link>
+                  )}
+                  value={`${row.sequence === null ? "Tanpa urutan" : `Cetak #${row.sequence}`} · ulang ${row.reprintCount}×`}
+                />
+              );
+            })}
+          </RecordList>
           <Table
             className="min-w-[60rem]"
-            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName={cn(dataTableSurfaceClassName, desktopTableClassName)}
             containerProps={{
               "aria-label": "Riwayat cetak resi; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -177,46 +219,47 @@ export default async function PrintHistoryReportPage({ searchParams }: PrintHist
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-inherit px-3 text-xs font-semibold whitespace-nowrap">Nomor kiriman</TableHead>
-                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Waktu cetak</TableHead>
-                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Peran pelaku</TableHead>
-                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Hasil</TableHead>
-                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Alasan</TableHead>
-                <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Urutan cetak</TableHead>
-                <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Cetak ulang</TableHead>
+                <TableHead className="sticky left-0 z-10 bg-inherit px-3 whitespace-nowrap">Nomor kiriman</TableHead>
+                <TableHead className="px-3 whitespace-nowrap">Waktu cetak</TableHead>
+                <TableHead className="px-3 whitespace-nowrap">Peran pelaku</TableHead>
+                <TableHead className="px-3 whitespace-nowrap">Hasil</TableHead>
+                <TableHead className="px-3 whitespace-nowrap">Alasan</TableHead>
+                <TableHead className="px-3 text-right whitespace-nowrap">Urutan cetak</TableHead>
+                <TableHead className="px-3 text-right whitespace-nowrap">Cetak ulang</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.rows.map((row) => {
                 const outcome = PRINT_OUTCOME_PRESENTATION[row.outcome];
                 return (
-                  <TableRow className="group transition-colors hover:bg-muted/30" key={row.printEventId}>
-                    <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
+                  <TableRow key={row.printEventId}>
+                    <TableCell className="sticky left-0 z-10 bg-inherit px-3">
                       <Link
-                        className="inline-flex min-h-11 items-center whitespace-nowrap font-mono font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
+                        className={`inline-flex items-center whitespace-nowrap ${shipmentIdLinkClassName}`}
                         href={shipmentLabelHref(row.publicReference)}
                       >
                         {row.publicReference}
                       </Link>
                       <span className="mt-0.5 block text-xs text-muted-foreground whitespace-nowrap">{row.outletName}</span>
                     </TableCell>
-                    <TableCell className="px-3 whitespace-nowrap text-xs"><StackedDateTime value={row.printedAt} /></TableCell>
-                    <TableCell className="px-3 whitespace-nowrap text-xs font-medium">{PRINT_ACTOR_ROLE_PRESENTATION[row.actorRole]}</TableCell>
+                    <TableCell className="px-3 whitespace-nowrap"><StackedDateTime value={row.printedAt} /></TableCell>
+                    <TableCell className="px-3 whitespace-nowrap font-medium">{PRINT_ACTOR_ROLE_PRESENTATION[row.actorRole]}</TableCell>
                     <TableCell className="px-3 whitespace-nowrap">
                       <ShipmentStatusBadge label={outcome.label} tone={outcome.tone} />
                     </TableCell>
-                    <TableCell className="min-w-[12rem] max-w-[18rem] px-3 text-xs leading-relaxed whitespace-normal break-words">
+                    <TableCell className="min-w-48 max-w-72 px-3 whitespace-normal break-words">
                       {printReasonLabel(row.reasonCode)}
                     </TableCell>
-                    <TableCell className="px-3 text-right text-xs tabular-nums font-medium">
+                    <TableCell className="px-3 text-right tabular-nums font-medium">
                       {row.sequence === null ? "—" : `#${row.sequence}`}
                     </TableCell>
-                    <TableCell className="px-3 text-right text-xs tabular-nums font-medium">{row.reprintCount}×</TableCell>
+                    <TableCell className="px-3 text-right tabular-nums font-medium">{row.reprintCount}×</TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
+          </>
         )}
       </section>
     </PageContainer>

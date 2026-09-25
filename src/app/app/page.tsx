@@ -59,7 +59,7 @@ import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { DATA_STALE_AFTER_MS } from "@/lib/data-freshness";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Dasbor · GeraiCUAN", robots: { index: false } };
 
 type TenantDashboardPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -248,7 +248,7 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
   const activeFilterCount = Number(range.presetId !== "7-hari") + Number(Boolean(selectedOutlet));
   const analyticsQuery = serializeAnalyticsRange(range);
   if (selectedOutlet) analyticsQuery.set("outlet", selectedOutlet.id);
-  const analyticsHref = principal.role === "TENANT_ADMIN" ? `/app/analitik?${analyticsQuery.toString()}` : undefined;
+  const reportHref = principal.role === "TENANT_ADMIN" ? `/app/laporan/pengiriman?${analyticsQuery.toString()}` : undefined;
   const supportingLinks = Object.fromEntries(
     (["created", "cod", "non-cod", "issued"] as const).map((kind) => {
       const params = new URLSearchParams(analyticsQuery);
@@ -260,35 +260,35 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Operasional tenant" actions={<Suspense fallback={<Skeleton className="h-8 w-40 max-md:h-11 max-sm:w-full" />}><DashboardHeaderActions promise={resolvedOutletsPromise} role={principal.role} /></Suspense>} focusTargetId="dashboard-page-heading" title="Ringkasan" />
+      <PageHeader description="Ringkasan operasional pengiriman, status paket, dan kinerja ekspedisi." eyebrow="Utama" actions={<Suspense fallback={<Skeleton className="h-10 w-40 max-md:h-11 max-sm:w-full" />}><DashboardHeaderActions promise={resolvedOutletsPromise} role={principal.role} /></Suspense>} focusTargetId="dashboard-page-heading" title="Dasbor" />
 
       <Suspense fallback={<ReadinessSkeleton />}><OutletReadinessRegion promise={resolvedOutletsPromise} role={principal.role} /></Suspense>
 
       {/* The filter bar is the header's toolbar row and the line under it names the applied dates, zone, and outlet at every width; the period heading stays for the document outline only. */}
-      <section aria-labelledby="dashboard-period-heading" className="grid gap-4">
+      <section aria-labelledby="dashboard-period-heading" className="grid gap-6">
         <h2 className="sr-only" id="dashboard-period-heading">Ringkasan periode</h2>
-        <div className="space-y-3">
+        <div className="grid gap-2">
           <DashboardPeriodFilter activeCount={activeFilterCount} comparisonLabel={decisionContext.previousPeriodLabel} key={analyticsQuery.toString()} outlets={outletRows} rangeLabel={decisionContext.periodLabel} timezoneLabel={decisionContext.timezoneLabel} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate }} />
-          <p className="inline-flex items-center rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-2xs backdrop-blur-md [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
+          <p className="text-xs text-muted-foreground wrap-anywhere">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
           {range.issues.length > 0 ? <Alert><AlertTitle>Filter disesuaikan</AlertTitle><AlertDescription><ul className="list-disc pl-5">{range.issues.map((issue, index) => <li key={`${issue}-${index}`}>{analyticsIssueMessage(issue)}</li>)}</ul></AlertDescription></Alert> : null}
           {invalidOutlet ? <Alert variant="destructive"><AlertTitle>Filter outlet ditolak</AlertTitle><AlertDescription>Outlet pada alamat halaman tidak tersedia untuk tenant ini.<div className="mt-3"><Button asChild variant="outline"><Link href="/app">Reset ke filter aman</Link></Button></div></AlertDescription></Alert> : null}
         </div>
-        {periodReads ? <Suspense fallback={<PeriodSummarySkeleton />}><DashboardPeriodSummaryRegion analyticsHref={analyticsHref} context={periodContext} lifetimeMetricsPromise={metricsPromise} outletReady={outletRows.some((outlet) => outlet.ready)} promise={periodReads.summary} supportingLinks={supportingLinks} /></Suspense> : null}
+        {periodReads ? <Suspense fallback={<PeriodSummarySkeleton />}><DashboardPeriodSummaryRegion context={periodContext} lifetimeMetricsPromise={metricsPromise} outletReady={outletRows.some((outlet) => outlet.ready)} promise={periodReads.summary} reportHref={reportHref} supportingLinks={supportingLinks} /></Suspense> : null}
         {periodReads?.support && supportKind ? <Suspense fallback={<PeriodSupportSkeleton />}><DashboardPeriodSupportRegion context={periodContext} kind={supportKind} promise={periodReads.support} /></Suspense> : null}
       </section>
 
+      {/* T-206 reference: two cards per row from lg — period outcome beside its trend, then the recent records beside the courier recap. */}
       {periodReads ? (
-        <Suspense fallback={<OutcomeSkeleton />}><DashboardOutcomeRegion context={periodContext} promise={periodReads.outcome} /></Suspense>
+        <div className={dashboardOverviewGridClassName}>
+          <Suspense fallback={<OutcomeSkeleton />}><DashboardOutcomeRegion context={periodContext} promise={periodReads.outcome} /></Suspense>
+          <Suspense fallback={<PeriodTrendSkeleton />}><DashboardPeriodTrendRegion context={periodContext} demo={demoChart} previousPromise={periodReads.previousTrend} promise={periodReads.trend} /></Suspense>
+        </div>
       ) : null}
 
       <div className={dashboardOverviewGridClassName}>
-        {periodReads ? <Suspense fallback={<PeriodTrendSkeleton />}><DashboardPeriodTrendRegion context={periodContext} demo={demoChart} previousPromise={periodReads.previousTrend} promise={periodReads.trend} /></Suspense> : null}
         <Suspense fallback={<RecentSkeleton />}><DashboardRecentRegion actionPromise={actionPromise} multipleOutlets={outletRows.length > 1} recentPromise={recentPromise} role={principal.role} /></Suspense>
+        {periodReads ? <Suspense fallback={<CourierRecapSkeleton />}><DashboardCourierRecapRegion context={periodContext} promise={periodReads.courierRecap} /></Suspense> : null}
       </div>
-
-      {periodReads ? (
-        <Suspense fallback={<CourierRecapSkeleton />}><DashboardCourierRecapRegion context={periodContext} promise={periodReads.courierRecap} /></Suspense>
-      ) : null}
 
     </PageContainer>
   );

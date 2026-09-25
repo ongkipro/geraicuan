@@ -28,7 +28,7 @@ export default function PickupSettingsError({ reset }: { reset: () => void }) {
         header={
           <PageHeader
             description="Alamat penjemputan Mengantar yang boleh dipakai tiap outlet."
-            eyebrow="Pengaturan"
+            eyebrow="Pengelolaan"
             title="Titik pickup"
           />
         }

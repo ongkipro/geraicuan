@@ -60,7 +60,7 @@ try {
 
   await s.goto(`${tenant}/`);
   let page = await here();
-  check("tenant / lands on the tenant login", page.href === `${tenant}/login` && page.h1 === "Masuk ke toko Anda", page);
+  check("tenant / lands on the tenant login", page.href === `${tenant}/login` && page.h1 === "Masuk ke gerai Anda", page);
   await shot("tenant-login-1440");
 
   await s.goto(`${platform}/`);

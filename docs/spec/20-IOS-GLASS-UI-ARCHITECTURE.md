@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-09-25 (T-201).** The owner chose the GeraiOS professional shadcn pattern without glass. `10-DESIGN-SYSTEM-WHITELABEL.md` v2.0 is the only design contract; nothing in this document is a requirement. Glass classes still present in code are defects listed in `docs/visual-screening-register.md`. Kept for provenance only.
+
 # Spec 20: iOS / Glassmorphism UI/UX Architecture
 
 > **Authoritative Specification** for GeraiCUAN Apple-Inspired Glass Interface  

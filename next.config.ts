@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
         source: "/app/kontak",
       },
       { destination: "/app/kontak/pengirim", permanent: true, source: "/app/kontak" },
+      // T-204: Impor CSV, Keuangan and Analitik left the product; old bookmarks land on
+      // the page that now does their job instead of a bare 404. Temporary, so a browser
+      // does not cache the decision if a page ever returns.
+      { destination: "/app/pengiriman/baru", permanent: false, source: "/app/impor/:path*" },
+      { destination: "/app/laporan/pengiriman", permanent: false, source: "/app/keuangan/:path*" },
+      { destination: "/app/laporan/pengiriman", permanent: false, source: "/app/analitik/:path*" },
     ];
   },
   ...(allowedDevOrigins ? { allowedDevOrigins } : {}),

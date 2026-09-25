@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { CircleAlert, RefreshCw, Truck } from "lucide-react";
 
@@ -15,8 +15,8 @@ import {
   DRAFT_MONEY_METRIC_IDS,
   type DraftCodBreakdownValue,
 } from "@/app/app/shipment-draft-experience";
+import { ToneBadge } from "@/components/cms/shipment-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
 import { shippingMengantarDeductsIdr } from "@/lib/mengantar-cod-fee";
 import type { PaymentMethod } from "@/lib/payment-method";
 
@@ -50,6 +51,9 @@ type EstimateSnapshot = {
 
 type DraftEstimatePanelProps = {
   auditState?: "error" | null;
+  /** T-200: request the estimate once on arrival when none is stored yet. */
+  autoLoad?: boolean;
+  className?: string;
   draftId: string;
   isCod: boolean;
   /** T-186: defaults to what `isCod` implies for callers that predate COD Ongkir. */
@@ -75,17 +79,36 @@ function formatRetrievedAt(value: string) {
   }).format(new Date(value));
 }
 
-function EstimateButton({ hasSnapshot }: { hasSnapshot: boolean }) {
+function EstimateButton({ hasSnapshot, variant }: { hasSnapshot: boolean; variant?: "outline" }) {
   const { pending } = useFormStatus();
   return (
-    <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={pending} type="submit">
+    <Button className="min-h-11 max-md:w-full md:min-h-10" disabled={pending} type="submit" variant={variant}>
       <RefreshCw aria-hidden="true" className={pending ? "animate-spin" : undefined} />
       {pending ? "Memuat estimasi…" : hasSnapshot ? "Muat ulang estimasi" : "Muat estimasi"}
     </Button>
   );
 }
 
-export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentMethod = isCod ? "COD" : "NON_COD", snapshot }: DraftEstimatePanelProps) {
+/**
+ * T-200: the one-page flow shows the service choice itself, so it only needs the
+ * action that refreshes the stored estimate. Same action, same limits, same redirect.
+ */
+export function EstimateRefreshForm({ draftId }: { draftId: string }) {
+  const [state, action] = useActionState(loadShipmentEstimate, initialState);
+  return (
+    <form action={action} className="grid gap-2">
+      <input name="shipmentId" type="hidden" value={draftId} />
+      <EstimateButton hasSnapshot variant="outline" />
+      {state.unconfigured ? (
+        <p className="text-sm text-destructive" role="alert">Konfigurasi Mengantar belum tersedia. Hubungi Tenant Admin.</p>
+      ) : state.error ? (
+        <p className="text-sm text-destructive" role="alert">{state.error}</p>
+      ) : null}
+    </form>
+  );
+}
+
+export function DraftEstimatePanel({ auditState = null, autoLoad = false, className, draftId, isCod, paymentMethod = isCod ? "COD" : "NON_COD", snapshot }: DraftEstimatePanelProps) {
   const [auditRetryComplete, setAuditRetryComplete] = useState(false);
   const [state, action] = useActionState(
     loadShipmentEstimate,
@@ -93,6 +116,14 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
       ? { error: "Estimasi audit tidak dapat dimuat. Tinjau draf lalu coba lagi." }
       : initialState,
   );
+  const autoFormRef = useRef<HTMLFormElement>(null);
+  const autoRequested = useRef(false);
+  useEffect(() => {
+    // Once per mount: a failure shows its message and waits for the button, never a retry loop.
+    if (!autoLoad || snapshot || auditState || autoRequested.current) return;
+    autoRequested.current = true;
+    autoFormRef.current?.requestSubmit();
+  }, [auditState, autoLoad, snapshot]);
   const visibleSnapshot = snapshot;
   const visibleError = auditState === "error" && auditRetryComplete ? undefined : state.error;
   const services = visibleSnapshot?.services ?? [];
@@ -117,12 +148,13 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
               breakdown: service.codBreakdown,
               money: moneyLinesFor(service),
               providerService: service.providerService,
+              serviceName: serviceDisplayName(service.providerService),
             }]
           : [])
     : [];
 
   return (
-    <Card aria-busy={false} aria-labelledby="estimasi-draf-heading" id="estimasi-draf" role="region">
+    <Card aria-busy={false} aria-labelledby="estimasi-draf-heading" className={className} id="estimasi-draf" role="region">
       <CardHeader className="gap-4 md:flex md:items-start md:justify-between">
         <div className="grid gap-1">
           <CardTitle id="estimasi-draf-heading">Estimasi layanan</CardTitle>
@@ -133,7 +165,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
 
       {auditState === "error" ? (
         <Button
-          className="min-h-11 max-md:w-full md:min-h-8"
+          className="min-h-11 max-md:w-full md:min-h-10"
           onClick={() => setAuditRetryComplete(true)}
           type="button"
         >
@@ -143,7 +175,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
       ) : state.unconfigured ? (
         null
       ) : (
-        <form action={action} className="shrink-0">
+        <form action={action} className="shrink-0" ref={autoFormRef}>
           <input name="shipmentId" type="hidden" value={draftId} />
           <EstimateButton hasSnapshot={snapshot !== null} />
         </form>
@@ -186,7 +218,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
               390px. `containerProps` puts them on the real one, the way the
               shipment and return queues already do. */}
           <Table
-            containerClassName="rounded-md border"
+            containerClassName="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Daftar estimasi layanan Mengantar",
               role: "region",
@@ -208,16 +240,12 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
                   const money = moneyLinesFor(service);
                   return (
                   <TableRow key={service.providerService}>
-                    <TableCell className="font-medium"><span className="flex items-center gap-2"><Truck aria-hidden="true" className="size-4 text-muted-foreground" />{service.providerService}</span></TableCell>
-                    <TableCell>{service.deliveryEstimate}</TableCell>
+                    <TableCell className="font-medium"><span className="flex items-center gap-2"><Truck aria-hidden="true" className="size-4 text-muted-foreground" />{serviceDisplayName(service.providerService)}</span></TableCell>
+                    <TableCell>{deliveryEstimateLabel(service.deliveryEstimate)}</TableCell>
                     <TableCell>
-                      {service.codEligible ? (
-                        <Badge variant="secondary">Tersedia</Badge>
-                      ) : (
-                        <Badge aria-label={`COD tidak tersedia untuk ${service.providerService}`} variant="outline">Tidak tersedia</Badge>
-                      )}
+                      <ToneBadge label={service.codEligible ? "Tersedia" : "Tidak tersedia"} tone={service.codEligible ? "ok" : "neutral"} />
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">
+                    <TableCell className="text-right tabular-nums">
                       <span className="grid justify-items-end gap-0.5">
                         <span data-metric-id={DRAFT_MONEY_METRIC_IDS.normalPrice}>
                           Normal {formatIdr(money.normalPriceIdr)}
@@ -232,7 +260,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
                         )}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
                   </TableRow>
                   );
                 })}
@@ -244,7 +272,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
               className="grid gap-4 border-t pt-5"
             >
               <header>
-                <h3 className="font-medium" id="draft-cod-explanation-title">
+                <h3 className="text-base font-semibold" id="draft-cod-explanation-title">
                   Rincian penagihan COD sebelum konfirmasi
                 </h3>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -253,12 +281,12 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
                 </p>
               </header>
               <div className="grid gap-3 md:grid-cols-2">
-                {codBreakdowns.map(({ breakdown, money, providerService }) => (
+                {codBreakdowns.map(({ breakdown, money, providerService, serviceName }) => (
                   <DraftCodBreakdown
                     breakdown={breakdown}
                     key={providerService}
                     money={money}
-                    providerService={providerService}
+                    providerService={serviceName}
                   />
                 ))}
               </div>
@@ -270,7 +298,7 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
               className="@container grid gap-4 border-t pt-5"
             >
               <header>
-                <h3 className="font-medium" id="draft-cod-ongkir-title">
+                <h3 className="text-base font-semibold" id="draft-cod-ongkir-title">
                   Ongkir COD yang ditagih kurir
                 </h3>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -284,12 +312,12 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentM
                   about 160px each, so "Ongkir dipotong Mengantar" ran into its
                   own amount and the refusal message was cut off. The columns
                   follow the panel's own width instead. */}
-              <div className="grid gap-3 @xl:grid-cols-2">
+              <div className="grid gap-6 @xl:grid-cols-2">
                 {codOngkirServices.map((service, index) => (
                   <CodOngkirCharge
                     idPrefix={`draft-cod-ongkir-${index}`}
                     key={service.providerService}
-                    providerService={service.providerService}
+                    providerService={serviceDisplayName(service.providerService)}
                     shippingDeductedIdr={shippingMengantarDeductsIdr({
                       normalPriceIdr: service.normalPriceIdr ?? null,
                       shippingAmountIdr: service.shippingAmountIdr,

@@ -31,7 +31,7 @@ export function AuthShell({
           <p className="auth-brand">GeraiCUAN</p>
           <p className="auth-surface-tag">
             {surface === "platform" ? <ShieldCheck aria-hidden="true" /> : <Store aria-hidden="true" />}
-            {surface === "platform" ? "Khusus Super Admin" : "Untuk toko"}
+            {surface === "platform" ? "Khusus Super Admin" : "Untuk gerai"}
           </p>
         </div>
         <section aria-labelledby="auth-title" className="auth-card">

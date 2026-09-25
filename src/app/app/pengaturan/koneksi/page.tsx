@@ -25,7 +25,7 @@ import {
   UI_AUDIT_HEADER,
 } from "@/lib/ui-audit-scenario";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Koneksi Mengantar · GeraiCUAN", robots: { index: false } };
 
 const updatedAtFormatter = new Intl.DateTimeFormat("id-ID", {
   dateStyle: "medium",
@@ -193,8 +193,8 @@ export default async function MengantarConnectionSettingsPage({
         currentHref="/app/pengaturan/koneksi"
         header={
           <PageHeader
-            description="Sumber koneksi Mengantar tiap outlet: default GeraiCUAN atau akun sendiri."
-            eyebrow="Pengaturan"
+            description="Sumber koneksi Mengantar tiap outlet: koneksi bawaan GeraiCUAN atau akun sendiri."
+            eyebrow="Pengelolaan"
             title="Koneksi Mengantar"
           />
         }

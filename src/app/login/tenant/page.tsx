@@ -47,16 +47,16 @@ export default async function TenantLoginPage({
 
   return (
     <AuthShell
-      description="Untuk pemilik toko dan operator pengiriman."
+      description="Untuk pemilik gerai dan operator pengiriman."
       footer={
         <>
           <Link className="auth-link" href="/lupa-password">Lupa kata sandi?</Link>
-          <Link className="auth-link" href="/daftar">Belum punya akun? Daftarkan toko</Link>
+          <Link className="auth-link" href="/daftar">Belum punya akun? Daftarkan gerai</Link>
         </>
       }
       homeHref={homeHref}
       surface="tenant"
-      title="Masuk ke toko Anda"
+      title="Masuk ke gerai Anda"
     >
       <LoginForm
         demoCredentials={

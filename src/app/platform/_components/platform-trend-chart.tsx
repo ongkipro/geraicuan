@@ -23,7 +23,7 @@ export type PlatformTrendPoint = {
 const series = [
   { key: "created", label: "Kiriman dibuat", color: "var(--chart-1)", dash: undefined, dashLabel: "garis penuh" },
   { key: "issued", label: "Resi terbit", color: "var(--chart-2)", dash: "6 4", dashLabel: "garis putus-putus" },
-  { key: "failed", label: "Batch gagal", color: "var(--chart-5)", dash: "2 3", dashLabel: "garis titik-titik" },
+  { key: "failed", label: "Pengajuan gagal", color: "var(--chart-5)", dash: "2 3", dashLabel: "garis titik-titik" },
 ] as const;
 
 const chartConfig = Object.fromEntries(
@@ -46,7 +46,7 @@ export function PlatformTrendChart({
 
   return (
     <figure className="grid min-w-0 gap-3">
-      <ul aria-label="Keterangan grafik" className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+      <ul aria-label="Keterangan grafik" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {series.map(({ key, label, color, dash, dashLabel }) => (
           <li className="flex items-center gap-2" key={key}>
             <svg aria-hidden="true" className="shrink-0" height="8" width="24">
@@ -97,10 +97,10 @@ export function PlatformTrendChart({
           ))}
         </LineChart>
       </ChartContainer>
-      <figcaption className="max-w-2xl text-xs leading-5 text-muted-foreground">
-        Jumlah kiriman dibuat, resi terbit, dan batch provider gagal per {unit} · {periodLabel}.{" "}
+      <figcaption className="max-w-2xl text-sm text-muted-foreground">
+        Jumlah kiriman dibuat, resi terbit, dan pengajuan ke provider yang gagal per {unit} · {periodLabel}.{" "}
         {latest ? <>Nilai terakhir ({latest.label}): {series.map(({ key, label }) => `${label.toLocaleLowerCase("id-ID")} ${countFormatter.format(latest[key])}`).join(", ")}.{" "}</> : null}
-        Garis putus-putus menandai resi terbit; garis titik-titik menandai batch gagal. Tabel lengkap tersedia di bawah grafik.
+        Garis putus-putus menandai resi terbit; garis titik-titik menandai pengajuan gagal. Tabel lengkap tersedia di bawah grafik.
       </figcaption>
     </figure>
   );
