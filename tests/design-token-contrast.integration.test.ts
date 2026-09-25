@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -443,7 +443,9 @@ describe("design token contrast", () => {
         .not.toMatch(/\/|transparent/);
     }
     // The same fill can be moved into the CSS module, out of reach of the classes.
-    const tableModuleCss = readFileSync(join(process.cwd(), "src/components/ui/table.module.css"), "utf8");
+    // T-209: the v3 table has no CSS module; when one exists again its fills are held to the same rule.
+    const tableModulePath = join(process.cwd(), "src/components/ui/table.module.css");
+    const tableModuleCss = existsSync(tableModulePath) ? readFileSync(tableModulePath, "utf8") : "";
     for (const declaration of tableModuleCss.match(/background(?:-color)?:[^;]+;/g) ?? []) {
       expect(declaration, "a module row fill must be opaque")
         .not.toMatch(/transparent|\/\s*[0-9.]+%?\s*\)|rgba\(|hsla\(/);

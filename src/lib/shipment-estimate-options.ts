@@ -1,9 +1,22 @@
 import "server-only";
 
-import type { ShipmentEstimateOption } from "@/app/app/pengiriman/[shipmentId]/issuance-panel";
 import { calculateCodAmountsOrNull } from "@/db/cod-totals-repository";
-import { codChargeBreakdown, shippingMengantarDeductsIdr } from "@/lib/mengantar-cod-fee";
+import { codChargeBreakdown, shippingMengantarDeductsIdr, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
 import type { PaymentMethod } from "@/lib/payment-method";
+
+/** One service the issuance step offers (moved here from the removed issuance panel, T-208). */
+export type ShipmentEstimateOption = {
+  /** T-193: `codChargeBreakdown` of the amount confirmation would submit. */
+  codBreakdown: CodChargeBreakdown | null;
+  codEligible: boolean;
+  deliveryEstimate: string;
+  estimateServiceId: string;
+  insuranceAmountIdr: number | null;
+  providerService: string;
+  shippingAmountIdr: number;
+  /** T-186: the shipping Mengantar deducts, the COD Ongkir break-even basis. */
+  shippingDeductedIdr?: number;
+};
 
 type EstimateService = {
   codEligible: boolean;

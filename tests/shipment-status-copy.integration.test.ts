@@ -79,7 +79,8 @@ describe("shipment lifecycle presentation copy", () => {
     }
   });
 
-  it("keeps one lifecycle vocabulary on every surface that names a status", () => {
+  // T-209 (ADR-0001): UI v3 rebuild in progress — the pages this reads were removed; re-enable in T-219.
+  it.skip("keeps one lifecycle vocabulary on every surface that names a status", () => {
     // The platform monitoring filter, the RTS KPI cards and the reconciliation
     // panel each carried their own map, so one stored value read "Antre retur"
     // to a tenant and "RTS (Antrean)" to a super admin.
@@ -156,7 +157,8 @@ describe("shipment lifecycle presentation copy", () => {
     expect(values.slice(5)).toEqual([...shipmentStatuses]);
   });
 
-  it("renders the return queue from the shared presentation, not a second copy", () => {
+  // T-209 (ADR-0001): UI v3 rebuild in progress — the pages this reads were removed; re-enable in T-219.
+  it.skip("renders the return queue from the shared presentation, not a second copy", () => {
     const page = readFileSync(
       join(process.cwd(), "src/app/app/pengiriman/rts/page.tsx"),
       "utf8",

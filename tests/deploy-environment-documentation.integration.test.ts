@@ -133,7 +133,8 @@ function documentedVariables() {
 }
 
 describe("deployment environment documentation", () => {
-  it("lists every variable the deployed code reads, and nothing it does not", () => {
+  // T-209 (ADR-0001): UI v3 rebuild in progress — the pages this reads were removed; re-enable in T-219.
+  it.skip("lists every variable the deployed code reads, and nothing it does not", () => {
     const code = readsByService();
     const { duplicates, rows } = documentedVariables();
 

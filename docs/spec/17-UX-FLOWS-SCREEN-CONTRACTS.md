@@ -1,9 +1,93 @@
 # UX Flows and Screen Contracts: GeraiCUAN
 
-- Status: Accepted for CMS redesign
-- Locale: `id-ID`
-- Primary device model: desktop operator console with tablet rail and mobile sheet
-- Visual source: `10-DESIGN-SYSTEM-WHITELABEL.md`
+- Status: **UX-v3 accepted 2026-09-25 (UI rebuilt from zero, [ADR-0001](../adr/ADR-0001-ui-v3-rebuild.md)).** Sections UX-1 … T-196 below §UX-v3 are **history** (pre-v3); where they conflict with §UX-v3, §UX-v3 wins.
+- Locale: `id-ID`, IDR, WIB
+- Devices: desktop operator console (1440/1024), tablet icon rail (768), phone (390)
+- Visual contract: `10-DESIGN-SYSTEM-WHITELABEL.md` v3.0; visual reference per screen: `~/Documents/work/notes/geraicuan-html/<file>.html`
+
+---
+
+## UX-v3 — Masking-first CMS
+
+### UX-v3.1 Operational frame
+
+| Actor | Job | Trigger / frequency | Success | Failure cost |
+|---|---|---|---|---|
+| **Operator** (gerai staff, 40+) | Create shipments, print the gerai's label, hand parcels to the courier, follow returns | Many times a day, bursts before pickup | Correct resi printed on a masked label within minutes | Wrong address/COD amount; parcel shipped under the wrong identity |
+| **Tenant Admin** (gerai owner) | Everything the operator does + pull statuses, read reports, configure outlets/pickup/connection, manage members | Daily check, weekly report | Statuses current, reports trusted, setup complete | Money lost on COD, orders blocked by setup |
+| **Super Admin** | Approve registrations, watch tenant health, suspend/archive tenants, audit | Daily | Healthy tenants, fast approvals | Unauthorised access, stuck tenants |
+
+Surface split: daily operations (Buat kiriman, Histori, Retur, Cetak resi), lookups (Cek resi, Cek tarif), data (Pengirim, Penerima), reporting (Laporan pengiriman, Riwayat cetak resi), configuration (Pengaturan, Anggota), platform governance (Ringkasan, Tenant, Pendaftaran, Audit).
+
+### UX-v3.2 Objects and lifecycle
+
+- **Kiriman** (shipment): number `PREFIX-NNNNN`; parties snapshot (pengirim di label, penerima); paket (products → content + quantity, weight, dimensions, dangerous goods); pembayaran (Non-COD, COD, COD Ongkir); handover (Penjemputan / Drop di outlet, pickup date + slot — stored, not yet sent to Mengantar); outlet + titik pickup; estimate snapshot; provider order; label prints.
+- **Lifecycle** (`src/lib/shipment-queue.ts`, transitions `src/lib/provider-delivery-status.ts`): Draf → Diestimasi → Antre kirim → (Resi terbit | Menunggu pembayaran | Perlu rekonsiliasi | Gagal) → Dalam perjalanan → Terkirim | Bermasalah | Antre retur → Retur dalam perjalanan → Retur diterima. Only the issuance action and the Mengantar status pull move a shipment; the UI never sets a status directly.
+- **Kontak** (pengirim / penerima / both), with addresses; archived contacts stay for history.
+- **Outlet**, **titik pickup**, **koneksi Mengantar** (platform default or the gerai's own API key), **anggota** (Tenant Admin / Operator).
+
+### UX-v3.3 Permissions (UI visibility is never access control; the server re-checks every action)
+
+| Capability | Operator | Tenant Admin | Super Admin |
+|---|---|---|---|
+| Dasbor, Buat kiriman, Histori, Retur, Cetak resi, detail, label print | ✓ | ✓ | — |
+| Pengirim, Penerima (create, edit, archive) | ✓ | ✓ | — |
+| Cek resi, Cek tarif | ✓ | ✓ | — |
+| Perbarui status dari Mengantar | — | ✓ | — |
+| Laporan pengiriman (+ CSV), Riwayat cetak resi | — | ✓ | — |
+| Pengaturan (profil, prefix, pickup, outlet, koneksi), Anggota | — | ✓ | — |
+| Platform pages, approve/reject, suspend/archive, prefix unlock | — | — | ✓ |
+
+### UX-v3.4 Core flow — shipment to masked label
+
+1. **Isi data** (Buat kiriman): asal & penyerahan → pengirim di label (masking) → penerima → pembayaran → produk & paket. Primary: **Simpan & cek tarif** (`saveShipmentDraft` → redirect with the draft → `loadShipmentEstimate` once).
+2. **Cek tarif**: services from the estimate snapshot appear in section 5 on the same page (courier logo grid → service list). Failure: message + "Coba lagi"; the draft stays.
+3. **Pilih layanan & terbitkan**: choose one eligible service, tick "Paket sudah dicek fisik", primary **Konfirmasi & terbitkan AWB** (`confirmShipmentIssuance`, same guards and fixture gate). Outcomes: Resi terbit → "Cetak label" · Menunggu pembayaran → recovery on detail · Perlu rekonsiliasi → reconciliation on detail · Gagal → reason + edit draft.
+4. **Cetak label** (`/app/label/[n]`): choose 10×15 or 10×10 → preview = print → **Cetak label** (`recordLabelPrint`).
+5. **Follow**: Tenant Admin runs **Perbarui status dari Mengantar** (`pullMengantarStatus`) on Histori/Retur; statuses move; Retur lists returns.
+
+### UX-v3.5 Shared screen rules
+Page anatomy, filter row, card, table, record card, tiles, KPI, states and anti-slop rules are defined in spec 10 v3.0 §1.5 and §4 and apply to every screen below. Each screen lists only what is specific to it. "Ref" is the reference HTML file.
+
+### UX-v3.6 Screen contracts — tenant
+
+| Route | Ref | Job | Anatomy (top → bottom) | Primary / secondary | States | Data / actions |
+|---|---|---|---|---|---|---|
+| `/app` Dasbor | `dasbor.html` | See today's situation and what needs action | Header (Utama · Dasbor) → filter row (periode, outlet) → 4 KPI cards (Kiriman dibuat, COD, non-COD, Resi terbit) → row: Hasil pengiriman table (Terkirim, Retur, Gagal, Masih berjalan × COD/Non-COD/Total, status dots) · Grafik kiriman (line, this vs previous) → row: Kiriman terbaru (6 rows with next-step link) · Rekap per kurir (table + total) | Buat kiriman (primary); link "Laporan pengiriman →" (admin) | loading, no shipments (setup steps if gerai pending), filtered-empty, region error | `tenant-dashboard-repository` |
+| `/app/pengiriman/baru` Buat kiriman | `buat-kiriman.html` | Create a shipment and issue its resi | Header → stepper card (Isi data · Cek tarif · Terbitkan resi) → two columns: **form** [1 Penyerahan & asal: cards Penjemputan terjadwal / Drop di outlet, pickup address block from the titik pickup with "Ubah", pickup date + slot (09.00–18.00, ≥ 90 min ahead today), note "Belum dikirim ke Mengantar" · 2 Pengirim & penerima: sub-block DATA PENGIRIM (CETAK DI LABEL) with badge MASKING and "Gunakan masking pengirim" (off = gerai identity + pickup address; on = editable name, phone, kota; "Cari kontak tersimpan"), sub-block DATA PELANGGAN (name, phone, full address, kecamatan search with verified check) · 3 Pembayaran: cards COD (BAYAR DI TEMPAT, 3,33%) / Non-COD (TRANSFER/LUNAS); COD value row with checkbox "COD Ongkir" and fee line · 4 Produk & paket: rows Nama · Jumlah · Berat (kg), dashed "Tambah produk", Instruksi (opsional), "Detail tambahan" disclosure (dimensi, barang berbahaya) · 5 Pilih layanan ekspedisi: before estimate an empty frame "Tarif muncul setelah data disimpan"; after, courier logo grid + service list + "Paket sudah dicek fisik"] + **rail** "Ringkasan tagihan" (TARIF RESMI badge, route asal→tujuan, rows, rincian komponen biaya, big total, primary, "Simpan draf") | Simpan & cek tarif → Konfirmasi & terbitkan AWB (one visible at a time) | field errors with summary, estimate loading/failure, issuance pending/outcomes, gerai pending approval (read-only notice) | `saveShipmentDraft`, `searchSender/RecipientShipmentContacts`, `selectShipmentContact`, `searchMengantarDestinationAreas`, `verifyShipmentDraftDestinationArea`, `loadShipmentEstimate`, `confirmShipmentIssuance` |
+| `/app/pengiriman` Histori kiriman | `histori-kiriman.html` | Find a shipment and act on it | Header (Buat kiriman primary) → filter row → status tiles (Semua, Siap dilanjutkan, Resi terbit, Dalam perjalanan, Terkirim, Perlu perhatian) → one card: toolbar (search number/resi/penerima, "Perbarui status dari Mengantar" admin outline + one freshness line) → table (Nomor · Status/Pembayaran · Penerima · Paket/Outlet · Ekspedisi/Resi · Aktivitas) → footer count + pagination | Buat kiriman / Perbarui status | empty, filtered-empty, stale, pull result (status/alert only after the action) | `shipment-queue-repository`, `pullMengantarStatus`, `loadProviderDeliveryStatusBasis` |
+| `/app/pengiriman/[n]` Detail kiriman | `detail-kiriman.html` | Understand one shipment and take its next step | Back link → header (Kiriman GC-10058 + status badge) → main: Resi & label card (courier logo, resi large mono, copy, print count) · Pihak (pengirim di label, penerima) · Paket & pembayaran · Estimasi/layanan (issuance panel when Diestimasi) · Hasil penyedia; rail: Status + Tindakan berikutnya + Riwayat status | Next action (one primary) | per-status next actions: recovery, reconciliation, stale check | loaders in `src/db/*`, `confirmShipmentIssuance`, `recoverShipmentUnpaidPayment`, `reconcileShipmentUnknownSubmission`, `checkStaleShipmentOperation` |
+| `/app/pengiriman/rts` Retur | `retur-rts.html` | Follow returns and courier problems | Header → filter row → tiles (Semua retur, Antre retur, Dalam perjalanan, Diterima, Bermasalah) → card: toolbar (pull + freshness) → table (Resi · Penerima · Outlet & kurir · Pembayaran & berat · Status & waktu · Catatan) → pagination | Perbarui status (admin) | empty, filtered-empty | `rts-repository`, `pullMengantarStatus` |
+| `/app/label` Cetak resi | `cetak-resi.html` | Print labels for issued shipments | Header → filter row → tiles (Semua resi, Belum dicetak, Sudah dicetak) → card: search "akhiran resi" → table (Ekspedisi/Resi · Terbit · Penerima · Pembayaran · Cetak · Aksi "Cetak") | — | empty, invalid search | `label-print-repository` |
+| `/app/label/[n]` Label | `label-detail.html` | Print the masked label | Back link → header (Label <resi>) → left: size cards (10×15 default, 10×10) + **Cetak label** + riwayat cetak; right: preview (sheet scaled to fit, print 1:1) | Cetak label | not issued, unpaid | `recordLabelPrint`, label sheet |
+| `/app/kontak/pengirim`, `/penerima` | `pengirim.html`, `penerima.html` | Reuse parties | Header (Pengirim/Penerima baru primary) → card: tabs Aktif/Diarsipkan/Semua + search → table (Nama · Telepon · Alamat · Aksi WhatsApp/salin) → pagination (20) | New contact | empty, no results | `contact-repository`, `searchContacts` |
+| `/app/kontak/baru`, `/app/kontak/[id]` | `kontak-baru.html`, `kontak-detail.html` | Create/edit a contact | Back link → header → cards Kontak · Peran · Alamat (list with Utama, edit, add) → danger: Arsipkan | Simpan kontak / Pakai di kiriman baru | validation, archived | `saveContact`, `updateContactAction`, `add/updateContactAddressAction`, `archiveContactAction` |
+| `/app/cek-resi` | `cek-resi.html` | Track by number or resi | Header → card: input + **Cek resi** → result card (number, resi, courier, status, timeline) + tips | Cek resi | not found, rate limited | `lookupShipmentTracking` |
+| `/app/cek-tarif` | `cek-tarif.html` | Compare rates before creating | Header → card: outlet, kecamatan tujuan, berat + **Cek tarif** → results card (courier chips, service rows with logo, ongkir, estimasi, COD) | Cek tarif | unsupported route, provider error | `checkShippingRates` |
+| `/app/laporan/pengiriman` | `laporan-pengiriman.html` | Period report + CSV | Header (Ekspor CSV outline) → filter row (+ Filter lanjutan: kurir, status) → cards Total per kurir · Total per status → Performa kurir → Daftar kiriman table (≤ 7 columns: Nomor · Dibuat · Penerima (kecamatan, kota) · Kurir/Layanan · Status · Pembayaran · Biaya) + pagination | Ekspor CSV | empty, filtered-empty | `shipment-report-repository`, `export.csv` route |
+| `/app/laporan/cetak-resi` | `riwayat-cetak-resi.html` | Who printed what | Header → filter row → card table (Nomor · Waktu · Peran · Hasil · Urutan · Cetak ulang) + pagination | — | empty | `label-print-repository` |
+| `/app/pengaturan/*` | `pengaturan.html` | Configure the gerai | Settings layout: sub-menu + content cards (Profil gerai & prefix · Titik pickup list + add · Outlet readiness · Koneksi Mengantar radio cards) | Per card save | locked prefix, provider errors | `saveShipmentPrefix`, pickup and credential actions |
+| `/app/anggota` | `anggota.html` | Manage access | Settings layout → cards Ringkasan akses · Daftar anggota · Undang anggota | Undang anggota | last admin protected | member actions |
+
+### UX-v3.7 Screen contracts — platform and public
+
+| Route | Ref | Anatomy | Actions |
+|---|---|---|---|
+| `/platform` Ringkasan | `platform-ringkasan.html` | Filter row → health KPIs (with Kritis/Perhatian) → Perlu perhatian list → trend → tenant table → audit list | — |
+| `/platform/tenant`, `/platform/tenant/[id]` | `platform-tenant.html` | List (search, status badges, usage) + Buat tenant; detail: KPIs, outlets, submissions, finance/reconciliation read-only, audit, prefix, **Zona berbahaya** last | `submitPlatformTenantLifecycle`, `unlockShipmentPrefix` |
+| `/platform/pendaftaran` | `platform-pendaftaran.html` | Queue of registration cards (gerai, pemilik, email, WhatsApp, verified badge) with **Setujui gerai** and outline Tolak | `reviewRegistration` |
+| `/platform/audit` | `platform-audit.html` | Filter row → table (Waktu · Aksi sentence · Pelaku · Tenant · Hasil) | — |
+| Public: `/`, `/login/tenant`, `/login/super-admin`, `/daftar`, `/lupa-password`, `/atur-ulang-password`, `/verifikasi-email/*` | — | Centered card, 17px body, 48px fields; Super Admin on a dark ground with its own badge | auth actions in their folders |
+
+### UX-v3.8 Acceptance (every screen)
+- Matches its reference HTML at 1440 and 390 in a side-by-side screenshot review, section by section (spec 10 §11).
+- Every state in its row renders; permissions follow UX-v3.3 on the server.
+- No meta sentences, duplicated headings or badges that restate a heading (spec 10 §1.5).
+
+---
+
+## History (pre-v3)
+
 
 ## UX-1 — Operational frame
 

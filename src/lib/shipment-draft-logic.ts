@@ -1,10 +1,7 @@
-import { ArrowDown } from "lucide-react";
-import type { ReactNode } from "react";
-
-import type { ShipmentContactSelection } from "@/app/app/actions";
+// T-208 (UI v3 clean slate): the pure shipment-draft rules that used to live beside the old
+// form components. No JSX — server actions, the new UI and tests import these.
 import {
   BASIS_POINTS,
-  codChargeBreakdown,
   codOngkirBreakEvenIdr,
   codOngkirSellerDifferenceIdr,
   MAX_COD_AMOUNT_IDR,
@@ -12,7 +9,6 @@ import {
   mengantarCodFeeIdr,
   shippingMengantarDeductsIdr,
 } from "@/lib/mengantar-cod-fee";
-import { cn } from "@/lib/utils";
 
 /** "3,33%": Mengantar's COD fee rate, read from the one constant the fee helpers use. */
 export const MENGANTAR_COD_FEE_RATE_LABEL = `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(
@@ -68,37 +64,19 @@ export function parseProductRows(packageContent = "", packageQuantity = ""): Pro
   return [{ name: packageContent, quantity: packageQuantity || "1" }];
 }
 
-/** A summary line on the flow's rail: a muted label and its value. */
-export type SummaryRow = { label: string; value: ReactNode };
+// Mirrors the server's sender-address limit (`src/lib/shipment-draft.ts` MAX_ADDRESS_LENGTH).
+const MAX_SENDER_ADDRESS_LENGTH = 500;
 
 /**
- * T-205 rail summary, shared by the draft form, the estimate wait and the service
- * choice so the three states read the same. Presentational only.
+ * T-205 "Alamat gerai": the stored pickup label is "pickup name, street, sub-district, district,
+ * city, province, zip" (`src/lib/mengantar-locations.ts`). The label prints the address only: the
+ * leading name is Mengantar's pickup name, which need not be the gerai's (masking), and the area
+ * is already in the label, so nothing is appended.
  */
-export function ShipmentFlowSummary({ destination, origin, rows }: {
-  destination: string | null;
-  origin: string | null;
-  rows: readonly SummaryRow[];
-}) {
-  return (
-    <div className="grid gap-4 text-sm">
-      <div className="grid gap-1">
-        <p className="text-xs font-medium text-muted-foreground">Rute</p>
-        <p className={cn("wrap-anywhere", origin ? "font-medium" : "text-muted-foreground")}>{origin ?? "Asal belum dipilih"}</p>
-        <ArrowDown aria-hidden="true" className="size-4 text-muted-foreground" />
-        <p className="sr-only">ke</p>
-        <p className={cn("wrap-anywhere", destination ? "font-medium" : "text-muted-foreground")}>{destination ?? "Tujuan belum dipilih"}</p>
-      </div>
-      <dl className="grid gap-2 border-t pt-4">
-        {rows.map((row) => (
-          <div className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-baseline gap-3" key={row.label}>
-            <dt className="text-muted-foreground">{row.label}</dt>
-            <dd className="wrap-anywhere text-right font-medium">{row.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
+export function geraiAddress(point: { pickupAddressLabel: string } | null) {
+  if (!point) return "";
+  const parts = point.pickupAddressLabel.split(",").map((part) => part.trim()).filter(Boolean);
+  return (parts.length > 1 ? parts.slice(1) : parts).join(", ").slice(0, MAX_SENDER_ADDRESS_LENGTH);
 }
 
 /** "1.250 g · 3 barang" — the package line of the rail. */
@@ -110,76 +88,11 @@ export function packageSummaryLabel(weightGrams: string | number, quantity: stri
   return `${weightText} · ${countText}`;
 }
 
-type ContactSearchKeyEvent = {
-  isComposing: boolean;
-  key: string;
-  preventDefault: () => void;
-};
-
-export function invokeContactSearchFromKeyboard(
-  event: ContactSearchKeyEvent,
-  search: () => void,
-) {
-  if (event.key !== "Enter" || event.isComposing) return false;
-
-  event.preventDefault();
-  search();
-  return true;
-}
-
-type SelectedContactProvenanceProps = {
-  addressLabel?: string;
-  partyLabel: string;
-  selection: ShipmentContactSelection;
-};
-
-export function SelectedContactProvenance({
-  addressLabel,
-  partyLabel,
-  selection,
-}: SelectedContactProvenanceProps) {
-  return (
-    <div
-      aria-label={`Kontak ${partyLabel} terpilih`}
-      className="grid gap-3 rounded-lg bg-muted p-4"
-      role="status"
-    >
-      <p className="text-sm font-medium">Kontak tersimpan dipilih</p>
-      <dl className="grid gap-3 text-sm md:grid-cols-3">
-        <div className="min-w-0">
-          <dt className="text-xs font-medium text-muted-foreground">Kontak dipilih</dt>
-          <dd className="mt-1 wrap-anywhere">{selection.name}</dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-xs font-medium text-muted-foreground">Alamat dipilih</dt>
-          <dd className="mt-1 grid wrap-anywhere">
-            <strong className="font-medium">{addressLabel ?? "Alamat tersimpan"}</strong>
-            <span className="text-muted-foreground">{selection.address}</span>
-          </dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-xs font-medium text-muted-foreground">Area alamat</dt>
-          <dd className="mt-1 wrap-anywhere">{selection.destinationAreaLabel ?? "Area tidak disimpan untuk alamat ini"}</dd>
-        </div>
-      </dl>
-      <p className="text-sm leading-5 text-muted-foreground">
-        Disalin dari direktori kontak {partyLabel}. Isian manual tetap dapat diubah.
-      </p>
-    </div>
-  );
-}
-
 /** The COD amount a draft would submit; the fee lines come from `codChargeBreakdown` (T-193). */
 export type DraftCodBreakdownValue = {
   goodsValueIdr: number;
   providerCodAmountIdr: number;
   shippingAmountIdr: number;
-};
-
-type DraftCodBreakdownProps = {
-  breakdown: DraftCodBreakdownValue;
-  money: DraftProviderMoneyLines;
-  providerService: string;
 };
 
 /** The provider money facts one estimate row carries (PR-47). */
@@ -299,88 +212,6 @@ export function formatDraftIdr(value: number) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(value);
-}
-
-export function DraftCodBreakdown({
-  breakdown,
-  money,
-  providerService,
-}: DraftCodBreakdownProps) {
-  const charge = codChargeBreakdown(breakdown);
-  return (
-    <article className="min-w-0">
-      <h4 className="mb-3 wrap-anywhere text-sm font-medium">{providerService}</h4>
-      <dl className="text-sm">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 first:border-t-0">
-          <dt className="text-muted-foreground">Nilai barang dideklarasikan</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(breakdown.goodsValueIdr)}</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-          <dt className="text-muted-foreground">Ongkir penyedia</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(breakdown.shippingAmountIdr)}</dd>
-        </div>
-        {charge === null ? null : (
-          <>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-              <dt className="text-muted-foreground">
-                Biaya COD Mengantar 3,33% (termasuk PPN {formatDraftIdr(charge.codFeeVatIncludedIdr)})
-              </dt>
-              <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(charge.codFeeIdr)}</dd>
-            </div>
-            {charge.roundingIdr > 0 ? (
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-                <dt className="text-muted-foreground">Pembulatan ke rupiah</dt>
-                <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(charge.roundingIdr)}</dd>
-              </div>
-            ) : null}
-          </>
-        )}
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 font-semibold">
-          <dt>Total ditagih ke pelanggan</dt>
-          <dd className="text-right tabular-nums whitespace-nowrap">{formatDraftIdr(breakdown.providerCodAmountIdr)}</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-          <dt className="text-muted-foreground">Ongkir dasar pencairan Mengantar</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">
-            −{formatDraftIdr(money.providerChargedShippingIdr)}
-          </dd>
-        </div>
-        {money.mengantarCodFeeIdr === null ? null : (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-            <dt className="text-muted-foreground">Biaya COD Mengantar (3,33% dari total COD)</dt>
-            <dd className="text-right font-medium tabular-nums whitespace-nowrap">
-              −{formatDraftIdr(money.mengantarCodFeeIdr)}
-            </dd>
-          </div>
-        )}
-        {money.estimatedSellerPayoutIdr === null ? null : (
-          <div
-            className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 font-semibold"
-            data-metric-id={DRAFT_MONEY_METRIC_IDS.sellerPayout}
-          >
-            <dt>Estimasi diterima penjual</dt>
-            <dd className="text-right tabular-nums whitespace-nowrap">
-              {formatDraftIdr(money.estimatedSellerPayoutIdr)}
-            </dd>
-          </div>
-        )}
-      </dl>
-      {money.estimatedSellerPayoutIdr === null ? (
-        <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          Estimasi diterima penjual belum tersedia untuk kombinasi tarif ini: data ongkir
-          dari penyedia tidak konsisten, jadi angka disembunyikan agar tidak menampilkan
-          perkiraan yang salah.
-        </p>
-      ) : (
-        <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          Biaya COD (sudah termasuk PPN) ditagih ke pelanggan, lalu dipotong Mengantar
-          saat pencairan, sehingga estimasi ini sudah bersih dari biaya COD. Angka ini masih
-          memuat selisih ongkir normal-spesial sebesar{" "}
-          {formatDraftIdr(money.shippingSpreadIdr)}.
-        </p>
-      )}
-    </article>
-  );
 }
 
 /** The confirmation form field that carries the COD Ongkir charge to the server. */

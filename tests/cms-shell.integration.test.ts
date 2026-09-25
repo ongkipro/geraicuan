@@ -1,13 +1,11 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
 import { matchHas } from "next/dist/shared/lib/router/utils/prepare-destination";
 
 import nextConfig from "../next.config";
-import { completeCmsSignOut } from "@/app/_components/sign-out-control";
 import {
   platformCmsNavigation,
   tenantCmsNavigation,
@@ -68,37 +66,6 @@ describe("tenant CMS shell contract", () => {
 
     expect(current).toHaveLength(1);
     expect(current[0]?.label).toBe(label);
-  });
-
-  /**
-   * T-164 review: the resolver used to fall back to the dashboard key, so a page
-   * added to the app but never mapped into the menu would quietly mark Dasbor
-   * current while the operator stood somewhere else. The fallback is gone, which
-   * only helps if something enumerates the pages that actually exist.
-   */
-  it("resolves exactly one current destination for every /app page on disk", () => {
-    const routes: string[] = [];
-    const walk = (dir: string, url: string) => {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      if (entries.some((entry) => entry.isFile() && entry.name === "page.tsx")) routes.push(url);
-      for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
-        // A route group `(name)` adds no URL segment, so walk through it rather
-        // than past it — skipping would hide every page inside one. A dynamic
-        // segment stands in for one real id; the menu resolves it by prefix.
-        const segment = entry.name.startsWith("(")
-          ? ""
-          : `/${entry.name.startsWith("[") ? "3b4f" : entry.name}`;
-        walk(join(dir, entry.name), url + segment);
-      }
-    };
-    walk(join(process.cwd(), "src/app/app"), "/app");
-
-    expect(routes.length, "pages found under src/app/app").toBeGreaterThan(10);
-    for (const route of routes) {
-      const current = itemsFor("TENANT_ADMIN", route).filter((item) => item.current);
-      expect(current.map((item) => item.label), `current rows for ${route}`).toHaveLength(1);
-    }
   });
 
   it("uses the accepted navigation groups in task order (PR-54)", () => {
@@ -202,10 +169,8 @@ describe("tenant CMS shell contract", () => {
     },
   );
 
-  // Superseded by the on-disk sweep above. `aria-current="page"` on Dasbor while
-  // the operator stands on an unmapped route is a wrong answer, not a graceful
-  // one, and it is the same wrong answer this file already rejects for a route
-  // the role may not see. Nothing current is the honest state.
+  // `aria-current="page"` on Dasbor while the operator stands on an unmapped
+  // route is a wrong answer; nothing current is the honest state.
   it("marks nothing current on a route the menu does not own", () => {
     expect(
       itemsFor("OPERATOR", "/app/belum-dikenal").filter((item) => item.current),
@@ -254,152 +219,5 @@ describe("platform CMS shell contract", () => {
     expect(current[0]?.label).toBe("Ringkasan");
     expect(items.map((item) => item.label)).not.toContain("Kiriman");
     expect(items.map((item) => item.label)).not.toContain("Anggota & akses");
-  });
-});
-
-describe("CMS sign-out boundary", () => {
-  it("ends the session before returning to the correct login entry", async () => {
-    const request = vi.fn().mockResolvedValue({ ok: true });
-    const navigate = vi.fn();
-
-    await completeCmsSignOut(request, navigate, "/login/tenant");
-
-    expect(request).toHaveBeenCalledWith(
-      "/api/auth/sign-out",
-      expect.objectContaining({
-        credentials: "same-origin",
-        method: "POST",
-      }),
-    );
-    expect(navigate).toHaveBeenCalledOnce();
-    expect(navigate).toHaveBeenCalledWith("/login/tenant");
-  });
-
-  it("keeps the operator in place when sign-out is rejected", async () => {
-    const request = vi.fn().mockResolvedValue({ ok: false });
-    const navigate = vi.fn();
-
-    await expect(
-      completeCmsSignOut(request, navigate, "/login/super-admin"),
-    ).rejects.toThrow("CMS sign-out request failed");
-    expect(navigate).not.toHaveBeenCalled();
-  });
-});
-
-describe("responsive CMS navigation presentation", () => {
-  const shellSource = readFileSync(
-    "src/app/_components/cms-shell.tsx",
-    "utf8",
-  );
-  const navigationSource = readFileSync(
-    "src/app/_components/cms-navigation.tsx",
-    "utf8",
-  );
-  const signOutSource = readFileSync(
-    "src/app/_components/sign-out-control.tsx",
-    "utf8",
-  );
-
-  const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
-
-  it("uses one shadcn Sidebar for every width: icon rail on tablet, Sheet on mobile", () => {
-    // shadcn-admin AppSidebar pattern: a single Sidebar, not separate
-    // sidebar/rail/sheet mounts that can drift apart.
-    expect(navigationSource.match(/<Sidebar\b/g)).toHaveLength(1);
-    expect(navigationSource).toContain('collapsible="icon"');
-    expect(shellSource).toContain('"(min-width: 768px) and (max-width: 1023px)"');
-    expect(shellSource).toContain("setSidebarOpen(!tablet.matches)");
-    // The Sidebar renders its own Sheet on mobile and returns focus to the trigger.
-    expect(sidebarSource).toMatch(/if \(isMobile\) \{\s*return \(\s*<Sheet/);
-    expect(sidebarSource).toContain("mobileTriggerRef.current?.focus()");
-    expect(shellSource).toContain('aria-label="Buka atau tutup navigasi"');
-  });
-
-  it("keeps destinations named and current, with rail-only tooltips and 44px mobile targets", () => {
-    expect(navigationSource).toContain('aria-current={item.current ? "page" : undefined}');
-    expect(navigationSource).toContain("isActive={item.current}");
-    expect(navigationSource).toContain("<span>{item.label}</span>");
-    // A mounted tooltip is a separate Escape layer, so tooltips exist only on
-    // the collapsed desktop rail; otherwise the mobile Sheet needs two Escapes.
-    expect(navigationSource).toContain("tooltip={railTooltip(item.label)}");
-    expect(navigationSource).toContain('state === "collapsed" && !isMobile ? label : undefined');
-    expect(navigationSource).toMatch(/className="h-10 [^"]*max-md:h-11/);
-  });
-
-  it("gives every destination its own icon in one flat list with uppercase group labels (T-204, supersedes T-187/T-192)", () => {
-    const headerToolsSource = readFileSync(
-      "src/app/_components/cms-header-tools.tsx",
-      "utf8",
-    );
-    const keys = [
-      ...tenantCmsNavigation("TENANT_ADMIN", "/app"),
-      ...platformCmsNavigation("/platform"),
-    ].flatMap((group) => group.items.map((item) => item.key));
-    for (const key of keys) {
-      expect(navigationSource, key).toMatch(new RegExp(`(?:"${key}"|\\b${key}): [A-Z][A-Za-z0-9]+,`));
-    }
-    expect(navigationSource).toContain("const Icon = navigationIcons[item.key] ?? FileText;");
-    // Group labels are plain uppercase headings over a labelled list — no tree
-    // lines, no disclosure, no stored open state, no rail flyout.
-    expect(navigationSource).toContain("<SidebarGroupLabel");
-    expect(navigationSource).toMatch(/className="[^"]*\buppercase\b[^"]*"\s*id=\{labelId\}/);
-    expect(navigationSource).toContain("aria-labelledby={labelled ? labelId : undefined}");
-    for (const gone of ["Collapsible", "localStorage", "DropdownMenu", "data-nav-tree-item", "SidebarMenuSub"]) {
-      expect(navigationSource, gone).not.toContain(gone);
-    }
-    // The header keeps only the command palette; Cek tarif is reached from the sidebar group.
-    expect(headerToolsSource).not.toContain("CmsQuickRateLink");
-    expect(headerToolsSource).not.toContain("/app/cek-tarif");
-    expect(shellSource).not.toContain("CmsQuickRateLink");
-    // The palette lists the same destinations as the sidebar, so Cek resi and Cek tarif are searchable.
-    expect(headerToolsSource).toContain("tenantCmsNavigation(props.role, pathname, searchParams)");
-  });
-
-  it("marks the current page with the soft accent and hovers on a neutral ground (T-204)", () => {
-    expect(sidebarSource).toContain("data-active:bg-sidebar-accent");
-    expect(sidebarSource).toContain("hover:bg-muted hover:text-sidebar-foreground");
-    const menuButtonVariants = /const sidebarMenuButtonVariants = cva\(\s*"([^"]*)"[\s\S]*?default: "([^"]*)"/.exec(sidebarSource);
-    expect(menuButtonVariants).not.toBeNull();
-    for (const classes of [menuButtonVariants![1], menuButtonVariants![2]]) {
-      expect(classes).not.toMatch(/(?:^|\s)hover:bg-sidebar-accent(?:\s|$)/);
-    }
-  });
-
-  it("keeps account and sign-out controls at least 44px tall", () => {
-    // The footer account trigger uses the large menu button (48px).
-    expect(shellSource).toMatch(/<SidebarMenuButton[\s\S]*?size="lg"[\s\S]*?>\s*<Avatar/);
-    expect(sidebarSource).toContain('lg: "h-12');
-    expect(signOutSource).toContain(
-      'className="cms-signout-button min-h-11"',
-    );
-  });
-
-  it("replaces protected history after sign-out so Back cannot restore it", () => {
-    expect(shellSource).toContain(
-      "window.location.replace(destination)",
-    );
-    expect(shellSource).not.toContain(
-      "window.location.assign(destination)",
-    );
-    expect(shellSource).toContain("onCloseAutoFocus={(event) => {");
-    expect(shellSource).toContain("signOutDestinationRef.current = destination;");
-    expect(shellSource).toContain("setAccountOpen(false);");
-    expect(signOutSource).toContain("onSignedOut");
-    expect(shellSource).toContain(
-      'window.addEventListener("pageshow", revalidateRestoredSession)',
-    );
-    expect(shellSource).toContain("if (!event.persisted) return;");
-    expect(shellSource).toContain(
-      'document.documentElement.style.visibility = "hidden"',
-    );
-    expect(shellSource).toContain("window.location.reload();");
-  });
-
-  it("keeps the account menu controlled for pointer and keyboard activation", () => {
-    expect(shellSource).toContain(
-      "<DropdownMenu onOpenChange={setAccountOpen} open={accountOpen}>",
-    );
-    expect(shellSource).toContain("onPointerDown={(event) => {");
-    expect(shellSource).toContain("setAccountOpen((open) => !open);");
   });
 });

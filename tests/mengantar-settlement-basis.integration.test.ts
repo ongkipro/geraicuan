@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   deriveDraftProviderMoneyLines,
   type ProviderMoneyFacts,
-} from "@/app/app/shipment-draft-experience";
+} from "@/lib/shipment-draft-logic";
 import { claimProviderBatch, completeProviderOrder, prepareProviderBatches } from "@/db/order-batch-repository";
 import { calculateCodAmounts } from "@/db/cod-totals-repository";
 import * as schema from "@/db/schema";

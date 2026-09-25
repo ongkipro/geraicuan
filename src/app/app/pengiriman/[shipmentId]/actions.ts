@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { COD_ONGKIR_FIELD_NAME, parseRupiahInput } from "@/app/app/shipment-draft-experience";
+import { COD_ONGKIR_FIELD_NAME, parseRupiahInput } from "@/lib/shipment-draft-logic";
 import {
   CodOngkirChargeRefusedError,
   CodTotalsFormulaRetiredError,

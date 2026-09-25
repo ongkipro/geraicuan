@@ -3211,8 +3211,26 @@ Owner steering (2026-09-25): "tujuan utama sistem kita ini untuk masking resi me
   - Not built on purpose: pickup vs drop-off and pickup date/slot (stored-order fields `TYPE`/`pickupDate` exist, but the request contract is unverified — T-153; `POST /time` never called), vehicle type (no provider field anywhere).
   - **Ran:** tsc exit 0; lint exit 0; full integration suite on the disposable tmpfs postgres:16 **127 files / 1,476 passed**. Browser (dev server on the Tailscale origin, seeded 180-shipment demo): 21 tenant routes at 1440 and 390 — overflow ≤ 0, every text size on the scale, no control under 40/44px, one filled primary per page, courier logos load (0 broken images); removed routes answer 307 to Buat kiriman / Laporan pengiriman.
   - Independent review: **FAIL** on one must-fix — "Alamat gerai" prefilled the sender address with Mengantar's pickup name and the area twice (wrong printed sender, could pass 500 characters) — fixed (address only, capped, unit-tested). Should-fixes fixed: physical-check confirmation on the detail page too; "last pulled" line on Histori kiriman; product text (qty 1 prints the name alone, free text never split, stepper from blank → 1, live 240-character counter); stale specs (spec 10 rows, PRD PR-42/PR-43 retired, spec 19 note). Nits fixed: decorative logo beside a visible courier name; dashboard empty-state button outline. Re-review of the fixes: **PASS** (left as-is: a pickup name that itself contains a comma leaves its tail in the editable address; the detail page gives no sentence when its issue button is disabled).
-- [ ] **T-207 — Buat kiriman 1:1 with the owner's reference (two-stage flow) and handover type + pickup schedule.**
+- [~] **T-207 — (superseded by Phase 18, ADR-0001) Buat kiriman 1:1 with the owner's reference (two-stage flow) and handover type + pickup schedule.**
   - Owner (2026-09-25): "belum kau sempurnakan seperti html yang aku kirim … kalo perlu rombak dari awal"; decisions: keep the two-stage flow (Simpan & cek tarif → pilih layanan & terbitkan); store and show handover type (Penjemputan / Drop di outlet) and pickup date + slot now (additive migration), labelled as not yet sent to Mengantar until T-153 verifies the request contract; no vehicle field (Mengantar has none).
   - Done when: side-by-side browser comparison with `buat-kiriman.html` at 1440 and 390 section by section; tsc, lint, affected tests and the migration pass on a fresh database.
-- [ ] **T-208 — List pages de-cluttered to the owner's reference (Histori kiriman, Retur, Cetak resi).**
+- [~] **T-208 — (superseded by Phase 18, ADR-0001) List pages de-cluttered to the owner's reference (Histori kiriman, Retur, Cetak resi).**
   - Owner (2026-09-25): "ini juga tampilanya berantakan" (Histori kiriman, Retur).
+
+## Phase 18 — UI v3 rebuilt from zero (accepted 2026-09-25)
+
+Owner (2026-09-25): "backup keseluruhan dan kau develop ui ux dari 0 dengan mengabaikan yang ada saat ini … pakai shadcn ui admin dashboard full"; "BERSIHKAN UI UX SAAT INI, BANGUN DARI 0"; "BERSIHKAN YANG TIDAK PERLU DAN TIDAK TERPAKAI"; "buat prd, anatomi, design md, dll". Contracts: [ADR-0001](docs/adr/ADR-0001-ui-v3-rebuild.md), spec 02 §v3 (PR-67–PR-75), spec 10 v3.0 (design), spec 17 §UX-v3 (anatomy and screen contracts). Checkpoint commit `d0db307` (pushed) and full backup `~/.local/state/geraicuan-backups/full-repo-before-ui-rebuild-20260925T230759.tgz`. Every screen task is done only after the spec 10 §11 side-by-side comparison with its reference HTML at 1440 and 390.
+
+- [x] **T-209 — Clean slate.** Old presentation layer removed (168 files: pages, layouts, `src/app/_components`, `src/components/cms`), old browser audits, spec 20 and the v2 visual register; `src/components/ui` reinstalled from the shadcn registry; pure draft rules moved to `src/lib/shipment-draft-logic.ts`, the estimate option type to `src/lib/shipment-estimate-options.ts`; pure old-UI tests removed, mixed tests trimmed to their domain assertions. Kept: every server action, route handler, `src/db`, `src/lib`, the thermal label sheet.
+- [ ] **T-210 — Foundation.** `globals.css` from zero (spec 10 §2 tokens; label print CSS kept); primitive size variants (40/44px); `src/components/app/*` (AppShell, AppSidebar, SiteHeader, PageHeader, FilterBar, DataCard, RecordList, StatusTiles, StatusBadge, KpiCard, HelpHint, CourierLogo, EmptyState, Money, DateRangePicker); `/app` and `/platform` layouts with the server auth guards (tenant scope incl. pending approval; platform scope); root layout with TooltipProvider. PR-67, PR-74, PR-75.
+- [ ] **T-211 — Buat kiriman** (`buat-kiriman.html`) incl. additive migration for handover type + pickup date/slot (PR-68–PR-72).
+- [ ] **T-212 — Histori kiriman, Retur, Cetak resi, Label** (`histori-kiriman.html`, `retur-rts.html`, `cetak-resi.html`, `label-detail.html`) incl. the status pull (PR-73, PR-74).
+- [ ] **T-213 — Detail kiriman** (`detail-kiriman.html`) incl. issuance panel, recovery, reconciliation, stale check.
+- [ ] **T-214 — Dasbor** (`dasbor.html`).
+- [ ] **T-215 — Pengirim, Penerima, Kontak baru/detail, Cek resi, Cek tarif.**
+- [ ] **T-216 — Laporan pengiriman (+ CSV), Riwayat cetak resi.**
+- [ ] **T-217 — Pengaturan (profil & prefix, titik pickup, outlet, koneksi) and Anggota.**
+- [ ] **T-218 — Platform (Ringkasan, Tenant + detail, Pendaftaran, Audit) and public/auth pages.**
+- [ ] **T-219 — Whole-product screening against the reference, full suite, independent review.**
+  - Must re-enable the tests parked by T-209 (`it.skip` with the T-209 note): system-map-inventory ×4, shipment-status-copy ×2, deploy-environment-documentation ×1 — each passing against the v3 pages.
+

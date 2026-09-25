@@ -1,9 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { StateSummaryPanel } from "@/components/cms/state-summary-panel";
 import { loadContactDirectoryPage } from "@/db/contact-repository";
 import { loadLabelIndexPage } from "@/db/label-print-repository";
 import * as schema from "@/db/schema";
@@ -436,74 +434,6 @@ describe("panel reads carry their own tenant predicate", () => {
         /"(?:shipments|contacts|contact_addresses)"\."tenant_id"\s*=\s*\$\d/i,
       );
     }
-  });
-});
-
-describe("panel markup", () => {
-  const html = renderToStaticMarkup(
-    StateSummaryPanel({
-      action: "/app/pengiriman",
-      entries: [
-        { count: 12, description: "Seluruh kiriman.", label: "Semua kiriman", metricId: "QUE-ALL", value: "ALL" },
-        { count: 4, description: "Perlu dilihat.", label: "Perlu perhatian", metricId: "QUE-ATTENTION", value: "NEEDS_ATTENTION" },
-      ],
-      label: "Ringkasan status kiriman",
-      param: "status",
-      preserved: { page: undefined, q: "abc123", status: "ignored" },
-      selected: "NEEDS_ATTENTION",
-    }),
-  );
-
-  it("makes every entry a keyboard-operable submit button carrying aria-pressed", () => {
-    // A link cannot carry `aria-pressed`, and a div would need a key handler to
-    // answer Enter and Space. Both were live options and both are wrong here.
-    const buttons = html.match(/<button[^>]*>/g) ?? [];
-    expect(buttons).toHaveLength(2);
-    for (const button of buttons) {
-      expect(button, button).toContain('type="submit"');
-      expect(button, button).toContain('name="status"');
-      expect(button, button).toMatch(/aria-pressed="(?:true|false)"/);
-      expect(button, button).not.toContain("tabindex");
-    }
-    expect(html).toContain('method="get"');
-    expect(html).toContain('action="/app/pengiriman"');
-  });
-
-  it("marks exactly one entry, and not by colour alone", () => {
-    expect(html.match(/aria-pressed="true"/g) ?? []).toHaveLength(1);
-    const pressed = html.match(/<button[^>]*aria-pressed="true"[^>]*>/)?.[0] ?? "";
-    expect(pressed).toContain('value="NEEDS_ATTENTION"');
-    // The check glyph, not the fill, is what a colour-blind operator reads.
-    expect(html.match(/<svg/g) ?? [], "check glyph on the pressed entry only").toHaveLength(1);
-  });
-
-  it("keeps our single full-alpha 2px focus ring and a 44px target", () => {
-    for (const button of html.match(/<button[^>]*>/g) ?? []) {
-      expect(button, button).toContain("focus-visible:ring-2");
-      expect(button, button).toContain("focus-visible:ring-ring");
-      expect(button, button).toContain("min-h-11");
-      // `design-token-contrast` forbids a half-alpha ring; the reference markup
-      // this programme adapts shipped `focus-visible:ring-3 ring-ring/50`.
-      expect(button, button).not.toMatch(/ring-ring\/\d+/);
-      expect(button, button).not.toMatch(/\bring-3\b/);
-    }
-  });
-
-  it("wraps on a grid and never becomes a horizontal scroller", () => {
-    const list = html.match(/<ul[^>]*>/)?.[0] ?? "";
-    expect(list).toContain('aria-label="Ringkasan status kiriman"');
-    expect(list).toContain("grid-cols-2");
-    expect(html).not.toMatch(/overflow(?:-x)?-(?:auto|scroll)/);
-  });
-
-  it("carries the other URL state across the filter but never the page number", () => {
-    const hidden = html.match(/<input[^>]*type="hidden"[^>]*>/g) ?? [];
-    expect(hidden).toHaveLength(1);
-    expect(hidden[0]).toContain('name="q"');
-    expect(hidden[0]).toContain('value="abc123"');
-    // Its own parameter must not be duplicated as a hidden input, or the stale
-    // value would win the query string over the pressed button.
-    expect(html).not.toMatch(/<input[^>]*name="status"/);
   });
 });
 

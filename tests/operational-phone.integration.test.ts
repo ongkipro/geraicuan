@@ -1,5 +1,3 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
@@ -81,7 +79,6 @@ vi.mock("@/lib/mengantar-credentials", () => ({
 }));
 
 import { searchRecipientShipmentContacts, searchSenderShipmentContacts } from "@/app/app/actions";
-import { ContactDirectoryBrowser } from "@/app/app/kontak/contact-directory-browser";
 
 beforeEach(() => {
   fixture.authorized = true;
@@ -124,26 +121,5 @@ describe("authorized operational phone display", () => {
     const form = new FormData();
     form.set("recipientContactQuery", "fixture");
     await expect(searchRecipientShipmentContacts({}, form)).rejects.toThrow("REDIRECT:/login/tenant");
-  });
-
-  it("renders the complete phone in the contact directory", () => {
-    const html = renderToStaticMarkup(createElement(ContactDirectoryBrowser, {
-      initialRows: [{
-        address: null,
-        addressCount: 0,
-        archived: false,
-        destinationAreaLabel: null,
-        id: fixture.contactId,
-        isRecipient: true,
-        isSender: false,
-        name: "Operational fixture recipient",
-        phone: fixture.phone,
-      }],
-      role: "penerima",
-      status: "active",
-    }));
-    const visible = html.replace(/<[^>]+>/g, " ");
-    expect(visible).toContain(fixture.phone);
-    expect(visible).not.toContain("••••");
   });
 });

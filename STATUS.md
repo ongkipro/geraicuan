@@ -179,6 +179,9 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
+**2026-09-25 — Phase 18 started: UI v3 rebuilt from zero (ADR-0001).** Checkpoint `d0db307` pushed; full backup archived. The old presentation layer was removed (T-209) — the CMS pages are intentionally absent until T-210+ rebuild them; server actions, database, provider integration and the thermal label are unchanged. Planning: spec 02 §v3 (PR-67–PR-75), spec 10 v3.0 (design, measured from the owner's HTML), spec 17 §UX-v3 (anatomy and screen contracts), TASKS Phase 18.
+
+
 **2026-09-25 — Phase 17: masking-first product on the owner's HTML reference (T-204–T-206).** Impor CSV, Keuangan and Analitik removed (database kept); the Mengantar status pull now lives on Histori kiriman and Retur; Buat kiriman rebuilt with sender-on-label sources, several products, courier logo cards and a sticky summary; every page aligned to `~/Documents/work/notes/geraicuan-html/`. Full suite 1,476/1,476; review FAIL (sender address) → fixed → PASS. Order creation still waits on Mengantar (T-153). See BUILD-LOG.
 
 

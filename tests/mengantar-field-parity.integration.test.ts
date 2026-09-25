@@ -1,30 +1,9 @@
 import { readFile } from "node:fs/promises";
 
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/app/app/actions", () => ({
-  saveShipmentDraft: vi.fn(),
-  searchRecipientShipmentContacts: vi.fn(),
-  searchSenderShipmentContacts: vi.fn(),
-  selectShipmentContact: vi.fn(),
-}));
-
-vi.mock("@/app/app/estimate-actions", () => ({
-  loadShipmentEstimate: vi.fn(),
-}));
-
-vi.mock("@/app/app/location-actions", () => ({
-  searchMengantarDestinationAreas: vi.fn(),
-}));
-
-import { DraftEstimatePanel } from "@/app/app/draft-estimate-panel";
-import {
-  deriveDraftProviderMoneyLines,
-  DRAFT_MONEY_METRIC_IDS,
-} from "@/app/app/shipment-draft-experience";
-import { HazardousDeclaration, ShipmentDraftForm } from "@/app/app/shipment-draft-form";
+import { codChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import { deriveDraftProviderMoneyLines } from "@/lib/shipment-draft-logic";
 import type { ProviderOrderSource } from "@/db/order-batch-repository";
 import {
   buildMengantarOrderPayload,
@@ -40,15 +19,6 @@ import {
   validateShipmentDraft,
   ShipmentWeightUnavailableError,
 } from "@/lib/shipment-draft";
-
-function visibleText(markup: string) {
-  return markup
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x27;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function submission(values: Record<string, string> = {}) {
   const formData = new FormData();
@@ -115,18 +85,6 @@ describe("PR-47 draft field parity", () => {
     });
   });
 
-  // Review follow-up: the ticked state is the part an operator has to read, and it was
-  // rendered by nothing in the suite — deleting the whole notice would have passed.
-  it("states the consequence only once the hazardous declaration is ticked", () => {
-    const ticked = visibleText(renderToStaticMarkup(createElement(HazardousDeclaration, { defaultChecked: true })));
-    const unticked = visibleText(renderToStaticMarkup(createElement(HazardousDeclaration, {})));
-
-    expect(ticked).toContain("Sebagian layanan menolak barang berbahaya");
-    expect(unticked).not.toContain("Sebagian layanan menolak barang berbahaya");
-    // The declaration itself is always readable, ticked or not.
-    expect(unticked).toContain("Barang berbahaya");
-  });
-
   it("rejects an oversized or control-bearing instruction and landmark", () => {
     const tooLong = validateShipmentDraft(submission({
       recipientAddressLandmark: "x".repeat(161),
@@ -141,30 +99,6 @@ describe("PR-47 draft field parity", () => {
       shippingInstruction: "Titip‮ke satpam",
     }));
     expect(control.ok).toBe(false);
-  });
-
-  it("renders the operational handling fields", () => {
-    const markup = renderToStaticMarkup(createElement(ShipmentDraftForm, {
-      autoFocusFirstField: false,
-      outlets: [{ id: "00000000-0000-4000-8000-000000000111", name: "Outlet fixture", pickupPoints: [] }],
-      submissionId: "00000000-0000-4000-8000-000000000152",
-    }));
-    const text = visibleText(markup);
-
-    expect(markup).toContain('for="shippingInstruction"');
-    expect(markup).toContain('name="shippingInstruction"');
-    expect(markup).toContain('for="recipientAddressLandmark"');
-    expect(markup).toContain('name="recipientAddressLandmark"');
-    expect(markup).toContain('id="isHazardous"');
-    expect(text).toContain("Instruksi pengiriman");
-    expect(text).toContain("Patokan rumah");
-    expect(text).toContain("Barang berbahaya");
-    // T-170: the dropshipper pair left the product; nothing may reintroduce it silently.
-    expect(markup).not.toContain("dropshipper");
-    // The hazardous declaration states what it costs the operator, and the payment
-    // method is asked before the amounts it governs.
-    expect(text).toContain("salah menyatakan bisa membuat paket ditahan atau ditolak kurir");
-    expect(markup.indexOf('id="paymentType"')).toBeLessThan(markup.indexOf('name="declaredValue"'));
   });
 });
 
@@ -480,66 +414,36 @@ describe("PR-47 seller payout", () => {
     expect(money.estimatedSellerPayoutIdr).toBeNull();
   });
 
-  it("renders normal price, special price and the seller payout with their metric IDs", () => {
-    const markup = renderToStaticMarkup(createElement(DraftEstimatePanel, {
-      draftId: "00000000-0000-0000-0000-000000000152",
-      isCod: true,
-      snapshot: {
-        retrievedAt: "2026-09-16T12:00:00.000Z",
-        services: [{
-          codBreakdown: {
-            goodsValueIdr: 100_000,
-            providerCodAmountIdr: 113_790,
-            shippingAmountIdr: 10_000,
-          },
-          codEligible: true,
-          codFeeIdr: 2_500,
-          deliveryEstimate: "2-3 hari",
-          discountIdr: 3_000,
-          normalPriceIdr: 10_000,
-          providerService: "Layanan fixture T-152",
-          shippingAmountIdr: 10_000,
-          specialPriceIdr: 7_000,
-        }],
-      },
-    }));
-    const text = visibleText(markup);
-
-    expect(markup).toContain(`data-metric-id="${DRAFT_MONEY_METRIC_IDS.normalPrice}"`);
-    expect(markup).toContain(`data-metric-id="${DRAFT_MONEY_METRIC_IDS.specialPrice}"`);
-    expect(markup).toContain(`data-metric-id="${DRAFT_MONEY_METRIC_IDS.sellerPayout}"`);
-    expect(text).toContain("Normal Rp 10.000");
-    expect(text).toContain("Spesial Rp 7.000");
-    expect(text).toContain("Ongkir dasar pencairan Mengantar −Rp 7.000");
+  it("derives normal price, special price, Mengantar's COD fee and the seller payout for one COD service", () => {
+    const money = deriveDraftProviderMoneyLines(
+      { codFeeIdr: 2_500, discountIdr: 3_000, normalPriceIdr: 10_000, shippingAmountIdr: 10_000, specialPriceIdr: 7_000 },
+      113_790,
+    );
+    expect(money).toMatchObject({
+      estimatedSellerPayoutIdr: 103_001,
+      mengantarCodFeeIdr: 3_789,
+      normalPriceIdr: 10_000,
+      providerChargedShippingIdr: 7_000,
+      shippingSpreadIdr: 3_000,
+      specialPriceIdr: 7_000,
+    });
     // T-193: one Biaya COD — Mengantar's fee on the total, VAT inside — and the round-up.
-    expect(text).toContain("Biaya COD Mengantar 3,33% (termasuk PPN Rp 375) Rp 3.789");
-    expect(text).toContain("Pembulatan ke rupiah Rp 1");
-    expect(text).not.toMatch(/PPN biaya COD|Rp 3\.414|Rp 376/);
-    expect(text).toContain("Total ditagih ke pelanggan Rp 113.790");
-    expect(text).toContain("Biaya COD Mengantar (3,33% dari total COD) −Rp 3.789");
-    expect(text).not.toContain("Rp 2.500");
-    expect(text).toContain("Estimasi diterima penjual Rp 103.001");
-    expect(text).toContain("selisih ongkir normal-spesial sebesar Rp 3.000");
+    expect(codChargeBreakdown({ goodsValueIdr: 100_000, providerCodAmountIdr: 113_790, shippingAmountIdr: 10_000 })).toEqual({
+      codFeeIdr: 3_789,
+      codFeeVatIncludedIdr: 375,
+      goodsValueIdr: 100_000,
+      providerCodAmountIdr: 113_790,
+      roundingIdr: 1,
+      shippingAmountIdr: 10_000,
+    });
   });
 
-  it("omits the special price line when the provider offers none", () => {
-    const markup = renderToStaticMarkup(createElement(DraftEstimatePanel, {
-      draftId: "00000000-0000-0000-0000-000000000152",
-      isCod: false,
-      snapshot: {
-        retrievedAt: "2026-09-16T12:00:00.000Z",
-        services: [{
-          codBreakdown: null,
-          codEligible: false,
-          deliveryEstimate: "2-3 hari",
-          providerService: "Layanan tanpa harga spesial",
-          shippingAmountIdr: 10_000,
-        }],
-      },
-    }));
-
-    expect(markup).toContain(`data-metric-id="${DRAFT_MONEY_METRIC_IDS.normalPrice}"`);
-    expect(markup).not.toContain(`data-metric-id="${DRAFT_MONEY_METRIC_IDS.specialPrice}"`);
-    expect(visibleText(markup)).toContain("Normal Rp 10.000");
+  it("has no special price when the provider offers none", () => {
+    const money = deriveDraftProviderMoneyLines(
+      { codFeeIdr: null, discountIdr: null, normalPriceIdr: null, shippingAmountIdr: 10_000, specialPriceIdr: null },
+      null,
+    );
+    expect(money.normalPriceIdr).toBe(10_000);
+    expect(money.specialPriceIdr).toBeNull();
   });
 });

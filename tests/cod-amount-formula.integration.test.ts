@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { afterAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 
-import { deriveDraftProviderMoneyLines } from "@/app/app/shipment-draft-experience";
+import { deriveDraftProviderMoneyLines } from "@/lib/shipment-draft-logic";
 import {
   calculateCodAmounts,
   COD_FORMULA_VERSION,

@@ -1,7 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { createElement, type ReactElement } from "react";
-import { renderToReadableStream } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
@@ -9,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
  * Ongkir as COD Ongkir, with the shipping charge the courier collects, never
  * as "COD" or a goods / COD total (closes T-186 follow-up (e)).
  *
- * Each surface renders its real page or region over the real tenant-scoped
- * repository on the test database, so a regression in the query (dropping
- * `cod_shipping_only`) and one in the markup (`isCod ? "COD" : …`) both fail
- * here. The bulk-import preview is bound in bulk-import-actions.integration.test.ts.
+ * Each surface's real tenant-scoped repository read runs on the test database
+ * and its rows go through the one shared payment mapping
+ * (`presentShipmentPayment`), so a regression in the query (dropping
+ * `cod_shipping_only`) or in the mapping fails here. UI v3 (ADR-0001) owns the
+ * markup. The bulk-import preview is bound in bulk-import-actions.integration.test.ts.
  */
 
 const principal = vi.hoisted(() => ({ tenantId: "", userId: "" }));
@@ -26,26 +25,20 @@ vi.mock("@/lib/cms-auth", () => ({
   })),
 }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => ({ get: () => null })) }));
-vi.mock("next/navigation", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("next/navigation")>()),
-  notFound: () => { throw new Error("NEXT_NOT_FOUND"); },
-  redirect: (href: string) => { throw new Error(`NEXT_REDIRECT:${href}`); },
-  usePathname: () => "/app",
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
-}));
 
 const { lookupShipmentTracking } = await import("@/app/app/cek-resi/actions");
-const { TrackingLookupForm } = await import("@/app/app/cek-resi/tracking-lookup-form");
-const { default: TenantDashboardPage } = await import("@/app/app/page");
-const { default: LabelIndexPage } = await import("@/app/app/label/page");
-const { default: ShipmentQueuePage } = await import("@/app/app/pengiriman/page");
-const { default: RtsPage } = await import("@/app/app/pengiriman/rts/page");
 const { calculateCodAmounts, calculateCodOngkirAmounts } = await import("@/db/cod-totals-repository");
+const { loadLabelIndexPage } = await import("@/db/label-print-repository");
 const { completeProviderOrder } = await import("@/db/order-batch-repository");
+const { loadRtsShipmentsPage } = await import("@/db/rts-repository");
+const { loadShipmentQueuePage } = await import("@/db/shipment-queue-repository");
+const { loadTenantDashboardPeriodSupport } = await import("@/db/tenant-dashboard-repository");
 const schema = await import("@/db/schema");
 const { withTenantContext } = await import("@/db/tenant-context");
+const { buildAnalyticsDecisionContext } = await import("@/lib/analytics-decision-context");
+const { parseAnalyticsRange } = await import("@/lib/analytics-range");
 const { formatIdr } = await import("@/lib/label-format");
+const { presentShipmentPayment } = await import("@/lib/payment-method");
 const { ensureIntegrationRuntimeRole } = await import("./integration-runtime-role");
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
@@ -161,16 +154,20 @@ async function seedIssued(sequence: number, method: Method) {
   return row;
 }
 
-async function html(element: ReactElement | Promise<unknown>) {
-  const stream = await renderToReadableStream((await element) as ReactElement);
-  await stream.allReady;
-  return new Response(stream).text();
+type PaymentFacts = Parameters<typeof presentShipmentPayment>[0];
+
+/** Every row's payment as [method, "label amountLabel Rp …"], the text the old cell showed. */
+function paymentCells(rows: readonly PaymentFacts[]) {
+  return rows.map((row) => {
+    const payment = presentShipmentPayment(row);
+    return [payment.method, payment.amountIdr === null
+      ? payment.label
+      : `${payment.label} ${payment.amountLabel} ${rp(payment.amountIdr)}`];
+  });
 }
 
-/** Every rendered payment cell as [method attribute, visible text], in document order. */
-function paymentCells(markup: string) {
-  return [...markup.matchAll(/data-payment-method="([A-Z_]+)">((?:<span[^>]*>[^<]*<\/span>)+)<\/span>/g)]
-    .map(([, method, inner]) => [method, inner!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()]);
+function asTenantA<T>(read: Parameters<typeof withTenantContext<T>>[3]) {
+  return withTenantContext(appDb, userA, tenantA, read);
 }
 
 const ONGKIR_CELL = ["COD_ONGKIR", `COD Ongkir Ongkir ditagih ${rp(CHARGE)}`];
@@ -217,7 +214,8 @@ afterAll(async () => {
 
 describe("T-190 COD Ongkir on every shipment surface", () => {
   it("Histori kiriman: each method with its own figure, COD Ongkir with the charge collected", async () => {
-    const cells = paymentCells(await html(ShipmentQueuePage({ searchParams: Promise.resolve({}) })));
+    const page = await asTenantA((tx, context) => loadShipmentQueuePage(tx, context, { page: 1, pageSize: 20, status: "ALL" }));
+    const cells = paymentCells(page.rows);
     expect(cells).toHaveLength(4);
     expect(cells.filter(([method]) => method === "COD_ONGKIR")).toEqual([ONGKIR_CELL, ONGKIR_CELL]);
     expect(cells).toContainEqual(COD_CELL);
@@ -225,15 +223,18 @@ describe("T-190 COD Ongkir on every shipment surface", () => {
   });
 
   it("RTS: a returned COD Ongkir parcel shows the charge, not the goods value", async () => {
-    const markup = await html(RtsPage({ searchParams: Promise.resolve({}) }));
-    expect(paymentCells(markup)).toEqual([ONGKIR_CELL]);
-    expect(markup).not.toContain(rp(GOODS));
+    const page = await asTenantA((tx, context) => loadRtsShipmentsPage(tx, context, { page: 1, pageSize: 20, status: "ALL" }));
+    const cells = paymentCells(page.rows);
+    expect(cells).toEqual([ONGKIR_CELL]);
+    expect(cells.flat().join(" ")).not.toContain(rp(GOODS));
   });
 
   it("Cetak resi: COD Ongkir prints as the charge collected, never as a COD total", async () => {
-    const cells = paymentCells(await html(LabelIndexPage({ searchParams: Promise.resolve({}) })));
+    // The Cetak resi list does not load the declared value.
+    const page = await asTenantA((tx, context) => loadLabelIndexPage(tx, context, { status: "issued" }));
+    const cells = paymentCells(page.rows.map((row) => ({ ...row, declaredValueIdr: null })));
     expect(cells.filter(([method]) => method !== "NON_COD")).toEqual(expect.arrayContaining([ONGKIR_CELL, COD_CELL]));
-    expect(cells.some(([, text]) => text.startsWith("COD Total COD") && text.endsWith(rp(CHARGE)))).toBe(false);
+    expect(cells.some(([, text]) => text!.startsWith("COD Total COD") && text!.endsWith(rp(CHARGE)))).toBe(false);
   });
 
   it("Cek resi: the lookup names COD Ongkir and its charge", async () => {
@@ -243,15 +244,13 @@ describe("T-190 COD Ongkir on every shipment surface", () => {
       return form;
     })());
     expect(state).toMatchObject({ kind: "found", result: { paymentMethod: "COD_ONGKIR", providerCodAmountIdr: CHARGE } });
-    expect(paymentCells(await html(createElement(TrackingLookupForm, { initialState: state })))).toEqual([ONGKIR_CELL]);
+    if (state.kind !== "found") throw new Error("Tracking lookup did not find the COD Ongkir shipment.");
+    expect(paymentCells([state.result])).toEqual([ONGKIR_CELL]);
   });
 
-  it("Dashboard: the COD drill-down lists COD Ongkir as its own method and shows no COD money", async () => {
-    const markup = await html(TenantDashboardPage({ searchParams: Promise.resolve({ support: "cod" }) }));
-    const cells = paymentCells(markup);
-    expect(cells.map(([method, text]) => `${method}:${text}`).sort()).toEqual([
-      "COD:COD", "COD_ONGKIR:COD Ongkir", "COD_ONGKIR:COD Ongkir",
-    ]);
-    expect(markup).toContain("kiriman COD dan COD Ongkir dibuat");
+  it("Dashboard: the COD drill-down lists COD Ongkir as its own method", async () => {
+    const { currentRange } = buildAnalyticsDecisionContext(parseAnalyticsRange({ rentang: "7-hari" }, new Date()));
+    const support = await asTenantA((tx, context) => loadTenantDashboardPeriodSupport(tx, context, currentRange, "cod"));
+    expect(support.rows.map((row) => row.paymentMethod).sort()).toEqual(["COD", "COD_ONGKIR", "COD_ONGKIR"]);
   });
 });

@@ -3,8 +3,37 @@
 ## Document Control
 - Status: Accepted product direction; latest execution and completion evidence remain in `TASKS.md`
 - Accountable owner: Paduka Ongki
-- Updated: 2026-09-15
+- Updated: 2026-09-25 (§v3 masking-first product and UI rebuild)
 - Source: User product direction; Mengantar Public API docs retrieved 2026-08-28 and reviewed for location authority on 2026-09-01
+
+## v3 — Masking-first product and UI rebuilt from zero (accepted 2026-09-25)
+
+**Owner direction (2026-09-25):** "tujuan utama sistem kita ini untuk masking resi mengantar dengan label baru sesuai dengan gerai"; Impor CSV, Keuangan and Analitik removed; "BERSIHKAN UI UX SAAT INI, BANGUN DARI 0 … pakai shadcn ui admin dashboard"; "buat prd, anatomi, design md". Decision record: [ADR-0001](../adr/ADR-0001-ui-v3-rebuild.md). Visual contract: spec 10 v3.0. Screen contracts: spec 17 §UX-v3.
+
+**Problem.** A gerai ships through Mengantar but wants its own identity on the parcel: the courier's airway bill must be printed on the gerai's label with the sender the gerai chooses (masking), the order must be created and followed without juggling the Mengantar dashboard, and operators aged 40+ must do it quickly without mistakes.
+
+**Goals**
+1. Create a Mengantar order from one page and print a masked 10×15 / 10×10 thermal label.
+2. Follow every shipment to delivery or return with statuses pulled from Mengantar.
+3. A clean, precise, readable admin (shadcn/ui, owner's HTML reference, 40+ sizing) with no clutter.
+
+**Non-goals (v3)** Bulk CSV import; ledger/reconciliation workspace (Keuangan) and Analitik (data kept, pages removed); vehicle type; webhook tracking (no provider contract); billing; white-labelling.
+
+**Requirements (EARS)**
+
+| ID | Requirement |
+|---|---|
+| PR-67 | The CMS shall render every tenant and platform screen from the v3 presentation layer (spec 10 v3.0, spec 17 §UX-v3); no page shall reuse a pre-v3 page component. |
+| PR-68 | When an operator fills Buat kiriman and chooses **Simpan & cek tarif**, the system shall save the draft, load one Mengantar estimate and show eligible services with courier logos in section 5 of the same page. |
+| PR-69 | When the operator chooses a service, ticks "Paket sudah dicek fisik" and confirms, the system shall issue the resi through the existing single issuance path with its guards; if the chosen service is no longer in the latest estimate it shall refuse and ask for a new choice. |
+| PR-70 | The system shall store a handover type (Penjemputan terjadwal / Drop di outlet) and, for pickup, a date and a 09.00–18.00 slot at least 90 minutes ahead; it shall show them on the form, rail and detail, and shall not send them to Mengantar until the order contract is verified (T-153). |
+| PR-71 | While "Gunakan masking pengirim" is off, the label sender shall be the gerai's name, WhatsApp and pickup address; while it is on, the operator-entered sender name, phone and city shall be printed instead. The Mengantar pickup name shall never be printed as the sender by default. |
+| PR-72 | The system shall let an operator enter several products (name, quantity, weight in kg) and store them as the order's content, total quantity and total weight in grams without loss. |
+| PR-73 | Where a Tenant Admin requests **Perbarui status dari Mengantar**, the system shall pull order statuses read-only for the chosen outlet and period and move shipments only through the allowed transitions. |
+| PR-74 | Every list page shall show at most one freshness line and no explanatory meta sentences; below 768px it shall render one record card per row. |
+| PR-75 | Every text the user reads shall be ≥ 13px, controls ≥ 40px (44px on touch), with exactly one filled primary action per page. |
+
+**Success metrics** A new shipment issued from an empty form in ≤ 3 minutes by an operator; zero labels printed with the Mengantar pickup name as sender; owner acceptance of each screen against its reference.
 
 ## Product Decision
 GeraiCUAN is a free multi-tenant SaaS CMS for Indonesian shipping outlets. The only public product surface is a sales page; all operational workflows are inside authenticated CMS Admin. Any number of isolated tenants may use the platform; each tenant operates its own outlets and private Mengantar connection, while the platform Super Admin monitors the service. The MVP creates single or bulk shipments, uses an outlet default pickup point, obtains Mengantar AWBs, prints labels, and maintains an operational ledger.

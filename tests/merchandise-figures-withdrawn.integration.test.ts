@@ -2,26 +2,12 @@
  * T-177 (owner decision 2026-09-17, "Laporan saja"): GeraiCUAN reports shipping
  * and the COD fee, never merchandise revenue, goods value, COGS or margin.
  * D-3b is withdrawn and T-91 resolves as a withdrawal; this file proves the
- * removal on the rendered surfaces, the read-model types and the exports.
+ * removal on the read-model types, the draft input type and the exports.
  * Sibling guards: `analytics-repository` (the KPI read model's exact keys),
- * `shipment-draft` (a posted COGS is neither parsed nor stored),
- * `dashboard-period-page` and `report-pages-render` (whole-page renders).
+ * `shipment-draft` (a posted COGS is neither parsed nor stored).
  */
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/app/app/actions", () => ({
-  saveShipmentDraft: vi.fn(),
-  searchRecipientShipmentContacts: vi.fn(),
-  searchSenderShipmentContacts: vi.fn(),
-  selectShipmentContact: vi.fn(),
-}));
-vi.mock("@/app/app/estimate-actions", () => ({ loadShipmentEstimate: vi.fn() }));
-vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-
-import { ShipmentDraftForm } from "@/app/app/shipment-draft-form";
 import type { ShipmentKpis } from "@/db/analytics-repository";
 import type { ShipmentReportCourierTotal, ShipmentReportRow } from "@/db/shipment-report-repository";
 import type { TenantDashboardPeriodMetrics } from "@/db/tenant-dashboard-repository";
@@ -31,8 +17,6 @@ import { SHIPMENT_REPORT_COLUMNS } from "@/lib/shipment-report";
 
 /** Words that name a merchandise figure in Indonesian or English UI copy. */
 const MERCHANDISE_FIGURE = /margin|laba|profit|keuntungan|omset|omzet|cogs|\bhpp\b|pokok cod|nilai barang|pendapatan|revenue/i;
-
-const visible = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 // Type-level removal: each line fails `tsc --noEmit` if the field comes back.
 export function withdrawnFieldsStayWithdrawn(
@@ -61,19 +45,6 @@ export function withdrawnFieldsStayWithdrawn(
 }
 
 describe("merchandise figures are withdrawn (T-177)", () => {
-  it("no longer asks the operator for a goods cost on Buat kiriman", () => {
-    const markup = renderToStaticMarkup(createElement(ShipmentDraftForm, {
-      autoFocusFirstField: false,
-      outlets: [{ id: "00000000-0000-0000-0000-000000000027", name: "Outlet fixture", pickupPoints: [] }],
-      submissionId: "00000000-0000-4000-8000-000000000177",
-    }));
-
-    expect(markup).not.toMatch(/name="cogsAmount"/);
-    // "Nilai barang" stays: it is the declared value the courier insures and COD
-    // is computed from, an input rather than a reported figure.
-    expect(visible(markup)).not.toMatch(/margin|laba|profit|cogs|\bhpp\b|modal/i);
-  });
-
   it("exports shipping, COD fee and disbursement columns and no merchandise column", () => {
     const row: ShipmentReportRow = {
       codDisbursementEstimateIdr: 202_000,

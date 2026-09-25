@@ -1,50 +1,33 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { CourierPerformanceSection } from "@/app/app/laporan/pengiriman/courier-performance";
 import type { ShipmentReportRow } from "@/db/shipment-report-repository";
 import { buildAnalyticsDecisionContext } from "@/lib/analytics-decision-context";
 import { serializeShipmentReportCsv } from "@/lib/analytics-export";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
+import {
+  courierIssueRate,
+  isLowVolumeCourier,
+  lowVolumeLabel,
+  orderCouriersForRanking,
+} from "@/lib/courier-volume";
 
-vi.mock("@/app/app/laporan/pengiriman/courier-issue-rate-chart", () => ({
-  CourierIssueRateChart: ({ data }: { data: { courier: string; label: string }[] }) =>
-    createElement("div", { "data-chart": "courier", "data-order": data.map((point) => point.courier).join(",") }),
-}));
-
-const render = (rows: Parameters<typeof CourierPerformanceSection>[0]["rows"]) =>
-  renderToStaticMarkup(createElement(CourierPerformanceSection, { periodLabel: "1–7 Sep 2026", rows, timezoneLabel: "WIB (UTC+07:00)" }));
-
-// T-204: spec 19 M-3 "Performa kurir" moved from the retired Analitik page into Laporan pengiriman.
+// T-204: spec 19 M-3 "Performa kurir" ranking rules (presentation-independent).
 describe("Laporan pengiriman courier performance (T-204)", () => {
   it("never ranks a low-volume courier above a higher-volume one by rate alone", () => {
     // The repository order puts a 5/5 low-volume courier above an 8/10 courier by rate.
-    const html = render([
+    const rows = [
       { courier: "SAP", issuedCount: 5, resolvedSubmissionCount: 5 },
       { courier: "JNE", issuedCount: 8, resolvedSubmissionCount: 10 },
-    ]);
-    expect(html.indexOf('data-chart="courier"')).toBeLessThan(html.indexOf("<details"));
-    expect(html).not.toMatch(/<details[^>]*\bopen(?:=|>)/);
-    const disclosure = /<details[^>]*data-report-detail="couriers"[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
-    expect(disclosure).toMatch(/Lihat detail performa kurir <span[^>]*>\(2\)<\/span>/);
-    expect(disclosure.match(/<tbody[\s\S]*?<\/tbody>/)?.[0].match(/<tr /g)?.length).toBe(2);
-    expect(html.replace(disclosure, "")).not.toContain("<table");
-    expect(disclosure).toContain("Volume rendah (n = 5)");
-    expect(disclosure.match(/Volume rendah/g)).toHaveLength(1);
-    expect(disclosure.indexOf(">JNE<")).toBeGreaterThan(-1);
-    expect(disclosure.indexOf(">JNE<")).toBeLessThan(disclosure.indexOf(">SAP<"));
-    expect(html).toContain('data-order="JNE,SAP"');
+    ];
+    expect(orderCouriersForRanking(rows).map((row) => row.courier)).toEqual(["JNE", "SAP"]);
+    expect(rows.map(isLowVolumeCourier)).toEqual([true, false]);
+    expect(courierIssueRate(rows[0]!)).toBe(100);
+    expect(courierIssueRate(rows[1]!)).toBe(80);
+    expect(lowVolumeLabel(rows[0]!)).toBe("Volume rendah (n = 5)");
   });
 
-  it("degrades to its own alert on a failed read and states an empty filter", () => {
-    const failed = render(null);
-    expect(failed).toContain('role="alert"');
-    expect(failed).toContain("Performa kurir tidak dapat dimuat");
-    expect(failed).not.toContain("<details");
-    const empty = render([]);
-    expect(empty).toContain("Belum ada pengajuan yang dijawab Mengantar pada filter ini.");
-    expect(empty).not.toContain('data-chart="courier"');
+  it("gives a courier with no resolved outcomes a zero rate instead of dividing by zero", () => {
+    expect(courierIssueRate({ courier: "JNE", issuedCount: 0, resolvedSubmissionCount: 0 })).toBe(0);
   });
 });
 

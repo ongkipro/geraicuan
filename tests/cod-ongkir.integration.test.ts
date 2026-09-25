@@ -7,14 +7,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { CodOngkirCharge } from "@/app/app/cod-ongkir-charge";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
 import {
   COD_ONGKIR_METRIC_IDS,
   evaluateCodOngkirCharge,
   formatDraftIdr,
-} from "@/app/app/shipment-draft-experience";
-import { PaymentMethodFields } from "@/app/app/shipment-draft-form";
+} from "@/lib/shipment-draft-logic";
 import { loadShipmentPage } from "@/db/analytics-repository";
 import {
   calculateCodAmounts,
@@ -652,41 +650,8 @@ describe("T-186 an issued COD Ongkir shipment: ledger, label, report and analyti
   });
 });
 
-describe("T-186 the draft form and the label render each method's own facts", () => {
+describe("T-186 the draft validation, the charge rule and the label keep each method's own facts", () => {
   const visible = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
-  const render = (defaultMethod?: string) =>
-    renderToStaticMarkup(createElement(PaymentMethodFields, { defaultDeclaredValue: "150000", defaultMethod }));
-
-  it("offers the three methods as labelled choices and renders only the chosen method's field", () => {
-    const panels = {
-      COD: render("COD"),
-      COD_ONGKIR: render("COD_ONGKIR"),
-      NON_COD: render("NON_COD"),
-    };
-    for (const markup of Object.values(panels)) {
-      const text = visible(markup);
-      for (const label of ["Non-COD", "COD", "COD Ongkir"]) expect(text).toContain(label);
-      // One goods value input, ever: the method's own panel owns it.
-      expect(markup.match(/name="declaredValue"/g)).toHaveLength(1);
-      expect(markup).toContain('aria-live="polite"');
-      expect(markup).not.toContain(`name="codShippingChargeIdr"`);
-    }
-    expect(panels.NON_COD).toContain('data-payment-panel="NON_COD"');
-    expect(visible(panels.NON_COD)).toContain("Nilai barang untuk asuransi (Rp)");
-    expect(visible(panels.NON_COD)).not.toMatch(/Total COD dihitung otomatis|Ongkir yang ditagih kurir diatur/);
-
-    expect(panels.COD).toContain('data-payment-panel="COD"');
-    expect(visible(panels.COD)).toContain("Total COD dihitung otomatis");
-    expect(visible(panels.COD)).not.toMatch(/untuk asuransi \(Rp\)|Ongkir yang ditagih kurir diatur|sudah dibayar \(Rp\)/);
-
-    expect(panels.COD_ONGKIR).toContain('data-payment-panel="COD_ONGKIR"');
-    expect(visible(panels.COD_ONGKIR)).toContain("Nilai barang yang sudah dibayar (Rp)");
-    expect(visible(panels.COD_ONGKIR)).toContain("Ongkir yang ditagih kurir diatur saat memilih layanan");
-    expect(visible(panels.COD_ONGKIR)).not.toMatch(/Total COD dihitung otomatis|untuk asuransi \(Rp\)/);
-
-    // An unknown method from a replayed form falls back to Non-COD rather than no panel.
-    expect(render("CASH")).toContain('data-payment-panel="NON_COD"');
-  });
 
   it("validates the method server-side and derives COD from it", () => {
     const form = (paymentType: string, declaredValue = "150000") => {
@@ -707,33 +672,22 @@ describe("T-186 the draft form and the label render each method's own facts", ()
   });
 
   it("starts the COD Ongkir charge at break-even and states the seller's difference", () => {
-    const markup = renderToStaticMarkup(createElement(CodOngkirCharge, {
-      idPrefix: "probe", name: "codShippingChargeIdr", providerService: "JNE REG", shippingDeductedIdr: 14_000,
-    }));
-    expect(markup).toContain('value="14483"');
-    expect(markup).toContain('name="codShippingChargeIdr"');
-    const text = visible(markup);
-    expect(text).toContain(`Titik impas (ongkir minimal) ${idr(14_483)}`);
-    expect(text).toContain(`Selisih diterima penjual ${idr(codOngkirSellerDifferenceIdr(14_483, 14_000))}`);
-    for (const id of Object.values(COD_ONGKIR_METRIC_IDS)) expect(markup).toContain(`data-metric-id="${id}"`);
+    // The field's starting value is break-even, and break-even is itself a valid charge.
+    const breakEven = codOngkirBreakEvenIdr(14_000);
+    expect(breakEven).toBe(14_483);
+    expect(evaluateCodOngkirCharge(String(breakEven), 14_000)).toMatchObject({
+      chargeIdr: 14_483,
+      kind: "valid",
+      sellerDifferenceIdr: codOngkirSellerDifferenceIdr(14_483, 14_000),
+    });
     expect(COD_ONGKIR_METRIC_IDS.mengantarFee).toBe("COD-ONGKIR-MENGANTAR-FEE-IDR");
-    expect(markup).toMatch(/data-metric-id="COD-ONGKIR-MENGANTAR-FEE-IDR"><dt[^>]*>Biaya COD Mengantar/);
-    expect(text).not.toContain("Nilai barang");
   });
 
-  it("shows a refused charge without an assertive alert and announces it politely only on blur or submit (T-199)", () => {
-    // No usable shipping amount renders the refusal immediately, as a typed low charge does.
-    const markup = renderToStaticMarkup(createElement(CodOngkirCharge, {
-      idPrefix: "probe", name: "codShippingChargeIdr", providerService: "JNE REG", shippingDeductedIdr: -1,
-    }));
-    expect(markup).toContain('id="probe-charge-error"');
-    expect(markup).toMatch(/aria-describedby="probe-charge-hint probe-charge-error"/);
-    // Typing never fires an alert, and the results block does not chatter on every keystroke.
-    expect(markup).not.toContain('role="alert"');
-    expect(markup).not.toMatch(/<dl[^>]*aria-live/);
-    // The polite regions start empty: blur/submit fills one, a settled valid charge the other.
-    expect(markup).toContain('<p aria-live="polite" class="sr-only" data-cod-ongkir-announcement="refusal"></p>');
-    expect(markup).toContain('<p aria-live="polite" class="sr-only" data-cod-ongkir-announcement="settled"></p>');
+  it("refuses any charge when the service has no usable shipping amount", () => {
+    expect(evaluateCodOngkirCharge("20000", -1)).toEqual({
+      kind: "invalid",
+      message: "Ongkir layanan ini tidak dapat dipakai untuk COD Ongkir.",
+    });
   });
 
   it("never prints a goods breakdown on a COD Ongkir label, even if one is supplied", () => {
