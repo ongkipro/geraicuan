@@ -21,6 +21,12 @@ export type OrderConfirmation = {
   shipmentId: string;
   estimateSnapshotId: string;
   estimateServiceId: string;
+  /**
+   * T-186: the COD Ongkir charge confirmed with this service. Read only when
+   * the COD totals are recorded (`ensureCodTotalsForConfirmation`); batching
+   * and the order snapshot read the recorded row, never this field.
+   */
+  codShippingChargeIdr?: number | null;
 };
 
 export type ProviderOrderSource = {

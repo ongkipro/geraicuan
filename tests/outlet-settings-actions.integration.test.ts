@@ -15,6 +15,7 @@ const errors = vi.hoisted(() => ({
   ManagedMengantarSecretUnavailableError:
     class ManagedMengantarSecretUnavailableError extends Error {},
   MengantarConfigurationError: class MengantarConfigurationError extends Error {},
+  MengantarPlatformCredentialsRefusedError: class MengantarPlatformCredentialsRefusedError extends Error {},
   MengantarLocationError: class MengantarLocationError extends Error {},
   PickupPointDefaultRequiredError: class PickupPointDefaultRequiredError extends Error {},
   PickupPointDeniedError: class PickupPointDeniedError extends Error {},
@@ -159,7 +160,7 @@ vi.mock("@/db/managed-secret-repository", () => ({
       if (mocks.credentialFailure === "rate") {
         throw new errors.ManagedMengantarSecretRateLimitedError();
       }
-      assertPlatformDefaultComplete();
+      await assertPlatformDefaultComplete();
       if (mocks.credentialFailure === "generic") {
         throw new Error(`managed failure ${SECRET_SENTINEL}`);
       }
@@ -171,7 +172,9 @@ vi.mock("@/db/managed-secret-repository", () => ({
 
 vi.mock("@/lib/mengantar-credentials", () => ({
   MengantarConfigurationError: errors.MengantarConfigurationError,
-  assertPlatformDefaultMengantarCredentialsComplete: vi.fn(() => {
+  MengantarPlatformCredentialsRefusedError: errors.MengantarPlatformCredentialsRefusedError,
+  // D-9 (T-182): the check now also reads the tenant's credential policy.
+  assertPlatformDefaultMengantarCredentialsAvailable: vi.fn(async () => {
     if (mocks.platformDefaultIncomplete) {
       throw new errors.MengantarConfigurationError();
     }

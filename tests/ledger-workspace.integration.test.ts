@@ -240,16 +240,18 @@ describe("tenant ledger and reconciliation workspace", () => {
       },
     );
 
-    expect(daily.entries.totalCount).toBe(5);
+    // T-193: principal, shipping, insurance and Mengantar's COD fee; no VAT liability row.
+    expect(daily.entries.totalCount).toBe(4);
     expect(daily.entries.rows.every((row) => row.shipmentId === orderA.shipmentId)).toBe(true);
     expect(daily.reconciliation.sourceTotals).toEqual({
       COD_PRINCIPAL_COLLECTABLE: 99500,
       MENGANTAR_SHIPPING_COST: 10000,
       MENGANTAR_INSURANCE_COST: 500,
-      // T-178: a post-change issuance posts its fee as a Mengantar cost.
-      MENGANTAR_COD_FEE_COST: 3285,
+      // T-193: an issuance with no historical fee entry expects Mengantar's fee on
+      // the order's COD amount, round(113 146 × 333 / 10 000) = 3 768, and no VAT row.
+      MENGANTAR_COD_FEE_COST: 3768,
       GERAICUAN_COD_SERVICE_FEE_REVENUE: 0,
-      COD_SERVICE_FEE_VAT_PAYABLE: 361,
+      COD_SERVICE_FEE_VAT_PAYABLE: 0,
       NON_COD_UPSTREAM_PAYMENT: 0,
     });
     const dailyPrincipal = daily.reconciliation.reconciliations.find(
@@ -482,7 +484,7 @@ describe("tenant ledger and reconciliation workspace", () => {
     expect(concurrentAdjustments[0]).toEqual(concurrentAdjustments[1]);
     expect(concurrentAdjustments[0]).toMatchObject({
       id: adjustmentAttemptId,
-      amountIdr: -3300,
+      amountIdr: -3785,
       reversesEntryId: revenueEntry.id,
     });
     await expect(withTenantContext(appDb, adminA, tenantA, (tx, context) =>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { CmsShell } from "@/app/_components/cms-shell";
+import { TenantApprovalBanner } from "@/app/app/tenant-approval-banner";
 import { db } from "@/db/client";
 import { outlets, tenants, users } from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -27,7 +28,7 @@ export default async function TenantLayout({
 }) {
   let principal;
   try {
-    principal = await requireCmsScope("tenant");
+    principal = await requireCmsScope("tenant", { allowPendingApproval: true });
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) {
       redirect(
@@ -70,6 +71,7 @@ export default async function TenantLayout({
 
       return { outlets: outletRows, tenant, user };
     },
+    { allowPendingApproval: true },
   );
 
   const roleLabel =
@@ -88,6 +90,7 @@ export default async function TenantLayout({
       }}
       destination="/login/tenant"
       navigationRole={principal.role}
+      notice={principal.tenantStatus === "PROVISIONING" ? <TenantApprovalBanner /> : undefined}
       roleLabel={roleLabel}
       scope="tenant"
       scopeDescription={`Data tenant · ${outletLabel}`}

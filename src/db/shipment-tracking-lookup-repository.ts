@@ -11,6 +11,7 @@ import {
   type shipmentStatuses,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 
 /**
  * PR-51 tracking lookup key. At least one of `tenantNumber` / `awb` is set; `prefix` is the
@@ -25,9 +26,12 @@ export type ShipmentTrackingLookupKey = {
 export type ShipmentTrackingLookup = {
   awb: string | null;
   courier: string | null;
+  declaredValueIdr: number;
   destinationAreaLabel: string;
-  isCod: boolean;
   observation: { observedAt: Date; providerStatus: string } | null;
+  /** T-190: never reduced to COD for a COD Ongkir shipment. */
+  paymentMethod: PaymentMethod;
+  providerCodAmountIdr: number | null;
   providerService: string | null;
   publicReference: string;
   status: (typeof shipmentStatuses)[number];
@@ -62,7 +66,10 @@ export async function lookupShipmentByTrackingKey(
       awb: providerOrderSnapshots.cnoteNo,
       courier: providerBatches.courier,
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
+      declaredValueIdr: shipmentDrafts.declaredValueIdr,
       isCod: shipmentDrafts.isCod,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
+      providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       providerService: providerOrderSnapshots.providerService,
       publicReference: shipments.publicReference,
       shipmentId: shipments.id,
@@ -117,9 +124,11 @@ export async function lookupShipmentByTrackingKey(
   return {
     awb: row.awb?.trim() || null,
     courier: row.courier,
+    declaredValueIdr: row.declaredValueIdr,
     destinationAreaLabel: row.destinationAreaLabel,
-    isCod: row.isCod,
     observation: observation ?? null,
+    paymentMethod: paymentMethodOf(row.isCod, row.codShippingOnly),
+    providerCodAmountIdr: row.providerCodAmountIdr,
     providerService: row.providerService,
     publicReference: row.publicReference,
     status: row.status,

@@ -60,6 +60,7 @@ import {
 } from "@/lib/analytics-range";
 import { isDataStale } from "@/lib/data-freshness";
 import { reconciliationVarianceHref } from "@/lib/finance-exception-filter";
+import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import { sectionHeadingClassName } from "@/components/cms/cms-layouts";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,9 @@ const idrFormatter = new Intl.NumberFormat("id-ID", {
   currency: "IDR",
   maximumFractionDigits: 0,
   style: "currency",
+});
+const percentFormatter = new Intl.NumberFormat("id-ID", {
+  maximumFractionDigits: 1,
 });
 // `focus:` not `focus-visible:`: these targets only take focus from script (hash, retry), and a
 // mouse-triggered retry would otherwise move focus with no visible ring.
@@ -94,6 +98,7 @@ export type AnalyticsResolvedRegionProps = {
 };
 
 type Metric = {
+  accent?: "blue" | "emerald" | "indigo" | "amber" | "rose" | "neutral";
   context?: string;
   current: number;
   href?: string;
@@ -144,7 +149,7 @@ function RegionHeading({
   id,
   title,
 }: {
-  description: string;
+  description?: ReactNode;
   id: string;
   title: string;
 }) {
@@ -181,6 +186,7 @@ function MetricCards({ className, metrics }: { className: string; metrics: Metri
     <div className={cn("grid gap-4", className)}>
       {metrics.map((metric) => (
         <StatCard
+          accent={metric.accent}
           description={metric.context || metric.previous !== undefined ? (
             <>
               {metric.context ? <p>{metric.context}</p> : null}
@@ -235,10 +241,10 @@ export async function AnalyticsSummaryRegion({
     ? (previous.issuedCount / previous.resolvedSubmissionCount) * 100
     : 0;
   const operationalMetrics: Metric[] = [
-    { current: kpis.createdCount, href: supportingRowsHref(context.canonicalQuery, "created"), context: "Mengikuti tanggal kiriman dibuat.", icon: Package, label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(kpis.createdCount) },
-    { context: "Mengikuti tanggal resi diterbitkan Mengantar.", current: kpis.issuedCount, href: supportingRowsHref(context.canonicalQuery, "issued"), icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(kpis.issuedCount) },
-    { context: `${countFormatter.format(kpis.issuedCount)} resi terbit dari ${countFormatter.format(kpis.resolvedSubmissionCount)} pengajuan selesai.`, current: currentSuccessRate, href: supportingRowsHref(context.canonicalQuery, "outcome"), icon: BadgePercent, label: "Tingkat penerbitan resi", previous: previousSuccessRate, value: kpis.resolvedSubmissionCount > 0 ? `${countFormatter.format(currentSuccessRate)}%` : "—" },
-    { context: `${countFormatter.format(backlog.awaitingPaymentCount)} menunggu pembayaran + ${countFormatter.format(backlog.needsActionCount)} gagal/perlu rekonsiliasi · saat ini, ${formatInZone(backlog.asOf, context.range.timezone)}. Tidak mengikuti periode laporan.`, current: backlog.awaitingPaymentCount + backlog.needsActionCount, href: supportingRowsHref(context.canonicalQuery, "exceptions"), icon: TriangleAlert, label: "Pengecualian belum selesai", value: countFormatter.format(backlog.awaitingPaymentCount + backlog.needsActionCount) },
+    { accent: "blue", current: kpis.createdCount, href: supportingRowsHref(context.canonicalQuery, "created"), context: "Mengikuti tanggal kiriman dibuat.", icon: Package, label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(kpis.createdCount) },
+    { accent: "emerald", context: "Mengikuti tanggal resi diterbitkan Mengantar.", current: kpis.issuedCount, href: supportingRowsHref(context.canonicalQuery, "issued"), icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(kpis.issuedCount) },
+    { accent: "indigo", context: `${countFormatter.format(kpis.issuedCount)} resi terbit dari ${countFormatter.format(kpis.resolvedSubmissionCount)} pengajuan selesai.`, current: currentSuccessRate, href: supportingRowsHref(context.canonicalQuery, "outcome"), icon: BadgePercent, label: "Tingkat penerbitan resi", previous: previousSuccessRate, value: kpis.resolvedSubmissionCount > 0 ? `${percentFormatter.format(currentSuccessRate)}%` : "—" },
+    { accent: "rose", context: `${countFormatter.format(backlog.awaitingPaymentCount)} menunggu pembayaran + ${countFormatter.format(backlog.needsActionCount)} gagal/perlu rekonsiliasi · saat ini, ${formatInZone(backlog.asOf, context.range.timezone)}. Tidak mengikuti periode laporan.`, current: backlog.awaitingPaymentCount + backlog.needsActionCount, href: supportingRowsHref(context.canonicalQuery, "exceptions"), icon: TriangleAlert, label: "Pengecualian belum selesai", value: countFormatter.format(backlog.awaitingPaymentCount + backlog.needsActionCount) },
   ];
 
   return (
@@ -254,7 +260,8 @@ export async function AnalyticsSummaryRegion({
 }
 
 /**
- * Spec 19 FIN-PROVIDER-SHIPPING, FIN-COD-FEE and FIN-COD-DISBURSEMENT-EST.
+ * Spec 19 FIN-PROVIDER-SHIPPING, FIN-COD-FEE-TOTAL, FIN-COD-FEE-VAT-INCLUDED and
+ * FIN-COD-DISBURSEMENT-EST.
  * T-177 (owner, 2026-09-17): COD reporting carries shipping and the COD fee,
  * never merchandise revenue, goods value, COGS or margin.
  */
@@ -262,23 +269,22 @@ export async function AnalyticsFinancialRegion({ promise }: { promise: Promise<S
   const result = await settle(promise);
   if (!result.ok) return <AnalyticsRegionError description="Ringkasan operasional dan tren tetap tersedia bila berhasil dimuat." focusTargetId="analytics-financial-heading" title="Biaya kirim dan COD tidak dapat dimuat" />;
   const { current: kpis, previous } = result.value;
-  const codFee = (value: typeof kpis) => value.codServiceFeeIdr + value.codVatIdr;
   const primaryMetrics: Metric[] = [
-    { context: "Ongkir yang ditagihkan Mengantar untuk kiriman COD dan non-COD.", current: kpis.providerShippingIdr, icon: Truck, label: "Biaya kirim Mengantar", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
-    { context: "Biaya layanan ditambah PPN-nya; rinciannya di bawah.", current: codFee(kpis), icon: HandCoins, label: "Biaya COD", previous: codFee(previous), value: idrFormatter.format(codFee(kpis)) },
-    { context: "Nilai COD dikurangi biaya kirim Mengantar dan biaya COD, untuk kiriman COD yang resinya terbit pada periode ini.", current: kpis.codDisbursementEstimateIdr, icon: Landmark, label: "Estimasi dana dicairkan Mengantar", previous: previous.codDisbursementEstimateIdr, value: idrFormatter.format(kpis.codDisbursementEstimateIdr) },
+    { accent: "amber", context: "Ongkir yang ditagihkan Mengantar untuk kiriman COD dan non-COD.", current: kpis.providerShippingIdr, icon: Truck, label: "Biaya kirim Mengantar", previous: previous.providerShippingIdr, value: idrFormatter.format(kpis.providerShippingIdr) },
+    { accent: "rose", context: "3,33% dari nilai COD yang dipotong Mengantar, termasuk PPN, untuk kiriman COD yang resinya terbit pada periode ini.", current: kpis.codFeeIdr, icon: HandCoins, label: "Biaya COD", previous: previous.codFeeIdr, value: idrFormatter.format(kpis.codFeeIdr) },
+    { accent: "emerald", context: "Nilai COD dikurangi biaya kirim Mengantar dan biaya COD, untuk kiriman COD yang resinya terbit pada periode ini.", current: kpis.codDisbursementEstimateIdr, icon: Landmark, label: "Estimasi dana dicairkan Mengantar", previous: previous.codDisbursementEstimateIdr, value: idrFormatter.format(kpis.codDisbursementEstimateIdr) },
   ];
+  // T-193: informational only — the VAT is inside Biaya COD above, never added to it.
   const codFeeParts: Metric[] = [
-    { current: kpis.codServiceFeeIdr, icon: HandCoins, label: "Biaya layanan COD", previous: previous.codServiceFeeIdr, value: idrFormatter.format(kpis.codServiceFeeIdr) },
-    { current: kpis.codVatIdr, icon: Receipt, label: "PPN biaya layanan COD", previous: previous.codVatIdr, value: idrFormatter.format(kpis.codVatIdr) },
+    { accent: "indigo", context: "Sudah termasuk dalam Biaya COD dan dipotong Mengantar; bukan kewajiban GeraiCUAN.", current: kpis.codFeeVatIncludedIdr, icon: Receipt, label: "Termasuk PPN", previous: previous.codFeeVatIncludedIdr, value: idrFormatter.format(kpis.codFeeVatIncludedIdr) },
   ];
   return (
     <section aria-labelledby="analytics-financial-heading" className="space-y-4">
-      <SectionHeading description="Biaya kirim dan biaya COD mengikuti tanggal efektif catatan keuangan; estimasi dana cair mengikuti tanggal resi terbit." id="analytics-financial-heading" title="Biaya kirim & COD" />
+      <SectionHeading description="Biaya kirim mengikuti tanggal efektif catatan keuangan; biaya COD dan estimasi dana cair mengikuti tanggal resi terbit." id="analytics-financial-heading" title="Biaya kirim & COD" />
       <MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={primaryMetrics} />
       <details className="group border-t pt-2" data-analytics-detail="costs">
         <summary className={detailTrigger}><span>Lihat rincian biaya COD</span><ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
-        <div className="pt-3"><MetricCards className="sm:grid-cols-2" metrics={codFeeParts} /></div>
+        <div className="pt-3"><MetricCards className="sm:grid-cols-2 lg:grid-cols-3" metrics={codFeeParts} /></div>
       </details>
       <Alert><CircleAlert aria-hidden="true" /><AlertTitle>Estimasi, bukan dana yang sudah cair</AlertTitle><AlertDescription>Dana yang benar-benar dicairkan Mengantar dan selisihnya ada di Keuangan.</AlertDescription></Alert>
     </section>
@@ -465,7 +471,7 @@ export async function AnalyticsShipmentRegion({
                 <TableCell><StackedDateTime value={row.issuedAt} /></TableCell>
                 <TableCell className="max-w-48 whitespace-normal"><CourierAwbStack awb={row.cnoteNo} courier={row.courier?.toUpperCase() ?? null} service={row.providerService} /></TableCell>
                 <TableCell className="max-w-40 whitespace-normal wrap-anywhere">{row.outletName}</TableCell>
-                <TableCell className="text-right tabular-nums">{row.isCod && row.providerCodAmountIdr !== null ? idrFormatter.format(row.providerCodAmountIdr) : "—"}</TableCell>
+                <TableCell className="text-right tabular-nums">{row.isCod && row.providerCodAmountIdr !== null ? <>{idrFormatter.format(row.providerCodAmountIdr)}<span className="block text-xs text-muted-foreground">{PAYMENT_METHOD_LABELS[row.paymentMethod]}</span></> : "—"}</TableCell>
               </TableRow>
             );
           })}

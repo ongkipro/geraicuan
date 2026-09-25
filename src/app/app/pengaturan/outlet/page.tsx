@@ -74,7 +74,7 @@ export default async function OutletSettingsPage({
 }: OutletSettingsPageProps) {
   let principal;
   try {
-    principal = await requireCmsScope("tenant");
+    principal = await requireCmsScope("tenant", { allowPendingApproval: true });
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) {
       redirect("/login/tenant");
@@ -153,6 +153,7 @@ export default async function OutletSettingsPage({
       principal.userId,
       principal.tenantId,
       (tx, context) => listOutletReadiness(tx, context),
+      { allowPendingApproval: true },
     );
   }
   const readyCount = outlets.filter((outlet) => outlet.readinessStatus === "ready").length;
@@ -184,6 +185,7 @@ export default async function OutletSettingsPage({
           : null,
         readinessStatus: activeOutlet.readinessStatus,
         updatedAtLabel: `${updatedAtFormatter.format(activeOutlet.updatedAt)} WIB`,
+        privateConnectionRequired: activeOutlet.privateConnectionRequired,
       }
     : null;
 

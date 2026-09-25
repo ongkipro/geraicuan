@@ -31,6 +31,7 @@ import { parseTenantAnalyticsQuery, type TenantAnalyticsIssue } from "@/lib/anal
 import { analyticsIssueMessage, formatRangeLabel, parseAnalyticsRange } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatIdr } from "@/lib/label-format";
+import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
   SHIPMENT_REPORT_COLUMNS,
@@ -38,6 +39,7 @@ import {
   shipmentReportHref,
 } from "@/lib/shipment-report";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -187,34 +189,34 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
           </Badge>
           {" "}Total berikut dihitung atas seluruh baris yang cocok dengan filter, bukan hanya halaman ini. Dana dicairkan Mengantar di sini masih estimasi: nilai COD dikurangi biaya kirim dan biaya COD.
         </p>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <div className="grid gap-2">
-            <h3 className="text-xs font-medium text-muted-foreground" id="shipment-report-courier-title">Total per kurir</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground" id="shipment-report-courier-title">Total per kurir</h3>
             {data.totals.byCourier.length === 0 ? (
               <p className="text-sm text-muted-foreground">Belum ada kiriman pada periode ini.</p>
             ) : (
               <Table
-                containerClassName="rounded-md border bg-card"
+                containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-2xs overflow-hidden"
                 containerProps={{ "aria-labelledby": "shipment-report-courier-title", role: "region", tabIndex: 0 }}
               >
                 <TableCaption className="sr-only">Total kiriman, biaya kirim Mengantar, biaya COD, dan estimasi dana dicairkan Mengantar per kurir.</TableCaption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="px-3">Kurir</TableHead>
-                    <TableHead className="px-3 text-right">Kiriman</TableHead>
-                    <TableHead className="px-3 text-right">Biaya kirim Mengantar</TableHead>
-                    <TableHead className="px-3 text-right">Biaya COD</TableHead>
-                    <TableHead className="px-3 text-right">Estimasi dana dicairkan Mengantar</TableHead>
+                    <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Kurir</TableHead>
+                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Kiriman</TableHead>
+                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Biaya kirim Mengantar</TableHead>
+                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Biaya COD</TableHead>
+                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Estimasi dana dicairkan Mengantar</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.totals.byCourier.map((total) => (
-                    <TableRow key={total.courier ?? "tanpa-kurir"}>
-                      <TableCell className="px-3">{total.courier ?? "Belum ada kurir"}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums">{total.shipmentCount}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums">{formatIdr(total.shippingCostIdr)}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums">{formatIdr(total.codFeeIdr)}</TableCell>
-                      <TableCell className="px-3 text-right tabular-nums">{formatIdr(total.codDisbursementEstimateIdr)}</TableCell>
+                    <TableRow key={total.courier ?? "tanpa-kurir"} className="transition-colors hover:bg-muted/30">
+                      <TableCell className="px-3 text-xs font-medium whitespace-nowrap">{total.courier ?? "Belum ada kurir"}</TableCell>
+                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{total.shipmentCount}</TableCell>
+                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{formatIdr(total.shippingCostIdr)}</TableCell>
+                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{formatIdr(total.codFeeIdr)}</TableCell>
+                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{formatIdr(total.codDisbursementEstimateIdr)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -222,31 +224,31 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
             )}
           </div>
           <div className="grid gap-2">
-            <h3 className="text-xs font-medium text-muted-foreground" id="shipment-report-lifecycle-title">Total per lifecycle</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground" id="shipment-report-lifecycle-title">Total per lifecycle</h3>
             {data.totals.byLifecycle.length === 0 ? (
               <p className="text-sm text-muted-foreground">Belum ada kiriman pada periode ini.</p>
             ) : (
               <Table
-                containerClassName="rounded-md border bg-card"
+                containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-2xs overflow-hidden"
                 containerProps={{ "aria-labelledby": "shipment-report-lifecycle-title", role: "region", tabIndex: 0 }}
               >
                 <TableCaption className="sr-only">Total kiriman per lifecycle.</TableCaption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="px-3">Lifecycle</TableHead>
-                    <TableHead className="px-3 text-right">Kiriman</TableHead>
+                    <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Lifecycle</TableHead>
+                    <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Kiriman</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.totals.byLifecycle.map((total) => (
-                    <TableRow key={total.status}>
-                      <TableCell className="px-3">
+                    <TableRow key={total.status} className="transition-colors hover:bg-muted/30">
+                      <TableCell className="px-3 whitespace-nowrap">
                         <ShipmentStatusBadge
                           label={SHIPMENT_STATUS_PRESENTATION[total.status].label}
                           tone={SHIPMENT_STATUS_PRESENTATION[total.status].tone}
                         />
                       </TableCell>
-                      <TableCell className="px-3 text-right tabular-nums">{total.shipmentCount}</TableCell>
+                      <TableCell className="px-3 text-right tabular-nums text-xs font-medium whitespace-nowrap">{total.shipmentCount}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -276,7 +278,7 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
         ) : (
           <Table
             className="min-w-[72rem]"
-            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Baris laporan pengiriman; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -288,41 +290,48 @@ export default async function ShipmentReportPage({ searchParams }: ShipmentRepor
             </TableCaption>
             <TableHeader>
               <TableRow>
-                {SHIPMENT_REPORT_COLUMNS.map((column, index) => (
-                  <TableHead
-                    className={index === 0 ? "sticky left-0 z-10 bg-inherit px-3" : "px-3"}
-                    key={column.metricId}
-                  >
-                    {column.label}
-                  </TableHead>
-                ))}
+                {SHIPMENT_REPORT_COLUMNS.map((column, index) => {
+                  const isFinancial = [8, 9, 10].includes(index);
+                  return (
+                    <TableHead
+                      className={cn(
+                        "px-3 text-xs font-semibold whitespace-nowrap",
+                        index === 0 && "sticky left-0 z-10 bg-inherit",
+                        isFinancial && "text-right",
+                      )}
+                      key={column.metricId}
+                    >
+                      {column.label}
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.rows.map((row) => (
-                <TableRow className="group" key={row.shipmentId}>
+                <TableRow className="group transition-colors hover:bg-muted/30" key={row.shipmentId}>
                   <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
-                    <span className="whitespace-nowrap">{row.publicReference}</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">{row.outletName}</span>
+                    <span className="font-mono font-semibold text-primary whitespace-nowrap">{row.publicReference}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground whitespace-nowrap">{row.outletName}</span>
                   </TableCell>
-                  <TableCell className="px-3"><StackedDateTime value={row.createdAt} /></TableCell>
-                  <TableCell className="px-3"><StackedDateTime value={row.issuedAt} /></TableCell>
-                  <TableCell className="max-w-56 whitespace-normal px-3 wrap-anywhere">{row.destinationAreaLabel}</TableCell>
-                  <TableCell className="px-3">{row.courier ?? "—"}</TableCell>
-                  <TableCell className="px-3">{row.providerService ?? "—"}</TableCell>
-                  <TableCell className="px-3">
+                  <TableCell className="px-3 whitespace-nowrap text-xs"><StackedDateTime value={row.createdAt} /></TableCell>
+                  <TableCell className="px-3 whitespace-nowrap text-xs"><StackedDateTime value={row.issuedAt} /></TableCell>
+                  <TableCell className="min-w-[14rem] max-w-[20rem] px-3 text-xs leading-relaxed whitespace-normal break-words">{row.destinationAreaLabel}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap text-xs font-medium">{row.courier ?? "—"}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap text-xs text-muted-foreground">{row.providerService ?? "—"}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap">
                     <ShipmentStatusBadge
                       label={SHIPMENT_STATUS_PRESENTATION[row.status].label}
                       tone={SHIPMENT_STATUS_PRESENTATION[row.status].tone}
                     />
                   </TableCell>
-                  <TableCell className="px-3">{row.isCod ? "COD" : "Non-COD"}</TableCell>
+                  <TableCell className="px-3 whitespace-nowrap text-xs font-medium">{PAYMENT_METHOD_LABELS[row.paymentMethod]}</TableCell>
                   {[row.shippingCostIdr, row.codFeeIdr, row.codDisbursementEstimateIdr].map((amount, index) => (
-                    <TableCell className="px-3 text-right tabular-nums" key={index}>
+                    <TableCell className="px-3 text-right tabular-nums whitespace-nowrap text-xs font-medium" key={index}>
                       {amount === null ? "—" : formatIdr(amount)}
                     </TableCell>
                   ))}
-                  <TableCell className="px-3">
+                  <TableCell className="px-3 whitespace-nowrap text-xs text-muted-foreground">
                     {row.printCount > 0 ? `Sudah dicetak (${row.printCount}×)` : "Belum dicetak"}
                   </TableCell>
                 </TableRow>

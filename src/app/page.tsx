@@ -15,7 +15,7 @@ const workflow = [
   ["01", "Catat kiriman", "Satuan atau impor massal dalam satu antrean."],
   ["02", "Bandingkan layanan", "Tarif mengikuti akun kurir outlet Anda."],
   ["03", "Terbitkan resi", "AWB berasal langsung dari otoritas penyedia."],
-  ["04", "Cetak dan rekonsiliasi", "Cetak label 100 × 150 mm dan cocokkan catatan transaksi."],
+  ["04", "Cetak dan rekonsiliasi", "Cetak label 10 × 15 cm (bawaan) atau 10 × 10 cm dan cocokkan catatan transaksi."],
 ] as const;
 
 const capabilities = [
@@ -64,7 +64,7 @@ export default function Home() {
                   <div><dt className="text-xs text-muted-foreground">Outlet</dt><dd className="mt-1 font-medium">Jakarta Selatan</dd></div>
                   <div><dt className="text-xs text-muted-foreground">Layanan</dt><dd className="mt-1 font-medium">Regular</dd></div>
                   <div><dt className="text-xs text-muted-foreground">Pembayaran</dt><dd className="mt-1 font-medium">COD</dd></div>
-                  <div><dt className="text-xs text-muted-foreground">Label</dt><dd className="mt-1 font-medium">100 × 150 mm</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Label</dt><dd className="mt-1 font-medium">10 × 15 atau 10 × 10 cm</dd></div>
                 </dl>
                 <div className="border-t pt-4">
                   <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Dana COD</span><span className="font-mono text-foreground">Liabilitas</span></div>

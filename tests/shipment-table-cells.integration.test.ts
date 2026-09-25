@@ -13,6 +13,18 @@ describe("T-148 stacked shipment table cells", () => {
     expect(formatDistrictCity("Gambir, Jakarta Pusat")).toBe("Gambir, Jakarta Pusat");
   });
 
+  // T-193: a label of fewer than three parts used to be printed raw, so the sender
+  // stub could show a postal code or empty segments as the area.
+  it("prints a short or malformed area label from its cleaned parts, never a postal code, empty segment or blank", () => {
+    expect(formatDistrictCity("Kota Bandung, 40135")).toBe("Kota Bandung");
+    expect(formatDistrictCity("Jakarta Pusat")).toBe("Jakarta Pusat");
+    expect(formatDistrictCity(" Gambir ,, Jakarta Pusat , ")).toBe("Gambir, Jakarta Pusat");
+    expect(formatDistrictCity("Gambir, Jakarta Pusat, 10110")).toBe("Gambir, Jakarta Pusat");
+    expect(formatDistrictCity("40114")).toBe("—");
+    expect(formatDistrictCity(" , ")).toBe("—");
+    expect(formatDistrictCity("")).toBe("—");
+  });
+
   it("splits an instant into a WIB date line and time line", () => {
     expect(formatWibDateTimeParts(new Date("2026-09-14T17:30:00.000Z"))).toEqual({ date: "15 Sep 2026", time: "00.30 WIB" });
   });

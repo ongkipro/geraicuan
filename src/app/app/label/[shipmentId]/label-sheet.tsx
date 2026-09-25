@@ -74,7 +74,17 @@ function LabelPackage({ label }: { label: PrintableLabel }) {
       </div>
 
       <div className="label-payment-block">
-        {label.isCod ? (
+        {label.paymentMethod === "COD_ONGKIR" ? (
+          <>
+            <div className="label-payment">
+              <span>COD ONGKIR — TAGIH ONGKIR SAJA</span>
+              <b>{formatIdr(label.providerCodAmountIdr as number)}</b>
+            </div>
+            <div className="label-money">
+              <div><span>Barang sudah dibayar</span><span>JANGAN DITAGIH</span></div>
+            </div>
+          </>
+        ) : label.isCod ? (
           <>
             <div className="label-payment">
               <span>COD — TAGIH KE PENERIMA</span>
@@ -84,10 +94,12 @@ function LabelPackage({ label }: { label: PrintableLabel }) {
               <div className="label-money">
                 <div><span>Nilai barang</span><span>{formatIdr(label.codBreakdown.goodsValueIdr)}</span></div>
                 <div><span>Ongkir Mengantar</span><span>{formatIdr(label.codBreakdown.shippingAmountIdr)}</span></div>
-                {/* One vocabulary with the draft and the shipment detail (T-175): this
-                    fee is Mengantar's COD fee, not a GeraiCUAN service charge. */}
-                <div><span>Biaya COD</span><span>{formatIdr(label.codBreakdown.serviceFeeIdr)}</span></div>
-                <div><span>PPN biaya COD</span><span>{formatIdr(label.codBreakdown.vatAmountIdr)}</span></div>
+                {/* T-193: one Biaya COD — the fee Mengantar keeps, VAT inside it —
+                    and the round-up, so the lines add up to the amount above. */}
+                <div><span>Biaya COD (termasuk PPN)</span><span>{formatIdr(label.codBreakdown.codFeeIdr)}</span></div>
+                {label.codBreakdown.roundingIdr > 0 ? (
+                  <div><span>Pembulatan</span><span>{formatIdr(label.codBreakdown.roundingIdr)}</span></div>
+                ) : null}
               </div>
             ) : null}
           </>
@@ -107,7 +119,10 @@ function LabelPackage({ label }: { label: PrintableLabel }) {
         <div className="label-facts-wide"><dt>Isi</dt><dd>{label.package.content}</dd></div>
         <div><dt>Berat</dt><dd>{formatWeight(label.package.weightGrams)} · {label.package.quantity} koli</dd></div>
         <div><dt>Dimensi</dt><dd>{dimensions ?? "Tidak dicatat"}</dd></div>
-        <div><dt>Nilai</dt><dd>{formatIdr(label.package.declaredValueIdr)}</dd></div>
+        <div>
+          <dt>{label.paymentMethod === "COD_ONGKIR" ? "Nilai (lunas)" : "Nilai"}</dt>
+          <dd>{formatIdr(label.package.declaredValueIdr)}</dd>
+        </div>
         <div><dt>Asuransi Mengantar</dt><dd>{insurance}</dd></div>
       </dl>
 
@@ -137,7 +152,9 @@ function LabelSenderStub({ label }: { label: PrintableLabel }) {
           {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
         </p>
         <p className="label-stub-payment">
-          {label.isCod ? <>COD <b>{formatIdr(label.providerCodAmountIdr as number)}</b></> : "NON-COD"}
+          {label.paymentMethod === "COD_ONGKIR"
+            ? <>COD ONGKIR <b>{formatIdr(label.providerCodAmountIdr as number)}</b></>
+            : label.isCod ? <>COD <b>{formatIdr(label.providerCodAmountIdr as number)}</b></> : "NON-COD"}
         </p>
       </div>
       <div className="label-awb-block">

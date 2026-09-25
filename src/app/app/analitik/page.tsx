@@ -216,7 +216,19 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
 
       <section aria-labelledby="period-context-title" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm"><div><h2 className="font-medium text-foreground" id="period-context-title">{decisionContext.periodLabel}</h2><p className="max-w-2xl text-muted-foreground">{decisionContext.timezoneLabel} · {decisionContext.presetLabel}. Kiriman dibuat memakai waktu pembuatan; resi terbit memakai waktu AWB provider.</p></div><p aria-live="polite" className="text-muted-foreground" id="hasil-analitik" role="status">Dibanding <strong className="font-medium text-foreground">{decisionContext.previousPeriodLabel}</strong> / {decisionContext.timezoneLabel}.</p></section>
 
-      {chips.length > 0 ? <section aria-label="Filter aktif" className="flex flex-wrap items-center gap-2"><Badge variant="secondary">Filter aktif: {activeCount}</Badge>{chips.map((chip) => <Button asChild className="min-h-11 border-dashed md:min-h-8" key={chip.label} size="sm" variant="outline"><Link href={chip.href}>{chip.label}<span aria-hidden="true">×</span></Link></Button>)}</section> : null}
+      {chips.length > 0 ? (
+        <section aria-label="Filter aktif" className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">Filter aktif: {activeCount}</Badge>
+          {chips.map((chip) => (
+            <Button asChild className="min-h-11 border-dashed md:min-h-8" key={chip.label} size="sm" variant="outline">
+              <Link className="inline-flex items-center gap-1.5" href={chip.href}>
+                <span>{chip.label}</span>
+                <span aria-hidden="true" className="text-muted-foreground">×</span>
+              </Link>
+            </Button>
+          ))}
+        </section>
+      ) : null}
 
       {parsed.issues.length > 0 ? <Alert variant={parsed.filterRejected ? "destructive" : "default"}><CircleAlert aria-hidden="true" /><AlertTitle>{parsed.filterRejected ? "Filter ditolak" : "Filter disesuaikan"}</AlertTitle><AlertDescription><ul className="list-disc pl-5">{parsed.issues.map((issue, index) => <li key={`${issue}-${index}`}>{tenantAnalyticsIssueMessage(issue)}</li>)}</ul>{parsed.filterRejected ? <div className="mt-3"><Button asChild variant="outline"><Link href="/app/analitik">Kembali ke filter aman</Link></Button></div> : null}</AlertDescription></Alert> : null}
 

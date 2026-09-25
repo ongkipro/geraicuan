@@ -346,12 +346,16 @@ export async function restorePlatformDefaultMengantarConnection(
   tx: TenantTransaction,
   context: TenantContext,
   outletId: string,
-  assertPlatformDefaultComplete: () => void,
+  assertPlatformDefaultAvailable: (
+    tx: TenantTransaction,
+    context: TenantContext,
+  ) => Promise<void> | void,
 ) {
   requireTenantAdmin(context);
   requireOutletId(outletId);
   await lockOwnedOutlet(tx, context, outletId);
-  assertPlatformDefaultComplete();
+  // D-9: also refuses a PRIVATE_ONLY tenant, which has no platform default to fall back to.
+  await assertPlatformDefaultAvailable(tx, context);
 
   const connection = await tx
     .delete(mengantarConnections)

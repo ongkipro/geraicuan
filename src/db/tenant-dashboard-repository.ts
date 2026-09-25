@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
+import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
 import { summarizeLatestReconciliationVariances } from "@/db/ledger-repository";
 import {
@@ -22,6 +23,14 @@ import {
 import { RTS_STATUSES } from "@/db/rts-repository";
 
 const DEFAULT_RECENT_LIMIT = 6;
+/** Statuses the dashboard's `actionable` read returns: every shipment with a next step. */
+export const TENANT_DASHBOARD_ACTIONABLE_STATUSES = [
+  "DRAFT",
+  "ESTIMATED",
+  "AWAITING_UPSTREAM_PAYMENT",
+  "SUBMISSION_UNKNOWN",
+  "FAILED",
+] as const;
 const MAX_RECENT_LIMIT = 20;
 
 export type TenantDashboardSummary = {
@@ -81,10 +90,11 @@ export type TenantDashboardPeriodSupportKind =
 
 export type TenantDashboardPeriodSupport = {
   rows: Array<{
-    isCod: boolean;
     occurredAt: Date;
     outletName: string;
     shipmentId: string;
+    /** T-190: COD Ongkir is its own method here, though SHP-COD still counts it as COD. */
+    paymentMethod: PaymentMethod;
     publicReference: string;
     status: (typeof shipments.$inferSelect)["status"];
   }>;
@@ -556,6 +566,7 @@ export async function loadTenantDashboardPeriodSupport(
 ): Promise<TenantDashboardPeriodSupport> {
   const commonSelection = {
     isCod: shipmentDrafts.isCod,
+    codShippingOnly: shipmentDrafts.codShippingOnly,
     outletName: outlets.name,
     shipmentId: shipments.id,
     publicReference: shipments.publicReference,
@@ -636,8 +647,8 @@ export async function loadTenantDashboardPeriodSupport(
         throw new Error("Tenant dashboard supporting event timestamp was not loaded.");
       }
       return {
-        isCod: row.isCod,
         occurredAt: row.occurredAt,
+        paymentMethod: paymentMethodOf(row.isCod, row.codShippingOnly),
         outletName: row.outletName,
         shipmentId: row.shipmentId,
         publicReference: row.publicReference,
@@ -787,13 +798,7 @@ export async function loadTenantDashboardShipments(
       and(
         eq(shipments.tenantId, context.tenantId),
         mode === "actionable"
-          ? inArray(shipments.status, [
-              "DRAFT",
-              "ESTIMATED",
-              "AWAITING_UPSTREAM_PAYMENT",
-              "SUBMISSION_UNKNOWN",
-              "FAILED",
-            ])
+          ? inArray(shipments.status, [...TENANT_DASHBOARD_ACTIONABLE_STATUSES])
           : undefined,
       ),
     )

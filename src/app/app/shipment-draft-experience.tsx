@@ -1,5 +1,12 @@
 import type { ShipmentContactSelection } from "@/app/app/actions";
-import { mengantarCodFeeIdr } from "@/lib/mengantar-cod-fee";
+import {
+  codChargeBreakdown,
+  codOngkirBreakEvenIdr,
+  codOngkirSellerDifferenceIdr,
+  MAX_COD_AMOUNT_IDR,
+  mengantarCodFeeIdr,
+  shippingMengantarDeductsIdr,
+} from "@/lib/mengantar-cod-fee";
 
 type ContactSearchKeyEvent = {
   isComposing: boolean;
@@ -60,12 +67,11 @@ export function SelectedContactProvenance({
   );
 }
 
+/** The COD amount a draft would submit; the fee lines come from `codChargeBreakdown` (T-193). */
 export type DraftCodBreakdownValue = {
   goodsValueIdr: number;
   providerCodAmountIdr: number;
-  serviceFeeIdr: number;
   shippingAmountIdr: number;
-  vatAmountIdr: number;
 };
 
 type DraftCodBreakdownProps = {
@@ -159,7 +165,7 @@ export function deriveDraftProviderMoneyLines(
 ): DraftProviderMoneyLines {
   const normalPriceIdr = service.normalPriceIdr ?? service.shippingAmountIdr;
   const specialPriceIdr = service.specialPriceIdr;
-  const providerChargedShippingIdr = specialPriceIdr ?? normalPriceIdr;
+  const providerChargedShippingIdr = shippingMengantarDeductsIdr(service);
   const shippingSpreadIdr = service.shippingAmountIdr - providerChargedShippingIdr;
   const scaleMismatch =
     service.shippingAmountIdr > providerChargedShippingIdr * SHIPPING_SCALE_MISMATCH_RATIO
@@ -185,7 +191,7 @@ export function deriveDraftProviderMoneyLines(
   };
 }
 
-function formatIdr(value: number) {
+export function formatDraftIdr(value: number) {
   return new Intl.NumberFormat("id-ID", {
     currency: "IDR",
     maximumFractionDigits: 0,
@@ -198,41 +204,50 @@ export function DraftCodBreakdown({
   money,
   providerService,
 }: DraftCodBreakdownProps) {
+  const charge = codChargeBreakdown(breakdown);
   return (
     <article className="min-w-0 rounded-lg border bg-card p-4">
       <h4 className="mb-3 wrap-anywhere text-sm font-medium">{providerService}</h4>
       <dl className="text-sm">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 first:border-t-0">
           <dt className="text-muted-foreground">Nilai barang dideklarasikan</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatIdr(breakdown.goodsValueIdr)}</dd>
+          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(breakdown.goodsValueIdr)}</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
           <dt className="text-muted-foreground">Ongkir penyedia</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatIdr(breakdown.shippingAmountIdr)}</dd>
+          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(breakdown.shippingAmountIdr)}</dd>
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-          <dt className="text-muted-foreground">Biaya COD</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatIdr(breakdown.serviceFeeIdr)}</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
-          <dt className="text-muted-foreground">PPN biaya COD</dt>
-          <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatIdr(breakdown.vatAmountIdr)}</dd>
-        </div>
+        {charge === null ? null : (
+          <>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
+              <dt className="text-muted-foreground">
+                Biaya COD Mengantar 3,33% (termasuk PPN {formatDraftIdr(charge.codFeeVatIncludedIdr)})
+              </dt>
+              <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(charge.codFeeIdr)}</dd>
+            </div>
+            {charge.roundingIdr > 0 ? (
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
+                <dt className="text-muted-foreground">Pembulatan ke rupiah</dt>
+                <dd className="text-right font-medium tabular-nums whitespace-nowrap">{formatDraftIdr(charge.roundingIdr)}</dd>
+              </div>
+            ) : null}
+          </>
+        )}
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2 font-semibold">
           <dt>Total ditagih ke pelanggan</dt>
-          <dd className="text-right tabular-nums whitespace-nowrap">{formatIdr(breakdown.providerCodAmountIdr)}</dd>
+          <dd className="text-right tabular-nums whitespace-nowrap">{formatDraftIdr(breakdown.providerCodAmountIdr)}</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
           <dt className="text-muted-foreground">Ongkir dasar pencairan Mengantar</dt>
           <dd className="text-right font-medium tabular-nums whitespace-nowrap">
-            −{formatIdr(money.providerChargedShippingIdr)}
+            −{formatDraftIdr(money.providerChargedShippingIdr)}
           </dd>
         </div>
         {money.mengantarCodFeeIdr === null ? null : (
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t py-2">
             <dt className="text-muted-foreground">Biaya COD Mengantar (3,33% dari total COD)</dt>
             <dd className="text-right font-medium tabular-nums whitespace-nowrap">
-              −{formatIdr(money.mengantarCodFeeIdr)}
+              −{formatDraftIdr(money.mengantarCodFeeIdr)}
             </dd>
           </div>
         )}
@@ -243,7 +258,7 @@ export function DraftCodBreakdown({
           >
             <dt>Estimasi diterima penjual</dt>
             <dd className="text-right tabular-nums whitespace-nowrap">
-              {formatIdr(money.estimatedSellerPayoutIdr)}
+              {formatDraftIdr(money.estimatedSellerPayoutIdr)}
             </dd>
           </div>
         )}
@@ -256,12 +271,69 @@ export function DraftCodBreakdown({
         </p>
       ) : (
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          Biaya COD dan PPN-nya ditagih ke pelanggan, lalu dipotong Mengantar saat
-          pencairan, sehingga estimasi ini sudah bersih dari biaya COD. Angka ini masih
+          Biaya COD (sudah termasuk PPN) ditagih ke pelanggan, lalu dipotong Mengantar
+          saat pencairan, sehingga estimasi ini sudah bersih dari biaya COD. Angka ini masih
           memuat selisih ongkir normal-spesial sebesar{" "}
-          {formatIdr(money.shippingSpreadIdr)}.
+          {formatDraftIdr(money.shippingSpreadIdr)}.
         </p>
       )}
     </article>
   );
+}
+
+/** The confirmation form field that carries the COD Ongkir charge to the server. */
+export const COD_ONGKIR_FIELD_NAME = "codShippingChargeIdr";
+
+export const COD_ONGKIR_METRIC_IDS = {
+  breakEven: "COD-ONGKIR-BREAK-EVEN-IDR",
+  charge: "COD-ONGKIR-CHARGE-IDR",
+  mengantarFee: "COD-ONGKIR-MENGANTAR-FEE-IDR",
+  sellerDifference: "COD-ONGKIR-SELLER-DIFFERENCE-IDR",
+  shippingDeducted: "COD-ONGKIR-SHIPPING-DEDUCTED-IDR",
+} as const;
+
+/** Whole rupiah as typed by an operator: `25000` or `25.000`. */
+export function parseRupiahInput(value: string) {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed) && !/^\d{1,3}(?:\.\d{3})+$/.test(trimmed)) return null;
+  const amount = Number(trimmed.replace(/\./g, ""));
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+export type CodOngkirChargeState =
+  | { kind: "valid"; chargeIdr: number; sellerDifferenceIdr: number; mengantarCodFeeIdr: number }
+  | { kind: "invalid"; message: string };
+
+/**
+ * The one rule the COD Ongkir field applies as the operator types, and the
+ * message it shows. `calculateCodOngkirAmounts` and the database apply the
+ * same break-even; this only decides what the screen says.
+ */
+export function evaluateCodOngkirCharge(
+  input: string,
+  shippingDeductedIdr: number,
+): CodOngkirChargeState {
+  const breakEvenIdr = codOngkirBreakEvenIdr(shippingDeductedIdr);
+  if (breakEvenIdr === null) {
+    return { kind: "invalid", message: "Ongkir layanan ini tidak dapat dipakai untuk COD Ongkir." };
+  }
+  const charge = parseRupiahInput(input);
+  if (charge === null || charge > MAX_COD_AMOUNT_IDR) {
+    return {
+      kind: "invalid",
+      message: `Isi ongkir dalam rupiah bulat tanpa desimal, minimal ${formatDraftIdr(breakEvenIdr)}.`,
+    };
+  }
+  if (charge < breakEvenIdr) {
+    return {
+      kind: "invalid",
+      message: `Ongkir tidak boleh di bawah titik impas ${formatDraftIdr(breakEvenIdr)}. ${formatDraftIdr(charge)} kurang ${formatDraftIdr(breakEvenIdr - charge)} dan membuat penjual rugi.`,
+    };
+  }
+  return {
+    chargeIdr: charge,
+    kind: "valid",
+    mengantarCodFeeIdr: mengantarCodFeeIdr(charge),
+    sellerDifferenceIdr: codOngkirSellerDifferenceIdr(charge, shippingDeductedIdr),
+  };
 }

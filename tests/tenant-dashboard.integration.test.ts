@@ -635,13 +635,14 @@ describe("tenant dashboard read model", () => {
           decision.currentRange,
           decision.previousRange,
         ),
-        support: await Promise.all([
-          loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "created"),
-          loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "cod"),
-          loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "non-cod"),
-          loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "issued"),
-          loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "cod", { outletId: outletB }),
-        ]),
+        // In turn: one transaction is one connection (T-197).
+        support: [
+          await loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "created"),
+          await loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "cod"),
+          await loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "non-cod"),
+          await loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "issued"),
+          await loadTenantDashboardPeriodSupport(tx, context, decision.currentRange, "cod", { outletId: outletB }),
+        ],
         trend: await loadTenantDashboardPeriodTrend(
           tx,
           context,
@@ -670,7 +671,7 @@ describe("tenant dashboard read model", () => {
     expect(result.support.map((item) => item.totalCount)).toEqual([2, 1, 1, 1, 0]);
     expect(result.support[1]?.rows).toEqual([
       expect.objectContaining({
-        isCod: true,
+        paymentMethod: "COD",
         shipmentId: shipmentId(81),
       }),
     ]);

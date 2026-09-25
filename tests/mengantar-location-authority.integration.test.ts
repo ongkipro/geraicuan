@@ -106,6 +106,7 @@ async function createEstimatedContactShipment() {
       packageQuantity: 1,
       packageWeightGrams: 1_000,
       packageWidthCm: null,
+      paymentMethod: "NON_COD",
       pickupAddressId: null,
       destinationAreaVerified: true,
       isHazardous: false,

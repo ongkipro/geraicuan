@@ -3,14 +3,19 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
+import { matchHas } from "next/dist/shared/lib/router/utils/prepare-destination";
+
+import nextConfig from "../next.config";
 import { completeCmsSignOut } from "@/app/_components/sign-out-control";
 import {
   platformCmsNavigation,
   tenantCmsNavigation,
 } from "@/lib/cms-shell-navigation";
 
-function itemsFor(role: "TENANT_ADMIN" | "OPERATOR", pathname: string) {
-  return tenantCmsNavigation(role, pathname).flatMap((group) => group.items);
+function itemsFor(role: "TENANT_ADMIN" | "OPERATOR", pathname: string, search?: string) {
+  return tenantCmsNavigation(role, pathname, search === undefined ? undefined : new URLSearchParams(search))
+    .flatMap((group) => group.items);
 }
 
 function platformItemsFor(pathname: string) {
@@ -27,7 +32,7 @@ describe("tenant CMS shell contract", () => {
     );
 
     expect(operatorLabels).toEqual([
-      "Dasbor", "Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Kontak", "Cek resi", "Cek tarif",
+      "Dasbor", "Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Pengirim", "Penerima", "Cek resi", "Cek tarif",
     ]);
     expect(operatorLabels).not.toContain("Analitik");
     expect(operatorLabels).not.toContain("Pengaturan");
@@ -47,9 +52,10 @@ describe("tenant CMS shell contract", () => {
     ["/app/label", "Cetak resi"],
     ["/app/label/3b4f", "Cetak resi"],
     ["/app/analitik", "Analitik"],
-    ["/app/kontak", "Kontak"],
-    ["/app/kontak/baru", "Kontak"],
-    ["/app/kontak/3b4f", "Kontak"],
+    ["/app/kontak/pengirim", "Pengirim"],
+    ["/app/kontak/penerima", "Penerima"],
+    ["/app/kontak/baru", "Pengirim"],
+    ["/app/kontak/3b4f", "Pengirim"],
     ["/app/pengaturan", "Pengaturan"],
     ["/app/anggota", "Pengaturan"],
     ["/app/cek-resi", "Cek resi"],
@@ -113,9 +119,12 @@ describe("tenant CMS shell contract", () => {
     ]);
   });
 
-  it("moves Kontak into its own Data group and gathers the three reports under Laporan (PR-54, PR-55)", () => {
+  it("splits contacts into Pengirim and Penerima in the Data group and gathers the three reports under Laporan (PR-54, PR-55, T-188)", () => {
     const groups = tenantCmsNavigation("TENANT_ADMIN", "/app");
-    expect(groups.find(({ label }) => label === "Data")?.items.map((item) => item.label)).toEqual(["Kontak"]);
+    expect(groups.find(({ label }) => label === "Data")?.items.map((item) => [item.key, item.label, item.shortLabel, item.href])).toEqual([
+      ["contacts-sender", "Pengirim", "PG", "/app/kontak/pengirim"],
+      ["contacts-recipient", "Penerima", "PN", "/app/kontak/penerima"],
+    ]);
     // T-165 and T-166 joined Analitik here; every one of the three is a Tenant
     // Admin record, so an operator sees no Laporan group at all.
     expect(groups.find(({ label }) => label === "Laporan")?.items.map((item) => [item.key, item.label, item.href])).toEqual([
@@ -140,6 +149,48 @@ describe("tenant CMS shell contract", () => {
         ["quick-rate", "Cek tarif", "/app/cek-tarif"],
       ]);
     }
+  });
+
+  // T-188: the create form and a contact detail belong to the menu they were
+  // opened from (`peran` / `dari`), defaulting to Pengirim; the query never
+  // moves a role list itself.
+  it.each([
+    ["/app/kontak/baru", "peran=penerima", "Penerima"],
+    ["/app/kontak/baru", "peran=pengirim", "Pengirim"],
+    ["/app/kontak/baru", "peran=semua", "Pengirim"],
+    ["/app/kontak/baru", "dari=penerima", "Pengirim"],
+    ["/app/kontak/00000000-0000-4000-8000-000000000663", "dari=penerima", "Penerima"],
+    ["/app/kontak/00000000-0000-4000-8000-000000000663", "dari=pengirim&alamat=x", "Pengirim"],
+    ["/app/kontak/00000000-0000-4000-8000-000000000663", "", "Pengirim"],
+    ["/app/kontak/00000000-0000-4000-8000-000000000663", "peran=penerima", "Pengirim"],
+    ["/app/kontak/pengirim", "dari=penerima", "Pengirim"],
+    ["/app/kontak/penerima", "peran=pengirim", "Penerima"],
+  ])("marks the contact menu for %s?%s as %s", (pathname, search, label) => {
+    const current = itemsFor("OPERATOR", pathname, search).filter((item) => item.current);
+    expect(current.map((item) => item.label)).toEqual([label]);
+  });
+
+  // T-188: /app/kontak no longer has a page. Old links and bookmarks resolve
+  // through next.config redirects, evaluated here with Next's own matchers in
+  // declaration order (first match wins, as the router applies them).
+  it.each([
+    ["/app/kontak", "", "/app/kontak/pengirim"],
+    ["/app/kontak", "peran=semua", "/app/kontak/pengirim"],
+    ["/app/kontak", "peran=pengirim&status=archived", "/app/kontak/pengirim"],
+    ["/app/kontak", "status=all&peran=penerima", "/app/kontak/penerima"],
+    ["/app/kontak", "peran=penerimaX", "/app/kontak/pengirim"],
+    ["/app/kontak/penerima", "", null],
+    ["/app/kontak/baru", "peran=penerima", null],
+  ])("redirects the legacy contact URL %s?%s to %s", async (pathname, search, destination) => {
+    const query = Object.fromEntries(new URLSearchParams(search));
+    const redirects = await nextConfig.redirects!();
+    const match = redirects.find((rule) =>
+      getPathMatch(rule.source)(pathname)
+      && matchHas({ headers: {} } as never, query, rule.has, rule.missing));
+    expect(match?.destination ?? null).toBe(destination);
+    if (match) expect(match).toMatchObject({ permanent: true });
+    // The destination is a page the menu owns.
+    if (destination) expect(itemsFor("OPERATOR", destination).filter((item) => item.current)).toHaveLength(1);
   });
 
   it.each(["/app/analitik", "/app/keuangan", "/app/pengaturan", "/app/anggota"])(
@@ -168,10 +219,12 @@ describe("platform CMS shell contract", () => {
     const items = groups.flatMap((group) => group.items);
 
     expect(groups.map((group) => group.label)).toEqual(["Platform"]);
-    expect(items.map((item) => item.label)).toEqual(["Ringkasan", "Tenant", "Audit"]);
+    // T-182 (PR-61) adds the approval queue.
+    expect(items.map((item) => item.label)).toEqual(["Ringkasan", "Tenant", "Pendaftaran", "Audit"]);
     expect(items.map((item) => item.href)).toEqual([
       "/platform",
       "/platform/tenant",
+      "/platform/pendaftaran",
       "/platform/audit",
     ]);
     expect(items.map((item) => item.href).join(" ")).not.toContain("[tenantId]");
@@ -184,6 +237,7 @@ describe("platform CMS shell contract", () => {
     ["/platform", "Ringkasan"],
     ["/platform/tenant", "Tenant"],
     ["/platform/tenant/10000000-0000-4000-8000-000000000471", "Tenant"],
+    ["/platform/pendaftaran", "Pendaftaran"],
     ["/platform/audit", "Audit"],
   ])("marks exactly one platform current destination for %s", (pathname, label) => {
     const current = platformItemsFor(pathname).filter((item) => item.current);
@@ -282,34 +336,36 @@ describe("responsive CMS navigation presentation", () => {
     expect(navigationSource).toContain("Cek: ScanSearch,");
     expect(navigationSource).toContain("Laporan: BarChart3,");
     expect(navigationSource).toContain("Pengelolaan: Settings2,");
-    expect(navigationSource).toContain('"tracking-lookup": PackageSearch');
-    expect(navigationSource).toContain('"quick-rate": Calculator');
+    // T-192: icons mark top-level rows only; submenu items (tree and rail flyout) are text.
+    expect(navigationSource).not.toContain('"tracking-lookup": PackageSearch');
+    expect(navigationSource).not.toContain('"quick-rate": Calculator');
+    expect(navigationSource).toMatch(/const navigationIcons: Record<string, LucideIcon> = \{\s*dashboard: LayoutDashboard,\s*\}/);
+    expect(navigationSource).not.toMatch(/group\.items\.map\(\(item\) => \{\s*const Icon/);
     expect(navigationSource).toContain("const GroupIcon = navigationGroupIcons[group.label] ?? FileText;");
     // The header keeps only the command palette; Cek tarif is reached from the sidebar group.
     expect(headerToolsSource).not.toContain("CmsQuickRateLink");
     expect(headerToolsSource).not.toContain("/app/cek-tarif");
     expect(shellSource).not.toContain("CmsQuickRateLink");
     // The palette lists the same destinations as the sidebar, so Cek resi and Cek tarif are searchable.
-    expect(headerToolsSource).toContain("tenantCmsNavigation(props.role, pathname)");
+    expect(headerToolsSource).toContain("tenantCmsNavigation(props.role, pathname, searchParams)");
   });
 
-  it("splits the collapsible group disclosure row: a plain heading label plus a separate chevron button (PR-54)", () => {
+  it("makes the whole group row one disclosure button, label included (T-187, supersedes the PR-54 split row)", () => {
     // The item <a> keeps its own shape untouched — this is what keeps
     // "no data-state on a nav link" true even once groups collapse.
     expect(navigationSource).toContain('aria-current={item.current ? "page" : undefined}');
     expect(navigationSource).toContain("<CollapsibleTrigger asChild>");
     expect(navigationSource).toContain("aria-expanded={open}");
     expect(navigationSource).toContain("aria-controls={contentId}");
-    // The group's own text label is a separate, non-interactive span — the
-    // chevron button never wraps it.
-    expect(navigationSource).toContain("<span className=\"flex-1 truncate\">{group.label}</span>");
+    expect(navigationSource).toMatch(/<CollapsibleTrigger asChild>\s*<SidebarMenuButton[\s\S]*?<GroupIcon[\s\S]*?\{group\.label\}[\s\S]*?<ChevronDown[\s\S]*?<\/SidebarMenuButton>\s*<\/CollapsibleTrigger>/);
+    expect(navigationSource).not.toContain("grup ${group.label}");
   });
 
   it("persists group open/closed state in localStorage, forces the current-route group open, and falls back to a DropdownMenu flyout on the icon rail (PR-54)", () => {
     expect(navigationSource).toContain("GROUP_STATE_STORAGE_KEY");
     expect(navigationSource).toContain("window.localStorage.getItem(GROUP_STATE_STORAGE_KEY)");
     expect(navigationSource).toContain("window.localStorage.setItem(GROUP_STATE_STORAGE_KEY");
-    expect(navigationSource).toContain("groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? false)");
+    expect(navigationSource).toContain("groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? true)");
     expect(navigationSource).toContain("const isRail = state === \"collapsed\" && !isMobile;");
     expect(navigationSource).toContain("<DropdownMenu>");
   });

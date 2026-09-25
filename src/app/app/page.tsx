@@ -24,13 +24,18 @@ import {
   type DashboardPeriodContext,
 } from "@/app/app/dashboard-regions";
 import { DashboardPeriodFilter } from "@/app/app/dashboard-period-filter";
+import { StoreSetupOverview } from "@/app/app/store-setup-overview";
 import { PageHeader } from "@/components/cms/page-header";
 import { PageContainer } from "@/components/cms/page-container";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db/client";
-import { listOutletReadinessSummary } from "@/db/outlet-readiness-repository";
+import {
+  listOutletReadiness,
+  listOutletReadinessSummary,
+  OutletSettingsDeniedError,
+} from "@/db/outlet-readiness-repository";
 import {
   loadTenantDashboardCourierRecap,
   loadTenantDashboardMetrics,
@@ -39,6 +44,7 @@ import {
   loadTenantDashboardPeriodSupport,
   loadTenantDashboardPeriodTrend,
   loadTenantDashboardShipments,
+  TENANT_DASHBOARD_ACTIONABLE_STATUSES,
 } from "@/db/tenant-dashboard-repository";
 import type { TenantDashboardPeriodSupportKind } from "@/db/tenant-dashboard-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -79,12 +85,37 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
 
   let principal;
   try {
-    principal = await requireCmsScope("tenant");
+    principal = await requireCmsScope("tenant", { allowPendingApproval: true });
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) redirect("/login/tenant");
     throw error;
   }
   if (principal.scope !== "tenant") redirect("/login/tenant");
+
+  // PR-60: a store awaiting approval sees its setup steps, not shipment figures,
+  // and every query below stays behind the default approval refusal.
+  if (principal.tenantStatus === "PROVISIONING") {
+    const outlets = await withTenantContext(
+      db,
+      principal.userId,
+      principal.tenantId,
+      (tx, context) => listOutletReadiness(tx, context),
+      { allowPendingApproval: true },
+    ).catch((error: unknown) => {
+      if (error instanceof OutletSettingsDeniedError) return [];
+      throw error;
+    });
+    return (
+      <StoreSetupOverview
+        progress={{
+          hasOwnConnection: outlets.some((outlet) => outlet.connectionSource === "private"),
+          hasPickupPoint: outlets.some((outlet) => Boolean(outlet.defaultPickupAddressId)),
+          isTenantAdmin: principal.role === "TENANT_ADMIN",
+        }}
+        refused={firstValue(rawParams.persetujuan) === "diperlukan"}
+      />
+    );
+  }
 
   const auditScenario = process.env.NODE_ENV === "development"
     ? parseUiAuditScenarioForRoute(
@@ -137,7 +168,15 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
     }
     return rows;
   });
-  let recentPromise = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardShipments(tx, context, { limit: 8, mode: "recent" })).then((rows) => auditScenario === "dashboard-first-run" ? [] : rows);
+  let recentPromise = withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadTenantDashboardShipments(tx, context, { limit: 8, mode: "recent" })).then((rows) => {
+    if (auditScenario === "dashboard-first-run") return [];
+    // The recent card merges both reads, so an empty follow-up queue also drops
+    // actionable shipments from the recent read; otherwise they reappear there.
+    if (auditScenario === "dashboard-action-empty") {
+      return rows.filter((row) => !(TENANT_DASHBOARD_ACTIONABLE_STATUSES as readonly string[]).includes(row.status));
+    }
+    return rows;
+  });
   if (auditScenario === "dashboard-stream") {
     actionPromise = delayResult(actionPromise, 1_800);
     recentPromise = delayResult(recentPromise, 2_400);
@@ -230,7 +269,7 @@ export default async function TenantDashboardPage({ searchParams }: TenantDashbo
         <h2 className="sr-only" id="dashboard-period-heading">Ringkasan periode</h2>
         <div className="space-y-3">
           <DashboardPeriodFilter activeCount={activeFilterCount} comparisonLabel={decisionContext.previousPeriodLabel} key={analyticsQuery.toString()} outlets={outletRows} rangeLabel={decisionContext.periodLabel} timezoneLabel={decisionContext.timezoneLabel} todayLocalDate={todayLocalDate} values={{ endDate: range.lastIncludedDate, outletId: selectedOutlet?.id, presetId: range.presetId, startDate: range.startDate }} />
-          <p className="max-w-2xl text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
+          <p className="inline-flex items-center rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-2xs backdrop-blur-md [overflow-wrap:anywhere]">{decisionContext.periodLabel} · {decisionContext.timezoneLabel} · {selectedOutlet?.name ?? "Semua outlet"}</p>
           {range.issues.length > 0 ? <Alert><AlertTitle>Filter disesuaikan</AlertTitle><AlertDescription><ul className="list-disc pl-5">{range.issues.map((issue, index) => <li key={`${issue}-${index}`}>{analyticsIssueMessage(issue)}</li>)}</ul></AlertDescription></Alert> : null}
           {invalidOutlet ? <Alert variant="destructive"><AlertTitle>Filter outlet ditolak</AlertTitle><AlertDescription>Outlet pada alamat halaman tidak tersedia untuk tenant ini.<div className="mt-3"><Button asChild variant="outline"><Link href="/app">Reset ke filter aman</Link></Button></div></AlertDescription></Alert> : null}
         </div>

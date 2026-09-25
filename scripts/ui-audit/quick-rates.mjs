@@ -19,7 +19,7 @@ for(const width of [1440,1024,768,390,320]){
  await s.send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<768});
  await s.send('Network.setExtraHTTPHeaders',{headers:{'x-geraicuan-ui-audit':'quick-rate-demo'}});
  await s.goto(origin+'/app/cek-tarif');await wait(`!!document.getElementById('rate-results-title')&&!document.querySelector('[data-slot=skeleton]')`);await pause(350);
- const probe=JSON.parse(await s.evaluate(PROBE));assert.equal(probe.overflow,0);assert.equal(probe.weakFocusRing,0);assert.equal(probe.contrastFails,0);
+ const probe=JSON.parse(await s.evaluate(PROBE));assert(probe.overflow<=0);assert.equal(probe.weakFocusRing,0);assert.equal(probe.contrastFails,0);
  const layout=await s.evaluate(`(()=>{const h=document.querySelector('[data-slot=cms-header]'),a=h.querySelector('a[href="/app/cek-tarif"]'),r=a.getBoundingClientRect(),t=h.querySelector('time').getBoundingClientRect();return {headerHeight:h.getBoundingClientRect().height,button:{width:r.width,height:r.height,right:r.right},clockLeft:t.left,overflow:document.documentElement.scrollWidth>innerWidth}})()`);
  assert(layout.button.height>=44);assert(!layout.overflow);assert(layout.headerHeight<130);results.push({width,probe,layout});await s.evaluate(`scrollTo({top:0,behavior:'instant'})`);await shot('quote-'+width);
  if(width===320||width===390){await s.evaluate(`document.getElementById('rate-results-title').scrollIntoView({block:'start',behavior:'instant'})`);if(width===390)await s.evaluate(`(()=>{const t=document.querySelector('[data-slot=table-container]');t.scrollLeft=t.scrollWidth})()`);await shot('table-'+width);results.push({width,tableCapture:true})}

@@ -191,3 +191,15 @@ export const platformMonitoringReconciliationLatest = pgView(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
 ).existing();
+
+/** T-182 (0051): stores awaiting approval with what they registered. */
+export const platformRegistrationQueue = pgView("platform_registration_queue", {
+  tenantId: uuid("tenant_id").notNull(),
+  storeName: text("store_name").notNull(),
+  contactWhatsapp: text("contact_whatsapp"),
+  mengantarCredentialPolicy: text("mengantar_credential_policy").notNull(),
+  registeredAt: timestamp("registered_at", { withTimezone: true }).notNull(),
+  ownerName: text("owner_name").notNull(),
+  ownerEmail: text("owner_email").notNull(),
+  ownerEmailVerified: boolean("owner_email_verified").notNull(),
+}).existing();

@@ -186,16 +186,16 @@ export async function readPlatformHealth(
   const rangeStart = filters.range.startInclusive;
   const rangeEnd = filters.range.endExclusive;
   type AggregateRow = { count: string; oldest_at: Date | null; affected: string };
-  const [queueResult, unpaidResult, unknownResult, failureResult, latencyResult, accountsResult] = await Promise.all([
-    tx.execute<AggregateRow>(sql`
+  // One transaction holds one connection, so its queries are awaited in turn (T-197).
+  const queueResult = await tx.execute<AggregateRow>(sql`
       SELECT count(*)::text AS count,
         min(coalesce(b.submission_attempted_at, b.created_at)) AS oldest_at,
         count(distinct b.tenant_id)::text AS affected
       FROM ${platformMonitoringProviderBatch} b
       WHERE b.status IN ('SUBMISSION_QUEUED', 'SUBMITTING')
         AND coalesce(b.submission_attempted_at, b.created_at) < ${new Date(now.getTime() - PLATFORM_HEALTH_THRESHOLDS.queueStuckMs)}
-        ${bScope} ${bOutlet} ${bCourier}`),
-    tx.execute<AggregateRow & { recovering: string }>(sql`
+        ${bScope} ${bOutlet} ${bCourier}`);
+  const unpaidResult = await tx.execute<AggregateRow & { recovering: string }>(sql`
       SELECT count(*)::text AS count, min(o.created_at) AS oldest_at,
         count(distinct o.tenant_id)::text AS affected,
         (SELECT count(*)::text FROM ${platformMonitoringUnpaidRecovery} r
@@ -203,8 +203,8 @@ export async function readPlatformHealth(
           WHERE r.status IN ('PAYMENT_QUEUED', 'PAYING') ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}) AS recovering
       FROM ${platformMonitoringProviderOrder} o
       JOIN ${platformMonitoringProviderBatch} b ON b.id = o.batch_id AND b.tenant_id = o.tenant_id
-      WHERE o.status = 'AWAITING_UPSTREAM_PAYMENT' ${oScope} ${bOutlet} ${bCourier}`),
-    tx.execute<{ batches: string; orders: string; recoveries: string; oldest_at: Date | null; affected: string }>(sql`
+      WHERE o.status = 'AWAITING_UPSTREAM_PAYMENT' ${oScope} ${bOutlet} ${bCourier}`);
+  const unknownResult = await tx.execute<{ batches: string; orders: string; recoveries: string; oldest_at: Date | null; affected: string }>(sql`
       WITH unknowns AS (
         SELECT b.tenant_id, coalesce(b.submission_attempted_at, b.created_at) AS at
         FROM ${platformMonitoringProviderBatch} b WHERE b.status = 'SUBMISSION_UNKNOWN' ${bScope} ${bOutlet} ${bCourier}
@@ -222,8 +222,8 @@ export async function readPlatformHealth(
         (SELECT count(*)::text FROM ${platformMonitoringProviderBatch} b WHERE b.status='SUBMISSION_UNKNOWN' ${bScope} ${bOutlet} ${bCourier}) AS batches,
         (SELECT count(*)::text FROM ${platformMonitoringProviderOrder} o JOIN ${platformMonitoringProviderBatch} b ON b.id=o.batch_id AND b.tenant_id=o.tenant_id WHERE o.status='SUBMISSION_UNKNOWN' ${oScope} ${bOutlet} ${bCourier}) AS orders,
         (SELECT count(*)::text FROM ${platformMonitoringUnpaidRecovery} r JOIN ${platformMonitoringProviderBatch} rb ON rb.id=r.batch_id AND rb.tenant_id=r.tenant_id WHERE r.status='PAYMENT_UNKNOWN' ${rScope} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)}) AS recoveries,
-        min(at) AS oldest_at, count(distinct tenant_id)::text AS affected FROM unknowns`),
-    tx.execute<{ total: string; failed: string; oldest_at: Date | null; affected: string; recent_code_peak: string; has_critical_code: boolean }>(sql`
+        min(at) AS oldest_at, count(distinct tenant_id)::text AS affected FROM unknowns`);
+  const failureResult = await tx.execute<{ total: string; failed: string; oldest_at: Date | null; affected: string; recent_code_peak: string; has_critical_code: boolean }>(sql`
       SELECT count(*)::text AS total,
         count(*) FILTER (WHERE b.status='FAILED')::text AS failed,
         min(b.created_at) FILTER (WHERE b.status='FAILED') AS oldest_at,
@@ -231,20 +231,19 @@ export async function readPlatformHealth(
         coalesce((SELECT max(n)::text FROM (SELECT count(*) n FROM ${platformMonitoringProviderBatch} rb WHERE rb.status='FAILED' AND rb.created_at >= ${new Date(now.getTime() - PLATFORM_HEALTH_THRESHOLDS.failureRecentWindowMs)} ${scopeClause("rb", filters.scope)} ${outletClause("rb", filters.outletId)} ${courierClause("rb", filters.courier)} GROUP BY rb.safe_error_code) recent), '0') AS recent_code_peak,
         coalesce(bool_or(b.safe_error_code ~ '^(AUTH|CREDENTIAL|SCHEMA)') FILTER (WHERE b.status='FAILED'), false) AS has_critical_code
       FROM ${platformMonitoringProviderBatch} b
-      WHERE b.created_at >= ${rangeStart} AND b.created_at < ${rangeEnd} ${bScope} ${bOutlet} ${bCourier}`),
-    tx.execute<{ p50: string | null; p95: string | null }>(sql`
+      WHERE b.created_at >= ${rangeStart} AND b.created_at < ${rangeEnd} ${bScope} ${bOutlet} ${bCourier}`);
+  const latencyResult = await tx.execute<{ p50: string | null; p95: string | null }>(sql`
       SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM (b.completed_at-b.submission_attempted_at)))::text AS p50,
         percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM (b.completed_at-b.submission_attempted_at)))::text AS p95
       FROM ${platformMonitoringProviderBatch} b
       WHERE b.completed_at >= ${rangeStart} AND b.completed_at < ${rangeEnd}
-        AND b.submission_attempted_at IS NOT NULL ${bScope} ${bOutlet} ${bCourier}`),
-    tx.execute<{ bucket: string; courier: string; waiting: string; oldest_at: Date }>(sql`
+        AND b.submission_attempted_at IS NOT NULL ${bScope} ${bOutlet} ${bCourier}`);
+  const accountsResult = await tx.execute<{ bucket: string; courier: string; waiting: string; oldest_at: Date }>(sql`
       SELECT b.provider_account_bucket::text AS bucket, b.courier,
         count(*)::text AS waiting, min(coalesce(b.submission_attempted_at,b.created_at)) AS oldest_at
       FROM ${platformMonitoringProviderBatch} b
       WHERE b.status IN ('SUBMISSION_QUEUED','SUBMITTING') ${bScope} ${bOutlet} ${bCourier}
-      GROUP BY b.provider_account_bucket,b.courier ORDER BY count(*) DESC,b.provider_account_bucket LIMIT 20`),
-  ]);
+      GROUP BY b.provider_account_bucket,b.courier ORDER BY count(*) DESC,b.provider_account_bucket LIMIT 20`);
   const queueRaw = queueResult.rows[0];
   const unpaidRaw = unpaidResult.rows[0];
   const unknownRaw = unknownResult.rows[0];

@@ -16,6 +16,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CodOngkirCharge } from "@/app/app/cod-ongkir-charge";
+import { COD_ONGKIR_FIELD_NAME } from "@/app/app/shipment-draft-experience";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Table,
@@ -26,29 +28,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { COD_FORMULA_RETIRED_MESSAGE, codOngkirBreakEvenIdr, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import type { PaymentMethod } from "@/lib/payment-method";
 
-type CodBreakdown = {
-  goodsValueIdr: number;
-  shippingAmountIdr: number;
-  serviceFeeIdr: number;
-  vatAmountIdr: number;
-  providerCodAmountIdr: number;
-};
 
 export type ShipmentEstimateOption = {
-  codBreakdown: CodBreakdown | null;
+  /** T-193: `codChargeBreakdown` of the amount confirmation would submit. */
+  codBreakdown: CodChargeBreakdown | null;
   codEligible: boolean;
   deliveryEstimate: string;
   estimateServiceId: string;
   insuranceAmountIdr: number | null;
   providerService: string;
   shippingAmountIdr: number;
+  /** T-186: the shipping Mengantar deducts, the COD Ongkir break-even basis. */
+  shippingDeductedIdr?: number;
 };
 
 type ShipmentIssuancePanelProps = {
+  /** T-199: the shipment holds a never-submitted version 1 COD row; confirmation is refused. */
+  codFormulaRetired?: boolean;
   fixtureEnabled: boolean;
   isCod: boolean;
   options: ShipmentEstimateOption[];
+  /** T-186: defaults to what `isCod` implies for callers that predate COD Ongkir. */
+  paymentMethod?: PaymentMethod;
   shipmentId: string;
   snapshotId: string;
 };
@@ -61,18 +65,25 @@ const idr = new Intl.NumberFormat("id-ID", {
   style: "currency",
 });
 
-const breakdownRows: readonly [keyof CodBreakdown, string][] = [
-  ["goodsValueIdr", "Nilai barang dideklarasikan"],
-  ["shippingAmountIdr", "Ongkir penyedia"],
-  ["serviceFeeIdr", "Biaya COD"],
-  ["vatAmountIdr", "PPN biaya COD"],
-  ["providerCodAmountIdr", "Total ditagih ke pelanggan"],
-];
+// T-193: one Biaya COD (Mengantar's 3.33%, VAT inside), and the lines add up to the total.
+function breakdownRows(breakdown: CodChargeBreakdown): readonly [string, string, number][] {
+  return [
+    ["goods", "Nilai barang dideklarasikan", breakdown.goodsValueIdr],
+    ["shipping", "Ongkir penyedia", breakdown.shippingAmountIdr],
+    ["fee", `Biaya COD Mengantar 3,33% (termasuk PPN ${idr.format(breakdown.codFeeVatIncludedIdr)})`, breakdown.codFeeIdr],
+    ...(breakdown.roundingIdr > 0
+      ? [["rounding", "Pembulatan ke rupiah", breakdown.roundingIdr] as [string, string, number]]
+      : []),
+    ["total", "Total ditagih ke pelanggan", breakdown.providerCodAmountIdr],
+  ];
+}
 
 export function ShipmentIssuancePanel({
+  codFormulaRetired = false,
   fixtureEnabled,
   isCod,
   options,
+  paymentMethod = isCod ? "COD" : "NON_COD",
   shipmentId,
   snapshotId,
 }: ShipmentIssuancePanelProps) {
@@ -82,9 +93,19 @@ export function ShipmentIssuancePanel({
     initialVerificationState,
   );
   const [selectedId, setSelectedId] = useState("");
+  const [codOngkirValidity, setCodOngkirValidity] = useState<{ id: string; valid: boolean } | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.estimateServiceId === selectedId);
   const eligibleOptions = options.filter((option) => !isCod || option.codEligible);
+  const codOngkirBasis = paymentMethod === "COD_ONGKIR" ? selected?.shippingDeductedIdr ?? null : null;
+  // Refused inline first; the server refuses the same charge again.
+  const codOngkirBlocked = paymentMethod === "COD_ONGKIR" && Boolean(selected) && (
+    codOngkirBasis === null
+    || (codOngkirValidity?.id === selectedId
+      ? !codOngkirValidity.valid
+      : codOngkirBreakEvenIdr(codOngkirBasis) === null)
+  );
+  const confirmDisabled = codFormulaRetired || !selected || !fixtureEnabled || pending || codOngkirBlocked;
 
   useEffect(() => {
     if (state.error || state.issued) resultRef.current?.focus();
@@ -106,6 +127,17 @@ export function ShipmentIssuancePanel({
 
       <CardContent className="grid gap-5">
 
+      {codFormulaRetired ? (
+        <Alert id="cod-formula-retired" variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Kiriman ini tidak dapat dikonfirmasi</AlertTitle>
+          <AlertDescription className="grid gap-2">
+            <p>{COD_FORMULA_RETIRED_MESSAGE}</p>
+            <p><Link className="font-medium underline underline-offset-4" href="/app/pengiriman/baru">Buat kiriman baru</Link></p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {eligibleOptions.length === 0 ? (
         <Alert>
           <CircleAlert aria-hidden="true" />
@@ -118,7 +150,8 @@ export function ShipmentIssuancePanel({
         <form action={action} className="grid gap-5">
           <input name="shipmentId" type="hidden" value={shipmentId} />
           <input name="estimateSnapshotId" type="hidden" value={snapshotId} />
-          <fieldset className="grid gap-3" disabled={pending}>
+          {/* T-199: nothing on a retired-formula shipment can be confirmed, so no service is choosable. */}
+          <fieldset className="grid gap-3" disabled={pending || codFormulaRetired}>
             <legend className="text-sm font-medium">Layanan Mengantar yang tersimpan</legend>
             <div className="overflow-hidden rounded-md border">
               <Table
@@ -170,15 +203,28 @@ export function ShipmentIssuancePanel({
             </div>
           </fieldset>
 
-          {selected?.codBreakdown ? (
+          {paymentMethod === "COD_ONGKIR" && selected ? (
+            codOngkirBasis === null ? (
+              <p className="text-sm text-destructive" role="alert">Ongkir yang dipotong Mengantar untuk layanan ini tidak tersedia. Muat ulang estimasi.</p>
+            ) : (
+              <CodOngkirCharge
+                idPrefix={`issuance-cod-ongkir-${selectedId}`}
+                key={selectedId}
+                name={COD_ONGKIR_FIELD_NAME}
+                onValidityChange={(valid) => setCodOngkirValidity({ id: selectedId, valid })}
+                providerService={selected.providerService}
+                shippingDeductedIdr={codOngkirBasis}
+              />
+            )
+          ) : codFormulaRetired ? null : selected?.codBreakdown ? (
             <div aria-label="Rincian nilai penagihan COD" className="overflow-hidden rounded-md border" role="region">
               <Table>
                 <TableCaption className="px-3 text-left">Rincian penagihan ke pelanggan</TableCaption>
                 <TableBody>
-                  {breakdownRows.map(([key, label]) => (
+                  {breakdownRows(selected.codBreakdown).map(([key, label, amount]) => (
                     <TableRow key={key}>
-                      <TableCell className={key === "providerCodAmountIdr" ? "font-medium" : undefined}>{label}</TableCell>
-                      <TableCell className="text-right font-mono font-medium tabular-nums">{idr.format(selected.codBreakdown![key])}</TableCell>
+                      <TableCell className={key === "total" ? "font-medium" : undefined}>{label}</TableCell>
+                      <TableCell className="text-right font-mono font-medium tabular-nums">{idr.format(amount)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -198,12 +244,12 @@ export function ShipmentIssuancePanel({
             </Alert>
           ) : null}
 
-          <Field className="max-w-2xl items-start" data-disabled={!selected || !fixtureEnabled || pending} orientation="horizontal">
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selected || !fixtureEnabled || pending} id="issuance-confirmation" key={selectedId} name="confirmation" required value="confirmed" />
+          <Field className="max-w-2xl items-start" data-disabled={confirmDisabled} orientation="horizontal">
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={confirmDisabled} id="issuance-confirmation" key={selectedId} name="confirmation" required value="confirmed" />
             <FieldLabel className="font-normal leading-6" htmlFor="issuance-confirmation">Saya sudah memeriksa layanan dan nilai di atas, lalu mengonfirmasi penerbitan AWB satu kali.</FieldLabel>
           </Field>
           <div className="flex border-t pt-4">
-            <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={!selected || !fixtureEnabled || pending} type="submit">
+            <Button className="min-h-11 max-md:w-full md:min-h-8" disabled={confirmDisabled} type="submit">
               {pending ? "Menerbitkan AWB…" : "Konfirmasi dan terbitkan AWB"}
             </Button>
           </div>

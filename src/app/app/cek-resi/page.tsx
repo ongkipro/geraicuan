@@ -20,11 +20,31 @@ const AUDIT_STATES: Record<string, TrackingLookupState> = {
     result: {
       awb: "SANITIZED-AUDIT-AWB",
       courier: "JNE",
+      declaredValueIdr: 250_000,
       destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN",
-      isCod: true,
       observation: { observedAtIso: "2026-09-14T17:00:00Z", providerStatus: "ON PROCESS" },
+      paymentMethod: "COD",
+      providerCodAmountIdr: 270_000,
       providerService: "JNE REG",
       publicReference: "GC-10013",
+      status: "IN_TRANSIT",
+      updatedAtIso: "2026-09-14T17:05:00Z",
+    },
+  },
+  // T-190: a COD Ongkir result shows the method and the shipping charge, never goods.
+  "resi-lookup-found-cod-ongkir": {
+    kind: "found",
+    query: "GC-10014",
+    result: {
+      awb: "SANITIZED-AUDIT-AWB-2",
+      courier: "SAP",
+      declaredValueIdr: 250_000,
+      destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN",
+      observation: { observedAtIso: "2026-09-14T17:00:00Z", providerStatus: "ON PROCESS" },
+      paymentMethod: "COD_ONGKIR",
+      providerCodAmountIdr: 20_000,
+      providerService: "SAP REG",
+      publicReference: "GC-10014",
       status: "IN_TRANSIT",
       updatedAtIso: "2026-09-14T17:05:00Z",
     },
@@ -59,7 +79,7 @@ export default async function TrackingLookupPage() {
       <FormLayout
         aside={(
           <PageAside label="Bantuan cek resi">
-            <Card>
+            <Card className="ios-glass-card rounded-2xl border-border/60 shadow-xs">
               <CardHeader>
                 <CardTitle>Tips pencarian</CardTitle>
                 <CardDescription>Pencarian hanya mencakup kiriman milik tenant ini.</CardDescription>

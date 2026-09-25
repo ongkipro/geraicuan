@@ -1,5 +1,5 @@
-import { PackageSearch, Plus, Upload } from "lucide-react";
-import { CourierAwbStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { CircleAlert, PackageSearch, Plus, Upload } from "lucide-react";
+import { CourierAwbStack, PaymentStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -143,7 +143,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
 
       {issues.length > 0 ? (
         <Alert variant="destructive">
-          <CircleAlertIcon />
+          <CircleAlert aria-hidden="true" />
           <AlertTitle>Filter disesuaikan</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-4">
@@ -228,7 +228,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
           // labelled region.
           <Table
             className="min-w-[56rem]"
-            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Daftar kiriman; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -252,7 +252,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
               {data.rows.map((row) => {
                 const status = SHIPMENT_STATUS_PRESENTATION[row.status];
                 return (
-                  <TableRow className="group" key={row.shipmentId}>
+                  <TableRow className="group transition-colors hover:bg-muted/30" key={row.shipmentId}>
                     <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                       <Link
                         className="inline-flex min-h-11 items-center whitespace-nowrap text-primary underline-offset-4 hover:underline md:min-h-8"
@@ -263,9 +263,7 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
                     </TableCell>
                     <TableCell className="px-3">
                       <ShipmentStatusBadge label={status.label} tone={status.tone} />
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {row.isCod ? "COD" : "Non-COD"}
-                      </span>
+                      <PaymentStack className="mt-1 block text-xs text-muted-foreground" facts={row} />
                     </TableCell>
                     <TableCell className="max-w-48 whitespace-normal px-3">
                       <RecipientStack areaLabel={row.destinationAreaLabel} name={row.recipientName} phone={row.recipientPhone} />
@@ -306,8 +304,4 @@ export default async function ShipmentQueuePage({ searchParams }: ShipmentQueueP
       </section>
     </PageContainer>
   );
-}
-
-function CircleAlertIcon() {
-  return <span aria-hidden="true" className="mt-0.5 size-4 rounded-full border border-current" />;
 }

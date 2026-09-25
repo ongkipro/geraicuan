@@ -16,6 +16,7 @@ const input: ShipmentDraftInput = {
   destinationAreaLabel: "Gambir, Jakarta Pusat",
   isCod: false,
   outletId: "00000000-0000-4000-8000-000000000111",
+  paymentMethod: "NON_COD",
   packageContent: "Paket fixture",
   packageHeightCm: null,
   packageLengthCm: null,

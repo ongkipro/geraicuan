@@ -50,6 +50,12 @@ export type StateSummaryPanelProps = {
    * panel that is simply not in use. Naming the active filter says otherwise.
    */
   selectedElsewhereLabel?: string;
+  /**
+   * T-188: "segmented" is the compact form the contact lists use — one row of
+   * label + count toggles that sits in a toolbar beside search. The entry's
+   * description stays available to assistive technology, not on screen.
+   */
+  variant?: "cards" | "segmented";
 };
 
 const countFormatter = new Intl.NumberFormat("id-ID");
@@ -62,8 +68,47 @@ export function StateSummaryPanel({
   preserved,
   selected,
   selectedElsewhereLabel,
+  variant = "cards",
 }: StateSummaryPanelProps) {
   const selectedHere = entries.some((entry) => entry.value === selected);
+  if (variant === "segmented") {
+    return (
+      <form action={action} className="min-w-0" data-slot="state-summary-panel" method="get">
+        {Object.entries(preserved ?? {}).map(([name, value]) =>
+          value === undefined || value === "" || name === param
+            ? null
+            : <input key={name} name={name} type="hidden" value={value} />,
+        )}
+        <ul aria-label={label} className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-border/60 bg-muted/60 backdrop-blur-md p-1">
+          {entries.map((entry) => {
+            const active = entry.value === selected;
+            return (
+              <li key={entry.value}>
+                <button
+                  aria-pressed={active}
+                  className={cn(
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-sm outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "border-border/80 bg-background font-semibold text-foreground shadow-xs"
+                      : "border-transparent font-medium text-muted-foreground hover:bg-background/60 hover:text-foreground",
+                  )}
+                  data-metric-id={entry.metricId}
+                  name={param}
+                  type="submit"
+                  value={entry.value}
+                >
+                  {active ? <Check aria-hidden="true" className="size-4 shrink-0" /> : null}
+                  <span>{entry.label}</span>
+                  <span className="font-mono tabular-nums">{countFormatter.format(entry.count)}</span>
+                  <span className="sr-only">. {entry.description}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </form>
+    );
+  }
   return (
     <form action={action} className="grid min-w-0 gap-2" data-slot="state-summary-panel" method="get">
       {Object.entries(preserved ?? {}).map(([name, value]) =>
@@ -75,7 +120,7 @@ export function StateSummaryPanel({
           never an overflow container. */}
       <ul
         aria-label={label}
-        className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
+        className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6"
       >
         {entries.map((entry) => {
           const active = entry.value === selected;
@@ -84,22 +129,24 @@ export function StateSummaryPanel({
               <button
                 aria-pressed={active}
                 className={cn(
-                  "flex h-full min-h-11 w-full flex-col items-start gap-1 rounded-lg border bg-card px-3 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
-                  active ? "border-primary bg-muted" : "border-dashed",
+                  "flex h-full min-h-11 w-full flex-col items-start gap-1 rounded-xl border px-3.5 py-2.5 text-left outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+                  active
+                    ? "border-primary bg-primary/10 shadow-xs text-foreground font-medium"
+                    : "border-border/70 border-dashed bg-card/70 hover:border-border hover:bg-card hover:shadow-2xs",
                 )}
-                data-metric={entry.metricId}
+                data-metric-id={entry.metricId}
                 name={param}
                 type="submit"
                 value={entry.value}
               >
                 <span className="flex w-full min-w-0 items-center gap-1.5">
-                  {active ? <Check aria-hidden="true" className="size-4 shrink-0" /> : null}
+                  {active ? <Check aria-hidden="true" className="size-4 shrink-0 text-primary" /> : null}
                   <span className="min-w-0 flex-1 text-sm font-medium wrap-anywhere">{entry.label}</span>
-                  <span className="font-mono text-base font-semibold tabular-nums">
+                  <span className="font-mono text-base font-bold tabular-nums">
                     {countFormatter.format(entry.count)}
                   </span>
                 </span>
-                <span className="text-xs wrap-anywhere text-muted-foreground">{entry.description}</span>
+                <span className={cn("text-xs wrap-anywhere", active ? "text-foreground/80" : "text-muted-foreground")}>{entry.description}</span>
               </button>
             </li>
           );

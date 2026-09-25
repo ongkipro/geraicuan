@@ -88,11 +88,13 @@ export type UiAuditScenario =
   | "bulk-import-no-valid"
   | "bulk-import-stream"
   | "bulk-import-unconfigured"
-  | "contacts-error"
+  | "contacts-recipient-error"
+  | "contacts-recipient-stream"
+  | "contacts-sender-error"
+  | "contacts-sender-stream"
   | "contacts-area-error"
   | "contacts-area-no-result"
   | "contacts-area-results"
-  | "contacts-stream"
   | "contacts-new-error"
   | "contact-detail-outlet-error"
   | "contact-detail-route-error"
@@ -108,6 +110,7 @@ export type UiAuditScenario =
   | "print-history-error"
   | "shipment-report-empty"
   | "shipment-report-error"
+  | "shipment-detail-cod-formula-retired"
   | "shipment-detail-error"
   | "shipment-detail-payment-paying"
   | "shipment-detail-stale"
@@ -118,6 +121,7 @@ export type UiAuditScenario =
   | "shipment-draft-estimate-error"
   | "shipment-draft-pickup-choice"
   | "shipment-draft-saved"
+  | "shipment-draft-saved-cod-ongkir"
   | "shipment-draft-stream"
   | "shipment-draft-unconfigured"
   | "shipment-queue-empty"
@@ -133,6 +137,7 @@ export type UiAuditScenario =
   | "shipment-rts-stream"
   | "resi-lookup-error"
   | "resi-lookup-found"
+  | "resi-lookup-found-cod-ongkir"
   | "resi-lookup-limited"
   | "resi-lookup-missing";
 
@@ -179,7 +184,8 @@ type UiAuditScenarioContract = {
     | "/app/pengaturan/outlet"
     | "/app/pengaturan/pickup"
     | "/app/pengaturan/koneksi"
-    | "/app/kontak"
+    | "/app/kontak/pengirim"
+    | "/app/kontak/penerima"
     | "/app/kontak/baru"
     | "/app/kontak/[contactId]"
     | "/app/label"
@@ -199,6 +205,7 @@ type UiAuditScenarioContract = {
 
 export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "resi-lookup-found": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "populated" },
+  "resi-lookup-found-cod-ongkir": { mode: "read-only", ownerTask: "T-190", route: "/app/cek-resi", state: "populated" },
   "resi-lookup-missing": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "not-found" },
   "resi-lookup-limited": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "partial-error" },
   "resi-lookup-error": { mode: "read-only", ownerTask: "T-161", route: "/app/cek-resi", state: "route-error" },
@@ -212,14 +219,16 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "bulk-import-no-valid": { mode: "read-only", route: "/app/impor", state: "partial-error" },
   "bulk-import-stream": { mode: "read-only", route: "/app/impor", state: "loading" },
   "bulk-import-unconfigured": { mode: "read-only", route: "/app/impor", state: "healthy-empty" },
-  "contacts-error": { mode: "read-only", route: "/app/kontak", state: "route-error" },
+  "contacts-sender-error": { mode: "read-only", route: "/app/kontak/pengirim", state: "route-error" },
+  "contacts-recipient-error": { mode: "read-only", route: "/app/kontak/penerima", state: "route-error" },
   "contacts-area-error": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "partial-error" },
   "contacts-area-no-result": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "healthy-empty" },
   "contacts-area-results": { consumers: ["/app/kontak/[contactId]", "/app/pengiriman/baru"], mode: "read-only", ownerTask: "T-55", route: "/app/kontak/baru", state: "populated" },
   "contacts-new-error": { mode: "read-only", ownerTask: "T-77", route: "/app/kontak/baru", state: "route-error" },
   "contact-detail-outlet-error": { mode: "read-only", ownerTask: "T-77", route: "/app/kontak/[contactId]", state: "partial-error" },
   "contact-detail-route-error": { mode: "read-only", ownerTask: "T-77", route: "/app/kontak/[contactId]", state: "route-error" },
-  "contacts-stream": { mode: "read-only", route: "/app/kontak", state: "loading" },
+  "contacts-sender-stream": { mode: "read-only", route: "/app/kontak/pengirim", state: "loading" },
+  "contacts-recipient-stream": { mode: "read-only", route: "/app/kontak/penerima", state: "loading" },
   "label-detail-error": { mode: "read-only", route: "/app/label/[shipmentId]", state: "route-error" },
   "label-detail-inconsistent-cod": { mode: "read-only", route: "/app/label/[shipmentId]", state: "partial-error" },
   "label-detail-over-capacity": { mode: "read-only", route: "/app/label/[shipmentId]", state: "partial-error" },
@@ -307,6 +316,7 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "settings-pickup-list": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "populated" },
   "settings-pickup-provider-error": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "partial-error" },
   "settings-pickup-stream": { mode: "read-only", ownerTask: "T-157", route: "/app/pengaturan/pickup", state: "loading" },
+  "shipment-detail-cod-formula-retired": { mode: "read-only", ownerTask: "T-199", route: "/app/pengiriman/[shipmentId]", state: "partial-error" },
   "shipment-detail-error": { mode: "read-only", route: "/app/pengiriman/[shipmentId]", state: "route-error" },
   "shipment-detail-payment-paying": { mode: "read-only", route: "/app/pengiriman/[shipmentId]", state: "partial-error" },
   "shipment-detail-stale": { mode: "read-only", route: "/app/pengiriman/[shipmentId]", state: "stale" },
@@ -317,6 +327,7 @@ export const UI_AUDIT_SCENARIO_CONTRACTS = {
   "shipment-draft-estimate-error": { mode: "read-only", route: "/app/pengiriman/baru", state: "partial-error" },
   "shipment-draft-pickup-choice": { mode: "read-only", ownerTask: "T-157", route: "/app/pengiriman/baru", state: "populated" },
   "shipment-draft-saved": { mode: "read-only", route: "/app/pengiriman/baru", state: "primary-success" },
+  "shipment-draft-saved-cod-ongkir": { mode: "read-only", ownerTask: "T-186", route: "/app/pengiriman/baru", state: "primary-success" },
   "shipment-draft-stream": { mode: "read-only", route: "/app/pengiriman/baru", state: "loading" },
   "shipment-draft-unconfigured": { mode: "read-only", route: "/app/pengiriman/baru", state: "healthy-empty" },
   "shipment-queue-empty": { mode: "read-only", route: "/app/pengiriman", state: "healthy-empty" },
@@ -451,12 +462,21 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
     source: "src/app/app/impor/template.csv/route.ts",
     states: ["primary-success", "route-error", "unauthorized"],
   },
+  // T-188: the single /app/kontak directory became two role menus.
   {
     kind: "page",
-    ownerTask: "T-42",
+    ownerTask: "T-188",
     roles: ["TENANT_ADMIN", "OPERATOR"],
-    route: "/app/kontak",
-    source: "src/app/app/kontak/page.tsx",
+    route: "/app/kontak/pengirim",
+    source: "src/app/app/kontak/pengirim/page.tsx",
+    states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "unauthorized"],
+  },
+  {
+    kind: "page",
+    ownerTask: "T-188",
+    roles: ["TENANT_ADMIN", "OPERATOR"],
+    route: "/app/kontak/penerima",
+    source: "src/app/app/kontak/penerima/page.tsx",
     states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "unauthorized"],
   },
   {
@@ -595,6 +615,16 @@ export const CMS_UI_AUDIT_ROUTE_CONTRACTS = [
     source: "src/app/platform/audit/page.tsx",
     states: [...COMMON_PAGE_STATES, "filtered-empty", "invalid-query", "stale", "unauthorized"],
   },
+  {
+    // T-182 (PR-61): stores awaiting approval; verified by
+    // tests/tenant-registration.integration.test.ts and scripts/ui-audit/sign-up-approval.mjs.
+    kind: "page",
+    ownerTask: "T-182",
+    roles: ["SUPER_ADMIN"],
+    route: "/platform/pendaftaran",
+    source: "src/app/platform/pendaftaran/page.tsx",
+    states: ["healthy-empty", "populated", "pending", "primary-success", "unauthorized"],
+  },
 ] as const satisfies readonly CmsUiAuditRouteContract[];
 
 export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
@@ -609,7 +639,7 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     states: ["healthy-empty", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   },
   {
-    consumers: ["/app/kontak"],
+    consumers: ["/app/kontak/pengirim", "/app/kontak/penerima"],
     exportName: "searchContacts",
     ownerTask: "T-42",
     roles: ["TENANT_ADMIN", "OPERATOR"],
@@ -772,6 +802,14 @@ export const CMS_UI_AUDIT_ACTION_CONTRACTS = [
     source: "src/app/platform/tenant/actions.ts",
     states: ["partial-error", "pending", "primary-success", "unauthorized"],
   },
+  {
+    consumers: ["/platform/pendaftaran"],
+    exportName: "reviewRegistration",
+    ownerTask: "T-182",
+    roles: ["SUPER_ADMIN"],
+    source: "src/app/platform/pendaftaran/actions.ts",
+    states: ["partial-error", "pending", "primary-success", "unauthorized"],
+  },
 ] as const satisfies readonly {
   consumers: readonly string[];
   exportName: string;
@@ -825,6 +863,44 @@ export const PUBLIC_UI_AUDIT_ROUTE_CONTRACTS = [
     ownerTask: "T-67",
     route: "/api/auth/[...all]",
     source: "src/app/api/auth/[...all]/route.ts",
+  },
+  // T-181 / T-183 (PR-59, PR-62): the tenant host's public account pages.
+  {
+    cases: ["normal", "invalid", "pending", "submitted", "rate-limited"],
+    kind: "page",
+    ownerTask: "T-181",
+    route: "/daftar",
+    source: "src/app/daftar/page.tsx",
+  },
+  {
+    cases: ["normal", "invalid", "pending", "sent", "rate-limited"],
+    kind: "page",
+    ownerTask: "T-181",
+    route: "/lupa-password",
+    source: "src/app/lupa-password/page.tsx",
+  },
+  {
+    cases: ["normal", "expired", "invalid", "pending", "done"],
+    kind: "page",
+    ownerTask: "T-181",
+    route: "/atur-ulang-password",
+    source: "src/app/atur-ulang-password/page.tsx",
+  },
+  {
+    cases: ["normal", "invalid", "pending", "sent", "rate-limited"],
+    kind: "page",
+    ownerTask: "T-181",
+    route: "/verifikasi-email",
+    source: "src/app/verifikasi-email/page.tsx",
+  },
+  // T-198: the verification link asks for the sign-up password before it verifies
+  // (a T-181 public account page).
+  {
+    cases: ["normal", "expired", "invalid", "pending", "done", "rate-limited"],
+    kind: "page",
+    ownerTask: "T-181",
+    route: "/verifikasi-email/konfirmasi",
+    source: "src/app/verifikasi-email/konfirmasi/page.tsx",
   },
 ] as const;
 

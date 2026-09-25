@@ -35,8 +35,9 @@ import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { normalizeShipmentPrefixInput } from "@/lib/shipment-number";
 import {
-  assertPlatformDefaultMengantarCredentialsComplete,
+  assertPlatformDefaultMengantarCredentialsAvailable,
   MengantarConfigurationError,
+  MengantarPlatformCredentialsRefusedError,
   resolveMengantarAccountCredentials,
 } from "@/lib/mengantar-credentials";
 import {
@@ -44,6 +45,12 @@ import {
   MengantarLocationError,
   type MengantarPickupOption,
 } from "@/lib/mengantar-locations";
+
+/**
+ * PR-60: every action here is store setup — pickup points, the tenant's own
+ * Mengantar connection and the profile — which a store awaiting approval may do.
+ */
+const STORE_SETUP = { allowPendingApproval: true } as const;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -82,7 +89,7 @@ function formString(formData: FormData, name: string) {
 async function requireTenantAdminPrincipal() {
   let principal;
   try {
-    principal = await requireCmsScope("tenant");
+    principal = await requireCmsScope("tenant", STORE_SETUP);
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) {
       redirect("/login/tenant");
@@ -127,6 +134,7 @@ async function fetchAuthorizedPickupOptions(
     principal.userId,
     principal.tenantId,
     (tx, context) => resolveMengantarAccountCredentials(tx, context, outletId),
+    STORE_SETUP,
   );
   return {
     authority: resolved.authority,
@@ -147,6 +155,12 @@ export async function loadMengantarPickupOptions(
       success: true,
     };
   } catch (error) {
+    if (error instanceof MengantarPlatformCredentialsRefusedError) {
+      return {
+        message:
+          "Hubungkan dulu akun Mengantar milik toko di Pengaturan › Koneksi Mengantar. Daftar pickup diambil dari akun itu.",
+      };
+    }
     if (
       error instanceof MengantarConfigurationError
       || error instanceof MengantarLocationError
@@ -185,6 +199,7 @@ export async function savePrivateMengantarCredential(
         context,
         outletId,
       ),
+      STORE_SETUP,
     );
     await withTenantContext(
       db,
@@ -199,6 +214,7 @@ export async function savePrivateMengantarCredential(
           return typeof value === "string" ? value : "";
         },
       ),
+      STORE_SETUP,
     );
   } catch (error) {
     if (error instanceof ManagedMengantarSecretInvalidError) {
@@ -257,6 +273,7 @@ export async function switchMengantarToPlatformDefault(
         context,
         outletId,
       ),
+      STORE_SETUP,
     );
     await withTenantContext(
       db,
@@ -266,13 +283,19 @@ export async function switchMengantarToPlatformDefault(
         tx,
         context,
         outletId,
-        assertPlatformDefaultMengantarCredentialsComplete,
+        assertPlatformDefaultMengantarCredentialsAvailable,
       ),
+      STORE_SETUP,
     );
   } catch (error) {
     if (error instanceof ManagedMengantarSecretRateLimitedError) {
       return credentialFailureState(
         "Terlalu banyak percobaan perubahan koneksi. Coba lagi beberapa menit lagi.",
+      );
+    }
+    if (error instanceof MengantarPlatformCredentialsRefusedError) {
+      return credentialFailureState(
+        "Toko ini mengirim dengan akun Mengantar sendiri, jadi default platform tidak tersedia. Koneksi privat tetap dipertahankan.",
       );
     }
     if (error instanceof MengantarConfigurationError) {
@@ -397,7 +420,7 @@ export async function addOutletPickupPoint(
         originAreaLabel: canonical.originLabel,
         pickupAddressId: canonical.pickupAddressId,
         pickupAddressLabel: canonical.pickupLabel,
-      }));
+      }), STORE_SETUP);
   } catch (error) {
     return pickupErrorState(error);
   }
@@ -422,7 +445,7 @@ export async function setDefaultOutletPickupPoint(
 
   try {
     await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      setDefaultOutletPickupPointRow(tx, context, outletId, pickupAddressId));
+      setDefaultOutletPickupPointRow(tx, context, outletId, pickupAddressId), STORE_SETUP);
   } catch (error) {
     return pickupErrorState(error);
   }
@@ -450,7 +473,7 @@ export async function removeOutletPickupPoint(
 
   try {
     await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      removeOutletPickupPointRow(tx, context, outletId, pickupAddressId));
+      removeOutletPickupPointRow(tx, context, outletId, pickupAddressId), STORE_SETUP);
   } catch (error) {
     return pickupErrorState(error);
   }
@@ -485,7 +508,7 @@ export async function saveShipmentPrefix(
   }
   try {
     await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      saveTenantShipmentPrefix(tx, context, prefix, attemptId));
+      saveTenantShipmentPrefix(tx, context, prefix, attemptId), STORE_SETUP);
   } catch (error) {
     if (error instanceof ShipmentPrefixLockedError) {
       return { error: "Awalan sudah terkunci dan tidak dapat diubah. Hubungi Super Admin bila ada kesalahan.", resultToken: randomUUID() };

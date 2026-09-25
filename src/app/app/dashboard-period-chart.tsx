@@ -35,8 +35,8 @@ export function DashboardPeriodChart({ data, sevenDays, compare }: { data: Dashb
             <YAxis allowDecimals={false} axisLine={false} domain={[0, "auto"]} tickLine={false} width={32} />
             <ChartTooltip content={<ChartTooltipContent labelFormatter={(label, payload) => compare ? `${label} · pembanding ${payload[0]?.payload.previousLabel ?? "—"}` : label} />} />
             <ChartLegend align="left" verticalAlign="top" content={<ChartLegendContent className="justify-start" />} />
-            <Line dataKey="currentCount" dot={{ r: 3 }} isAnimationActive={false} stroke="var(--color-currentCount)" strokeWidth={2.5} type="linear" />
-            {compare ? <Line dataKey="previousCount" dot={{ r: 3 }} isAnimationActive={false} stroke="var(--color-previousCount)" strokeDasharray="5 4" strokeWidth={2} type="linear" /> : null}
+            <Line dataKey="currentCount" dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} stroke="var(--color-currentCount)" strokeWidth={2.5} type="monotone" />
+            {compare ? <Line dataKey="previousCount" dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} stroke="var(--color-previousCount)" strokeDasharray="5 4" strokeWidth={2} type="monotone" /> : null}
           </LineChart>
         </ChartContainer>
       </div>

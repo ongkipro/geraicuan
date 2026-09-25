@@ -21,6 +21,7 @@ import {
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsFilters } from "@/lib/analytics-filters";
 import type { AnalyticsRange } from "@/lib/analytics-range";
+import type { PaymentMethod } from "@/lib/payment-method";
 import { SHIPMENT_REPORT_EXPORT_MAX_ROWS } from "@/lib/shipment-report";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
@@ -41,6 +42,7 @@ export type ShipmentReportRow = {
   isCod: boolean;
   issuedAt: Date | null;
   outletName: string;
+  paymentMethod: PaymentMethod;
   printCount: number;
   providerService: string | null;
   publicReference: string;
@@ -199,6 +201,12 @@ function reportRowQuery(tx: TenantTransaction, context: TenantContext) {
         createdAt: shipments.createdAt,
         destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
         isCod: shipmentDrafts.isCod,
+        // RPT-SHP-PAYMENT-MODE (T-186): the draft's method, one of three.
+        paymentMethod: sql<PaymentMethod>`CASE
+          WHEN NOT ${shipmentDrafts.isCod} THEN 'NON_COD'
+          WHEN ${shipmentDrafts.codShippingOnly} THEN 'COD_ONGKIR'
+          ELSE 'COD'
+        END`,
         issuedAt: providerOrderSnapshots.resolvedAt,
         outletName: outlets.name,
         printCount: printCountExpression(context),

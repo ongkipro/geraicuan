@@ -3,11 +3,19 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { CodTotalsUnavailableError } from "@/db/cod-totals-repository";
+import { COD_ONGKIR_FIELD_NAME, parseRupiahInput } from "@/app/app/shipment-draft-experience";
+import {
+  CodOngkirChargeRefusedError,
+  CodTotalsFormulaRetiredError,
+  CodTotalsUnavailableError,
+} from "@/db/cod-totals-repository";
 import { db, dbPool } from "@/db/client";
 import { OrderBatchUnavailableError } from "@/db/order-batch-repository";
 import { TenantContextDeniedError } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { characterClassError } from "@/lib/field-character-classes";
+import { formatIdr } from "@/lib/label-format";
+import { COD_FORMULA_RETIRED_MESSAGE } from "@/lib/mengantar-cod-fee";
 import {
   MengantarOrderPayloadError,
   MengantarOrderTransportUnavailableError,
@@ -46,6 +54,23 @@ const PAYLOAD_ERROR_MESSAGES: Record<string, string> = {
   ORDER_WEIGHT_UNCONVERTIBLE:
     "Berat paket tidak dapat dikonversi ke satuan penyedia. Perbarui berat paket pada draf kiriman.",
 };
+
+/** T-186: the server's own refusal of a COD Ongkir charge, with the exact figure. */
+function codOngkirRefusalMessage(error: CodOngkirChargeRefusedError) {
+  const minimum = error.breakEvenIdr === null ? "" : ` Minimal ${formatIdr(error.breakEvenIdr)} (titik impas).`;
+  switch (error.reason) {
+    case "BELOW_BREAK_EVEN":
+      return `Ongkir COD di bawah titik impas ditolak karena membuat penjual rugi.${minimum}`;
+    case "MISSING":
+    case "INVALID":
+      return `Isi ongkir yang ditagih kurir dalam rupiah bulat.${minimum}`;
+    case "ALREADY_RECORDED":
+      return `Ongkir COD kiriman ini sudah tercatat ${formatIdr(error.recordedChargeIdr ?? 0)} dan tidak dapat diubah. Konfirmasi ulang dengan nilai itu.`;
+    case "NOT_COD_ONGKIR":
+      return "Kiriman ini bukan COD Ongkir, jadi ongkir COD tidak dapat diisi.";
+  }
+}
+
 const PAYLOAD_ERROR_FALLBACK_MESSAGE =
   "Data kiriman ini tidak dapat diproses penyedia. Perbarui draf lalu coba lagi.";
 
@@ -68,6 +93,7 @@ export async function confirmShipmentIssuance(
   const estimateSnapshotId = formData.get("estimateSnapshotId");
   const estimateServiceId = formData.get("estimateServiceId");
   const confirmation = formData.get("confirmation");
+  const chargeValue = formData.get(COD_ONGKIR_FIELD_NAME);
   if (
     typeof shipmentId !== "string" ||
     typeof estimateSnapshotId !== "string" ||
@@ -78,6 +104,20 @@ export async function confirmShipmentIssuance(
     confirmation !== "confirmed"
   ) {
     return { error: "Pilih layanan yang tersedia dan centang konfirmasi penerbitan AWB." };
+  }
+  // Absent means the form showed no COD Ongkir field; anything present must be
+  // whole rupiah, and the repository decides whether this shipment may carry it.
+  let codShippingChargeIdr: number | null = null;
+  if (chargeValue !== null) {
+    // T-196: a letter or symbol gets its own message before the amount rules.
+    const chargeClass = typeof chargeValue === "string"
+      ? characterClassError("RUPIAH", "Ongkir yang ditagih kurir", chargeValue.trim())
+      : null;
+    if (chargeClass) return { error: chargeClass };
+    codShippingChargeIdr = typeof chargeValue === "string" ? parseRupiahInput(chargeValue) : null;
+    if (codShippingChargeIdr === null) {
+      return { error: "Isi ongkir yang ditagih kurir dalam rupiah bulat tanpa desimal." };
+    }
   }
 
   const principal = await requireTenantPrincipal();
@@ -102,7 +142,7 @@ export async function confirmShipmentIssuance(
       lockPool: dbPool,
       principalId: principal.userId,
       tenantId: principal.tenantId,
-      confirmation: { shipmentId, estimateSnapshotId, estimateServiceId },
+      confirmation: { shipmentId, estimateSnapshotId, estimateServiceId, codShippingChargeIdr },
       resolveTransport: resolveSanctionedOrderFixtureTransport,
     });
     revalidatePath("/app/pengiriman/[shipmentId]", "page");
@@ -126,6 +166,12 @@ export async function confirmShipmentIssuance(
   } catch (error) {
     if (error instanceof OrderRateLimitedError) {
       return { error: "Terlalu banyak konfirmasi. Tunggu beberapa menit lalu coba lagi." };
+    }
+    if (error instanceof CodOngkirChargeRefusedError) {
+      return { error: codOngkirRefusalMessage(error) };
+    }
+    if (error instanceof CodTotalsFormulaRetiredError) {
+      return { error: COD_FORMULA_RETIRED_MESSAGE };
     }
     if (error instanceof MengantarOrderPayloadError) {
       return {

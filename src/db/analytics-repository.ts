@@ -9,6 +9,7 @@ import {
   providerBatches,
   providerOrderSnapshots,
   shipmentCodTotals,
+  shipmentDrafts,
   shipmentStatuses,
   shipments,
 } from "@/db/schema";
@@ -19,6 +20,7 @@ import {
   type AnalyticsFilters,
 } from "@/lib/analytics-filters";
 import type { AnalyticsRange } from "@/lib/analytics-range";
+import type { PaymentMethod } from "@/lib/payment-method";
 export type ShipmentStatus = (typeof shipments.$inferSelect)["status"];
 
 export { EMPTY_ANALYTICS_FILTERS } from "@/lib/analytics-filters";
@@ -46,12 +48,24 @@ export type ShipmentKpis = {
   issuedCount: number;
   resolvedSubmissionCount: number;
   providerShippingIdr: number;
-  codServiceFeeIdr: number;
-  codVatIdr: number;
+  /**
+   * Spec 19 FIN-COD-FEE-TOTAL (T-193): Σ RPT-SHP-COD-FEE-IDR — the fee Mengantar
+   * keeps, `round(COD × 333 / 10000)` per COD shipment whose receipt was issued
+   * in the range. The same figure the report, the disbursement estimate, the
+   * label and the ledger use; VAT is inside it.
+   */
+  codFeeIdr: number;
+  /**
+   * Spec 19 FIN-COD-FEE-VAT-INCLUDED (T-193): Σ `round(fee × 11 / 111)` per
+   * shipment — the VAT already inside `codFeeIdr`. Informational; never added to
+   * it and never a liability.
+   */
+  codFeeVatIncludedIdr: number;
   /**
    * Spec 19 FIN-COD-DISBURSEMENT-EST: per COD shipment whose receipt was issued
-   * in the range, COD amount − shipping Mengantar deducts − COD fee (service fee
-   * + VAT). An estimate of what Mengantar pays out, never money received.
+   * in the range, COD amount − shipping Mengantar deducts − COD fee
+   * (RPT-SHP-COD-FEE-IDR). An estimate of what Mengantar pays out, never money
+   * received.
    */
   codDisbursementEstimateIdr: number;
 };
@@ -90,6 +104,11 @@ export type ShipmentRow = {
   status: ShipmentStatus;
   cnoteNo: string | null;
   isCod: boolean;
+  /**
+   * T-186: `NON_COD` whenever `isCod` is false (the order's own flag, as this
+   * table has always read it), else COD or COD Ongkir from the draft.
+   */
+  paymentMethod: PaymentMethod;
   providerCodAmountIdr: number | null;
 };
 
@@ -294,6 +313,15 @@ export const mengantarCodFeeExpression = sql<number>`round(
 )::bigint`;
 
 /**
+ * Spec 19 FIN-COD-FEE-VAT-INCLUDED, per shipment: the VAT inside
+ * `mengantarCodFeeExpression`, `round(fee × 11 / 111)` half-up — the rule of
+ * `vatIncludedInMengantarCodFeeIdr`. Informational only.
+ */
+export const mengantarCodFeeVatIncludedExpression = sql<number>`round(
+  (${mengantarCodFeeExpression})::numeric * 11 / 111
+)::bigint`;
+
+/**
  * Built **from** the fee column rather than rounded on its own, so a report row
  * always adds up: COD − Biaya kirim − Biaya COD = Estimasi dana dicairkan, to
  * the rupiah, on every row. Rounding the whole difference separately would
@@ -307,11 +335,23 @@ export const codDisbursementEstimateExpression = sql<number>`(
   - ${mengantarCodFeeExpression}
 )::bigint`;
 
-type AdjustedLedgerEntryType =
-  | "MENGANTAR_SHIPPING_COST"
-  | "MENGANTAR_COD_FEE_COST"
-  | "GERAICUAN_COD_SERVICE_FEE_REVENUE"
-  | "COD_SERVICE_FEE_VAT_PAYABLE";
+/**
+ * RPT-SHP-PAYMENT-MODE for the analytics table and export: the order's own COD
+ * flag decides COD at all, and the draft's `cod_shipping_only` (T-186) splits
+ * COD from COD Ongkir. Tenant-scoped by the draft's own `tenant_id`.
+ */
+const analyticsPaymentMethodExpression = sql<PaymentMethod>`CASE
+  WHEN NOT coalesce(${providerOrderSnapshots.isCod}, false) THEN 'NON_COD'
+  WHEN coalesce((
+    SELECT analytics_draft.cod_shipping_only
+    FROM ${shipmentDrafts} AS analytics_draft
+    WHERE analytics_draft.shipment_id = ${shipments.id}
+      AND analytics_draft.tenant_id = ${shipments.tenantId}
+  ), false) THEN 'COD_ONGKIR'
+  ELSE 'COD'
+END`;
+
+type AdjustedLedgerEntryType = "MENGANTAR_SHIPPING_COST";
 
 /**
  * Adjustment-aware sum over one or more entry types: each entry of a listed
@@ -392,14 +432,6 @@ async function loadShipmentKpisUnchecked(
   const [financials] = await tx
     .select({
       providerShippingIdr: adjustedLedgerAmount("MENGANTAR_SHIPPING_COST"),
-      // Spec 19 FIN-COD-FEE: Mengantar's COD fee under either ledger
-      // classification — MENGANTAR_COD_FEE_COST from T-178 on, the legacy
-      // GERAICUAN_COD_SERVICE_FEE_REVENUE before it (append-only, never moved).
-      codServiceFeeIdr: adjustedLedgerAmount(
-        "MENGANTAR_COD_FEE_COST",
-        "GERAICUAN_COD_SERVICE_FEE_REVENUE",
-      ),
-      codVatIdr: adjustedLedgerAmount("COD_SERVICE_FEE_VAT_PAYABLE"),
     })
     .from(ledgerEntries)
     .innerJoin(
@@ -421,8 +453,12 @@ async function loadShipmentKpisUnchecked(
   // T-177: GeraiCUAN reports shipping and the COD fee, not merchandise revenue
   // or margin. The disbursement estimate is one figure per issued COD shipment,
   // so it reads the stored order and its COD totals rather than the ledger.
+  // T-193: so does the COD fee — the ledger holds three historical bookings of
+  // it (revenue, stored fee + VAT row, Mengantar's fee), the order holds one.
   const [disbursement] = await tx
     .select({
+      codFeeIdr: sql<number>`coalesce(sum(${mengantarCodFeeExpression}), 0)`.mapWith(Number),
+      codFeeVatIncludedIdr: sql<number>`coalesce(sum(${mengantarCodFeeVatIncludedExpression}), 0)`.mapWith(Number),
       codDisbursementEstimateIdr: sql<number>`coalesce(sum(${codDisbursementEstimateExpression}), 0)`.mapWith(Number),
     })
     .from(providerOrderSnapshots)
@@ -749,6 +785,7 @@ export async function loadShipmentPage(
       status: shipments.status,
       cnoteNo: providerOrderSnapshots.cnoteNo,
       isCod: sql<boolean>`coalesce(${providerOrderSnapshots.isCod}, false)`,
+      paymentMethod: analyticsPaymentMethodExpression,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
     })
     .from(shipments)
@@ -835,6 +872,7 @@ export async function loadShipmentExport(
       status: shipments.status,
       cnoteNo: providerOrderSnapshots.cnoteNo,
       isCod: sql<boolean>`coalesce(${providerOrderSnapshots.isCod}, false)`,
+      paymentMethod: analyticsPaymentMethodExpression,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
     })
     .from(shipments)

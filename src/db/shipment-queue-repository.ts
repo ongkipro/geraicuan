@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { PersistedEstimateService } from "@/db/estimate-repository";
+import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 import type { AnalyticsRange } from "@/lib/analytics-range";
 import { SHIPMENT_QUEUE_SUMMARY_ENTRIES } from "@/lib/shipment-queue";
 import type {
@@ -37,11 +38,15 @@ const NEEDS_ATTENTION_STATUSES = SHIPMENT_QUEUE_SUMMARY_ENTRIES.find(
 export type ShipmentQueueRow = {
   awb: string | null;
   createdAt: Date;
+  declaredValueIdr: number;
   destinationAreaLabel: string;
-  isCod: boolean;
   outletName: string;
   packageContent: string;
   packageWeightGrams: number;
+  /** T-190: the draft's method, so the queue never reads COD Ongkir as COD. */
+  paymentMethod: PaymentMethod;
+  /** COD total or COD Ongkir charge of the issued order; `null` before one exists. */
+  providerCodAmountIdr: number | null;
   providerService: string | null;
   recipientName: string;
   recipientPhone: string;
@@ -82,6 +87,8 @@ export type ShipmentDetail = {
   } | null;
   isCod: boolean;
   outlet: { id: string; name: string };
+  /** T-186 / PR-64. */
+  paymentMethod: PaymentMethod;
   package: {
     content: string;
     declaredValueIdr: number;
@@ -304,10 +311,13 @@ export async function loadShipmentQueuePage(
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       packageContent: shipmentDrafts.packageContent,
       packageWeightGrams: shipmentDrafts.packageWeightGrams,
+      declaredValueIdr: shipmentDrafts.declaredValueIdr,
       isCod: shipmentDrafts.isCod,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
       recipientName: shipmentParties.name,
       recipientPhone: shipmentParties.phone,
       providerService: providerOrderSnapshots.providerService,
+      providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       awb: providerOrderSnapshots.cnoteNo,
     })
     .from(shipments)
@@ -349,7 +359,10 @@ export async function loadShipmentQueuePage(
     generatedAt: countRow?.generatedAt ?? new Date(),
     page,
     pageSize: input.pageSize,
-    rows,
+    rows: rows.map(({ codShippingOnly, isCod, ...row }) => ({
+      ...row,
+      paymentMethod: paymentMethodOf(isCod, codShippingOnly),
+    })),
     status: input.status,
     summary,
     totalCount,
@@ -384,6 +397,7 @@ export async function loadShipmentDetail(
       packageHeightCm: shipmentDrafts.packageHeightCm,
       declaredValueIdr: shipmentDrafts.declaredValueIdr,
       isCod: shipmentDrafts.isCod,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
       providerSnapshotId: providerOrderSnapshots.id,
       providerOrderId: providerOrderSnapshots.providerOrderId,
       providerOrderStatus: providerOrderSnapshots.status,
@@ -516,6 +530,7 @@ export async function loadShipmentDetail(
       : null,
     isCod: row.isCod,
     outlet: { id: row.outletId, name: row.outletName },
+    paymentMethod: paymentMethodOf(row.isCod, row.codShippingOnly),
     package: {
       content: row.packageContent,
       declaredValueIdr: row.declaredValueIdr,

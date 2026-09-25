@@ -104,7 +104,7 @@ export function ShipmentUnpaidRecoveryPanel({
               {state.recovered.shipments.map((shipment) => (
                 <li className="flex flex-wrap items-center gap-2" key={shipment.shipmentId}>
                   <strong>AWB {shipment.awb}</strong>{" "}
-                  <Button asChild className="min-h-11 max-md:w-full md:min-h-8" size="sm" variant="outline"><Link href={shipment.labelHref}>Buka label 100 × 150 mm</Link></Button>
+                  <Button asChild className="min-h-11 max-md:w-full md:min-h-8" size="sm" variant="outline"><Link href={shipment.labelHref}>Buka label 10 × 15 atau 10 × 10 cm</Link></Button>
                 </li>
               ))}
             </ul></AlertDescription>

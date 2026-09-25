@@ -1,4 +1,5 @@
 // Read-only fixture browser regression; shortcut events are explicitly programmatic.
+// Public references are PR-44 `PREFIX-number` (e.g. GC-10013); PR-41's creator-YYMMDD-serial is retired.
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {Session,open,closeTab} from './cdp.mjs';
@@ -28,11 +29,11 @@ await shot(route.replaceAll('/','-')+'-'+width);results.push({route,width,wib:tr
 await s.send('Network.setExtraHTTPHeaders',{headers:{}});
 for(const route of ['/app/pengiriman','/app/analitik','/app']){
 await s.goto(origin+route);await wait(`document.readyState==='complete'&&!document.querySelector('[data-slot=skeleton]')`);await pause(350);
-const references=await s.evaluate(`Array.from(document.querySelectorAll('main a[href^="/app/pengiriman/"]')).filter(e=>/^[0-9]{5,}-[0-9]{6}-[0-9]{3,}$/.test(e.textContent.trim())).map(e=>{const r=e.getBoundingClientRect(),c=e.closest('td')?.getBoundingClientRect();return {width:r.width,cellWidth:c?.width,clipped:e.scrollWidth>e.clientWidth+1}})`);
+const references=await s.evaluate(`Array.from(document.querySelectorAll('main a[href^="/app/pengiriman/"]')).filter(e=>/^[A-Z0-9]{2,5}-[0-9]{5,}$/.test(e.textContent.trim())).map(e=>{const r=e.getBoundingClientRect(),c=e.closest('td')?.getBoundingClientRect();return {width:r.width,cellWidth:c?.width,clipped:e.scrollWidth>e.clientWidth+1}})`);
 assert(references.length>0,route+' populated public reference');assert(references.every(r=>r.width<=161&&!r.clipped&&(!r.cellWidth||r.cellWidth<=200)),route+' bounded public reference');
 results.push({route,width,references});
 }
-for(const [route,expected] of [['/app/kontak','081290000001'],['/app/pengiriman/rts','08129000'],['/app/label','08129000']]){
+for(const [route,expected] of [['/app/kontak/penerima','081290000001'],['/app/pengiriman/rts','08129000'],['/app/label','08129000']]){
 await s.goto(origin+route);await wait(`document.readyState==='complete'&&!document.querySelector('[data-slot=skeleton]')`);await pause(300);
 const check=await s.evaluate(`(()=>{const m=document.querySelector('main');return {full:new RegExp(${JSON.stringify(expected)}+'[0-9]{'+${expected.length===8?4:0}+'}').test(m.textContent),masked:/••••/.test(m.textContent),overflow:document.documentElement.scrollWidth>innerWidth}})()`);
 assert(check.full,route+' synthetic full phone');assert(!check.masked,route+' masking');assert(!check.overflow,route+' overflow');

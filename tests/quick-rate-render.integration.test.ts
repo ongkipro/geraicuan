@@ -41,7 +41,13 @@ describe("quick-rate presentation", () => {
   it("collects route and weight without recipient details or duplicate outlet context", () => {
     const html = renderToStaticMarkup(createElement(QuickRateForm, { outlets: [{ id: quote.outletId, name: "Outlet Uji" }], canManageSettings: true }));
     expect(html).toContain('name="weightGrams"');
-    expect(html).toContain('max="100000"');
+    // T-196: grams are a digits-only text field with a numeric keyboard, never a number spinner;
+    // the 1–100.000 g range is the server's check and the hint's wording.
+    const weight = html.match(/<input[^>]*name="weightGrams"[^>]*>/)?.[0] ?? "";
+    expect(weight).toContain('type="text"');
+    expect(weight).toContain('inputMode="numeric"');
+    expect(weight).toContain('data-character-class="NUMERIC_INTEGER"');
+    expect(html).toContain("Maksimal 100 kg.");
     expect(html).not.toContain("Sumber pencarian:");
     expect(html).not.toMatch(/recipientPhone|recipientName|draf kiriman/);
   });

@@ -92,6 +92,7 @@ export async function loadMengantarAccountAuthority(
     )
     .limit(1);
   if (!connection) {
+    await assertTenantMayUsePlatformDefaultMengantar(tx, context);
     return { connectionUpdatedAt: null, source: "platform_default", version: outlet.version };
   }
   if (
@@ -111,6 +112,41 @@ export class MengantarConfigurationError extends Error {
   constructor() {
     super("Mengantar configuration is unavailable.");
   }
+}
+
+/**
+ * D-9: the tenant's credential policy forbids the platform-default account, and
+ * the outlet has no private connection. A subclass, so every caller that already
+ * treats an unconfigured outlet as "not ready" refuses without calling Mengantar.
+ */
+export class MengantarPlatformCredentialsRefusedError extends MengantarConfigurationError {}
+
+/**
+ * Refuses the platform-default Mengantar account for a `PRIVATE_ONLY` tenant.
+ * Read inside the caller's tenant transaction, so the policy is the committed
+ * value, never a cached or browser-supplied one. A missing row fails closed.
+ */
+export async function assertTenantMayUsePlatformDefaultMengantar(
+  tx: TenantTransaction,
+  context: TenantContext,
+) {
+  const [tenant] = await tx
+    .select({ policy: schema.tenants.mengantarCredentialPolicy })
+    .from(schema.tenants)
+    .where(eq(schema.tenants.id, context.tenantId))
+    .limit(1);
+  if (tenant?.policy !== "PLATFORM_DEFAULT_ALLOWED") {
+    throw new MengantarPlatformCredentialsRefusedError();
+  }
+}
+
+/** The platform default is complete and this tenant may use it. */
+export async function assertPlatformDefaultMengantarCredentialsAvailable(
+  tx: TenantTransaction,
+  context: TenantContext,
+) {
+  await assertTenantMayUsePlatformDefaultMengantar(tx, context);
+  platformCredentials();
 }
 
 function requireCompleteCredentials(value: MengantarCredentials) {
@@ -282,6 +318,7 @@ export async function resolveMengantarAccountCredentials(
     }
   }
 
+  await assertTenantMayUsePlatformDefaultMengantar(tx, context);
   const credentials = platformCredentials();
   return {
     authority: {

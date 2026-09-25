@@ -1,5 +1,5 @@
 import { ArrowRight, PackageSearch } from "lucide-react";
-import { RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { PaymentStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -32,7 +32,7 @@ import {
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
-import { formatIdr, formatWeight, formatWibDateTime } from "@/lib/label-format";
+import { formatWeight, formatWibDateTime } from "@/lib/label-format";
 import { providerDeliveryBasisSentence } from "@/lib/provider-delivery-status";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import {
@@ -289,7 +289,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
         ) : (
           <Table
             className="min-w-[60rem]"
-            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Daftar kiriman retur; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -308,7 +308,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                 <TableHead className="sticky left-0 z-10 min-w-[140px] bg-card">Resi</TableHead>
                 <TableHead className="min-w-[150px]">Penerima</TableHead>
                 <TableHead className="min-w-[120px]">Outlet & Kurir</TableHead>
-                <TableHead className="min-w-[120px]">Nilai & Berat</TableHead>
+                <TableHead className="min-w-[120px]">Pembayaran & Berat</TableHead>
                 {/* Status and its update time share a column so the table fits 1440 without scrolling. */}
                 <TableHead className="min-w-[130px]">Status & Waktu</TableHead>
                 <TableHead className="min-w-40">Catatan / Kejadian</TableHead>
@@ -325,7 +325,7 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                   };
 
                 return (
-                  <TableRow key={row.shipmentId} className="group">
+                  <TableRow key={row.shipmentId} className="group transition-colors hover:bg-muted/30">
                     <TableCell className="sticky left-0 z-10 max-w-40 whitespace-normal bg-inherit font-mono text-xs group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                       <Link
                         className="flex min-h-11 max-w-40 items-center break-all font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
@@ -348,11 +348,9 @@ export default async function RtsDashboardPage({ searchParams }: RtsPageProps) {
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      <div className="text-xs font-semibold tabular-nums">
-                        {formatIdr(row.declaredValueIdr)}
-                      </div>
+                      <PaymentStack className="block text-xs [&>span:first-child]:font-semibold" facts={row} />
                       <div className="text-xs text-muted-foreground">
-                        {row.isCod ? "COD" : "Non-COD"} · {formatWeight(row.packageWeightGrams)}
+                        {formatWeight(row.packageWeightGrams)}
                       </div>
                     </TableCell>
                     <TableCell>

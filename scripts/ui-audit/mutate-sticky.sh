@@ -102,7 +102,8 @@ elif echo "$out" | grep -q "not sticky\|not opaque\|translucent\|transparent sto
 else echo "baseline: PASS | $out"; fi
 
 out=$(node "$UIA/kontak-check.mjs" 2>&1)
-if echo "$out" | grep -q "ok=1"; then echo "baseline (kontak): PASS | $out";
+# T-188: kontak-check prints one line per role list; baseline needs both clean.
+if echo "$out" | grep -q "ok=1" && ! echo "$out" | grep -q "ok=0"; then echo "baseline (kontak): PASS | $out";
 else echo "baseline (kontak): FAIL | $out"; fails=$((fails+1)); fi
 
 exit $fails

@@ -237,7 +237,7 @@ describe("tenant-scoped tracking lookup repository (PR-51)", () => {
         awb: AWB_A,
         courier: "JNE",
         destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN",
-        isCod: true,
+        paymentMethod: "COD",
         providerService: "JNE REG",
         publicReference: referenceA,
         status: "IN_TRANSIT",
@@ -317,7 +317,7 @@ describe("tracking lookup action boundary (PR-51)", () => {
       kind: "found",
       result: {
         awb: AWB_A,
-        isCod: true,
+        paymentMethod: "COD",
         observation: { observedAtIso: "2026-09-12T04:30:00.000Z", providerStatus: "DELIVERED" },
         publicReference: referenceA,
         status: "IN_TRANSIT",

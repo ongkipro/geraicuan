@@ -14,6 +14,7 @@ import type { ShipmentStatus } from "@/lib/shipment-queue";
 const fixture = vi.hoisted(() => ({
   auditHeader: null as string | null,
   awb: null as string | null,
+  codFormulaRetired: false,
   role: "TENANT_ADMIN" as "TENANT_ADMIN" | "OPERATOR",
   batchStatus: null as null | "SUBMISSION_QUEUED" | "SUBMITTING" | "SUBMISSION_UNKNOWN" | "COMPLETED" | "FAILED",
   recoveryStatus: null as null | "PAYMENT_QUEUED" | "PAYING" | "PAYMENT_UNKNOWN" | "COMPLETED",
@@ -64,6 +65,7 @@ vi.mock("@/db/cod-totals-repository", () => ({
     shippingAmountIdr: 14_000,
     vatAmountIdr: 858,
   }),
+  shipmentCodFormulaRetired: vi.fn(async () => fixture.codFormulaRetired),
 }));
 vi.mock("@/lib/sanctioned-order-fixture", () => ({
   isSanctionedOrderFixtureEnabled: () => false,
@@ -84,9 +86,11 @@ vi.mock("@/db/shipment-queue-repository", () => ({
         awb: fixture.awb,
         createdAt: new Date("2026-09-01T01:00:00.000Z"),
         // A real Mengantar label: subdistrict, district, city, province, zip.
+        declaredValueIdr: 150_000,
         destinationAreaLabel: "Cihapit, Bandung Wetan, Kota Bandung, Jawa Barat, 40114",
-        isCod: true,
         outletName: "Gerai utama",
+        paymentMethod: "COD" as const,
+        providerCodAmountIdr: null,
         packageContent: "Paket audit",
         packageWeightGrams: 1_000,
         providerService: null,
@@ -198,6 +202,7 @@ describe("T-39 shipment queue and lifecycle route states", () => {
   beforeEach(() => {
     fixture.auditHeader = null;
     fixture.awb = null;
+    fixture.codFormulaRetired = false;
     fixture.role = "TENANT_ADMIN";
     fixture.batchStatus = null;
     fixture.recoveryStatus = null;
@@ -313,6 +318,33 @@ describe("T-39 shipment queue and lifecycle route states", () => {
     expect(html).toContain(expected);
     expect(html).toContain('id="periksa-upaya-tersendat"');
     expect(html).toContain("Tidak ada permintaan baru yang dikirim ke penyedia");
+  });
+
+  it("refuses a never-submitted version 1 COD row up front with a disabled confirm (T-199)", async () => {
+    const retiredMessage = "Nilai COD kiriman ini dihitung dengan rumus lama, sehingga dana yang cair ke penjual akan kurang. Kiriman belum dikirim ke Mengantar dan tidak dapat dikonfirmasi: buat kiriman baru dengan data yang sama, lalu estimasi ulang.";
+    const confirmButton = /<button[^>]*>Konfirmasi dan terbitkan AWB<\/button>/;
+    fixture.status = "ESTIMATED";
+    const current = await renderDetail();
+    expect(current).not.toContain(retiredMessage);
+
+    fixture.codFormulaRetired = true;
+    const retired = await renderDetail();
+    expect(retired).toContain('id="cod-formula-retired"');
+    expect(retired).toContain(retiredMessage);
+    expect(retired).toContain('href="/app/pengiriman/baru"');
+    expect(confirmButton.exec(retired)?.[0]).toContain("disabled");
+    // No service can be picked, so no current-formula breakdown can appear.
+    expect(retired).toMatch(/<fieldset class="grid gap-3" disabled="">/);
+    expect(current).toMatch(/<fieldset class="grid gap-3">/);
+
+    // The dev-only scenario reaches the same state on any seeded shipment.
+    fixture.codFormulaRetired = false;
+    fixture.status = "DRAFT";
+    vi.stubEnv("NODE_ENV", "development");
+    fixture.auditHeader = "shipment-detail-cod-formula-retired";
+    const scenario = await renderDetail();
+    expect(scenario).toContain(retiredMessage);
+    expect(confirmButton.exec(scenario)?.[0]).toContain("disabled");
   });
 
   it.each([

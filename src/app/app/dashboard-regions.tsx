@@ -24,6 +24,7 @@ import { DataFreshnessControl } from "@/components/cms/data-freshness-control";
 import { DataTableShell } from "@/components/cms/data-table-shell";
 import { EmptyState } from "@/components/cms/empty-state";
 import { RetryRegionButton } from "@/components/cms/retry-region-button";
+import { PaymentStack } from "@/components/cms/shipment-table-cells";
 import { ShipmentStatusBadge, toneIcon } from "@/components/cms/shipment-status-badge";
 import { StatCard } from "@/components/cms/stat-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -123,13 +124,13 @@ function DashboardComparison({ current, direction = "up-is-good", previous, prev
   const Trend = delta === 0 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
   // The arrow and the signed number carry the direction; colour only reinforces it.
   const toneClassName = good === null
-    ? "bg-muted text-muted-foreground"
+    ? "bg-muted/80 text-muted-foreground border border-border/50"
     : good
-      ? "bg-[var(--ok-surface)] text-[var(--ok)]"
-      : "bg-[var(--danger-surface)] text-[var(--danger)]";
+      ? "bg-[var(--ok-surface)] text-[var(--ok)] border border-[var(--ok)]/20 font-semibold"
+      : "bg-[var(--danger-surface)] text-[var(--danger)] border border-[var(--danger)]/20 font-semibold";
   return (
-    <span className={cn("inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs leading-5 font-medium", toneClassName)}>
-      <Trend aria-hidden="true" className="size-3.5 shrink-0" />
+    <span className={cn("inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-normal shadow-2xs", toneClassName)}>
+      <Trend aria-hidden="true" className="size-3 shrink-0" />
       <span aria-hidden="true">{visible}</span>
       <span className="sr-only">{delta === 0 ? "" : `${delta > 0 ? "Naik" : "Turun"} ${magnitude} kiriman, dari ${countFormatter.format(previous)} menjadi ${countFormatter.format(current)}. `}{comparison.text}</span>
     </span>
@@ -157,8 +158,8 @@ const cardHeadingClassName = cn("text-base font-semibold leading-snug", focusTar
  * renders nothing (single-day range) the recent card takes the full row instead of
  * leaving an empty column.
  */
-export const dashboardOverviewSpan = "lg:col-span-4 lg:only:col-span-7";
-export const dashboardRecentSpan = "lg:col-span-3 lg:only:col-span-7";
+export const dashboardOverviewSpan = "max-lg:order-2 lg:col-span-4 lg:only:col-span-7";
+export const dashboardRecentSpan = "max-lg:order-1 lg:col-span-3 lg:only:col-span-7";
 /**
  * Row that holds the chart and recent-shipments cards; also used by the loading state.
  * Both cards stretch to the row height from lg; the chart plot grows into the extra
@@ -237,7 +238,16 @@ export async function DashboardHeaderActions({ promise, role }: { promise: Promi
   if (!ready) {
     return role === "TENANT_ADMIN" ? <Button asChild className="max-sm:flex-1" variant="outline"><Link href="/app/pengaturan/outlet"><Settings2 aria-hidden="true" />Siapkan outlet</Link></Button> : null;
   }
-  return <><Button asChild className="max-sm:flex-1" variant="outline"><Link href="/app/impor"><Upload aria-hidden="true" />Impor CSV</Link></Button><Button asChild className="max-sm:flex-1"><Link href="/app/pengiriman/baru"><Plus aria-hidden="true" />Buat kiriman</Link></Button></>;
+  return (
+    <>
+      <Button asChild className="max-sm:flex-1 rounded-xl font-medium border-border/70 bg-background/80 hover:bg-muted/80 backdrop-blur-md transition-all active:scale-[0.98]" variant="outline">
+        <Link href="/app/impor"><Upload aria-hidden="true" className="size-4" />Impor CSV</Link>
+      </Button>
+      <Button asChild className="max-sm:flex-1 rounded-xl font-medium shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all bg-blue-600 hover:bg-blue-700 text-white">
+        <Link href="/app/pengiriman/baru"><Plus aria-hidden="true" className="size-4" />Buat kiriman</Link>
+      </Button>
+    </>
+  );
 }
 
 export async function DashboardPeriodSummaryRegion({
@@ -271,18 +281,19 @@ export async function DashboardPeriodSummaryRegion({
   const previous = summary.previous;
   const previousLabel = context.range.presetId === "7-hari" ? "7 hari sebelumnya" : "periode sebelumnya";
   const metrics = [
-    { current: current.createdCount, href: supportingLinks.created, icon: Package, label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(current.createdCount) },
-    { current: current.codCount, href: supportingLinks.cod, icon: Banknote, label: "Kiriman COD", previous: previous.codCount, value: countFormatter.format(current.codCount) },
-    { current: current.nonCodCount, href: supportingLinks["non-cod"], icon: Wallet, label: "Kiriman non-COD", previous: previous.nonCodCount, value: countFormatter.format(current.nonCodCount) },
-    { context: "Berdasarkan waktu resi diterbitkan Mengantar.", current: current.issuedCount, direction: "up-is-good" as const, href: supportingLinks.issued, icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(current.issuedCount) },
+    { accent: "blue" as const, current: current.createdCount, href: supportingLinks.created, icon: Package, label: "Kiriman dibuat", previous: previous.createdCount, value: countFormatter.format(current.createdCount) },
+    { accent: "emerald" as const, current: current.codCount, href: supportingLinks.cod, icon: Banknote, label: "Kiriman COD", previous: previous.codCount, value: countFormatter.format(current.codCount) },
+    { accent: "indigo" as const, current: current.nonCodCount, href: supportingLinks["non-cod"], icon: Wallet, label: "Kiriman non-COD", previous: previous.nonCodCount, value: countFormatter.format(current.nonCodCount) },
+    { accent: "amber" as const, current: current.issuedCount, direction: "up-is-good" as const, href: supportingLinks.issued, icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount, value: countFormatter.format(current.issuedCount) },
   ];
 
   return (
     <div className={cn("grid gap-4", focusTargetClassName)} id="dashboard-period-results" tabIndex={-1}>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 [&_[data-slot=card-title]]:min-h-10">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {metrics.map((metric) => (
           <StatCard
-            description={<><span className="block text-foreground"><DashboardComparison current={metric.current} direction={metric.direction ?? "up-is-good"} previous={metric.previous} previousLabel={previousLabel} /></span>{metric.context ? <span className="mt-1 block leading-5">{metric.context}</span> : null}</>}
+            accent={metric.accent}
+            description={<span className="block text-foreground"><DashboardComparison current={metric.current} direction={metric.direction ?? "up-is-good"} previous={metric.previous} previousLabel={previousLabel} /></span>}
             href={metric.href}
             icon={metric.icon}
             key={metric.label}
@@ -293,10 +304,10 @@ export async function DashboardPeriodSummaryRegion({
         ))}
       </div>
       {current.createdCount === 0 ? <Alert><PackageSearch aria-hidden="true" /><AlertTitle>Tidak ada input pada {context.periodLabel}</AlertTitle><AlertDescription>Pilih periode lain atau buat kiriman baru. Daftar pekerjaan di bawah tetap menampilkan status terbaru.</AlertDescription></Alert> : null}
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 pt-1">
         <details className="group min-w-0 max-w-2xl text-xs text-muted-foreground">
           <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8 [&::-webkit-details-marker]:hidden">Cara menghitung<ChevronDown aria-hidden="true" className="size-3.5 transition-transform group-open:rotate-180" /></summary>
-          <p className="pb-1 leading-5">Dibandingkan dengan {context.previousPeriodLabel} · {context.timezoneLabel}. COD/non-COD dihitung saat kiriman dibuat; resi dihitung saat diterbitkan Mengantar. {`Data dianggap perlu diperbarui setelah ${DATA_STALE_AFTER_MS / 60_000} menit.`}</p>
+          <p className="pb-1 leading-5">Dibandingkan dengan {context.previousPeriodLabel} · {context.timezoneLabel}. COD/non-COD dihitung saat kiriman dibuat; COD mencakup COD Ongkir; resi dihitung saat diterbitkan Mengantar. {`Data dianggap perlu diperbarui setelah ${DATA_STALE_AFTER_MS / 60_000} menit.`}</p>
         </details>
         <div className="flex flex-wrap items-center gap-x-3">
           {analyticsHref ? <Button asChild className="min-h-11 md:min-h-8" size="sm" variant="ghost"><Link href={analyticsHref}>Analitik lengkap<ArrowRight aria-hidden="true" /></Link></Button> : null}
@@ -308,7 +319,7 @@ export async function DashboardPeriodSummaryRegion({
 }
 
 const supportLabels: Record<TenantDashboardPeriodSupportKind, string> = {
-  cod: "kiriman COD dibuat",
+  cod: "kiriman COD dan COD Ongkir dibuat",
   created: "semua kiriman dibuat",
   issued: "resi diterbitkan",
   "non-cod": "kiriman non-COD dibuat",
@@ -341,7 +352,7 @@ export async function DashboardPeriodSupportRegion({
             <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Kiriman</TableHead><TableHead>Waktu aktivitas</TableHead><TableHead>Outlet</TableHead><TableHead>Pembayaran</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>{support.rows.map((row) => {
               const status = SHIPMENT_STATUS_PRESENTATION[row.status];
-              return <TableRow key={row.shipmentId}><TableCell className="sticky left-0 z-10 bg-inherit"><ShipmentReferenceLink publicReference={row.publicReference} /></TableCell><TableCell>{formatInZone(row.occurredAt, context.range.timezone)}</TableCell><TableCell>{row.outletName}</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell></TableRow>;
+              return <TableRow key={row.shipmentId}><TableCell className="sticky left-0 z-10 bg-inherit"><ShipmentReferenceLink publicReference={row.publicReference} /></TableCell><TableCell>{formatInZone(row.occurredAt, context.range.timezone)}</TableCell><TableCell>{row.outletName}</TableCell><TableCell><PaymentStack facts={{ declaredValueIdr: null, paymentMethod: row.paymentMethod, providerCodAmountIdr: null }} /></TableCell><TableCell><ShipmentStatusBadge label={status.label} tone={status.tone} /></TableCell></TableRow>;
             })}</TableBody>
           </Table>
         </DataTableShell>
@@ -387,10 +398,10 @@ export async function DashboardOutcomeRegion({
 
   return (
     <section aria-labelledby="dashboard-outcome-heading" className="flex min-w-0 flex-col">
-      <Card className={cn("min-w-0 flex-1", outcome.cohortCount > 0 ? "gap-4" : "pb-0")}>
+      <Card className={cn("min-w-0 flex-1 ios-glass-card border-border/60 shadow-sm", outcome.cohortCount > 0 ? "gap-4" : "pb-0")}>
         <CardHeader className={cardBandClassName}>
           {heading}
-          <CardDescription className="mt-1">{context.periodLabel} · {context.timezoneLabel}</CardDescription>
+          <CardDescription className="mt-1">{context.periodLabel} · {context.timezoneLabel} · Status terkini paket periode ini</CardDescription>
         </CardHeader>
         {outcome.cohortCount === 0 ? (
           <EmptyState description="Belum ada kiriman yang dibuat pada periode ini, jadi belum ada hasil pengiriman yang bisa diringkas." icon={PackageSearch} title="Belum ada hasil pada periode ini" />
@@ -399,14 +410,14 @@ export async function DashboardOutcomeRegion({
             <DataTableShell className="[&_[data-slot=table-container]]:overflow-visible" label="Tabel hasil pengiriman">
               {/* Four short columns fit a 390px card without scrolling; no min-width. */}
               <Table>
-                <TableCaption className="px-3 pb-3 text-left">Status terkini dari {countFormatter.format(outcome.cohortCount)} kiriman yang dibuat pada {context.periodLabel}. Retur mencakup {SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.label.toLowerCase()}, {SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.label.toLowerCase()}, dan {SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.label.toLowerCase()}. COD mengikuti penanda COD saat kiriman dibuat. {providerDeliveryBasisSentence({
+                <TableCaption className="sr-only">Status terkini dari {countFormatter.format(outcome.cohortCount)} kiriman yang dibuat pada {context.periodLabel}. Retur mencakup {SHIPMENT_STATUS_PRESENTATION.RTS_QUEUED.label.toLowerCase()}, {SHIPMENT_STATUS_PRESENTATION.RTS_IN_TRANSIT.label.toLowerCase()}, dan {SHIPMENT_STATUS_PRESENTATION.RTS_RECEIVED.label.toLowerCase()}. COD mengikuti penanda COD saat kiriman dibuat, termasuk COD Ongkir. {providerDeliveryBasisSentence({
                   formattedObservedAt: outcome.basis.lastObservedAt ? formatWibDateTime(outcome.basis.lastObservedAt) : null,
                   observationVisible: outcome.basis.observationVisible,
                   subject: "Terkirim, retur, dan gagal",
                 })}</TableCaption>
                 <TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-inherit">Hasil</TableHead><TableHead className="text-right">COD</TableHead><TableHead className="text-right">Non-COD</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
                 <TableBody>{rows.map((row) => (
-                  <TableRow key={row.key}>
+                  <TableRow key={row.key} className="transition-colors hover:bg-muted/30">
                     <TableCell className="sticky left-0 z-10 bg-inherit font-medium">
                       <span className="flex items-center gap-2">
                         {(() => { const Icon = toneIcon[row.tone]; return <Icon aria-hidden="true" className={cn("size-4", toneTextClass[row.tone])} />; })()}
@@ -472,10 +483,7 @@ export async function DashboardCourierRecapRegion({
       <div className="grid gap-1">
         {heading}
         <p className="max-w-2xl text-sm text-muted-foreground">
-          {context.periodLabel} · {context.timezoneLabel}. Kiriman, terkirim, dan retur dihitung
-          dari kiriman yang dibuat pada periode ini dengan status terkini; kiriman tanpa kurir
-          (masih draf atau estimasi) tidak masuk hitungan.
-          {showCost ? " Biaya kirim mengikuti catatan ledger Mengantar pada periode yang sama, termasuk penyesuaiannya, dan belum termasuk asuransi." : ""}
+          {context.periodLabel} · {context.timezoneLabel}. Status terkini kiriman per ekspedisi.
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -483,7 +491,7 @@ export async function DashboardCourierRecapRegion({
           const row = byCourier.get(courier);
           const used = Boolean(row && row.shipmentCount > 0);
           return (
-            <Card className="min-w-0" key={courier}>
+            <Card className="ios-glass-card min-w-0 border-border/60 hover:border-primary/40 hover:shadow-md transition-all duration-200" key={courier}>
               <CardHeader className={cardBandClassName}>
                 <CardTitle className="flex items-center justify-between gap-2 text-sm">
                   {courierDisplayName(courier)}
@@ -558,7 +566,7 @@ export async function DashboardPeriodTrendRegion({
 
   return (
     <section aria-labelledby="dashboard-trend-heading" className={cn("flex min-w-0 flex-col", dashboardOverviewSpan)}>
-      <Card className="min-w-0 flex-1">
+      <Card className="ios-glass-card border-border/60 shadow-sm min-w-0 flex-1">
         <CardHeader className={cardBandClassName}>
           {heading}
           <CardDescription className="mt-1">{context.periodLabel}{compare ? ` dibanding ${context.previousPeriodLabel}` : ""} · {context.timezoneLabel}</CardDescription>
@@ -567,13 +575,16 @@ export async function DashboardPeriodTrendRegion({
         <CardContent className="flex min-w-0 flex-1 flex-col gap-4 *:min-w-0">
           {demo ? <Alert><AlertTitle>Data demo</AlertTitle><AlertDescription>Grafik ini memakai data contoh. Ringkasan dan daftar kiriman tetap memakai data tersimpan.</AlertDescription></Alert> : null}
           <DashboardPeriodChart compare={compare} data={rows} sevenDays={context.range.presetId === "7-hari"} />
-          <details className="min-w-0 rounded-md border">
-            <summary className="min-h-11 cursor-pointer rounded-md px-3 py-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:min-h-8 md:py-2">Lihat tabel data tren</summary>
+          <details className="group min-w-0 rounded-md border border-border/80 bg-card transition-colors">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between rounded-md px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:min-h-9 [&::-webkit-details-marker]:hidden">
+              <span>Lihat tabel data tren</span>
+              <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+            </summary>
             <div aria-label="Tabel perbandingan kiriman" className="min-w-0 overflow-x-auto border-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_[data-slot=table-container]]:overflow-visible" role="region" tabIndex={0}>
               <Table>
                 <TableCaption className="sr-only">Kiriman dibuat pada {context.periodLabel}{compare ? " dan periode sebelumnya" : ""}.</TableCaption>
                 <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead className="text-right">Kiriman</TableHead>{compare ? <><TableHead>Tanggal pembanding</TableHead><TableHead className="text-right">Kiriman sebelumnya</TableHead></> : null}</TableRow></TableHeader>
-                <TableBody>{rows.map((row) => <TableRow key={row.key}><TableCell className="font-medium">{row.label}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.currentCount)}</TableCell>{compare ? <><TableCell>{row.previousLabel}</TableCell><TableCell className="text-right tabular-nums">{row.previousCount === null ? "—" : countFormatter.format(row.previousCount)}</TableCell></> : null}</TableRow>)}</TableBody>
+                <TableBody>{rows.map((row) => <TableRow key={row.key} className="transition-colors hover:bg-muted/30"><TableCell className="font-medium">{row.label}</TableCell><TableCell className="text-right tabular-nums">{countFormatter.format(row.currentCount)}</TableCell>{compare ? <><TableCell>{row.previousLabel}</TableCell><TableCell className="text-right tabular-nums">{row.previousCount === null ? "—" : countFormatter.format(row.previousCount)}</TableCell></> : null}</TableRow>)}</TableBody>
               </Table>
             </div>
           </details>
@@ -615,7 +626,7 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
   const partialFailure = actionResult.ok !== recentResult.ok;
   return (
     <section aria-labelledby="recent-heading" className={cn("flex min-w-0 flex-col", dashboardRecentSpan)}>
-      <Card className={cn("flex-1", rows.length > 0 && "pb-0")}>
+      <Card className={cn("ios-glass-card border-border/60 shadow-sm flex-1", rows.length > 0 && "pb-0")}>
         <CardHeader className={cardBandClassName}>
           {heading}
           <CardDescription>{rows.length > 0 ? "Yang perlu ditindaklanjuti tampil lebih dulu." : "Tidak ada kiriman yang perlu ditindaklanjuti saat ini."}</CardDescription>
@@ -628,9 +639,18 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
               const status = SHIPMENT_STATUS_PRESENTATION[row.status];
               const action = nextAction(row, role);
               return (
-                // minmax(0,1fr) keeps long provider AWBs from widening the page; the action sits
-                // under the row on phones and in a right-hand column from sm, so rows align.
-                <li className="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-2 px-(--card-spacing) py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" data-actionable={action ? "true" : undefined} key={row.shipmentId}>
+                <li
+                  className={cn(
+                    "grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-2 px-(--card-spacing) py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center transition-colors border-l-4",
+                    exceptionStatuses.has(row.status)
+                      ? "border-l-[var(--danger)] bg-[var(--danger-surface)]/25 hover:bg-[var(--danger-surface)]/35"
+                      : action
+                        ? "border-l-[var(--warn)] bg-[var(--warn-surface)]/15 hover:bg-[var(--warn-surface)]/25"
+                        : "border-l-transparent hover:bg-muted/30",
+                  )}
+                  data-actionable={action ? "true" : undefined}
+                  key={row.shipmentId}
+                >
                   <div className="grid min-w-0 gap-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><ShipmentReferenceLink className="md:min-h-6" publicReference={row.publicReference} /><ShipmentStatusBadge label={status.label} tone={status.tone} /></div>
                     <p className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -643,7 +663,7 @@ export async function DashboardRecentRegion({ actionPromise, multipleOutlets = f
                       {row.awb ? <span className="min-w-0 max-w-full break-all">AWB <span className="font-mono text-foreground">{row.awb}</span></span> : null}
                     </p>
                   </div>
-                  {action ? <Button asChild className="w-full max-md:min-h-11 sm:w-auto" size="sm" variant="outline"><Link href={action.href}>{action.label}</Link></Button> : null}
+                  {action ? <Button asChild className="w-full max-md:min-h-11 sm:w-auto shrink-0 font-medium text-xs group/btn" size="sm" variant="ghost"><Link href={action.href} className="inline-flex items-center gap-1.5">{action.label}<ArrowRight aria-hidden="true" className="size-3.5 opacity-60 transition-transform group-hover/btn:translate-x-0.5" /></Link></Button> : null}
                 </li>
               );
             })}

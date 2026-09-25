@@ -7,7 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   calculateCodAmounts,
+  CodTotalsFormulaRetiredError,
   CodTotalsUnavailableError,
+  shipmentCodFormulaRetired,
 } from "@/db/cod-totals-repository";
 import * as schema from "@/db/schema";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
@@ -48,6 +50,12 @@ const shipmentId = randomUUID();
 const snapshotId = randomUUID();
 const eligibleServiceId = randomUUID();
 const blockedServiceId = randomUUID();
+// T-193: a COD shipment estimated and given a version 1 totals row before the deploy.
+const legacyShipmentId = randomUUID();
+const legacySnapshotId = randomUUID();
+const legacyServiceId = randomUUID();
+const legacyBatchId = randomUUID();
+const legacyOrderId = randomUUID();
 const operatorA = `t22-operator-${randomUUID()}`;
 const operatorB = `t22-operator-${randomUUID()}`;
 const outsider = `t22-outsider-${randomUUID()}`;
@@ -270,6 +278,16 @@ describe("T22 guarded queue-detail issuance", () => {
         ),
       );
     expect(providerRows).toEqual([{ cnoteNo: "SANITIZED-CNOTE-0001", status: "ISSUED" }]);
+    // T-193: the issuance books the fee Mengantar keeps on 113 790 (3 789, not the
+    // stored 3 414 + 376) and no VAT liability row.
+    const ledger = await adminDb
+      .select({ amountIdr: schema.ledgerEntries.amountIdr, entryType: schema.ledgerEntries.entryType })
+      .from(schema.ledgerEntries)
+      .where(eq(schema.ledgerEntries.shipmentId, shipmentId));
+    expect(ledger.filter((entry) => entry.entryType === "MENGANTAR_COD_FEE_COST")).toEqual([
+      { amountIdr: 3789, entryType: "MENGANTAR_COD_FEE_COST" },
+    ]);
+    expect(ledger.filter((entry) => entry.entryType === "COD_SERVICE_FEE_VAT_PAYABLE")).toEqual([]);
 
     const after = await withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
       loadShipmentDetail(tx, context, shipmentId),
@@ -281,5 +299,197 @@ describe("T22 guarded queue-detail issuance", () => {
     expect(shipmentLifecycleActions("ISSUED", "OPERATOR", shipmentId)).toEqual([
       expect.objectContaining({ href: `/app/label/${shipmentId}`, id: "open-label", kind: "link" }),
     ]);
+  });
+
+  it("never submits a version 1 COD amount recorded before the deploy, and still answers a retry of one already sent (T-193)", async () => {
+    await adminPool.query(
+      "INSERT INTO shipments (id, tenant_id, outlet_id, status) VALUES ($1, $2, $3, 'ESTIMATED')",
+      [legacyShipmentId, tenantA, outletA],
+    );
+    await adminPool.query(
+      `INSERT INTO shipment_drafts (
+         shipment_id, tenant_id, destination_area_id, destination_area_label,
+         package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod,
+         destination_area_verified_at
+       ) VALUES ($1, $2, 'fixture-destination', 'Tujuan sintetis',
+         'Paket sintetis T193', 1000, 1, 100000, true, now())`,
+      [legacyShipmentId, tenantA],
+    );
+    await adminPool.query(
+      `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address, destination_area_id, destination_area_label)
+       VALUES ($1, $2, 'SENDER', 'Pengirim Sintetis', '0800000000', 'Alamat sintetis asal', NULL, NULL),
+              ($1, $2, 'RECIPIENT', 'Penerima Sintetis', '0800000000', 'Alamat sintetis tujuan', 'fixture-destination', 'Tujuan sintetis')`,
+      [tenantA, legacyShipmentId],
+    );
+    await adminPool.query(
+      `INSERT INTO shipment_estimate_snapshots (
+         id, tenant_id, shipment_id, outlet_id, origin_area_id, destination_area_id,
+         destination_area_label, weight_grams, is_cod_requested, credential_source
+       ) VALUES ($1, $2, $3, $4, 'fixture-origin-a', 'fixture-destination', 'Tujuan sintetis', 1000, true, 'platform_default')`,
+      [legacySnapshotId, tenantA, legacyShipmentId, outletA],
+    );
+    await adminPool.query(
+      `INSERT INTO shipment_estimate_services (
+         id, tenant_id, snapshot_id, provider_service, currency, shipping_amount_idr,
+         insurance_amount_idr, shipping_source_field, insurance_source_field,
+         delivery_estimate, cod_eligible
+       ) VALUES ($1, $2, $3, 'JNE REG', 'IDR', 10000, NULL, 'price', NULL, '1-2 hari', true)`,
+      [legacyServiceId, tenantA, legacySnapshotId],
+    );
+    // Written the way the previous release wrote it: the additive formula, version 1.
+    await adminPool.query(
+      `INSERT INTO shipment_cod_totals (
+         tenant_id, shipment_id, snapshot_id, estimate_service_id, currency,
+         goods_value_idr, shipping_amount_idr, service_fee_idr, vat_amount_idr,
+         provider_cod_amount_idr, cod_formula_version
+       ) VALUES ($1, $2, $3, $4, 'IDR', 100000, 10000, 3300, 363, 113663, 1)`,
+      [tenantA, legacyShipmentId, legacySnapshotId, legacyServiceId],
+    );
+    const totalsRow = async () => (await adminPool.query(
+      "SELECT row_to_json(total)::text AS row FROM shipment_cod_totals total WHERE shipment_id = $1",
+      [legacyShipmentId],
+    )).rows.map((row: { row: string }) => row.row);
+    const totalsBefore = await totalsRow();
+    expect(totalsBefore).toHaveLength(1);
+
+    let submissions = 0;
+    const countingResolver: MengantarOrderTransportLookup = async (...args) => {
+      const binding = await resolveSanctionedOrderFixtureTransport(...args);
+      return {
+        ...binding,
+        transport: {
+          async submit(orders) {
+            submissions += 1;
+            return binding.transport.submit(orders);
+          },
+        },
+      } satisfies MengantarOrderTransportBinding;
+    };
+    // The first test spent this tenant's order rate limit; each step here is one confirmation.
+    const resetRateLimit = () => adminPool.query("DELETE FROM shipment_rate_limits WHERE tenant_id = ANY($1::uuid[])", [tenantIds]);
+    const confirm = async () => (await resetRateLimit(), confirmFixtureBackedShipmentIssuance({
+      db: appDb,
+      lockPool: appPool,
+      principalId: operatorA,
+      tenantId: tenantA,
+      confirmation: { shipmentId: legacyShipmentId, estimateSnapshotId: legacySnapshotId, estimateServiceId: legacyServiceId },
+      resolveTransport: countingResolver,
+    }));
+    const orderRows = async () => (await adminPool.query(
+      "SELECT status FROM provider_order_snapshots WHERE shipment_id = $1",
+      [legacyShipmentId],
+    )).rows;
+
+    // T-199: the detail page reads the same decision before rendering the confirm button.
+    const retired = () => withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
+      shipmentCodFormulaRetired(tx, context, legacyShipmentId));
+
+    // 1. Estimated before the deploy, confirmed after: refused, nothing queued or sent.
+    expect(await retired()).toBe(true);
+    await expect(confirm()).rejects.toBeInstanceOf(CodTotalsFormulaRetiredError);
+    expect(submissions).toBe(0);
+    expect(await orderRows()).toEqual([]);
+    expect(await totalsRow()).toEqual(totalsBefore);
+    const { rows: [{ status: legacyStatus }] } = await adminPool.query("SELECT status FROM shipments WHERE id = $1", [legacyShipmentId]);
+    expect(legacyStatus).toBe("ESTIMATED");
+
+    // 2. Queued by the previous release and never attempted: resuming would send
+    //    the old amount, so it is refused too.
+    await adminPool.query(
+      `INSERT INTO provider_batches (
+         id, tenant_id, outlet_id, pickup_address_id, courier, credential_source,
+         provider_account_key, idempotency_key, status
+       ) VALUES ($1, $2, $3, 'fixture-pickup-a', 'JNE', 'platform_default', $4, $5, 'SUBMISSION_QUEUED')`,
+      [legacyBatchId, tenantA, outletA, "b".repeat(64), "c".repeat(64)],
+    );
+    await adminPool.query(
+      `INSERT INTO provider_order_snapshots (
+         id, tenant_id, batch_id, shipment_id, estimate_snapshot_id, estimate_service_id, position,
+         provider_service, destination_area_id, destination_area_label, currency,
+         shipping_amount_idr, is_cod, provider_cod_amount_idr
+       ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE REG', 'fixture-destination', 'Tujuan sintetis', 'IDR', 10000, true, 113663)`,
+      [legacyOrderId, tenantA, legacyBatchId, legacyShipmentId, legacySnapshotId, legacyServiceId],
+    );
+    await adminPool.query("UPDATE shipments SET status = 'SUBMISSION_QUEUED' WHERE id = $1", [legacyShipmentId]);
+    expect(await retired()).toBe(true);
+    await expect(confirm()).rejects.toBeInstanceOf(CodTotalsFormulaRetiredError);
+    expect(submissions).toBe(0);
+    expect(await orderRows()).toEqual([{ status: "SUBMISSION_QUEUED" }]);
+
+    // 3. Already sent and issued with the old amount: Mengantar holds it, so a
+    //    retry reads the recorded result back and submits nothing.
+    await adminPool.query(
+      "UPDATE provider_batches SET status = 'COMPLETED', submission_attempted_at = now(), completed_at = now() WHERE id = $1",
+      [legacyBatchId],
+    );
+    await adminPool.query(
+      `UPDATE provider_order_snapshots
+       SET status = 'ISSUED', cnote_no = 'SANITIZED-CNOTE-T193', provider_order_id = 'provider-t193',
+           is_paid = true, resolved_at = now()
+       WHERE id = $1`,
+      [legacyOrderId],
+    );
+    await adminPool.query("UPDATE shipments SET status = 'ISSUED' WHERE id = $1", [legacyShipmentId]);
+    expect(await retired()).toBe(false);
+    await expect(confirm()).resolves.toMatchObject({
+      awb: "SANITIZED-CNOTE-T193",
+      duplicate: true,
+      status: "ISSUED",
+    });
+    expect(submissions).toBe(0);
+    expect(await totalsRow()).toEqual(totalsBefore);
+  });
+  it("keeps the COD fee basis equal in shipment_cod_totals and provider_order_snapshots (T-199, spec 19)", async () => {
+    // Spec 19: shipment_cod_totals.provider_cod_amount_idr is the canonical basis of
+    // Mengantar's COD fee; the submitted order carries a copy. Every COD order issued
+    // above through the application role must hold exactly the recorded amount.
+    const parity = async (client: { query: Pool["query"] }) => (await client.query(
+      `SELECT order_row.shipment_id,
+              order_row.provider_cod_amount_idr::bigint AS order_amount,
+              totals.provider_cod_amount_idr::bigint AS totals_amount
+       FROM provider_order_snapshots AS order_row
+       JOIN shipment_cod_totals AS totals
+         ON totals.shipment_id = order_row.shipment_id AND totals.tenant_id = order_row.tenant_id
+       WHERE order_row.tenant_id = ANY($1::uuid[]) AND order_row.is_cod`,
+      [tenantIds],
+    )).rows as Array<{ order_amount: string; shipment_id: string; totals_amount: string }>;
+    const rows = await parity(adminPool);
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    expect(rows.filter((row) => row.order_amount !== row.totals_amount)).toEqual([]);
+    // No COD order exists without its totals row.
+    const { rows: [{ orphans }] } = await adminPool.query(
+      `SELECT count(*)::int AS orphans FROM provider_order_snapshots AS order_row
+       WHERE order_row.tenant_id = ANY($1::uuid[]) AND order_row.is_cod
+         AND NOT EXISTS (SELECT 1 FROM shipment_cod_totals AS totals
+                         WHERE totals.shipment_id = order_row.shipment_id AND totals.tenant_id = order_row.tenant_id)`,
+      [tenantIds],
+    );
+    expect(orphans).toBe(0);
+
+    // The check detects drift: one order amount changed inside a rolled-back transaction.
+    const client = await adminPool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL session_replication_role = replica");
+      await client.query(
+        "UPDATE provider_order_snapshots SET provider_cod_amount_idr = provider_cod_amount_idr + 1 WHERE shipment_id = $1",
+        [shipmentId],
+      );
+      expect((await parity(client)).filter((row) => row.order_amount !== row.totals_amount)).toEqual([
+        { order_amount: "113791", shipment_id: shipmentId, totals_amount: "113790" },
+      ]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+
+    // Row-level security is what keeps them equal: the order INSERT policy requires it.
+    const { rows: [policy] } = await adminPool.query(
+      `SELECT with_check FROM pg_policies
+       WHERE tablename = 'provider_order_snapshots' AND policyname = 'provider_order_snapshots_active_tenant_insert'`,
+    );
+    expect(String(policy?.with_check).replace(/\s+/g, " ")).toContain(
+      "provider_order_snapshots.provider_cod_amount_idr = shipment_cod_totals.provider_cod_amount_idr",
+    );
   });
 });

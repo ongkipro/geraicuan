@@ -61,6 +61,7 @@ vi.mock("@/db/analytics-repository", () => {
           status: "ISSUED" as const,
           cnoteNo: "+FORMULA",
           isCod: true,
+          paymentMethod: "COD" as const,
           providerCodAmountIdr: 100_000,
         }],
       };

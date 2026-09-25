@@ -41,6 +41,8 @@ const STATES = [
   ['shipment-detail-stream', null],
   ['shipment-detail-submitting', '#periksa-upaya-tersendat'],
   ['shipment-detail-payment-paying', '#periksa-upaya-tersendat'],
+  // T-199: a never-submitted version 1 COD row is refused up front, confirm disabled.
+  ['shipment-detail-cod-formula-retired', null],
   ['shipment-detail-error', 'error'],
 ];
 const RAIL = 'aside[aria-label="Status kiriman"]';
@@ -100,6 +102,23 @@ try {
       assert(layout.statusInRail && layout.resiInRail, `${name}: ${JSON.stringify(layout)}`);
       assert(layout.dataInMain && !layout.dataInRail, `${name}: ${JSON.stringify(layout)}`);
       if (expected) assert(layout.expectedInRail && !layout.expectedInMain, `${name}: ${expected} not on the rail — ${JSON.stringify(layout)}`);
+      if (scenario === 'shipment-detail-cod-formula-retired') {
+        const retired = JSON.parse(await s.evaluate(`JSON.stringify((()=>{
+          const alert=document.getElementById('cod-formula-retired');
+          const button=[...document.querySelectorAll('#konfirmasi-penerbitan-awb button[type=submit]')].find(b=>/Konfirmasi dan terbitkan AWB/.test(b.textContent));
+          return {
+            message: alert?.textContent.includes('buat kiriman baru dengan data yang sama, lalu estimasi ulang') ?? false,
+            link: alert?.querySelector('a[href="/app/pengiriman/baru"]') ? true : false,
+            confirmDisabled: button?.disabled ?? null,
+            servicesDisabled: document.querySelector('#konfirmasi-penerbitan-awb fieldset')?.disabled ?? null,
+            breakdown: !!document.querySelector('[aria-label="Rincian nilai penagihan COD"]'),
+          };
+        })())`));
+        assert.deepEqual(retired, { message: true, link: true, confirmDisabled: true, servicesDisabled: true, breakdown: false }, `${name}: ${JSON.stringify(retired)}`);
+        await s.evaluate(`document.getElementById('cod-formula-retired').scrollIntoView({block:'center'})`);
+        await shot(`${name}-alert`);
+        layout.codFormulaRetired = retired;
+      }
       if (width === 1440) assert(layout.sideBySide && layout.railPosition === 'sticky', `${name}: ${JSON.stringify(layout)}`);
       else assert(layout.railBelow, `${name}: one column below the split — ${JSON.stringify(layout)}`);
       const probe = JSON.parse(await s.evaluate(PROBE));

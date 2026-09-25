@@ -3,7 +3,7 @@ import "server-only";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
-import { auditEvents, mengantarConnections, outlets } from "@/db/schema";
+import { auditEvents, mengantarConnections, outlets, tenants } from "@/db/schema";
 
 export const outletConnectionModes = ["platform_default", "private"] as const;
 export type OutletConnectionMode = (typeof outletConnectionModes)[number];
@@ -21,6 +21,11 @@ export type OutletReadiness = {
   connectionUpdatedAt: Date | null;
   readinessStatus: "ready" | "needs_attention";
   updatedAt: Date;
+  /**
+   * D-9: the tenant may not use the platform-default account, so an outlet
+   * without its own connection is not ready to ship.
+   */
+  privateConnectionRequired?: boolean;
 };
 
 export type OutletReadinessSummary = {
@@ -106,6 +111,13 @@ async function loadOutletReadiness(
   tx: TenantTransaction,
   context: TenantContext,
 ): Promise<OutletReadiness[]> {
+  const [tenant] = await tx
+    .select({ policy: tenants.mengantarCredentialPolicy })
+    .from(tenants)
+    .where(eq(tenants.id, context.tenantId))
+    .limit(1);
+  // Fails closed: an unreadable policy is treated as private-only.
+  const privateConnectionRequired = tenant?.policy !== "PLATFORM_DEFAULT_ALLOWED";
   const rows = await tx
     .select({
       id: outlets.id,
@@ -165,9 +177,11 @@ async function loadOutletReadiness(
         row.defaultPickupAddressId
         && row.defaultOriginAreaId
         && connectionStatus !== "private_attention"
+        && !(privateConnectionRequired && !row.hasPrivateConnection)
           ? "ready"
           : "needs_attention",
       updatedAt: new Date(row.updatedAt),
+      privateConnectionRequired,
     };
   });
 }

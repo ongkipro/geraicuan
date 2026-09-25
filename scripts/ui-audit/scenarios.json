@@ -21,13 +21,23 @@
    "state": "healthy-empty"
   }
  ],
- "/app/kontak": [
+ "/app/kontak/pengirim": [
   {
-   "scenario": "contacts-error",
+   "scenario": "contacts-sender-error",
    "state": "route-error"
   },
   {
-   "scenario": "contacts-stream",
+   "scenario": "contacts-sender-stream",
+   "state": "loading"
+  }
+ ],
+ "/app/kontak/penerima": [
+  {
+   "scenario": "contacts-recipient-error",
+   "state": "route-error"
+  },
+  {
+   "scenario": "contacts-recipient-stream",
    "state": "loading"
   }
  ],
@@ -333,6 +343,10 @@
  ],
  "/app/pengiriman/[shipmentId]": [
   {
+   "scenario": "shipment-detail-cod-formula-retired",
+   "state": "partial-error"
+  },
+  {
    "scenario": "shipment-detail-error",
    "state": "route-error"
   },
@@ -372,6 +386,10 @@
   },
   {
    "scenario": "shipment-draft-saved",
+   "state": "primary-success"
+  },
+  {
+   "scenario": "shipment-draft-saved-cod-ongkir",
    "state": "primary-success"
   },
   {

@@ -60,8 +60,8 @@ export default async function BulkImportPage() {
       declaredValueIdr: 150_000,
       destinationAreaLabel: "Gambir, Jakarta Pusat",
       destinationQuery: "Gambir Jakarta Pusat",
-      isCod: false,
       packageWeightGrams: 500,
+      paymentMethod: "NON_COD" as const,
       recipientName: "Penerima audit",
       row: 2,
     }],
@@ -106,6 +106,7 @@ export default async function BulkImportPage() {
                 <CardContent className="grid gap-2 text-sm text-muted-foreground">
                   <p>Judul kolom CSV harus sama persis dengan template.</p>
                   <p>Lokasi tujuan harus mengarah ke satu hasil Mengantar yang tidak ambigu.</p>
+                  <p>Isi metode_pembayaran dengan NON_COD, COD, atau COD_ONGKIR. Ongkir yang ditagih untuk COD Ongkir diatur saat memilih layanan, bukan di CSV.</p>
                   <p>Belum ada data tersimpan sampai draf terpilih dikonfirmasi.</p>
                 </CardContent>
               </Card>

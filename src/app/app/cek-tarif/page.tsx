@@ -44,7 +44,7 @@ export default async function QuickRatePage() {
       <FormLayout
         aside={(
           <PageAside label="Bantuan cek tarif">
-            <Card>
+            <Card className="ios-glass-card rounded-2xl border-border/60 shadow-xs">
               <CardHeader>
                 <CardTitle>Perlu diingat</CardTitle>
                 <CardDescription>Estimasi ini belum membuat kiriman apa pun.</CardDescription>

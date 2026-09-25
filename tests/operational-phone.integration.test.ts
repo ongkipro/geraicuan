@@ -8,6 +8,10 @@ const fixture = vi.hoisted(() => ({
   phone: "+6280000000141",
   tenantId: "00000000-0000-4000-8000-000000000141",
   contactId: "00000000-0000-4000-8000-000000000142",
+  // T-197: address reads share the transaction's one connection; count overlaps.
+  extraContact: false,
+  addressReadsInFlight: 0,
+  maxAddressReadsInFlight: 0,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -39,13 +43,26 @@ vi.mock("@/db/contact-repository", () => ({
     isRecipient: true,
     isSender: false,
     archivedAt: null,
-  }] : [],
-  listContactAddresses: async () => [{
-    id: "00000000-0000-4000-8000-000000000143",
-    label: "Fixture destination",
-    destinationAreaLabel: "Fixture district",
+  }, ...(fixture.extraContact ? [{
+    id: "00000000-0000-4000-8000-000000000144",
+    name: "Second fixture recipient",
+    phone: "+6280000000144",
+    isRecipient: true,
+    isSender: false,
     archivedAt: null,
-  }],
+  }] : [])] : [],
+  listContactAddresses: async () => {
+    fixture.addressReadsInFlight += 1;
+    fixture.maxAddressReadsInFlight = Math.max(fixture.maxAddressReadsInFlight, fixture.addressReadsInFlight);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    fixture.addressReadsInFlight -= 1;
+    return [{
+      id: "00000000-0000-4000-8000-000000000143",
+      label: "Fixture destination",
+      destinationAreaLabel: "Fixture district",
+      archivedAt: null,
+    }];
+  },
 }));
 vi.mock("@/db/shipment-draft-repository", () => ({
   checkDuplicateShipment: vi.fn(),
@@ -69,6 +86,9 @@ import { ContactDirectoryBrowser } from "@/app/app/kontak/contact-directory-brow
 beforeEach(() => {
   fixture.authorized = true;
   fixture.scope = "tenant";
+  fixture.extraContact = false;
+  fixture.addressReadsInFlight = 0;
+  fixture.maxAddressReadsInFlight = 0;
 });
 
 describe("authorized operational phone display", () => {
@@ -87,6 +107,15 @@ describe("authorized operational phone display", () => {
 
     form.set("senderContactQuery", "fixture");
     expect((await searchSenderShipmentContacts({}, form)).results).toEqual([]);
+  });
+
+  it("reads each contact's addresses in turn inside the tenant transaction (T-197)", async () => {
+    fixture.extraContact = true;
+    const form = new FormData();
+    form.set("recipientContactQuery", "fixture");
+    const result = await searchRecipientShipmentContacts({}, form);
+    expect(result.results?.map((row) => row.contactId)).toEqual([fixture.contactId, "00000000-0000-4000-8000-000000000144"]);
+    expect(fixture.maxAddressReadsInFlight).toBe(1);
   });
 
   it.each(["unauthenticated", "platform"])("returns no contact data for %s callers", async (caller) => {
@@ -110,7 +139,7 @@ describe("authorized operational phone display", () => {
         name: "Operational fixture recipient",
         phone: fixture.phone,
       }],
-      peran: "semua",
+      role: "penerima",
       status: "active",
     }));
     const visible = html.replace(/<[^>]+>/g, " ");

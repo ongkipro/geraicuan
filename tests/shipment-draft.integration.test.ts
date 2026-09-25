@@ -547,6 +547,76 @@ describe("tenant shipment drafts", () => {
     expect(replayRows).toEqual([{ id: submissionId }]);
   });
 
+  it("refuses a digit in a recipient name and a letter in weight, price, or phone without writing a draft, and keeps a store as sender (T-196)", async () => {
+    vi.resetModules();
+    vi.doMock("@/db/client", () => ({ db: appDb }));
+    vi.doMock("@/lib/cms-auth", () => ({
+      CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
+      requireCmsScope: vi.fn(async () => ({
+        scope: "tenant",
+        userId: "draft-user-a",
+        tenantId: tenantA,
+        role: "OPERATOR",
+      })),
+    }));
+    vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    vi.doMock("@/app/app/location-actions", () => ({
+      validateMengantarDestinationAreaSelection: vi.fn(async (_outletId, _query, areaId, areaLabel) => ({
+        option: { areaId, areaLabel },
+        success: true,
+      })),
+    }));
+    const { saveShipmentDraft } = await import("@/app/app/actions");
+    const formData = submission({
+      declaredValue: "150rb",
+      packageQuantity: "1x",
+      packageWeightGrams: "0,5kg",
+      recipientName: "Budi 2",
+      recipientPhone: "0812-3456-789O",
+      senderAddress: "Jl. Asia Afrika 8 😀",
+      senderName: "Toko 88",
+    });
+    formData.set("submissionId", randomUUID());
+    formData.set("destinationMode", "manual");
+    formData.set("areaOutletId", outletA);
+    formData.set("areaQuery", "Gambir Jakarta");
+    formData.set("areaId", "3171010");
+    formData.set("areaLabel", "Gambir, Jakarta Pusat");
+
+    const before = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
+    const state = await saveShipmentDraft({}, formData);
+    const after = await adminDb.select({ id: schema.shipments.id }).from(schema.shipments);
+
+    expect(state?.errors).toMatchObject({
+      declaredValue: "Nilai barang hanya boleh berisi angka.",
+      packageQuantity: "Jumlah paket hanya boleh berisi angka.",
+      packageWeightGrams: "Berat paket hanya boleh berisi angka.",
+      recipientName: "Nama penerima hanya boleh berisi huruf, spasi, titik, koma, apostrof, dan tanda hubung.",
+      recipientPhone: "Nomor telepon penerima hanya boleh berisi angka, boleh diawali +.",
+      senderAddress: "Alamat pengirim hanya boleh berisi huruf, angka, spasi, dan tanda baca, tanpa emoji.",
+    });
+    // Owner decision: a sender may be a store, so digits pass in the sender name.
+    expect(state?.errors).not.toHaveProperty("senderName");
+    // What the operator typed comes back unchanged to be corrected, not stripped.
+    expect(state?.values).toMatchObject({ recipientName: "Budi 2", senderName: "Toko 88" });
+    expect(after).toEqual(before);
+
+    expect(validateShipmentDraft(submission({ senderName: "Toko 88 😀" }))).toMatchObject({
+      errors: { senderName: "Nama pengirim tidak boleh memuat emoji, karakter kontrol, atau karakter tersembunyi." },
+      ok: false,
+    });
+    expect(validateShipmentDraft(submission({ senderName: "Grosir Aksesoris HP 99" })).ok).toBe(true);
+
+    const indonesian = validateShipmentDraft(submission({
+      packageContent: "Kaos 2 pcs",
+      recipientAddress: "Blok C2/5, RT 03/RW 07",
+      recipientName: "Siti Nur'aini",
+      senderAddress: "Jl. Pajajaran No. 88",
+      senderName: "R.A. Kartini",
+    }));
+    expect(indonesian.ok).toBe(true);
+  });
+
   it("flags a recipient phone reused within the duplicate window until confirmed", async () => {
     const recipientPhone = "+62 813-0000-0001";
     const priorSubmissionId = randomUUID();

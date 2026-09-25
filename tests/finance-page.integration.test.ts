@@ -38,7 +38,7 @@ const mocks = vi.hoisted(() => ({
     providerCostIdr: 0,
     revenueIdr: 0,
     upstreamRecoveryPaymentIdr: 0,
-    vatPayableIdr: 0,
+    legacyCodFeeVatIdr: 0,
   },
 }));
 
@@ -130,7 +130,7 @@ function populatedFixtures() {
     providerCostIdr: 17_000,
     revenueIdr: 12_500,
     upstreamRecoveryPaymentIdr: 8_000,
-    vatPayableIdr: 1_375,
+    legacyCodFeeVatIdr: 1_375,
   };
   mocks.entries = {
     totalCount: 101,
@@ -145,6 +145,7 @@ function populatedFixtures() {
       reversesEntryId: null,
       shipmentId: SHIPMENT_ID,
       publicReference: "GC-10431",
+      reversedEntryType: null,
       sourceEvent: "PROVIDER_ORDER_ISSUED",
       sourceEventId: "provider-order-fixture",
     }],
@@ -187,7 +188,7 @@ beforeEach(() => {
     providerCostIdr: 0,
     revenueIdr: 0,
     upstreamRecoveryPaymentIdr: 0,
-    vatPayableIdr: 0,
+    legacyCodFeeVatIdr: 0,
   };
 });
 
@@ -224,7 +225,10 @@ describe("Finance page acceptance", () => {
     // T-178: new COD fees are Mengantar's cost; the revenue card holds only entries posted before the change, and says so.
     expect(html).toContain("Pendapatan jasa COD (entri lama)");
     expect(html).toContain("Biaya COD kini dicatat sebagai biaya provider karena dipotong Mengantar.");
-    expect(html).toContain("PPN terutang");
+    // T-193: historical VAT rows are part of Mengantar's COD fee, never a payable.
+    expect(html).not.toMatch(/PPN terutang|PPN jasa COD terutang/);
+    expect(html).toContain("PPN dalam biaya COD (dipotong Mengantar)");
+    expect(html).toContain("bukan kewajiban GeraiCUAN, dan tidak dihitung sebagai utang");
     expect(html).toContain("Pemulihan non-COD");
     expect(html).toContain("Belum ada rekonsiliasi pada periode ini");
     expect(html).toContain("Tidak ada entri pada");
@@ -279,6 +283,31 @@ describe("Finance page acceptance", () => {
     expect(html).toContain("Buat pembalik");
     expect(html).toContain('id="reconciliation-history-title"');
     expect(html).toContain('tabindex="-1"');
+  });
+
+  it("presents a historical VAT row and its reversal as part of Mengantar's COD fee, not a liability (T-193)", async () => {
+    const vatRow = {
+      adjustmentState: "ADJUSTED", amountIdr: 363, effectiveAt: new Date("2026-08-20T05:00:00.000Z"),
+      entryType: "COD_SERVICE_FEE_VAT_PAYABLE", financialClass: "LIABILITY", id: "00000000-0000-4000-8000-000000000451",
+      outletName: "Outlet Jakarta", publicReference: "GC-10431", reversedEntryType: null, reversesEntryId: null,
+      shipmentId: SHIPMENT_ID, sourceEvent: "PROVIDER_ORDER_ISSUED", sourceEventId: "provider-order-fixture",
+    };
+    const reversal = {
+      ...vatRow, adjustmentState: "INELIGIBLE", amountIdr: -363, entryType: "ADJUSTMENT", id: "00000000-0000-4000-8000-000000000452",
+      reversedEntryType: "COD_SERVICE_FEE_VAT_PAYABLE", reversesEntryId: vatRow.id, sourceEvent: "MANUAL_ADJUSTMENT", sourceEventId: vatRow.id,
+    };
+    mocks.entries = { rows: [vatRow, reversal], totalCount: 2 };
+    mocks.summary = { ...mocks.summary, legacyCodFeeVatIdr: 363 };
+    const html = await renderPage();
+    const table = html.slice(html.indexOf('aria-label="Tabel entri ledger"'));
+    const rows = table.match(/<tr\b[^>]*id=|<tr\b[\s\S]*?<\/tr>/g)?.filter((row) => row.includes("GC-10431")) ?? [];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toContain("Bagian biaya COD, bukan kewajiban");
+      expect(row).not.toContain("Liabilitas");
+    }
+    expect(rows[0]).toContain("PPN dalam biaya COD (dipotong Mengantar) · entri lama");
+    expect(html).not.toContain("PPN terutang");
   });
 
   it("preserves the visible variance filter through controls and pagination", async () => {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -12,6 +12,11 @@ export type CmsPrincipal =
       userId: string;
       tenantId: string;
       role: (typeof schema.membershipRoles)[number];
+      /**
+       * `PROVISIONING` is a registered store awaiting Super Admin approval
+       * (PR-60): it may sign in and set itself up, and ships nothing.
+       */
+      tenantStatus: "ACTIVE" | "PROVISIONING";
     };
 
 export async function resolveCmsPrincipal(
@@ -43,6 +48,7 @@ export async function resolveCmsPrincipal(
         tenantId: schema.memberships.tenantId,
         role: schema.memberships.role,
         membershipStatus: schema.memberships.status,
+        tenantStatus: schema.tenants.status,
         userStatus: schema.users.status,
       })
       .from(schema.memberships)
@@ -52,17 +58,21 @@ export async function resolveCmsPrincipal(
         and(
           eq(schema.memberships.userId, userId),
           eq(schema.memberships.status, "ACTIVE"),
-          eq(schema.tenants.status, "ACTIVE"),
+          inArray(schema.tenants.status, ["ACTIVE", "PROVISIONING"]),
         ),
       )
       .limit(2);
 
-    return memberships.length === 1 && memberships[0].userStatus === "ACTIVE"
+    const membership = memberships.length === 1 ? memberships[0] : null;
+    return membership
+      && membership.userStatus === "ACTIVE"
+      && (membership.tenantStatus === "ACTIVE" || membership.tenantStatus === "PROVISIONING")
       ? {
           scope: "tenant",
           userId,
-          tenantId: memberships[0].tenantId,
-          role: memberships[0].role,
+          tenantId: membership.tenantId,
+          role: membership.role,
+          tenantStatus: membership.tenantStatus,
         }
       : null;
   });

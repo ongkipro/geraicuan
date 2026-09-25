@@ -24,9 +24,9 @@ const fixture = vi.hoisted(() => ({
   })),
   periodSupport: vi.fn(async () => ({
     rows: [{
-      isCod: true,
       occurredAt: new Date("2026-08-31T08:00:00.000Z"),
       outletName: "Outlet dashboard",
+      paymentMethod: "COD" as "COD" | "COD_ONGKIR" | "NON_COD",
       shipmentId: "00000000-0000-3602-0000-000000000001",
       publicReference: "GC-10001",
       status: "ISSUED" as const,
@@ -48,6 +48,13 @@ const fixture = vi.hoisted(() => ({
     updatedAt: Date;
   }>>>(async () => []),
   totalShipments: 18,
+  auditScenario: null as string | null,
+}));
+
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => new Headers(
+    fixture.auditScenario ? { "x-geraicuan-ui-audit": fixture.auditScenario } : {},
+  )),
 }));
 
 vi.mock("@/db/client", () => ({ db: {} }));
@@ -84,7 +91,8 @@ vi.mock("@/db/outlet-readiness-repository", () => ({
     ready: fixture.outletReady,
   }, ...(fixture.extraOutlet ? [{ id: "00000000-0000-3601-0000-000000000002", name: "Outlet cabang", ready: true }] : [])]),
 }));
-vi.mock("@/db/tenant-dashboard-repository", () => ({
+vi.mock("@/db/tenant-dashboard-repository", async (importOriginal) => ({
+  TENANT_DASHBOARD_ACTIONABLE_STATUSES: (await importOriginal<typeof import("@/db/tenant-dashboard-repository")>()).TENANT_DASHBOARD_ACTIONABLE_STATUSES,
   loadTenantDashboardMetrics: vi.fn(async () => ({
     actionRequiredBreakdown: {
       awaitingUpstreamPayment: 1,
@@ -128,6 +136,8 @@ describe("analytics-led tenant dashboard", () => {
     fixture.outletReady = true;
     fixture.role = "TENANT_ADMIN";
     fixture.totalShipments = 18;
+    fixture.auditScenario = null;
+    vi.unstubAllEnvs();
     fixture.periodSummary.mockClear();
     fixture.periodSupport.mockClear();
     fixture.periodTrend.mockClear();
@@ -245,7 +255,7 @@ describe("analytics-led tenant dashboard", () => {
     });
 
     expect(html).toContain("Rincian kiriman:");
-    expect(html).toContain("kiriman COD dibuat");
+    expect(html).toContain("kiriman COD dan COD Ongkir dibuat");
     expect(html).toContain("Data mengikuti periode, zona waktu, outlet, dan jenis aktivitas");
     expect(html).toContain("Tabel rincian kiriman");
     expect(fixture.periodSupport).toHaveBeenCalledWith(
@@ -370,6 +380,26 @@ describe("analytics-led tenant dashboard", () => {
     expect(operatorHtml).not.toContain("Pulihkan pembayaran");
   });
 
+  // T-200: the recent card merges both reads, so emptying only the actionable read
+  // left every actionable shipment on screen through the recent read, and the
+  // development scenario rendered exactly what the base route renders.
+  it("dashboard-action-empty screens a card with no follow-up, keeping non-actionable recent outcomes", async () => {
+    const row = (status: "AWAITING_UPSTREAM_PAYMENT" | "DRAFT" | "FAILED" | "ISSUED" | "SUBMISSION_UNKNOWN", n: number) => ({ awb: null, destinationAreaLabel: `Area ${n}`, outletName: "Outlet dashboard", recipientName: `Penerima Kosong ${n}`, shipmentId: `00000000-0000-3604-0000-00000000000${n}`, publicReference: `GC-1030${n}`, status, updatedAt: new Date(`2026-08-31T10:0${n}:00.000Z`) });
+    const actionable = [row("FAILED", 1), row("DRAFT", 2), row("SUBMISSION_UNKNOWN", 3)];
+    const issued = row("ISSUED", 4);
+    fixture.shipments.mockImplementation(async (_tx, _context, input) => input.mode === "actionable" ? actionable : [issued, ...actionable]);
+    vi.stubEnv("NODE_ENV", "development");
+
+    const base = recentItems(await renderDashboard());
+    expect(base.filter((item) => item.includes('data-actionable="true"'))).toHaveLength(3);
+
+    fixture.auditScenario = "dashboard-action-empty";
+    const items = recentItems(await renderDashboard());
+    expect(items).toHaveLength(1);
+    expect(items[0]).toContain("Penerima Kosong 4");
+    expect(items.join("")).not.toContain('data-actionable="true"');
+  });
+
   it("names the outlet on recent rows only when the tenant has more than one outlet", async () => {
     fixture.shipments.mockImplementation(async (_tx, _context, input) =>
       input.mode === "recent" ? [shipment("d4", "Penerima Empat", "ISSUED", "2026-08-31T10:00:00.000Z", "AWB-4")] : []);
@@ -459,7 +489,7 @@ describe("analytics-led tenant dashboard", () => {
     const html = await renderDashboard();
     const disclosure = html.match(/<details(?:(?!<\/details>).)*Cara menghitung(?:(?!<\/details>).)*<\/details>/)?.[0];
     expect(disclosure).toContain("Dibandingkan dengan");
-    expect(disclosure).toContain("COD/non-COD dihitung saat kiriman dibuat; resi dihitung saat diterbitkan Mengantar.");
+    expect(disclosure).toContain("COD/non-COD dihitung saat kiriman dibuat; COD mencakup COD Ongkir; resi dihitung saat diterbitkan Mengantar.");
     expect(disclosure).toContain("Data dianggap perlu diperbarui setelah 5 menit.");
     // T-168: data refreshes itself while the tab is visible, so no region carries a button.
     expect(html).not.toContain(">Muat ulang<");

@@ -338,6 +338,121 @@ describe("contact Server Actions", () => {
     expect(mocks.added).toEqual([]);
   });
 
+  it("refuses a digit in a recipient-only contact name and a letter in a phone on create, edit, and address saves (T-196)", async () => {
+    const { saveContact } = await import("@/app/app/kontak/actions");
+    const { addContactAddressAction, updateContactAction, updateContactAddressAction } = await import("@/app/app/kontak/[contactId]/actions");
+    const nameRule = "Nama kontak hanya boleh berisi huruf, spasi, titik, koma, apostrof, dan tanda hubung.";
+    const phoneRule = "Nomor telepon kontak hanya boleh berisi angka, boleh diawali +.";
+
+    const create = validCreateForm();
+    create.delete("roleSender");
+    create.set("contactName", "Budi 2");
+    create.set("contactPhone", "0812345678x9");
+    create.set("addressText", "Jl. Mawar 🏠 No. 5");
+    const createState = await saveContact({}, create);
+    expect(createState.errors).toMatchObject({
+      addressText: "Alamat hanya boleh berisi huruf, angka, spasi, dan tanda baca, tanpa emoji.",
+      contactName: nameRule,
+      contactPhone: phoneRule,
+    });
+    // The typed value comes back untouched for the operator to correct.
+    expect(createState.values).toMatchObject({ contactName: "Budi 2", contactPhone: "0812345678x9" });
+
+    // A stored recipient name that already holds a digit is refused on save, not rewritten.
+    const identity = validIdentityForm();
+    identity.set("contactName", "Toko 88");
+    const identityState = await updateContactAction({}, identity);
+    expect(identityState.errors).toEqual({ contactName: nameRule });
+    expect(identityState.values).toMatchObject({ contactName: "Toko 88" });
+
+    // T-199: the Peran card unticking Pengirim on "Toko 88" says what to do instead of a bare name rule.
+    const rolesCard = validIdentityForm();
+    rolesCard.set("contactName", "Toko 88");
+    rolesCard.set("card", "peran");
+    const rolesState = await updateContactAction({}, rolesCard);
+    expect(rolesState.errors).toEqual({
+      roles: "Nama kontak ini memuat angka atau simbol yang hanya boleh untuk pengirim. Ubah nama tanpa angka dulu di kartu Kontak, lalu lepas peran Pengirim.",
+    });
+    // Still a refusal: the recipient-only rule is kept, and a name that breaks every rule keeps its own message.
+    const rolesEmoji = validIdentityForm();
+    rolesEmoji.set("contactName", "Toko 88 😀");
+    rolesEmoji.set("card", "peran");
+    expect((await updateContactAction({}, rolesEmoji)).errors).toEqual({ contactName: nameRule });
+
+    const address = validAddressForm();
+    address.set("addressLabel", "Rumah\u202E");
+    const addressState = await addContactAddressAction({}, address);
+    expect(addressState.errors).toEqual({
+      addressLabel: "Label alamat tidak boleh memuat emoji, karakter kontrol, atau karakter tersembunyi.",
+    });
+    const addressUpdate = validAddressUpdateForm();
+    addressUpdate.set("addressText", "Jl. Mawar 👍🏽 No. 5");
+    const addressUpdateState = await updateContactAddressAction({}, addressUpdate);
+    expect(addressUpdateState.errors).toMatchObject({ addressText: expect.stringContaining("hanya boleh berisi huruf, angka") });
+
+    // Indonesian names and house-address punctuation still pass.
+    const valid = validCreateForm();
+    valid.set("contactName", "Siti Nur'aini");
+    valid.set("contactPhone", "+62 812-3456-7890");
+    valid.set("addressLabel", "Toko 88");
+    valid.set("addressText", "Blok C2/5, RT 03/RW 07 (belakang masjid) #2");
+    await expect(saveContact({}, valid)).resolves.toMatchObject({ successId: CONTACT_ID });
+    const renamed = validIdentityForm();
+    renamed.set("contactName", "R.A. Kartini");
+    await expect(updateContactAction({}, renamed)).resolves.toMatchObject({ success: true });
+
+    expect(mocks.created).toHaveLength(1);
+    expect(mocks.updated).toHaveLength(1);
+    expect(mocks.added).toEqual([]);
+    expect(mocks.addressUpdated).toEqual([]);
+  });
+
+  it("reads a non-breaking space as a word boundary and keeps everyday address punctuation (T-199)", async () => {
+    const { saveContact } = await import("@/app/app/kontak/actions");
+    const form = validCreateForm();
+    form.delete("roleSender");
+    form.set("contactName", "Siti\u00A0\u00A0Aminah\u202F");
+    form.set("addressText", "Jl. Ma\u2019ruf Blok C&D; km 5+200 \"Ruko\" @Pasar_Baru");
+    await expect(saveContact({}, form)).resolves.toMatchObject({ successId: CONTACT_ID });
+    expect(mocks.created).toEqual([
+      expect.objectContaining({
+        address: "Jl. Ma\u2019ruf Blok C&D; km 5+200 \"Ruko\" @Pasar_Baru",
+        name: "Siti Aminah",
+      }),
+    ]);
+  });
+
+  it("lets a sender contact name carry digits, alone or with the recipient role, but never an emoji (T-196 owner decision)", async () => {
+    const { saveContact } = await import("@/app/app/kontak/actions");
+    const { updateContactAction } = await import("@/app/app/kontak/[contactId]/actions");
+    const senderOnly = validCreateForm();
+    senderOnly.delete("roleRecipient");
+    senderOnly.set("contactName", "Toko 88");
+    await expect(saveContact({}, senderOnly)).resolves.toMatchObject({ successId: CONTACT_ID });
+    const bothRoles = validCreateForm();
+    bothRoles.set("contactName", "Grosir Aksesoris HP 99");
+    await expect(saveContact({}, bothRoles)).resolves.toMatchObject({ successId: CONTACT_ID });
+    const senderEdit = validIdentityForm();
+    senderEdit.delete("roleRecipient");
+    senderEdit.set("roleSender", "on");
+    senderEdit.set("contactName", "Toko 88");
+    await expect(updateContactAction({}, senderEdit)).resolves.toMatchObject({ success: true });
+    const emoji = validCreateForm();
+    emoji.delete("roleRecipient");
+    emoji.set("contactName", "Toko 88 😀");
+    await expect(saveContact({}, emoji)).resolves.toMatchObject({
+      errors: { contactName: "Nama kontak tidak boleh memuat emoji, karakter kontrol, atau karakter tersembunyi." },
+    });
+    // Dropping the sender role makes the same stored name a person's name again.
+    const recipientEdit = validIdentityForm();
+    recipientEdit.set("contactName", "Toko 88");
+    await expect(updateContactAction({}, recipientEdit)).resolves.toMatchObject({
+      errors: { contactName: "Nama kontak hanya boleh berisi huruf, spasi, titik, koma, apostrof, dan tanda hubung." },
+    });
+    expect(mocks.created).toHaveLength(2);
+    expect(mocks.updated).toHaveLength(1);
+  });
+
   it("returns complete phones to an authorized tenant contact search", async () => {
     const rawPhone = "081234567890";
     mocks.searchRows.push({
@@ -389,7 +504,18 @@ describe("contact Server Actions", () => {
     await expect(saveContact({}, validCreateForm())).resolves.toEqual({
       message: "Kontak tersimpan dan siap dipakai pada draf baru.",
       successId: CONTACT_ID,
+      successRole: "pengirim",
     });
+    // T-188: success returns to the list the form was opened from while the
+    // contact holds that role, else the contact's first role.
+    const fromRecipients = validCreateForm();
+    fromRecipients.set("peran", "penerima");
+    await expect(saveContact({}, fromRecipients)).resolves.toMatchObject({ successRole: "penerima" });
+    const senderOnly = validCreateForm();
+    senderOnly.set("peran", "penerima");
+    senderOnly.delete("roleRecipient");
+    await expect(saveContact({}, senderOnly)).resolves.toMatchObject({ successRole: "pengirim" });
+    mocks.created.splice(1);
     const identityState = await updateContactAction({}, validIdentityForm());
     const addressState = await addContactAddressAction({}, validAddressForm());
     expect(identityState).toMatchObject({ success: true });
@@ -534,8 +660,14 @@ describe("contact Server Actions", () => {
 
     mocks.archiveFailure = "";
     await expect(archiveContactAction({}, archiveForm())).rejects.toThrow(
-      `REDIRECT:/app/kontak/${CONTACT_ID}?diarsipkan=1`,
+      `REDIRECT:/app/kontak/${CONTACT_ID}?dari=pengirim&diarsipkan=1`,
     );
     expect(mocks.archived).toEqual([CONTACT_ID]);
+    // T-188: archiving stays under the menu the contact was opened from.
+    const fromRecipients = archiveForm();
+    fromRecipients.set("dari", "penerima");
+    await expect(archiveContactAction({}, fromRecipients)).rejects.toThrow(
+      `REDIRECT:/app/kontak/${CONTACT_ID}?dari=penerima&diarsipkan=1`,
+    );
   });
 });

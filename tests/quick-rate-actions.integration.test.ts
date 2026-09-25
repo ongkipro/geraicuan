@@ -103,6 +103,13 @@ describe("ephemeral tenant shipping-rate checks", () => {
     expect(fixture.validate).not.toHaveBeenCalled();
     expect(fixture.fetch).not.toHaveBeenCalled();
   });
+  it.each(["1kg", "1000g", "1,5", "satu"])("names the digits-only rule for weight %j before provider work (T-196)", async (weightGrams) => {
+    expect((await checkShippingRates({}, form({ weightGrams }))).fieldErrors).toEqual({
+      weightGrams: "Berat paket hanya boleh berisi angka.",
+    });
+    expect(fixture.validate).not.toHaveBeenCalled();
+    expect(fixture.fetch).not.toHaveBeenCalled();
+  });
   it.each<Record<string, string>>([
     { outletId: "forged" }, { areaOutletId: "another-outlet" }, { areaId: "" },
     { areaLabel: "invalid\nlabel" }, { areaQuery: "x".repeat(101) },

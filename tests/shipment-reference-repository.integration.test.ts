@@ -237,7 +237,7 @@ describe("per-tenant shipment numbers (PR-44)", () => {
     const input = {
       declaredValueIdr: 10000, destinationAreaId: "fixture-area", destinationAreaLabel: "Fixture area", destinationAreaVerified: true, isCod: false, isHazardous: false, outletId: outlets[0],
       recipientAddressLandmark: null, shippingInstruction: null,
-      packageContent: "Fixture package", packageHeightCm: null, packageLengthCm: null, packageQuantity: 1, packageWeightGrams: 1000, packageWidthCm: null, pickupAddressId: null,
+      packageContent: "Fixture package", packageHeightCm: null, packageLengthCm: null, packageQuantity: 1, packageWeightGrams: 1000, packageWidthCm: null, paymentMethod: "NON_COD" as const, pickupAddressId: null,
       recipientAddress: "Fixture address", recipientName: "Fixture recipient", recipientPhone: "080000000144", senderAddress: "Fixture origin", senderName: "Fixture sender", senderPhone: "080000000145",
     };
     await inTenant(0, (tx, context) => createShipmentDraft(tx, context, input, id));

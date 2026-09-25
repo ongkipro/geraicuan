@@ -82,7 +82,9 @@ export function OutletDetail({ outlet }: { outlet: SafeOutletReadiness }) {
       <SettingsCard
         badge={
           <Badge variant={outlet.connectionStatus === "private_attention" ? "destructive" : "secondary"}>
-            {outlet.connectionSource === "private" ? "Akun sendiri" : "Default GeraiCUAN"}
+            {outlet.connectionSource === "private"
+              ? "Akun sendiri"
+              : outlet.privateConnectionRequired ? "Belum terhubung" : "Default GeraiCUAN"}
           </Badge>
         }
         description="Akun Mengantar yang dipakai outlet ini untuk estimasi dan pembuatan order."
@@ -101,7 +103,9 @@ export function OutletDetail({ outlet }: { outlet: SafeOutletReadiness }) {
             ? "Koneksi privat outlet ini perlu diperiksa sebelum kiriman baru dapat dibuat."
             : outlet.connectionStatus === "private_ready"
               ? "Outlet ini memakai API key Mengantar miliknya sendiri."
-              : "Outlet ini memakai koneksi Mengantar yang dikelola GeraiCUAN."}
+              : outlet.privateConnectionRequired
+                ? "Toko ini mengirim dengan akun Mengantar miliknya sendiri. Hubungkan API key akun tersebut sebelum membuat kiriman."
+                : "Outlet ini memakai koneksi Mengantar yang dikelola GeraiCUAN."}
         </p>
       </SettingsCard>
     </section>

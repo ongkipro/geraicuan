@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CourierAwbStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
+import { CourierAwbStack, PaymentStack, RecipientStack, StackedDateTime } from "@/components/cms/shipment-table-cells";
 import { shipmentLabelHref } from "@/lib/shipment-number";
 import { Check, CircleAlert, Printer, Search } from "lucide-react";
 import Link from "next/link";
@@ -31,7 +31,6 @@ import { loadLabelIndexPage, type LabelPrintStateFilter } from "@/db/label-print
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
-import { formatIdr } from "@/lib/label-format";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -249,7 +248,7 @@ export default async function LabelIndexPage({
           // container and let the destination wrap instead of forcing width.
           <Table
             className="min-w-[56rem]"
-            containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{ "aria-label": "Daftar label kiriman; geser horizontal untuk melihat seluruh kolom", role: "region", tabIndex: 0 }}
           >
             <TableCaption className="sr-only">
@@ -280,9 +279,7 @@ export default async function LabelIndexPage({
                     <RecipientStack areaLabel={row.destinationAreaLabel} name={row.recipientName} phone={row.recipientPhone} />
                   </TableCell>
                   <TableCell>
-                    {row.isCod && row.providerCodAmountIdr !== null
-                      ? `COD ${formatIdr(row.providerCodAmountIdr)}`
-                      : "Non-COD"}
+                    <PaymentStack facts={{ ...row, declaredValueIdr: null }} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{row.printCount}×</TableCell>
                   <TableCell>

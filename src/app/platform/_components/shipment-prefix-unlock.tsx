@@ -36,7 +36,7 @@ export function ShipmentPrefixUnlockControl({ initialAttemptId, state: prefixSta
     <section aria-labelledby="shipment-prefix-unlock-title" className="grid gap-3">
       <div>
         <h2 className="font-semibold" id="shipment-prefix-unlock-title">Awalan nomor kiriman</h2>
-        <p className="text-sm leading-6 text-muted-foreground">Awalan dikunci sekali oleh tenant. Buka kunci hanya untuk memperbaiki kesalahan; tindakan tercatat di audit.</p>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">Awalan dikunci sekali oleh tenant. Buka kunci hanya untuk memperbaiki kesalahan; tindakan tercatat di audit.</p>
       </div>
       <p className="text-sm" role="status">
         {prefixState === null

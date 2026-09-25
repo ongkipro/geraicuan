@@ -39,6 +39,10 @@ const mocks = vi.hoisted(() => ({
     tenants: [] as Array<Record<string, unknown>>,
   },
   health: {} as Record<string, unknown>,
+  // T-197: every region reader shares the one platform transaction, whose
+  // single connection must not receive a query while another is running.
+  inFlight: 0,
+  maxInFlight: 0,
   pending: false,
   previous: { created: 0, failed: 0, issued: 0, unpaid: 0 },
   readCalls: [] as string[],
@@ -94,10 +98,17 @@ vi.mock("@/db/platform-context", () => ({
 }));
 
 vi.mock("@/db/platform-monitoring-repository", () => {
-  function valueFor<T>(name: string, value: T): T {
+  async function valueFor<T>(name: string, value: T): Promise<T> {
     mocks.readCalls.push(name);
-    if (mocks.failReads.includes(name)) throw new Error(`${name.toUpperCase()}_FAILED`);
-    return value;
+    mocks.inFlight += 1;
+    mocks.maxInFlight = Math.max(mocks.maxInFlight, mocks.inFlight);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      if (mocks.failReads.includes(name)) throw new Error(`${name.toUpperCase()}_FAILED`);
+      return value;
+    } finally {
+      mocks.inFlight -= 1;
+    }
   }
 
   return {
@@ -123,8 +134,15 @@ vi.mock("@/db/platform-monitoring-repository", () => {
 vi.mock("@/db/platform-tenant-repository", () => ({
   readPlatformTenantFinanceSummary: vi.fn(async () => {
     mocks.readCalls.push("finance");
-    if (mocks.failReads.includes("finance")) throw new Error("FINANCE_FAILED");
-    return mocks.finance;
+    mocks.inFlight += 1;
+    mocks.maxInFlight = Math.max(mocks.maxInFlight, mocks.inFlight);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      if (mocks.failReads.includes("finance")) throw new Error("FINANCE_FAILED");
+      return mocks.finance;
+    } finally {
+      mocks.inFlight -= 1;
+    }
   }),
 }));
 
@@ -257,7 +275,7 @@ function financeSummary() {
       providerCostIdr: 20_000,
       revenueIdr: 5_000,
       upstreamRecoveryPaymentIdr: 0,
-      vatPayableIdr: 550,
+      legacyCodFeeVatIdr: 550,
     },
     reconciliations: [{
       cadence: "DAILY",
@@ -365,6 +383,8 @@ beforeEach(() => {
     ],
   };
   mocks.health = health();
+  mocks.inFlight = 0;
+  mocks.maxInFlight = 0;
   mocks.pending = false;
   mocks.previous = { created: 0, failed: 0, issued: 0, unpaid: 0 };
   mocks.readCalls = [];
@@ -621,6 +641,15 @@ describe("platform monitoring page states", () => {
     expect(mocks.recordCalls).toEqual([]);
   });
 
+  it("reads every region in turn on the one platform transaction (T-197)", async () => {
+    mocks.failReads = ["trend"];
+
+    await renderTenantDetail(TENANT_ALPHA);
+
+    expect(mocks.readCalls).toEqual(["health", "counts", "previous", "trend", "usage", "audit", "detail", "finance"]);
+    expect(mocks.maxInFlight).toBe(1);
+  });
+
   it("renders tenant detail lifecycle controls, local scrollers, finance, and redacted provider detail", async () => {
     mocks.actionState = {
       message: "Tenant tidak ditemukan, status berubah, atau nama konfirmasi tidak cocok.",
@@ -659,6 +688,11 @@ describe("platform monitoring page states", () => {
     expect(timeCell).toContain("Selesai —");
     expect(html).toContain("Ledger dan rekonsiliasi");
     expect(html).toContain("Pokok COD — liabilitas");
+    // T-193: historical VAT rows read as part of Mengantar's COD fee, never as a payable.
+    const vatCard = html.match(/<div[^>]*data-slot="card"[^>]*>(?:(?!data-slot="card").)*PPN dalam biaya COD \(dipotong Mengantar\)(?:(?!data-slot="card").)*/)?.[0] ?? "";
+    expect(vatCard).toContain("Rp\u00a0550");
+    expect(vatCard).toContain("bukan kewajiban GeraiCUAN");
+    expect(html).not.toMatch(/PPN terutang|PPN jasa COD/);
     // Outlets, provider batches, reconciliation and audit each render a table
     // (the empty trend states its emptiness instead), and every table sits in
     // a labelled, focusable scroll region.

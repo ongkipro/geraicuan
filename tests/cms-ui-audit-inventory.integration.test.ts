@@ -29,7 +29,8 @@ const expectedStatesByRoute = {
   "/app/pengiriman/baru": ["healthy-empty", "loading", "populated", "partial-error", "pending", "primary-success", "route-error", "unauthorized"],
   "/app/impor": ["healthy-empty", "loading", "partial-error", "pending", "populated", "primary-success", "route-error", "unauthorized"],
   "/app/impor/template.csv": ["primary-success", "route-error", "unauthorized"],
-  "/app/kontak": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
+  "/app/kontak/pengirim": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
+  "/app/kontak/penerima": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
   "/app/kontak/baru": ["healthy-empty", "loading", "populated", "partial-error", "pending", "primary-success", "route-error", "unauthorized"],
   "/app/kontak/[contactId]": ["healthy-empty", "loading", "populated", "route-error", "partial-error", "pending", "primary-success", "unauthorized"],
   "/app/label": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "unauthorized"],
@@ -47,6 +48,7 @@ const expectedStatesByRoute = {
   "/platform/tenant": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "partial-error", "pending", "primary-success", "unauthorized"],
   "/platform/tenant/[tenantId]": ["healthy-empty", "loading", "populated", "route-error", "not-found", "partial-error", "pending", "primary-success", "stale", "unauthorized"],
   "/platform/audit": ["healthy-empty", "loading", "populated", "route-error", "filtered-empty", "invalid-query", "stale", "unauthorized"],
+  "/platform/pendaftaran": ["healthy-empty", "populated", "pending", "primary-success", "unauthorized"],
 } as const;
 
 const expectedOwnerByRoute = {
@@ -61,7 +63,8 @@ const expectedOwnerByRoute = {
   "/app/pengiriman/baru": "T-40",
   "/app/impor": "T-41",
   "/app/impor/template.csv": "T-41",
-  "/app/kontak": "T-42",
+  "/app/kontak/pengirim": "T-188",
+  "/app/kontak/penerima": "T-188",
   "/app/kontak/baru": "T-42",
   "/app/kontak/[contactId]": "T-42",
   "/app/label": "T-43",
@@ -79,6 +82,7 @@ const expectedOwnerByRoute = {
   "/platform/tenant": "T-47",
   "/platform/tenant/[tenantId]": "T-47",
   "/platform/audit": "T-47",
+  "/platform/pendaftaran": "T-182",
 } as const;
 
 const expectedT65Actions = [
@@ -385,7 +389,7 @@ describe("CMS UI audit inventory", () => {
     expect(routes.sort()).toEqual(Object.keys(expectedStatesByRoute).sort());
 
     for (const contract of CMS_UI_AUDIT_ROUTE_CONTRACTS) {
-      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72|143|15[6-8]|161|16[56])$/);
+      expect(contract.ownerTask).toMatch(/^T-(?:3[8-9]|4[0-7]|72|143|15[6-8]|161|16[56]|182|188)$/);
       expect(contract.ownerTask).toBe(expectedOwnerByRoute[contract.route]);
       expect(contract.roles.length).toBeGreaterThan(0);
       expect(contract.states.length).toBeGreaterThan(0);
@@ -403,7 +407,7 @@ describe("CMS UI audit inventory", () => {
     }
 
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "page"))
-      .toHaveLength(26);
+      .toHaveLength(28);
     expect(CMS_UI_AUDIT_ROUTE_CONTRACTS.filter(({ kind }) => kind === "endpoint"))
       .toHaveLength(3);
 
@@ -498,19 +502,31 @@ describe("CMS UI audit inventory", () => {
         .map(({ exportName, source }) => `${source}:${exportName}`),
     ).toEqual([
       "src/app/platform/tenant/actions.ts:submitPlatformTenantLifecycle",
+      "src/app/platform/pendaftaran/actions.ts:reviewRegistration",
     ]);
 
     const expectedPublicSources = [
       "src/app/api/auth/[...all]/route.ts",
+      "src/app/atur-ulang-password/page.tsx",
+      "src/app/daftar/page.tsx",
       "src/app/login/super-admin/page.tsx",
       "src/app/login/tenant/page.tsx",
+      "src/app/lupa-password/page.tsx",
       "src/app/page.tsx",
+      "src/app/verifikasi-email/konfirmasi/page.tsx",
+      "src/app/verifikasi-email/page.tsx",
     ];
     expect(PUBLIC_UI_AUDIT_ROUTE_CONTRACTS.map(({ source }) => source).sort())
       .toEqual(expectedPublicSources);
+    // Every public page on disk outside the CMS trees is registered.
+    expect(
+      sourceFiles("src/app")
+        .filter((file) => file.endsWith("/page.tsx") && !/^src\/app\/(?:app|platform)\//.test(file))
+        .sort(),
+    ).toEqual(expectedPublicSources.filter((source) => source.endsWith("/page.tsx")));
     for (const contract of PUBLIC_UI_AUDIT_ROUTE_CONTRACTS) {
       expect(existsSync(join(repositoryRoot, contract.source)), contract.source).toBe(true);
-      expect(contract.ownerTask).toBe("T-67");
+      expect(["T-67", "T-181"]).toContain(contract.ownerTask);
       expect(contract.cases.length).toBeGreaterThan(0);
     }
   });
@@ -816,7 +832,8 @@ describe("CMS UI audit inventory", () => {
       "src/app/app/page.tsx",
       "src/app/app/impor/page.tsx",
       "src/app/app/keuangan/page.tsx",
-      "src/app/app/kontak/page.tsx",
+      "src/app/app/kontak/pengirim/page.tsx",
+      "src/app/app/kontak/penerima/page.tsx",
       "src/app/app/kontak/baru/page.tsx",
       "src/app/app/kontak/[contactId]/page.tsx",
       "src/app/app/location-actions.ts",
@@ -891,7 +908,8 @@ describe("CMS UI audit inventory", () => {
       ["src/app/app/anggota/page.tsx", "/app/anggota"],
       ["src/app/app/impor/page.tsx", "/app/impor"],
       ["src/app/app/keuangan/page.tsx", "/app/keuangan"],
-      ["src/app/app/kontak/page.tsx", "/app/kontak"],
+      ["src/app/app/kontak/pengirim/page.tsx", "/app/kontak/pengirim"],
+      ["src/app/app/kontak/penerima/page.tsx", "/app/kontak/penerima"],
       ["src/app/app/pengaturan/page.tsx", "/app/pengaturan"],
       ["src/app/app/pengaturan/outlet/page.tsx", "/app/pengaturan/outlet"],
       ["src/app/app/pengaturan/pickup/page.tsx", "/app/pengaturan/pickup"],

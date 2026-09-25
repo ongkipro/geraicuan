@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fieldWidth } from "@/components/cms/cms-layouts";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { CharacterClassHint, useCharacterClass } from "@/components/ui/character-class-input";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +22,10 @@ type RateState = Awaited<ReturnType<typeof checkShippingRates>>;
 export function QuickRateForm({ outlets, canManageSettings, initialState = {}, initialStale = false }: { outlets: DestinationAreaOutlet[]; canManageSettings: boolean; initialState?: RateState; initialStale?: boolean }) {
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
   const [weight, setWeight] = useState("1000");
+  // T-196: grams are typed as digits only.
+  const { hint: weightHint, ...weightLock } = useCharacterClass<HTMLInputElement>("NUMERIC_INTEGER", {
+    onChange: (event) => setWeight(event.target.value),
+  });
   const [stale, setStale] = useState(initialStale);
   const revision = useRef(0);
   const form = useRef<HTMLFormElement>(null);
@@ -66,13 +71,14 @@ export function QuickRateForm({ outlets, canManageSettings, initialState = {}, i
           <Field className={fieldWidth.md} data-invalid={Boolean(visible.fieldErrors?.weightGrams)}>
             <FieldLabel htmlFor="rate-weight">Berat paket</FieldLabel>
             <div className="flex items-center gap-3">
-              <Input aria-describedby="rate-weight-hint rate-weight-error" aria-invalid={Boolean(visible.fieldErrors?.weightGrams)} className="min-h-11" disabled={pending} id="rate-weight" inputMode="numeric" max={100000} min={1} name="weightGrams" onChange={(event) => setWeight(event.target.value)} required step={1} type="number" value={weight} />
+              <Input aria-describedby="rate-weight-hint rate-weight-error" aria-invalid={Boolean(visible.fieldErrors?.weightGrams)} className="min-h-11" data-character-class="NUMERIC_INTEGER" disabled={pending} id="rate-weight" name="weightGrams" {...weightLock} required type="text" value={weight} />
               <span className="text-sm text-muted-foreground">gram</span>
             </div>
+            <CharacterClassHint hint={weightHint} id="rate-weight" />
             <FieldDescription id="rate-weight-hint">1 kg = 1.000 gram. Maksimal 100 kg.</FieldDescription>
             <FieldError id="rate-weight-error">{visible.fieldErrors?.weightGrams}</FieldError>
           </Field>
-          <Button className="min-h-11 w-full sm:w-fit" disabled={pending} type="submit">{pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Calculator aria-hidden="true" />}{pending ? "Memeriksa tarif…" : "Cek tarif"}</Button>
+          <Button className="ios-btn-primary min-h-11 w-full sm:w-fit" disabled={pending} type="submit">{pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Calculator aria-hidden="true" />}{pending ? "Memeriksa tarif…" : "Cek tarif"}</Button>
         </FieldGroup>
       </form>
       <div aria-live="polite" className="min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" ref={outcome} tabIndex={-1}>
@@ -93,13 +99,13 @@ export function QuickRateResults({ quote }: { quote: NonNullable<RateState["quot
         <p className="mt-1 text-xs text-muted-foreground">Diperiksa {formatWibDateTime(quote.retrievedAt)}</p>
       </div>
       {quote.services.length ? (
-        <Table containerClassName="rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" containerProps={{ role: "region", tabIndex: 0, "aria-label": "Perbandingan estimasi ongkir" }}>
+        <Table containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" containerProps={{ role: "region", tabIndex: 0, "aria-label": "Perbandingan estimasi ongkir" }}>
           <TableHeader><TableRow><TableHead>Layanan</TableHead><TableHead className="text-right">Estimasi ongkir</TableHead><TableHead>Estimasi tiba</TableHead><TableHead>COD</TableHead></TableRow></TableHeader>
           <TableBody>{quote.services.map((service) => <TableRow key={service.providerService}>
             <TableCell className="max-w-60 whitespace-normal break-words font-medium">{service.providerService}</TableCell>
             <TableCell className="text-right tabular-nums">{formatIdr(service.shippingAmountIdr)}</TableCell>
             <TableCell className="max-w-48 whitespace-normal wrap-anywhere">{service.deliveryEstimate || "Belum tersedia"}</TableCell>
-            <TableCell><Badge variant="secondary">{service.codEligible ? "Tersedia" : "Tidak tersedia"}</Badge></TableCell>
+            <TableCell><Badge variant={service.codEligible ? "secondary" : "outline"}>{service.codEligible ? "Tersedia" : "Tidak tersedia"}</Badge></TableCell>
           </TableRow>)}</TableBody>
         </Table>
       ) : <Alert><AlertTitle>Belum ada layanan untuk rute ini</AlertTitle><AlertDescription>Coba area tujuan atau berat lain, lalu periksa kembali.</AlertDescription></Alert>}

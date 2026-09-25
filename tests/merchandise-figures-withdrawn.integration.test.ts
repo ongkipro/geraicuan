@@ -63,8 +63,8 @@ export function withdrawnFieldsStayWithdrawn(
 
 const kpis: ShipmentKpis = {
   codDisbursementEstimateIdr: 202_000,
-  codServiceFeeIdr: 6_450,
-  codVatIdr: 710,
+  codFeeIdr: 7_160,
+  codFeeVatIncludedIdr: 710,
   createdCount: 3,
   issuedCount: 2,
   providerShippingIdr: 25_000,
@@ -85,7 +85,7 @@ describe("merchandise figures are withdrawn (T-177)", () => {
     expect(text).toContain("Biaya kirim Mengantar");
     expect(text).toContain("Biaya COD");
     expect(text).toContain("Estimasi dana dicairkan Mengantar");
-    // The COD fee card is the service fee plus its VAT.
+    // T-193: the COD fee card is Mengantar's fee, VAT inside it.
     expect(text).toContain("Rp 7.160");
   });
 
@@ -112,6 +112,7 @@ describe("merchandise figures are withdrawn (T-177)", () => {
       isCod: true,
       issuedAt: new Date("2026-09-03T04:00:00Z"),
       outletName: "Outlet",
+      paymentMethod: "COD",
       printCount: 1,
       providerService: "JNE REG",
       publicReference: "GC-10002",

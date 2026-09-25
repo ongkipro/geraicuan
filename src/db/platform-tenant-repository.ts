@@ -14,7 +14,8 @@ export type PlatformTenantLedgerSummary = {
   codPrincipalLiabilityIdr: number;
   providerCostIdr: number;
   revenueIdr: number;
-  vatPayableIdr: number;
+  /** T-193: historical VAT rows — inside Mengantar's COD fee, never a payable. */
+  legacyCodFeeVatIdr: number;
   upstreamRecoveryPaymentIdr: number;
 };
 
@@ -69,7 +70,7 @@ export async function readPlatformTenantFinanceSummary(
       ), 0)::text AS revenue,
       coalesce(sum(ledger.amount_idr) FILTER (
         WHERE ledger.entry_type = 'COD_SERVICE_FEE_VAT_PAYABLE'
-      ), 0)::text AS vat_payable,
+      ), 0)::text AS legacy_cod_fee_vat,
       coalesce(sum(ledger.amount_idr) FILTER (
         WHERE ledger.entry_type = 'NON_COD_UPSTREAM_PAYMENT'
       ), 0)::text AS upstream_recovery
@@ -107,7 +108,7 @@ export async function readPlatformTenantFinanceSummary(
       codPrincipalLiabilityIdr: asNumber(ledger.cod_principal),
       providerCostIdr: asNumber(ledger.provider_cost),
       revenueIdr: asNumber(ledger.revenue),
-      vatPayableIdr: asNumber(ledger.vat_payable),
+      legacyCodFeeVatIdr: asNumber(ledger.legacy_cod_fee_vat),
       upstreamRecoveryPaymentIdr: asNumber(ledger.upstream_recovery),
     },
     reconciliations: reconciliationResult.rows.map((row) => ({

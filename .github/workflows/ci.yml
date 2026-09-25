@@ -53,6 +53,28 @@ jobs:
       - name: Verify tenant isolation and application behavior
         run: pnpm test:integration
       - name: Lint and build
+        # A production build resolves host routing (DEP-1): three distinct exact
+        # HTTPS origins, with the trusted origins equal to the tenant and platform ones.
+        env:
+          BETTER_AUTH_TRUSTED_ORIGINS: https://app.example.test,https://bos.example.test
+          GERAICUAN_TENANT_ORIGIN: https://app.example.test
+          GERAICUAN_PLATFORM_ORIGIN: https://bos.example.test
+          GERAICUAN_PUBLIC_ORIGIN: https://example.test
         run: |
           pnpm lint
           pnpm build
+
+  docker-build:
+    # T-194: the production images still build. Nothing is pushed or run here.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build the app image
+        run: docker build --target app -t geraicuan-app:ci .
+      - name: Build the ops image (migrations and Super Admin bootstrap)
+        run: docker build --target ops -t geraicuan-ops:ci .
+      - name: Build the landing image
+        run: docker build -t geraicuan-landing:ci apps/landing

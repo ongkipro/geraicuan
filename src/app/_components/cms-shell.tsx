@@ -34,6 +34,8 @@ type CmsShellProps = {
   account: { initials: string; label: string; secondary?: string };
   children: ReactNode;
   destination: LoginDestination;
+  /** A page-independent notice above every page, e.g. the approval banner (PR-60). */
+  notice?: ReactNode;
   roleLabel: string;
   scopeDescription: string;
   scopeTitle: string;
@@ -97,7 +99,7 @@ export function CmsShell(props: CmsShellProps) {
         )}
         <SidebarInset className="min-w-0" id="konten-utama" tabIndex={-1}>
           {/* PR-51: Cek tarif moved into the sidebar "Cek" group, so both scopes share one header row. */}
-          <header className="sticky top-0 z-30 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b bg-background px-4 md:h-16 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:rounded-t-xl" data-slot="cms-header">
+          <header className="sticky top-0 z-30 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b border-border/60 bg-background/80 backdrop-blur-xl px-4 md:h-16 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:rounded-t-xl" data-slot="cms-header">
             <div className="flex h-16 items-center gap-3">
               <SidebarTrigger aria-label="Buka atau tutup navigasi" className="size-11 md:size-8" variant="outline" />
               <Separator className="hidden h-6! md:block" orientation="vertical" />
@@ -113,6 +115,7 @@ export function CmsShell(props: CmsShellProps) {
             <div className="col-span-3 flex h-8 items-center border-t md:col-span-1 md:h-auto md:border-t-0 md:border-l md:pl-3"><CmsHeaderClock /></div>
           </header>
           <div className="cms-main min-w-0 self-center [&_[id]]:scroll-mt-28 md:[&_[id]]:scroll-mt-20">
+            {props.notice}
             {props.children}
           </div>
         </SidebarInset>

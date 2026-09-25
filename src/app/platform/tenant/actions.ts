@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { resolvePlatformAccess } from "@/app/platform/platform-access";
 import { db } from "@/db/client";
+import { characterClassError, normalizeFieldText } from "@/lib/field-character-classes";
 import {
   executeTenantLifecycle,
   TenantLifecycleAttemptConflictError,
@@ -61,7 +62,8 @@ export async function submitPlatformTenantLifecycle(
   const confirmation = formString(formData, "confirmation");
   const attemptId = formString(formData, "attemptId");
   const tenantId = formString(formData, "tenantId")?.trim();
-  const name = formString(formData, "tenantName")?.trim();
+  const rawName = formString(formData, "tenantName");
+  const name = rawName === undefined ? undefined : normalizeFieldText(rawName);
   const expectedName = formString(formData, "confirmationName")?.trim();
   const values = action === "create" ? { name } : { expectedName };
   if (!action) {
@@ -83,7 +85,7 @@ export async function submitPlatformTenantLifecycle(
   }
   if (action === "create") {
     if (!name) errors.tenantName = "Nama tenant wajib diisi.";
-    else if (name.length > 120 || /[\u0000-\u001f\u007f]/u.test(name)) {
+    else if (name.length > 120 || characterClassError("BUSINESS_NAME", "Nama tenant", name)) {
       errors.tenantName = "Nama tenant maksimal 120 karakter dan tidak boleh memuat karakter kontrol.";
     }
   } else {

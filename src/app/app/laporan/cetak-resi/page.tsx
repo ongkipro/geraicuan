@@ -165,7 +165,7 @@ export default async function PrintHistoryReportPage({ searchParams }: PrintHist
         ) : (
           <Table
             className="min-w-[60rem]"
-            containerClassName="rounded-md border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            containerClassName="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             containerProps={{
               "aria-label": "Riwayat cetak resi; geser horizontal untuk melihat seluruh kolom",
               role: "region",
@@ -177,41 +177,41 @@ export default async function PrintHistoryReportPage({ searchParams }: PrintHist
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-inherit px-3">Nomor kiriman</TableHead>
-                <TableHead className="px-3">Waktu cetak</TableHead>
-                <TableHead className="px-3">Peran pelaku</TableHead>
-                <TableHead className="px-3">Hasil</TableHead>
-                <TableHead className="px-3">Alasan</TableHead>
-                <TableHead className="px-3 text-right">Urutan cetak</TableHead>
-                <TableHead className="px-3 text-right">Cetak ulang</TableHead>
+                <TableHead className="sticky left-0 z-10 bg-inherit px-3 text-xs font-semibold whitespace-nowrap">Nomor kiriman</TableHead>
+                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Waktu cetak</TableHead>
+                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Peran pelaku</TableHead>
+                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Hasil</TableHead>
+                <TableHead className="px-3 text-xs font-semibold whitespace-nowrap">Alasan</TableHead>
+                <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Urutan cetak</TableHead>
+                <TableHead className="px-3 text-right text-xs font-semibold whitespace-nowrap">Cetak ulang</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.rows.map((row) => {
                 const outcome = PRINT_OUTCOME_PRESENTATION[row.outcome];
                 return (
-                  <TableRow className="group" key={row.printEventId}>
+                  <TableRow className="group transition-colors hover:bg-muted/30" key={row.printEventId}>
                     <TableCell className="sticky left-0 z-10 bg-inherit px-3 font-medium group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]">
                       <Link
-                        className="inline-flex min-h-11 items-center whitespace-nowrap text-primary underline-offset-4 hover:underline md:min-h-8"
+                        className="inline-flex min-h-11 items-center whitespace-nowrap font-mono font-semibold text-primary underline-offset-4 hover:underline md:min-h-8"
                         href={shipmentLabelHref(row.publicReference)}
                       >
                         {row.publicReference}
                       </Link>
-                      <span className="block text-xs text-muted-foreground">{row.outletName}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground whitespace-nowrap">{row.outletName}</span>
                     </TableCell>
-                    <TableCell className="px-3"><StackedDateTime value={row.printedAt} /></TableCell>
-                    <TableCell className="px-3">{PRINT_ACTOR_ROLE_PRESENTATION[row.actorRole]}</TableCell>
-                    <TableCell className="px-3">
+                    <TableCell className="px-3 whitespace-nowrap text-xs"><StackedDateTime value={row.printedAt} /></TableCell>
+                    <TableCell className="px-3 whitespace-nowrap text-xs font-medium">{PRINT_ACTOR_ROLE_PRESENTATION[row.actorRole]}</TableCell>
+                    <TableCell className="px-3 whitespace-nowrap">
                       <ShipmentStatusBadge label={outcome.label} tone={outcome.tone} />
                     </TableCell>
-                    <TableCell className="max-w-56 whitespace-normal px-3 wrap-anywhere">
+                    <TableCell className="min-w-[12rem] max-w-[18rem] px-3 text-xs leading-relaxed whitespace-normal break-words">
                       {printReasonLabel(row.reasonCode)}
                     </TableCell>
-                    <TableCell className="px-3 text-right tabular-nums">
+                    <TableCell className="px-3 text-right text-xs tabular-nums font-medium">
                       {row.sequence === null ? "—" : `#${row.sequence}`}
                     </TableCell>
-                    <TableCell className="px-3 text-right tabular-nums">{row.reprintCount}×</TableCell>
+                    <TableCell className="px-3 text-right text-xs tabular-nums font-medium">{row.reprintCount}×</TableCell>
                   </TableRow>
                 );
               })}

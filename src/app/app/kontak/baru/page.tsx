@@ -11,11 +11,14 @@ import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { contactRoleLabel, DEFAULT_CONTACT_ROLE, parseContactRole } from "@/lib/contact-role-filter";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
 
-export default async function NewContactPage() {
+type SearchValue = string | string[] | undefined;
+
+export default async function NewContactPage({ searchParams }: { searchParams: Promise<{ peran?: SearchValue }> }) {
   let principal;
   try {
     principal = await requireCmsScope("tenant");
@@ -30,6 +33,9 @@ export default async function NewContactPage() {
     : null;
   if (auditScenario === "contacts-new-error") throw new Error("Intentional development-only new-contact form failure.");
 
+  // T-188: `peran` preselects the role of the menu the form was opened from.
+  const requestedPeran = (await searchParams).peran;
+  const role = parseContactRole(Array.isArray(requestedPeran) ? requestedPeran[0] : requestedPeran) ?? DEFAULT_CONTACT_ROLE;
   const outlets = await withTenantContext(
     db,
     principal.userId,
@@ -39,7 +45,7 @@ export default async function NewContactPage() {
 
   return (
     <PageContainer>
-      <PageHeader description="Satu kontak dapat dipakai sebagai pengirim, penerima, atau keduanya." eyebrow="Data" title="Buat kontak" />
+      <PageHeader description={`${contactRoleLabel(role)} baru. Simpan sekali, lalu pilih saat membuat draf kiriman.`} eyebrow="Data" title="Buat kontak" />
       <FormLayout
         aside={(
           <PageAside label="Bantuan kontak baru">
@@ -56,7 +62,7 @@ export default async function NewContactPage() {
           </PageAside>
         )}
       >
-        <ContactForm outlets={outlets} />
+        <ContactForm outlets={outlets} role={role} />
       </FormLayout>
     </PageContainer>
   );

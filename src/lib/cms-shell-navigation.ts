@@ -1,4 +1,5 @@
 import type { membershipRoles } from "@/db/schema";
+import { DEFAULT_CONTACT_ROLE, parseContactRole } from "@/lib/contact-role-filter";
 
 export type TenantCmsRole = (typeof membershipRoles)[number];
 
@@ -75,11 +76,19 @@ const navigationGroups: readonly {
   {
     label: "Data",
     items: [
+      // T-188: sender and recipient contacts are separate menus over one
+      // contacts table; a dual-role contact is listed under both.
       {
-        href: "/app/kontak",
-        key: "contacts",
-        label: "Kontak",
-        shortLabel: "KO",
+        href: "/app/kontak/pengirim",
+        key: "contacts-sender",
+        label: "Pengirim",
+        shortLabel: "PG",
+      },
+      {
+        href: "/app/kontak/penerima",
+        key: "contacts-recipient",
+        label: "Penerima",
+        shortLabel: "PN",
       },
     ],
   },
@@ -168,6 +177,13 @@ const platformNavigationGroups: readonly {
         label: "Tenant",
         shortLabel: "TN",
       },
+      // T-182 (PR-61): stores awaiting approval.
+      {
+        href: "/platform/pendaftaran",
+        key: "platform-registrations",
+        label: "Pendaftaran",
+        shortLabel: "PD",
+      },
       {
         href: "/platform/audit",
         key: "platform-audit",
@@ -200,9 +216,26 @@ function resolveNavigation(
   }));
 }
 
+/** The subset of URLSearchParams the resolver reads, so server tests can pass a plain one. */
+type SearchParamsReader = { get(name: string): string | null };
+
+/**
+ * T-188: `/app/kontak/baru` and a contact detail belong to whichever contact
+ * menu they were opened from — `peran` on the create form, `dari` on a detail —
+ * defaulting to Pengirim. The role lists themselves match by their own href.
+ */
+function contactNavigationPath(pathname: string, search: SearchParamsReader | undefined) {
+  if (!pathname.startsWith("/app/kontak/")) return pathname;
+  const segment = pathname.slice("/app/kontak/".length).split("/")[0];
+  if (segment === "pengirim" || segment === "penerima") return pathname;
+  const role = parseContactRole(search?.get(segment === "baru" ? "peran" : "dari")) ?? DEFAULT_CONTACT_ROLE;
+  return `/app/kontak/${role}`;
+}
+
 export function tenantCmsNavigation(
   role: TenantCmsRole,
   pathname: string,
+  search?: SearchParamsReader,
 ): CmsNavigationGroup[] {
   const visibleGroups = navigationGroups
     .map((group) => ({
@@ -217,7 +250,7 @@ export function tenantCmsNavigation(
   // menu entry, so it resolves the Pengaturan destination as current.
   const navigationPath = pathname === "/app/anggota" || pathname.startsWith("/app/anggota/")
     ? "/app/pengaturan"
-    : pathname;
+    : contactNavigationPath(pathname, search);
   const matchedDefinition = navigationGroups
     .flatMap((group) => group.items)
     .sort((a, b) => b.href.length - a.href.length)

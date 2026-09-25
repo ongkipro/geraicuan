@@ -12,6 +12,12 @@ import {
   shipmentCodTotals,
   shipments,
 } from "@/db/schema";
+import { COD_ONGKIR_FORMULA_VERSION } from "@/db/cod-totals-repository";
+import {
+  BASIS_POINTS,
+  MENGANTAR_COD_FEE_BASIS_POINTS,
+  mengantarCodFeeIdr,
+} from "@/lib/mengantar-cod-fee";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 
 export type ReconcilableLedgerEntryType = Exclude<
@@ -29,7 +35,13 @@ export type LedgerSummary = {
   codPrincipalLiabilityIdr: number;
   providerCostIdr: number;
   revenueIdr: number;
-  vatPayableIdr: number;
+  /**
+   * T-193: historical COD_SERVICE_FEE_VAT_PAYABLE rows. The 11% VAT is inside
+   * Mengantar's 3.33% fee and Mengantar keeps it, so this is part of the COD fee
+   * Mengantar withheld — informational, never GeraiCUAN's payable. No issuance
+   * books the type from T-193 on.
+   */
+  legacyCodFeeVatIdr: number;
   upstreamRecoveryPaymentIdr: number;
 };
 
@@ -69,6 +81,8 @@ export type LedgerWorkspaceEntry = Pick<
   publicReference: string | null;
   outletName: string;
   adjustmentState: "AVAILABLE" | "ADJUSTED" | "INELIGIBLE";
+  /** The type an ADJUSTMENT reverses, so it is presented like its original (T-193); null otherwise. */
+  reversedEntryType: (typeof ledgerEntries.$inferSelect)["entryType"] | null;
 };
 
 export type LedgerWorkspacePage = {
@@ -240,6 +254,7 @@ export async function appendLedgerForIssuedProviderOrder(
       codServiceFeeIdr: shipmentCodTotals.serviceFeeIdr,
       codVatAmountIdr: shipmentCodTotals.vatAmountIdr,
       codProviderAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+      codFormulaVersion: shipmentCodTotals.codFormulaVersion,
     })
     .from(providerOrderSnapshots)
     .innerJoin(
@@ -314,27 +329,34 @@ export async function appendLedgerForIssuedProviderOrder(
     ) {
       throw new LedgerUnavailableError();
     }
+    // COD principal is the goods money the courier collects for the seller.
+    // T-186 COD Ongkir (formula version 3) collects a shipping charge only —
+    // the goods were paid outside GeraiCUAN — so its principal is exactly zero.
+    // The entry is still appended, at 0, so every COD issuance carries the same
+    // entry set and "no goods principal" is a recorded fact, not an absence.
+    // The shipping charge is not principal: Mengantar keeps the shipping and
+    // its fee from it (the entries below) and remits the seller's difference,
+    // which RPT-SHP-COD-DISBURSEMENT-EST-IDR estimates and settlement records.
     entries.unshift({
       entryType: "COD_PRINCIPAL_COLLECTABLE",
       financialClass: "LIABILITY",
-      amountIdr: requireWholeIdr(source.codGoodsValueIdr),
+      amountIdr: source.codFormulaVersion === COD_ONGKIR_FORMULA_VERSION
+        ? 0
+        : requireWholeIdr(source.codGoodsValueIdr),
     });
     // T-178: the COD fee is Mengantar's — it deducts it at settlement and
     // GeraiCUAN never receives it — so it is a provider cost, not revenue.
-    // Entries posted before this change keep GERAICUAN_COD_SERVICE_FEE_REVENUE
-    // (append-only); nothing here rewrites them.
-    entries.push(
-      {
-        entryType: "MENGANTAR_COD_FEE_COST",
-        financialClass: "EXPENSE",
-        amountIdr: requireWholeIdr(source.codServiceFeeIdr),
-      },
-      {
-        entryType: "COD_SERVICE_FEE_VAT_PAYABLE",
-        financialClass: "LIABILITY",
-        amountIdr: requireWholeIdr(source.codVatAmountIdr),
-      },
-    );
+    // T-193: the amount is the fee Mengantar actually keeps,
+    // round_half_up(COD × 333 / 10000) (`mengantarCodFeeIdr`), not the stored
+    // service fee; the 11% VAT is inside that fee and Mengantar keeps it, so no
+    // COD_SERVICE_FEE_VAT_PAYABLE is booked. Entries posted before (the retired
+    // revenue type, the stored fee, the VAT row) stay as they are (append-only);
+    // readers present those VAT rows as part of the fee, never as a liability.
+    entries.push({
+      entryType: "MENGANTAR_COD_FEE_COST",
+      financialClass: "EXPENSE",
+      amountIdr: mengantarCodFeeIdr(requireWholeIdr(source.providerCodAmountIdr ?? Number.NaN)),
+    });
   } else if (source.isPaid !== true) {
     throw new LedgerUnavailableError();
   }
@@ -653,7 +675,7 @@ export async function summarizeLedger(
         case when ${ledgerEntries.financialClass} = 'REVENUE'
           then ${ledgerEntries.amountIdr} else 0 end
       ), 0)`.mapWith(Number),
-      vatPayableIdr: adjustedTypeAmount("COD_SERVICE_FEE_VAT_PAYABLE"),
+      legacyCodFeeVatIdr: adjustedTypeAmount("COD_SERVICE_FEE_VAT_PAYABLE"),
       upstreamRecoveryPaymentIdr: adjustedTypeAmount("NON_COD_UPSTREAM_PAYMENT"),
     })
     .from(ledgerEntries)
@@ -706,6 +728,12 @@ export async function listLedgerEntries(
       sourceEventId: ledgerEntries.sourceEventId,
       reversesEntryId: ledgerEntries.reversesEntryId,
       outletName: outlets.name,
+      reversedEntryType: sql<LedgerWorkspaceEntry["reversedEntryType"]>`(
+        select original.entry_type
+        from ledger_entries original
+        where original.tenant_id = ${context.tenantId}
+          and original.id = ${ledgerEntries.reversesEntryId}
+      )`,
       alreadyAdjusted: sql<boolean>`exists (
         select 1
         from ledger_entries adjustment
@@ -1058,7 +1086,10 @@ async function captureLedgerReconciliationTotals(
   }>(sql`
     WITH issued_source AS (
       SELECT
+        -- T-186: a COD Ongkir total (formula version 3) collects no goods, so
+        -- its principal is 0, exactly as appendLedgerForIssuedProviderOrder books it.
         coalesce(sum(CASE WHEN provider_order.is_cod
+          AND cod_total.cod_formula_version <> ${COD_ONGKIR_FORMULA_VERSION}
           THEN cod_total.goods_value_idr ELSE 0 END), 0) AS cod_principal,
         -- T-146: source of truth mirrors what the ledger now records: the
         -- provider-charged amount, not the buyer's price. See appendLedgerForIssuedProviderOrder.
@@ -1067,16 +1098,26 @@ async function captureLedgerReconciliationTotals(
           provider_order.shipping_amount_idr
         )), 0) AS shipping,
         coalesce(sum(coalesce(provider_order.insurance_amount_idr, 0)), 0) AS insurance,
-        -- T-178: the same stored fee, classified by how its issuance was
-        -- ledgered. An issuance that already carries the retired revenue
-        -- entry was posted before the change and is expected there; every
-        -- other COD issuance is expected as MENGANTAR_COD_FEE_COST, so a
-        -- missing entry still surfaces as a variance on the current type.
-        coalesce(sum(CASE WHEN provider_order.is_cod AND legacy_fee.id IS NOT NULL
+        -- The COD fee, classified by how its issuance was ledgered (REC-FEE-SOURCE):
+        -- - carries the retired revenue entry (before T-178): the stored
+        --   service fee as revenue, the stored VAT as a VAT row;
+        -- - carries a VAT row but no revenue entry (T-178 until T-193): the
+        --   stored service fee as MENGANTAR_COD_FEE_COST, the stored VAT row;
+        -- - neither (T-193 on): the fee Mengantar keeps,
+        --   round_half_up(COD × 333 / 10000), as MENGANTAR_COD_FEE_COST and no
+        --   VAT row, so a missing fee entry still surfaces as a variance on the
+        --   current type.
+        coalesce(sum(CASE WHEN provider_order.is_cod AND legacy_fee.booked
           THEN cod_total.service_fee_idr ELSE 0 END), 0) AS cod_revenue,
-        coalesce(sum(CASE WHEN provider_order.is_cod AND legacy_fee.id IS NULL
-          THEN cod_total.service_fee_idr ELSE 0 END), 0) AS cod_fee_cost,
+        coalesce(sum(CASE WHEN provider_order.is_cod AND NOT legacy_fee.booked
+          THEN CASE WHEN legacy_vat.booked
+            THEN cod_total.service_fee_idr::bigint
+            ELSE (provider_order.provider_cod_amount_idr::bigint * ${MENGANTAR_COD_FEE_BASIS_POINTS}
+              + ${BASIS_POINTS / 2}) / ${BASIS_POINTS}
+          END
+          ELSE 0 END), 0) AS cod_fee_cost,
         coalesce(sum(CASE WHEN provider_order.is_cod
+          AND (legacy_fee.booked OR legacy_vat.booked)
           THEN cod_total.vat_amount_idr ELSE 0 END), 0) AS cod_vat
       FROM provider_order_snapshots provider_order
       INNER JOIN provider_batches batch
@@ -1085,11 +1126,24 @@ async function captureLedgerReconciliationTotals(
       LEFT JOIN shipment_cod_totals cod_total
         ON cod_total.shipment_id = provider_order.shipment_id
         AND cod_total.tenant_id = provider_order.tenant_id
-      LEFT JOIN ledger_entries legacy_fee
-        ON legacy_fee.tenant_id = provider_order.tenant_id
-        AND legacy_fee.source_event = 'PROVIDER_ORDER_ISSUED'
-        AND legacy_fee.source_event_id = provider_order.id::text
-        AND legacy_fee.entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE'
+      CROSS JOIN LATERAL (
+        SELECT EXISTS (
+          SELECT 1 FROM ledger_entries fee_entry
+          WHERE fee_entry.tenant_id = provider_order.tenant_id
+            AND fee_entry.source_event = 'PROVIDER_ORDER_ISSUED'
+            AND fee_entry.source_event_id = provider_order.id::text
+            AND fee_entry.entry_type = 'GERAICUAN_COD_SERVICE_FEE_REVENUE'
+        ) AS booked
+      ) legacy_fee
+      CROSS JOIN LATERAL (
+        SELECT EXISTS (
+          SELECT 1 FROM ledger_entries vat_entry
+          WHERE vat_entry.tenant_id = provider_order.tenant_id
+            AND vat_entry.source_event = 'PROVIDER_ORDER_ISSUED'
+            AND vat_entry.source_event_id = provider_order.id::text
+            AND vat_entry.entry_type = 'COD_SERVICE_FEE_VAT_PAYABLE'
+        ) AS booked
+      ) legacy_vat
       WHERE provider_order.tenant_id = ${context.tenantId}
         AND batch.outlet_id = ${input.outletId}
         AND provider_order.status = 'ISSUED'

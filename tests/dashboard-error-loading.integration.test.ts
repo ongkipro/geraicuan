@@ -81,7 +81,6 @@ const STATIC_HEADER_ROUTES = [
   "analitik",
   "anggota",
   "keuangan",
-  "kontak",
   "kontak/baru",
   "label",
   "pengaturan",
@@ -141,6 +140,47 @@ describe("dashboard route error and loading states", () => {
       assertStatesMirror(route, false);
     },
   );
+
+  // T-188: Pengirim and Penerima are thin routes over one directory body and
+  // one pair of boundaries, so parity is checked where the headers live, and
+  // each route's boundaries must render the shared ones for its own role.
+  it("keeps the Pengirim and Penerima loading and error headers on the shared directory's", () => {
+    const shared = (file: string) => {
+      const path = join(process.cwd(), "src/app/app/kontak", file);
+      return ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    };
+    const pageHeaders = (source: ts.SourceFile) => {
+      const found: { eyebrow?: string; title?: string; width?: string }[] = [];
+      const visit = (node: ts.Node) => {
+        if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(source) === "PageHeader") {
+          const attributes: Record<string, string> = {};
+          for (const property of node.attributes.properties) {
+            if (ts.isJsxAttribute(property) && property.initializer) attributes[property.name.getText(source)] = property.initializer.getText(source);
+          }
+          found.push(attributes);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+      return found;
+    };
+    const [page] = pageHeaders(shared("contact-role-directory.tsx"));
+    const states = pageHeaders(shared("contact-role-boundaries.tsx"));
+    expect(page?.eyebrow).toBe('"Data"');
+    expect(page?.title).toBe("{label}");
+    expect(states).toHaveLength(2);
+    for (const state of states) {
+      expect(state.eyebrow).toBe(page?.eyebrow);
+      expect(state.title).toBe(page?.title);
+      expect(state.width).toBeUndefined();
+    }
+    for (const role of ["pengirim", "penerima"]) {
+      const loading = readFileSync(join(process.cwd(), "src/app/app/kontak", role, "loading.tsx"), "utf8");
+      const failure = readFileSync(join(process.cwd(), "src/app/app/kontak", role, "error.tsx"), "utf8");
+      expect(loading).toContain(`<ContactRoleDirectoryLoading role="${role}" />`);
+      expect(failure).toContain(`<ContactRoleDirectoryError reset={reset} role="${role}" />`);
+    }
+  });
 
   it("passes the platform page eyebrow and keeps the shared platform states on one eyebrow", () => {
     const view = join(process.cwd(), "src/app/platform/_components/monitoring-view.tsx");

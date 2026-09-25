@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/db/schema";
@@ -24,11 +24,28 @@ export class TenantContextDeniedError extends Error {
   }
 }
 
+/**
+ * PR-60 / D-8: the tenant is `PROVISIONING` — registered, not yet approved by a
+ * Super Admin. A subclass, so every existing refusal path still refuses.
+ */
+export class TenantApprovalPendingError extends TenantContextDeniedError {}
+
+export type TenantContextOptions = {
+  /**
+   * Store setup only: profile, outlet, pickup points and the tenant's own
+   * Mengantar connection. Every other caller — every shipment path — omits it,
+   * so a tenant awaiting approval is refused here before any work runs, and the
+   * row-level security on the tables that ship still requires an ACTIVE tenant.
+   */
+  allowPendingApproval?: true;
+};
+
 export async function withTenantContext<T>(
   db: Database,
   principalId: string,
   requestedTenantId: string | undefined,
   work: (tx: TenantTransaction, context: TenantContext) => Promise<T>,
+  options: TenantContextOptions = {},
 ): Promise<T> {
   if (requestedTenantId && !UUID_PATTERN.test(requestedTenantId)) {
     throw new TenantContextDeniedError();
@@ -49,6 +66,7 @@ export async function withTenantContext<T>(
       .select({
         tenantId: schema.memberships.tenantId,
         role: schema.memberships.role,
+        tenantStatus: schema.tenants.status,
       })
       .from(schema.memberships)
       .innerJoin(schema.users, eq(schema.memberships.userId, schema.users.id))
@@ -56,7 +74,7 @@ export async function withTenantContext<T>(
       .where(
         and(
           eq(schema.memberships.userId, principalId),
-          eq(schema.tenants.status, "ACTIVE"),
+          inArray(schema.tenants.status, ["ACTIVE", "PROVISIONING"]),
           eq(schema.memberships.status, "ACTIVE"),
           eq(schema.users.status, "ACTIVE"),
           requestedTenantId
@@ -70,6 +88,9 @@ export async function withTenantContext<T>(
     }
 
     const membership = memberships[0];
+    if (membership.tenantStatus !== "ACTIVE" && !options.allowPendingApproval) {
+      throw new TenantApprovalPendingError();
+    }
     await tx.execute(sql`select set_config('app.tenant_id', ${membership.tenantId}, true)`);
 
     return work(tx, {

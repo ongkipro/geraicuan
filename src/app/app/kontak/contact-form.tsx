@@ -2,7 +2,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { saveContact, type CreateContactState } from "@/app/app/kontak/actions";
@@ -20,8 +20,17 @@ import {
   FieldLegend,
   FieldSet,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/character-class-input";
+import { partyNameClass } from "@/lib/field-character-classes";
+import {
+  CONTACT_ROLE_EFFECTS,
+  CONTACT_ROLES,
+  contactDetailHref,
+  contactListHref,
+  contactRoleLabel,
+  otherContactRole,
+  type ContactRole,
+} from "@/lib/contact-role-filter";
 
 function SubmitButton({ disabled = false }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
@@ -32,12 +41,14 @@ function SubmitButton({ disabled = false }: { disabled?: boolean }) {
   );
 }
 
-export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
+export function ContactForm({ outlets, role }: { outlets: DestinationAreaOutlet[]; role: ContactRole }) {
   const [state, formAction, pending] = useActionState<CreateContactState, FormData>(saveContact, {});
   const errors = state.errors ?? {};
   const values = state.values ?? {};
   const errorEntries = Object.entries(errors);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
+  // T-196: the name lock follows the Pengirim checkbox as it is ticked.
+  const [isSender, setIsSender] = useState(state.errors ? values.roleSender === "on" : role === "pengirim");
 
   useEffect(() => {
     if (errorEntries.length > 0 || state.successId) errorSummaryRef.current?.focus();
@@ -51,8 +62,8 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
         <AlertDescription className="grid gap-4">
           <p>{state.message}</p>
           <div className="flex flex-col gap-2 md:flex-row">
-            <Button asChild className="min-h-11 md:min-h-8"><Link href={`/app/kontak/${state.successId}`}>Buka detail kontak</Link></Button>
-            <Button asChild className="min-h-11 md:min-h-8" variant="outline"><Link href="/app/kontak">Kembali ke direktori</Link></Button>
+            <Button asChild className="min-h-11 md:min-h-8"><Link href={contactDetailHref(state.successId, state.successRole ?? role)}>Buka detail kontak</Link></Button>
+            <Button asChild className="min-h-11 md:min-h-8" variant="outline"><Link href={contactListHref(state.successRole ?? role)}>Kembali ke daftar {contactRoleLabel(state.successRole ?? role).toLowerCase()}</Link></Button>
           </div>
         </AlertDescription>
       </Alert>
@@ -62,6 +73,7 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
   const describedBy = (field: string) => errors[field] ? `${field}-error` : undefined;
   return (
     <form action={formAction} aria-busy={pending} className="grid gap-6" id="form-kontak">
+      <input name="peran" type="hidden" value={role} />
       {errorEntries.length > 0 ? (
         <Alert ref={errorSummaryRef} role="alert" tabIndex={-1} variant="destructive">
           <AlertTitle>Periksa isian kontak</AlertTitle>
@@ -77,32 +89,51 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
 
       <Card aria-labelledby="contact-data-heading" role="region">
         <CardHeader className="border-b">
-          <CardTitle id="contact-data-heading">Data kontak</CardTitle>
-          <CardDescription className="leading-6">Identitas dan peran yang tersedia saat membuat kiriman.</CardDescription>
+          <CardTitle id="contact-data-heading">Kontak</CardTitle>
+          <CardDescription className="leading-6">Nama dan nomor yang dipakai kurir untuk konfirmasi.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <FieldGroup>
             <FieldRow>
               <Field className={fieldWidth.lg} data-invalid={Boolean(errors.contactName)}>
                 <FieldLabel htmlFor="contactName">Nama</FieldLabel>
-                <Input aria-describedby={describedBy("contactName")} aria-invalid={Boolean(errors.contactName)} autoFocus={!state.errors} className="min-h-11" defaultValue={values.contactName} id="contactName" name="contactName" required />
+                <CharacterClassInput aria-describedby={describedBy("contactName")} aria-invalid={Boolean(errors.contactName)} autoFocus={!state.errors} characterClass={partyNameClass({ isSender })} className="min-h-11" defaultValue={values.contactName} id="contactName" name="contactName" required />
                 <FieldError id="contactName-error">{errors.contactName}</FieldError>
               </Field>
               <Field className={fieldWidth.md} data-invalid={Boolean(errors.contactPhone)}>
                 <FieldLabel htmlFor="contactPhone">Nomor telepon</FieldLabel>
-                <Input aria-describedby={describedBy("contactPhone")} aria-invalid={Boolean(errors.contactPhone)} className="min-h-11" defaultValue={values.contactPhone} id="contactPhone" name="contactPhone" required type="tel" />
+                <CharacterClassInput aria-describedby={describedBy("contactPhone")} aria-invalid={Boolean(errors.contactPhone)} characterClass="PHONE" className="min-h-11" defaultValue={values.contactPhone} id="contactPhone" name="contactPhone" required type="tel" />
                 <FieldError id="contactPhone-error">{errors.contactPhone}</FieldError>
               </Field>
             </FieldRow>
-            <FieldSet aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} data-invalid={Boolean(errors.roles)} id="roles" tabIndex={-1}>
-              <FieldLegend>Peran kontak</FieldLegend>
-              <FieldGroup className="gap-3">
-                <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm font-medium"><input className="size-4 accent-primary" defaultChecked={state.errors ? values.roleSender === "on" : true} name="roleSender" type="checkbox" />Bisa dipakai sebagai pengirim</label>
-                <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm font-medium"><input className="size-4 accent-primary" defaultChecked={state.errors ? values.roleRecipient === "on" : true} name="roleRecipient" type="checkbox" />Bisa dipakai sebagai penerima</label>
-                <FieldError id="roles-error">{errors.roles}</FieldError>
-              </FieldGroup>
-            </FieldSet>
           </FieldGroup>
+        </CardContent>
+      </Card>
+
+      <Card aria-labelledby="contact-role-heading" role="region">
+        <CardHeader className="border-b">
+          <CardTitle id="contact-role-heading">Peran</CardTitle>
+          <CardDescription className="leading-6">Disiapkan sebagai {contactRoleLabel(role).toLowerCase()}. Centang keduanya bila kontak juga dipakai sebagai {contactRoleLabel(otherContactRole(role)).toLowerCase()}.</CardDescription>
+        </CardHeader>
+        <CardContent className="min-w-0">
+          <FieldSet aria-describedby={errors.roles ? "roles-error" : undefined} aria-invalid={Boolean(errors.roles)} data-invalid={Boolean(errors.roles)} id="roles" tabIndex={-1}>
+            <FieldLegend className="sr-only">Peran kontak</FieldLegend>
+            <FieldGroup className="flex flex-col gap-3 sm:flex-row [&>*]:flex-1">
+              {CONTACT_ROLES.map((option) => {
+                const name = option === "pengirim" ? "roleSender" : "roleRecipient";
+                return (
+                  <label className="flex min-h-11 items-start gap-3 rounded-lg border p-3 text-sm has-checked:border-primary has-checked:bg-muted/60" key={option}>
+                    <input aria-describedby={`${name}-effect`} className="mt-0.5 size-4 accent-primary" defaultChecked={state.errors ? values[name] === "on" : role === option} name={name} onChange={option === "pengirim" ? (event) => setIsSender(event.target.checked) : undefined} type="checkbox" />
+                    <span className="grid gap-0.5">
+                      <span className="font-medium">{contactRoleLabel(option)}</span>
+                      <span className="text-muted-foreground" id={`${name}-effect`}>{CONTACT_ROLE_EFFECTS[option]}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </FieldGroup>
+            <FieldError id="roles-error">{errors.roles}</FieldError>
+          </FieldSet>
         </CardContent>
       </Card>
 
@@ -115,13 +146,13 @@ export function ContactForm({ outlets }: { outlets: DestinationAreaOutlet[] }) {
           <FieldGroup>
             <Field className={fieldWidth.lg} data-invalid={Boolean(errors.addressLabel)}>
               <FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel>
-              <Input aria-describedby={describedBy("addressLabel")} aria-invalid={Boolean(errors.addressLabel)} className="min-h-11" defaultValue={values.addressLabel} id="addressLabel" name="addressLabel" required />
+              <CharacterClassInput aria-describedby={describedBy("addressLabel")} aria-invalid={Boolean(errors.addressLabel)} characterClass="BUSINESS_NAME" className="min-h-11" defaultValue={values.addressLabel} id="addressLabel" name="addressLabel" required />
               <FieldDescription>Contoh: Gudang Bandung, Rumah, atau Toko Pusat.</FieldDescription>
               <FieldError id="addressLabel-error">{errors.addressLabel}</FieldError>
             </Field>
             <Field className={fieldWidth.full} data-invalid={Boolean(errors.addressText)}>
               <FieldLabel htmlFor="addressText">Alamat</FieldLabel>
-              <Textarea aria-describedby={describedBy("addressText")} aria-invalid={Boolean(errors.addressText)} className="min-h-24" defaultValue={values.addressText} id="addressText" name="addressText" required rows={3} />
+              <CharacterClassTextarea aria-describedby={describedBy("addressText")} aria-invalid={Boolean(errors.addressText)} characterClass="ADDRESS" className="min-h-24" defaultValue={values.addressText} id="addressText" name="addressText" required rows={3} />
               <FieldError id="addressText-error">{errors.addressText}</FieldError>
             </Field>
             <DestinationAreaSelector

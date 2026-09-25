@@ -29,6 +29,7 @@ import { withTenantContext } from "@/db/tenant-context";
 import { listTenantOutlets } from "@/db/tenant-repository";
 import { analyticsIssueMessage, formatInZone, formatRangeLabel, parseAnalyticsRange, parsePageNumber, serializeAnalyticsRange, type AnalyticsRange } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { LEGACY_COD_FEE_VAT_CLASS_LABEL, LEGACY_COD_FEE_VAT_LABEL, LEGACY_COD_FEE_VAT_NOTE } from "@/lib/mengantar-cod-fee";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -57,9 +58,15 @@ function varianceClassName(amountIdr: number) {
 }
 
 const entryTypeLabel: Record<LedgerWorkspaceEntry["entryType"], string> = {
-  COD_PRINCIPAL_COLLECTABLE: "Pokok COD tertagih", MENGANTAR_SHIPPING_COST: "Biaya kirim Mengantar", MENGANTAR_INSURANCE_COST: "Biaya asuransi Mengantar", MENGANTAR_COD_FEE_COST: "Biaya COD Mengantar", GERAICUAN_COD_SERVICE_FEE_REVENUE: "Pendapatan jasa COD (entri lama)", COD_SERVICE_FEE_VAT_PAYABLE: "PPN jasa COD terutang", NON_COD_UPSTREAM_PAYMENT: "Pembayaran pemulihan non-COD", COD_REMITTANCE: "Setoran COD", ADJUSTMENT: "Penyesuaian pembalik", RECONCILIATION: "Memo rekonsiliasi",
+  COD_PRINCIPAL_COLLECTABLE: "Pokok COD tertagih", MENGANTAR_SHIPPING_COST: "Biaya kirim Mengantar", MENGANTAR_INSURANCE_COST: "Biaya asuransi Mengantar", MENGANTAR_COD_FEE_COST: "Biaya COD Mengantar", GERAICUAN_COD_SERVICE_FEE_REVENUE: "Pendapatan jasa COD (entri lama)", COD_SERVICE_FEE_VAT_PAYABLE: `${LEGACY_COD_FEE_VAT_LABEL} · entri lama`, NON_COD_UPSTREAM_PAYMENT: "Pembayaran pemulihan non-COD", COD_REMITTANCE: "Setoran COD", ADJUSTMENT: "Penyesuaian pembalik", RECONCILIATION: "Memo rekonsiliasi",
 };
 const financialClassLabel: Record<LedgerWorkspaceEntry["financialClass"], string> = { LIABILITY: "Liabilitas", EXPENSE: "Beban", REVENUE: "Pendapatan", MEMO: "Memo" };
+// T-193: a historical VAT row (or an adjustment reversing one) is stored as LIABILITY but is part of Mengantar's COD fee.
+function presentedFinancialClass(entry: Pick<LedgerWorkspaceEntry, "entryType" | "financialClass" | "reversedEntryType">) {
+  return entry.entryType === "COD_SERVICE_FEE_VAT_PAYABLE" || entry.reversedEntryType === "COD_SERVICE_FEE_VAT_PAYABLE"
+    ? LEGACY_COD_FEE_VAT_CLASS_LABEL
+    : financialClassLabel[entry.financialClass];
+}
 const settlementClass: Record<ProviderSettlementClass, { label: string; variant: "destructive" | "secondary" | "outline" }> = {
   AMOUNT_MISMATCH: { label: "Nominal beda", variant: "destructive" },
   DELIVERED_UNPAID: { label: "Terkirim, belum cair", variant: "destructive" },
@@ -138,7 +145,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
         providerCostIdr: 0,
         revenueIdr: 0,
         upstreamRecoveryPaymentIdr: 0,
-        vatPayableIdr: 0,
+        legacyCodFeeVatIdr: 0,
       },
     };
   }
@@ -161,11 +168,11 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
   const actionContext = { attemptId: randomUUID(), range: { presetId: range.presetId, timezone: range.timezone, startDate: range.startDate, lastIncludedDate: range.lastIncludedDate }, ...(data.outletId ? { outletFilter: data.outletId } : {}) };
 
   const summaryMetrics = [
-    { description: "Bukan pendapatan GeraiCUAN.", icon: Landmark, label: "Pokok COD — liabilitas", value: data.summary.codPrincipalLiabilityIdr },
-    { icon: Truck, label: "Biaya provider", value: data.summary.providerCostIdr },
-    { description: "Entri lama. Biaya COD kini dicatat sebagai biaya provider karena dipotong Mengantar.", icon: HandCoins, label: "Pendapatan jasa COD (entri lama)", value: data.summary.revenueIdr },
-    { icon: Receipt, label: "PPN terutang", value: data.summary.vatPayableIdr },
-    { icon: Undo2, label: "Pemulihan non-COD", value: data.summary.upstreamRecoveryPaymentIdr },
+    { accent: "indigo" as const, description: "Bukan pendapatan GeraiCUAN.", icon: Landmark, label: "Pokok COD — liabilitas", value: data.summary.codPrincipalLiabilityIdr },
+    { accent: "amber" as const, icon: Truck, label: "Biaya provider", value: data.summary.providerCostIdr },
+    { accent: "neutral" as const, description: "Entri lama. Biaya COD kini dicatat sebagai biaya provider karena dipotong Mengantar.", icon: HandCoins, label: "Pendapatan jasa COD (entri lama)", value: data.summary.revenueIdr },
+    { accent: "neutral" as const, description: LEGACY_COD_FEE_VAT_NOTE, icon: Receipt, label: LEGACY_COD_FEE_VAT_LABEL, value: data.summary.legacyCodFeeVatIdr },
+    { accent: "emerald" as const, icon: Undo2, label: "Pemulihan non-COD", value: data.summary.upstreamRecoveryPaymentIdr },
   ];
 
   return <PageContainer>
@@ -185,7 +192,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
     <section aria-labelledby="finance-summary-title" className={sectionClass}>
       <div><h2 className={sectionTitleClass} id="finance-summary-title">Ringkasan keputusan</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Nilai dalam periode workspace; pokok COD tetap liabilitas, bukan pendapatan.</p></div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-        {summaryMetrics.map((metric) => <StatCard description={metric.description} icon={metric.icon} key={metric.label} title={metric.label} value={idrFormatter.format(metric.value)} />)}
+        {summaryMetrics.map((metric) => <StatCard accent={metric.accent} description={metric.description} icon={metric.icon} key={metric.label} title={metric.label} value={idrFormatter.format(metric.value)} />)}
       </div>
     </section>
 
@@ -216,7 +223,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
       <div><h2 className={sectionTitleClass} id="ledger-entries-title">Entri ledger</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Catatan transaksi pada {periodLabel}. Koreksi dibuat sebagai catatan baru; catatan lama tetap tersimpan. Tanda positif atau negatif menunjukkan arah pencatatan.</p></div>
       {data.entries.rows.length === 0 ? <div className={emptyClass} role="status"><h3>Tidak ada entri pada {periodLabel}.</h3><p>Ubah periode atau outlet untuk melihat catatan lain.</p></div> : <Table className="min-w-[1120px]" containerClassName={tableRegionClass} containerProps={{ "aria-label": "Tabel entri ledger", role: "region", tabIndex: 0 }}>
         <TableCaption className="sr-only">Entri efektif pada {periodLabel} ({timezoneLabel})</TableCaption><TableHeader><TableRow><TableHead className="sticky left-0 z-20 bg-[color-mix(in_oklch,var(--muted)_40%,var(--background))]">Efektif</TableHead><TableHead>Outlet</TableHead><TableHead>Jenis</TableHead><TableHead>Kelas</TableHead><TableHead className="text-right">Nilai</TableHead><TableHead>Sumber</TableHead><TableHead>Penyesuaian</TableHead></TableRow></TableHeader>
-        <TableBody>{data.entries.rows.map((entry) => <TableRow key={entry.id}><TableCell className="sticky left-0 z-10 bg-inherit font-medium"><StackedDateTime value={entry.effectiveAt} /></TableCell><TableCell>{entry.outletName}</TableCell><TableCell>{entryTypeLabel[entry.entryType]}</TableCell><TableCell>{financialClassLabel[entry.financialClass]}</TableCell><TableCell className="text-right font-medium tabular-nums">{signedIdrFormatter.format(entry.amountIdr)}</TableCell><TableCell>{entry.shipmentId && entry.publicReference ? <Button asChild className="min-h-11" variant="link"><Link href={shipmentDetailHref(entry.publicReference)}>Kiriman {entry.publicReference}</Link></Button> : <span>Rekonsiliasi {entry.sourceEventId.slice(0, 12)}</span>}</TableCell><TableCell>{entry.adjustmentState === "AVAILABLE" ? <ReversalActionPanel action={reverseLedgerEntry} amountLabel={signedIdrFormatter.format(entry.amountIdr)} context={{ ...actionContext, attemptId: randomUUID() }} entryId={entry.id} entryType={entryTypeLabel[entry.entryType]} /> : entry.adjustmentState === "ADJUSTED" ? <Badge variant="outline">Sudah dibalik</Badge> : <span aria-label="Tidak dapat disesuaikan">—</span>}</TableCell></TableRow>)}</TableBody>
+        <TableBody>{data.entries.rows.map((entry) => <TableRow key={entry.id}><TableCell className="sticky left-0 z-10 bg-inherit font-medium"><StackedDateTime value={entry.effectiveAt} /></TableCell><TableCell>{entry.outletName}</TableCell><TableCell>{entryTypeLabel[entry.entryType]}</TableCell><TableCell>{presentedFinancialClass(entry)}</TableCell><TableCell className="text-right font-medium tabular-nums">{signedIdrFormatter.format(entry.amountIdr)}</TableCell><TableCell>{entry.shipmentId && entry.publicReference ? <Button asChild className="min-h-11" variant="link"><Link href={shipmentDetailHref(entry.publicReference)}>Kiriman {entry.publicReference}</Link></Button> : <span>Rekonsiliasi {entry.sourceEventId.slice(0, 12)}</span>}</TableCell><TableCell>{entry.adjustmentState === "AVAILABLE" ? <ReversalActionPanel action={reverseLedgerEntry} amountLabel={signedIdrFormatter.format(entry.amountIdr)} context={{ ...actionContext, attemptId: randomUUID() }} entryId={entry.id} entryType={entryTypeLabel[entry.entryType]} /> : entry.adjustmentState === "ADJUSTED" ? <Badge variant="outline">Sudah dibalik</Badge> : <span aria-label="Tidak dapat disesuaikan">—</span>}</TableCell></TableRow>)}</TableBody>
       </Table>}
       <DataTablePagination hrefForPage={(target) => workspaceHref(range, data.outletId, rawStatus, target)} label="Navigasi halaman ledger" page={page} summary={`${countFormatter.format(data.entries.totalCount)} entri`} totalCount={data.entries.totalCount} totalPages={totalPages} />
     </section>

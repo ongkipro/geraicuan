@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ContactDetailPage from "@/app/app/kontak/[contactId]/page";
 import NewContactPage from "@/app/app/kontak/baru/page";
-import ContactDirectoryPage from "@/app/app/kontak/page";
+import RecipientDirectoryPage from "@/app/app/kontak/penerima/page";
+import SenderDirectoryPage from "@/app/app/kontak/pengirim/page";
 
 const CONTACT_ID = "00000000-0000-4000-8000-000000000651";
 const ADDRESS_ID = "00000000-0000-4000-8000-000000000652";
@@ -84,9 +85,9 @@ vi.mock("@/db/contact-repository", () => ({
           ? archived
           : inRole.filter((contact) => !contact.archivedAt),
       summary: {
-        "CON-ACTIVE": inRole.length - archived.length,
-        "CON-ALL": inRole.length,
-        "CON-ARCHIVED": archived.length,
+        active: inRole.length - archived.length,
+        all: inRole.length,
+        archived: archived.length,
       },
     };
   }),
@@ -129,15 +130,15 @@ function activeAddress(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function renderDirectory(status?: string, peran?: string) {
+async function renderDirectory(status?: string, role: "penerima" | "pengirim" = "pengirim") {
   const params: Record<string, string> = {};
   if (status !== undefined) params.status = status;
-  if (peran !== undefined) params.peran = peran;
-  const element = await ContactDirectoryPage({ searchParams: Promise.resolve(params) });
+  const Page = role === "pengirim" ? SenderDirectoryPage : RecipientDirectoryPage;
+  const element = await Page({ searchParams: Promise.resolve(params) });
   return renderToStaticMarkup(element);
 }
 
-async function renderDetail(searchParams: Record<string, string> = {}) {
+async function renderDetail(searchParams: Record<string, string> = { dari: "pengirim" }) {
   const element = await ContactDetailPage({
     params: Promise.resolve({ contactId: CONTACT_ID }),
     searchParams: Promise.resolve(searchParams),
@@ -162,7 +163,7 @@ describe("contact route render contracts", () => {
     expect(populated).toContain("081234567890");
     expect(populated).not.toContain("0812••••890");
     expect(populated).not.toContain("••••");
-    expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru"/);
+    expect(populated).toMatch(/class="[^"]*min-h-11[^"]*" href="\/app\/kontak\/baru\?peran=pengirim"/);
     // The row: street address, district/city, postal code (all derived from
     // the same stored destination_area_label), and a WhatsApp affordance
     // built from the canonical phone.
@@ -178,7 +179,7 @@ describe("contact route render contracts", () => {
       html.match(/<form[^>]*data-slot="state-summary-panel"[^>]*>[\s\S]*?<\/form>/)?.[0] ?? "";
     for (const [requested, value] of [[undefined, "active"], ["archived", "archived"], ["all", "all"]] as const) {
       const panel = statusPanel(requested === undefined ? populated : await renderDirectory(requested));
-      expect(panel, String(requested)).toMatch(/<ul[^>]*aria-label="Ringkasan status kontak"/);
+      expect(panel, String(requested)).toMatch(/<ul[^>]*aria-label="Status pengirim"/);
       const pressed = panel.match(/<button[^>]*aria-pressed="true"[^>]*>/g) ?? [];
       expect(pressed, String(requested)).toHaveLength(1);
       expect(pressed[0]).toContain(`value="${value}"`);
@@ -193,12 +194,12 @@ describe("contact route render contracts", () => {
 
     const invalid = await renderDirectory("unknown");
     expect(invalid).toContain("Filter status disesuaikan");
-    expect(invalid).toContain("Status tidak dikenali; kontak aktif ditampilkan.");
+    expect(invalid).toContain("Status tidak dikenali; pengirim aktif ditampilkan.");
   });
 
-  it("splits the directory into peran views, recovers from an invalid peran, and states missing address data explicitly", async () => {
+  it("scopes each role menu to its own contacts, counts and links, and states missing address data explicitly (T-188)", async () => {
     mocks.contacts.push(
-      activeContact({ id: "00000000-0000-4000-8000-000000000661", isRecipient: false, isSender: true, name: "T167 Pengirim Saja" }),
+      activeContact({ id: "00000000-0000-4000-8000-000000000661", isRecipient: false, isSender: true, name: "T188 Pengirim Saja" }),
       activeContact({
         address: null,
         addressCount: 0,
@@ -206,7 +207,7 @@ describe("contact route render contracts", () => {
         id: "00000000-0000-4000-8000-000000000662",
         isRecipient: true,
         isSender: false,
-        name: "T167 Penerima Tanpa Alamat",
+        name: "T188 Penerima Tanpa Alamat",
       }),
       activeContact({
         addressCount: 3,
@@ -214,49 +215,133 @@ describe("contact route render contracts", () => {
         id: "00000000-0000-4000-8000-000000000663",
         isRecipient: true,
         isSender: true,
-        name: "T167 Dua Peran Area Belum Dipilih",
+        name: "T188 Dua Peran Area Belum Dipilih",
       }),
     );
 
-    // The peran nav mirrors the status nav's programmatic-selection contract.
-    const peranNav = (html: string) => html.match(/<nav[^>]*aria-label="Peran kontak"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? "";
-    const semua = peranNav(await renderDirectory(undefined, "semua"));
-    expect(semua.match(/<a[^>]*aria-current="true"[^>]*>/g) ?? []).toHaveLength(1);
-    expect(semua).toContain('href="/app/kontak?status=active&amp;peran=semua"');
-
     const pengirim = await renderDirectory(undefined, "pengirim");
-    expect(pengirim).toContain("T167 Pengirim Saja");
-    expect(pengirim).toContain("T167 Dua Peran Area Belum Dipilih");
-    expect(pengirim).not.toContain("T167 Penerima Tanpa Alamat");
-
     const penerima = await renderDirectory(undefined, "penerima");
-    expect(penerima).toContain("T167 Penerima Tanpa Alamat");
-    expect(penerima).toContain("T167 Dua Peran Area Belum Dipilih");
-    expect(penerima).not.toContain("T167 Pengirim Saja");
-    // A dual-role contact appears in both role-specific views.
-    expect(pengirim).toContain("T167 Dua Peran Area Belum Dipilih");
+
+    // Each list holds only its role; a dual-role contact is in both.
+    expect(pengirim).toContain("T188 Pengirim Saja");
+    expect(pengirim).toContain("T188 Dua Peran Area Belum Dipilih");
+    expect(pengirim).not.toContain("T188 Penerima Tanpa Alamat");
+    expect(penerima).toContain("T188 Penerima Tanpa Alamat");
+    expect(penerima).toContain("T188 Dua Peran Area Belum Dipilih");
+    expect(penerima).not.toContain("T188 Pengirim Saja");
+
+    // Title, create button preselecting the role, no role tabs or Peran column.
+    expect(pengirim).toMatch(/<h1[^>]*>Pengirim<\/h1>/);
+    expect(penerima).toMatch(/<h1[^>]*>Penerima<\/h1>/);
+    expect(pengirim).toContain('href="/app/kontak/baru?peran=pengirim"');
+    expect(penerima).toContain('href="/app/kontak/baru?peran=penerima"');
+    for (const html of [pengirim, penerima]) {
+      expect(html).not.toContain('aria-label="Peran kontak"');
+      expect(html).not.toContain(">Peran</th>");
+    }
+
+    // Counts are the role's own, under the role's own metric IDs.
+    const count = (html: string, metric: string) =>
+      new RegExp(`data-metric-id="${metric}"[\\s\\S]*?>(\\d+)<`).exec(html)?.[1];
+    expect(count(pengirim, "CON-SENDER-ACTIVE")).toBe("2");
+    expect(count(penerima, "CON-RECIPIENT-ACTIVE")).toBe("2");
+    expect(pengirim).not.toContain("CON-RECIPIENT-");
+    expect(penerima).not.toContain("CON-SENDER-");
+    expect(pengirim).toContain('action="/app/kontak/pengirim"');
+    expect(penerima).toContain('action="/app/kontak/penerima"');
+
+    // The other role is a marker on dual-role rows only, never the page's own
+    // role; one per row in the table (the phone card list repeats it below md).
+    const table = (html: string) => html.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
+    expect(table(pengirim).match(/data-also-role="penerima"/g) ?? []).toHaveLength(1);
+    expect(table(penerima).match(/data-also-role="pengirim"/g) ?? []).toHaveLength(1);
+    expect(pengirim).not.toContain('data-also-role="pengirim"');
+    expect(penerima).not.toContain('data-also-role="penerima"');
+    expect(table(penerima)).toMatch(/data-also-role="pengirim"[^>]*>[\s\S]*?Juga pengirim<span class="sr-only">: kontak ini juga tersimpan sebagai pengirim<\/span>/);
+
+    // Compact status filter: Aktif, Diarsipkan, Semua with inline counts;
+    // the Status column only when viewing Semua; the listed count has its ID.
+    expect([...pengirim.matchAll(/<button[^>]*aria-pressed[^>]*>[\s\S]*?<\/button>/g)].map((match) => match[0].replace(/<span class="sr-only">[\s\S]*?<\/span>/, "").replace(/<[^>]+>/g, "").trim()))
+      .toEqual(["Aktif2", "Diarsipkan0", "Semua2"]);
+    expect(pengirim).toMatch(/data-metric-id="CON-SENDER-LISTED"[^>]*>2 pengirim</);
+    expect(penerima).toMatch(/data-metric-id="CON-RECIPIENT-LISTED"[^>]*>2 penerima</);
+    expect(table(pengirim)).not.toContain(">Status</th>");
+    expect(table(await renderDirectory("all", "pengirim"))).toContain(">Status</th>");
+
+    // Detail links carry the list they came from.
+    expect(pengirim).toContain('href="/app/kontak/00000000-0000-4000-8000-000000000663?dari=pengirim"');
+    expect(penerima).toContain('href="/app/kontak/00000000-0000-4000-8000-000000000663?dari=penerima"');
 
     // Zero addresses and an address predating area selection are both stated
-    // explicitly, never left as a blank cell; "+N alamat" is addresses beyond
-    // the one shown, linking to the contact detail's address list.
-    const all = await renderDirectory(undefined, "semua");
-    expect(all).toContain("Belum ada alamat");
-    expect(all).toContain("Area belum dipilih");
-    expect(all).toMatch(/href="\/app\/kontak\/00000000-0000-4000-8000-000000000663#alamat"[^>]*>\s*\+2 alamat/);
+    // explicitly; "+N alamat" links to the detail's address list.
+    expect(penerima).toContain("Belum ada alamat");
+    expect(penerima).toContain("Area belum dipilih");
+    expect(penerima).toMatch(/href="\/app\/kontak\/00000000-0000-4000-8000-000000000663\?dari=penerima#alamat"[^>]*>\s*\+2 alamat/);
+  });
 
-    const invalidPeran = await renderDirectory(undefined, "unknown");
-    expect(invalidPeran).toContain("Filter peran disesuaikan");
-    expect(invalidPeran).toContain("Peran tidak dikenali; semua kontak ditampilkan.");
+  it("gives each role list its own empty state and create action (T-188)", async () => {
+    const empty = await renderDirectory(undefined, "penerima");
+    expect(empty).toContain("Belum ada penerima");
+    expect(empty).toMatch(/href="\/app\/kontak\/baru\?peran=penerima"[^>]*>[\s\S]*?Penerima baru/);
+    expect(empty).not.toContain("Belum ada kontak");
+  });
+
+  it("preselects the role the create form was opened for, still offering both (T-188)", async () => {
+    const checked = (html: string, name: string) =>
+      new RegExp(`<input(?=[^>]*name="${name}")(?=[^>]*checked="")[^>]*>`).test(html);
+    const recipient = renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({ peran: "penerima" }) }));
+    expect(checked(recipient, "roleRecipient")).toBe(true);
+    expect(checked(recipient, "roleSender")).toBe(false);
+    expect(recipient).toContain('name="roleSender"');
+    expect(recipient).toMatch(/<input[^>]*name="peran"[^>]*value="penerima"|<input[^>]*value="penerima"[^>]*name="peran"/);
+
+    for (const html of [
+      renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({}) })),
+      renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({ peran: "semua" }) })),
+    ]) {
+      expect(checked(html, "roleSender")).toBe(true);
+      expect(checked(html, "roleRecipient")).toBe(false);
+    }
+  });
+
+  it("canonicalises a detail URL without dari to the contact's first role and follows dari for the back link (T-188)", async () => {
+    mocks.currentContact = activeContact({ isSender: false });
+    mocks.addresses.push(activeAddress());
+
+    await expect(renderDetail({ alamat: ADDRESS_ID })).rejects.toThrow(
+      `REDIRECT:/app/kontak/${CONTACT_ID}?alamat=${ADDRESS_ID}&dari=penerima`,
+    );
+    await expect(renderDetail({ dari: "semua" })).rejects.toThrow(`REDIRECT:/app/kontak/${CONTACT_ID}?dari=penerima`);
+
+    const fromRecipients = await renderDetail({ dari: "penerima" });
+    expect(fromRecipients).toMatch(/href="\/app\/kontak\/penerima"[^>]*>[\s\S]{0,400}?Kembali ke daftar penerima/);
+    expect(fromRecipients).toContain(`href="/app/kontak/${CONTACT_ID}?dari=penerima&amp;alamat=${ADDRESS_ID}#alamat-edit"`);
+
+    mocks.currentContact = activeContact();
+    const fromSenders = await renderDetail({ dari: "pengirim" });
+    expect(fromSenders).toMatch(/href="\/app\/kontak\/pengirim"[^>]*>[\s\S]{0,400}?Kembali ke daftar pengirim/);
+    // Header: both role chips (the originating one filled), status, actions;
+    // the contact and its roles are separate cards and forms.
+    const header = fromSenders.match(/<header[\s\S]*?<\/header>/)?.[0] ?? "";
+    expect(header).toMatch(/data-variant="secondary"[^>]*>Pengirim</);
+    expect(header).toMatch(/data-variant="outline"[^>]*>Penerima</);
+    expect(header).toContain(">Aktif<");
+    expect(header).toContain('href="#form-kontak"');
+    expect(header).toContain(`href="/app/kontak/${CONTACT_ID}?dari=pengirim&amp;arsipkan=1#arsip-kontak"`);
+    expect(fromSenders).toContain('id="form-kontak"');
+    expect(fromSenders).toContain('id="form-peran"');
+    expect(fromSenders).toContain("Muncul di menu Penerima dan bisa dipilih sebagai tujuan kiriman.");
+    expect(fromSenders).toContain('href="https://wa.me/6281234567890"');
   });
 
   it("renders contact creation with truthful outlet readiness", async () => {
-    const unavailable = renderToStaticMarkup(await NewContactPage());
+    const unavailable = renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({}) }));
     expect(unavailable).toContain("Buat kontak");
     expect(unavailable).toContain("Outlet belum siap");
     expect(unavailable).toContain("Simpan kontak");
 
     mocks.outlets.push({ id: "00000000-0000-4000-8000-000000000653", name: "Outlet Pusat" });
-    const ready = renderToStaticMarkup(await NewContactPage());
+    const ready = renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({}) }));
     expect(ready).toContain("Sumber pencarian:");
     expect(ready).toContain("Outlet Pusat");
     expect(ready).not.toContain("Outlet belum siap");
@@ -267,18 +352,18 @@ describe("contact route render contracts", () => {
     mocks.addresses.push(activeAddress());
     mocks.outlets.push({ id: "00000000-0000-4000-8000-000000000653", name: "Outlet Pusat" });
 
-    const selected = await renderDetail({ alamat: ADDRESS_ID });
+    const selected = await renderDetail({ alamat: ADDRESS_ID, dari: "pengirim" });
     expect(selected).toContain('id="alamat-edit"');
     expect(selected).toContain("Edit Rumah");
     expect(selected).toContain("Data pada kiriman sebelumnya tetap tersimpan.");
 
-    const confirmation = await renderDetail({ arsipkan: "1" });
+    const confirmation = await renderDetail({ arsipkan: "1", dari: "pengirim" });
     expect(confirmation).toContain('id="arsip-kontak"');
     expect(confirmation).toContain("Arsipkan Penerima Aman?");
     expect(confirmation).toContain("Ya, arsipkan kontak");
 
     mocks.principal.role = "OPERATOR";
-    const operator = await renderDetail({ arsipkan: "1" });
+    const operator = await renderDetail({ arsipkan: "1", dari: "pengirim" });
     expect(operator).toContain("Arsip kontak dikelola oleh Tenant Admin.");
     expect(operator).not.toContain("Ya, arsipkan kontak");
     expect(operator).not.toContain("?arsipkan=1");
@@ -288,8 +373,13 @@ describe("contact route render contracts", () => {
     mocks.currentContact = activeContact({ archivedAt: new Date("2026-09-02T00:00:00.000Z") });
     mocks.addresses.push(activeAddress());
 
-    const html = await renderDetail({ diarsipkan: "1" });
-    expect(html).toContain("Data kontak diarsipkan");
+    const html = await renderDetail({ dari: "pengirim", diarsipkan: "1" });
+    expect(html).toContain("Data kontak diarsipkan; hanya dapat dibaca.");
+    expect(html.match(/<header[\s\S]*?<\/header>/)?.[0]).toMatch(/data-variant="destructive"[^>]*>Diarsipkan</);
+    expect(html).not.toContain('href="#form-kontak"');
+    expect(html).not.toContain("arsipkan=1");
+    const archivedWithoutNotice = await renderDetail({ dari: "pengirim" });
+    expect(archivedWithoutNotice).toContain("Kontak ini diarsipkan");
     expect(html).toContain("Kontak diarsipkan");
     expect(html).toContain("Kontak ini sudah diarsipkan.");
     expect(html).not.toContain('id="form-kontak"');

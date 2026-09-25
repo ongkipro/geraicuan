@@ -8,6 +8,7 @@ import {
   loadShipmentEstimate,
   type ShipmentEstimateActionState,
 } from "@/app/app/estimate-actions";
+import { CodOngkirCharge } from "@/app/app/cod-ongkir-charge";
 import {
   deriveDraftProviderMoneyLines,
   DraftCodBreakdown,
@@ -27,6 +28,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { shippingMengantarDeductsIdr } from "@/lib/mengantar-cod-fee";
+import type { PaymentMethod } from "@/lib/payment-method";
 
 type EstimateService = {
   codBreakdown: DraftCodBreakdownValue | null;
@@ -49,6 +52,8 @@ type DraftEstimatePanelProps = {
   auditState?: "error" | null;
   draftId: string;
   isCod: boolean;
+  /** T-186: defaults to what `isCod` implies for callers that predate COD Ongkir. */
+  paymentMethod?: PaymentMethod;
   snapshot: EstimateSnapshot | null;
 };
 
@@ -80,7 +85,7 @@ function EstimateButton({ hasSnapshot }: { hasSnapshot: boolean }) {
   );
 }
 
-export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot }: DraftEstimatePanelProps) {
+export function DraftEstimatePanel({ auditState = null, draftId, isCod, paymentMethod = isCod ? "COD" : "NON_COD", snapshot }: DraftEstimatePanelProps) {
   const [auditRetryComplete, setAuditRetryComplete] = useState(false);
   const [state, action] = useActionState(
     loadShipmentEstimate,
@@ -102,7 +107,10 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
     },
     service.codBreakdown?.providerCodAmountIdr ?? null,
   );
-  const codBreakdowns = isCod
+  const codOngkirServices = paymentMethod === "COD_ONGKIR"
+    ? services.filter((service) => service.codEligible)
+    : [];
+  const codBreakdowns = paymentMethod === "COD"
     ? services.flatMap((service) =>
         service.codBreakdown
           ? [{
@@ -251,6 +259,42 @@ export function DraftEstimatePanel({ auditState = null, draftId, isCod, snapshot
                     key={providerService}
                     money={money}
                     providerService={providerService}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {codOngkirServices.length > 0 ? (
+            <section
+              aria-labelledby="draft-cod-ongkir-title"
+              className="@container grid gap-4 border-t pt-5"
+            >
+              <header>
+                <h3 className="font-medium" id="draft-cod-ongkir-title">
+                  Ongkir COD yang ditagih kurir
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Barang sudah dibayar, jadi kurir hanya menagih ongkir. Coba nilai ongkir
+                  per layanan di sini; nilai final dipilih bersama layanannya saat konfirmasi
+                  penerbitan AWB.
+                </p>
+              </header>
+              {/* The panel sits in the 22rem form rail. A viewport breakpoint
+                  (`md:grid-cols-2`) put two service cards side by side in 352px,
+                  about 160px each, so "Ongkir dipotong Mengantar" ran into its
+                  own amount and the refusal message was cut off. The columns
+                  follow the panel's own width instead. */}
+              <div className="grid gap-3 @xl:grid-cols-2">
+                {codOngkirServices.map((service, index) => (
+                  <CodOngkirCharge
+                    idPrefix={`draft-cod-ongkir-${index}`}
+                    key={service.providerService}
+                    providerService={service.providerService}
+                    shippingDeductedIdr={shippingMengantarDeductsIdr({
+                      normalPriceIdr: service.normalPriceIdr ?? null,
+                      shippingAmountIdr: service.shippingAmountIdr,
+                      specialPriceIdr: service.specialPriceIdr ?? null,
+                    })}
                   />
                 ))}
               </div>

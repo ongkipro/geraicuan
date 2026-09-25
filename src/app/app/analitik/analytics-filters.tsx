@@ -29,7 +29,7 @@ export function AnalyticsFilters({ activeCount, comparisonLabel, options, rangeL
           {activeCount > 0 ? <Button asChild className="min-h-11 md:min-h-9" variant="ghost"><Link href="/app/analitik#analytics-page-heading">Reset semua</Link></Button> : null}
         </div>
       </form>
-      <p className="max-w-2xl text-xs leading-5 text-muted-foreground" id={ANALYTICS_FILTER_HINT_ID}>Rentang tanggal dipilih di panel Periode; memilih tanggal sendiri otomatis memakai Rentang khusus. Menerapkan filter selalu kembali ke halaman pertama.</p>
+      <p className="sr-only" id={ANALYTICS_FILTER_HINT_ID}>Rentang tanggal dipilih di panel Periode; memilih tanggal sendiri otomatis memakai Rentang khusus. Menerapkan filter selalu kembali ke halaman pertama.</p>
     </div>
   );
 }

@@ -8,7 +8,11 @@ import {
   calculateCodAmounts,
   COD_FORMULA_VERSION,
 } from "@/db/cod-totals-repository";
-import { mengantarCodFeeIdr } from "@/lib/mengantar-cod-fee";
+import {
+  codChargeBreakdown,
+  mengantarCodFeeIdr,
+  vatIncludedInMengantarCodFeeIdr,
+} from "@/lib/mengantar-cod-fee";
 
 /**
  * T-175: the COD amount never under-collects Mengantar's own fee.
@@ -166,6 +170,58 @@ describe("T-175 COD amount formula (version 2)", () => {
     expect(evidence.holds.codFeeIsExactly333BasisPointsOfCodAmount).toBe(evidence.codOrdersInspected);
     expect(evidence.holds.storedEstimatedPriceIsPricePlusCodFee).toBe(evidence.codOrdersInspected);
     expect(mengantarCodFeeIdr(10_000)).toBe(333);
+  });
+});
+
+/**
+ * T-193: one "Biaya COD". Every surface shows Mengantar's fee on the COD amount,
+ * the VAT only as the part already inside it, and the lines add up to the COD
+ * amount with the round-up shown on its own.
+ */
+describe("T-193 one COD fee", () => {
+  it("adds up every version 2 amount as goods + shipping + Mengantar's fee + a round-up of 0 or 1", () => {
+    const roundings = new Set<number>();
+    for (const { goods, shipping } of cases()) {
+      const amounts = calculateCodAmounts(goods, shipping);
+      const charge = codChargeBreakdown(amounts);
+      if (
+        charge === null
+        || charge.codFeeIdr !== mengantarCodFeeIdr(amounts.providerCodAmountIdr)
+        || charge.goodsValueIdr + charge.shippingAmountIdr + charge.codFeeIdr + charge.roundingIdr !== amounts.providerCodAmountIdr
+        || charge.roundingIdr < 0 || charge.roundingIdr > 1
+      ) {
+        throw new Error(`breakdown does not add up: ${JSON.stringify({ goods, shipping, amounts, charge })}`);
+      }
+      roundings.add(charge.roundingIdr);
+    }
+    expect([...roundings].sort()).toEqual([0, 1]);
+    expect(codChargeBreakdown({ goodsValueIdr: 100_000, shippingAmountIdr: 10_000, providerCodAmountIdr: 113_790 })).toEqual({
+      goodsValueIdr: 100_000,
+      shippingAmountIdr: 10_000,
+      codFeeIdr: 3_789,
+      codFeeVatIncludedIdr: 375,
+      roundingIdr: 1,
+      providerCodAmountIdr: 113_790,
+    });
+  });
+
+  it("has no honest breakdown for a version 1 amount, which is below goods + shipping + Mengantar's fee", () => {
+    // 100 000 + 10 000 + round(113 663 × 0.0333) = 113 785 > 113 663.
+    expect(codChargeBreakdown({ goodsValueIdr: 100_000, shippingAmountIdr: 10_000, providerCodAmountIdr: 113_663 })).toBeNull();
+  });
+
+  it("reports the VAT inside the fee as fee × 11 / 111, half-up, never more than the fee", () => {
+    for (let fee = 0; fee <= 200_000; fee += 1) {
+      const vat = vatIncludedInMengantarCodFeeIdr(fee);
+      const doubled = b(fee) * b(22);
+      // |vat − fee·11/111| ≤ 1/2, exactly: |222·vat − 22·fee| ≤ 111 — and never a tie.
+      const distance = b(222) * b(vat) - doubled;
+      if (distance > b(111) || distance < b(-111) || distance === b(111) || vat > fee) {
+        throw new Error(`VAT share off at fee ${fee}: ${vat}`);
+      }
+    }
+    expect(vatIncludedInMengantarCodFeeIdr(3_789)).toBe(375);
+    expect(vatIncludedInMengantarCodFeeIdr(333)).toBe(33);
   });
 });
 

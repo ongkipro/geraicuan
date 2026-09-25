@@ -16,6 +16,7 @@ import {
 } from "@/db/provider-settlement-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
+import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
 export const RTS_STATUSES = [
@@ -46,8 +47,11 @@ export type RtsShipmentRow = {
   destinationAreaLabel: string;
   packageContent: string;
   packageWeightGrams: number;
-  isCod: boolean;
   declaredValueIdr: number;
+  /** T-190: the draft's method, so a returned COD Ongkir parcel is never read as COD. */
+  paymentMethod: PaymentMethod;
+  /** COD total or COD Ongkir charge of the order; `null` without one. */
+  providerCodAmountIdr: number | null;
   recipientName: string;
   recipientPhone: string;
   providerService: string | null;
@@ -182,10 +186,12 @@ export async function loadRtsShipmentsPage(
       packageContent: shipmentDrafts.packageContent,
       packageWeightGrams: shipmentDrafts.packageWeightGrams,
       isCod: shipmentDrafts.isCod,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
       declaredValueIdr: shipmentDrafts.declaredValueIdr,
       recipientName: shipmentParties.name,
       recipientPhone: shipmentParties.phone,
       providerService: providerOrderSnapshots.providerService,
+      providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       awb: providerOrderSnapshots.cnoteNo,
       // One subquery, so the note and its timestamp can only ever come from the
       // same event row. Two independent subqueries could disagree on a
@@ -237,8 +243,9 @@ export async function loadRtsShipmentsPage(
     .limit(input.pageSize)
     .offset(offset);
 
-  const rows = selectedRows.map(({ latestEvent, recipientPhone, ...row }) => ({
+  const rows = selectedRows.map(({ codShippingOnly, isCod, latestEvent, recipientPhone, ...row }) => ({
     ...row,
+    paymentMethod: paymentMethodOf(isCod, codShippingOnly),
     recipientPhone,
     latestEventNotes: latestEvent?.notes ?? null,
     // The subquery returns JSON, so the timestamp arrives as a raw string

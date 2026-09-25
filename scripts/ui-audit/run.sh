@@ -37,7 +37,8 @@ echo "$out"
 # FINDINGS" for a sweep that had found none.
 route_pairs=$(echo "$out" | sed -n 's/^route sweep: \([0-9]*\) .*/\1/p')
 state_pairs=$(echo "$out" | sed -n 's/^state sweep: \([0-9]*\) .*/\1/p')
-[ "$route_pairs" = "66" ] || { echo "ROUTE COVERAGE CHANGED: $route_pairs pairs, expected 66"; exit 1; }
+# T-188 split /app/kontak into /app/kontak/pengirim and /app/kontak/penerima: 23 routes x 3 viewports.
+[ "$route_pairs" = "69" ] || { echo "ROUTE COVERAGE CHANGED: $route_pairs pairs, expected 69"; exit 1; }
 [ "$state_pairs" -ge 300 ] 2>/dev/null || { echo "STATE COVERAGE SHRANK: $state_pairs pairs"; exit 1; }
 echo "$out" | grep -q "^route sweep: .*; 0 with findings" || { echo "ROUTE FINDINGS"; exit 1; }
 echo "$out" | grep -q "^state sweep: .*; 0 with findings" || { echo "STATE FINDINGS"; exit 1; }

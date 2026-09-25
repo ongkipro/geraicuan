@@ -44,6 +44,56 @@ describe("bulk shipment CSV preview", () => {
     expect(JSON.stringify(result.errors)).not.toContain("invalid-phone");
   });
 
+  it("reports each character-class breach as a per-row error and never strips the cell (T-196)", async () => {
+    const digitName = [...validRow];
+    digitName[3] = "Penerima 2";
+    const letterWeight = [...validRow];
+    letterWeight[8] = "500g";
+    const letterPrice = [...validRow];
+    letterPrice[13] = "Rp150000";
+    const letterPhone = [...validRow];
+    letterPhone[1] = "08121234567O";
+    const emojiAddress = [...validRow];
+    emojiAddress[5] = "Jl. Medan Merdeka 🏠";
+    const storeSender = [...validRow];
+    storeSender[0] = "Toko 88";
+
+    const result = await previewBulkShipmentCsv(
+      upload(csv([validRow, digitName, letterWeight, letterPrice, letterPhone, emojiAddress, storeSender])),
+      outletId,
+    );
+
+    expect("code" in result).toBe(false);
+    if ("code" in result) return;
+    // A store as sender (row 8) keeps its digits.
+    expect(result.validRows.map((row) => row.row)).toEqual([2, 8]);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      { field: "nama_penerima", message: "Nama penerima hanya boleh berisi huruf, spasi, titik, koma, apostrof, dan tanda hubung.", row: 3 },
+      { field: "berat_gram", message: "Berat paket hanya boleh berisi angka.", row: 4 },
+      { field: "nilai_barang", message: "Nilai barang hanya boleh berisi angka.", row: 5 },
+      { field: "telepon_pengirim", message: "Nomor telepon pengirim hanya boleh berisi angka, boleh diawali +.", row: 6 },
+      { field: "alamat_penerima", message: "Alamat penerima hanya boleh berisi huruf, angka, spasi, dan tanda baca, tanpa emoji.", row: 7 },
+    ]));
+    expect(JSON.stringify(result.errors)).not.toContain("Penerima 2");
+  });
+
+  it("accepts a CSV row holding non-breaking spaces and everyday address punctuation (T-199)", async () => {
+    const row = [...validRow];
+    row[3] = "Siti\u00A0Aminah";
+    row[5] = "Jl. Ma\u2019ruf Blok C&D; km 5+200";
+    const result = await previewBulkShipmentCsv(upload(csv([row])), outletId);
+
+    expect("code" in result).toBe(false);
+    if ("code" in result) return;
+    expect(result.errors).toEqual([]);
+    expect(result.validRows).toEqual([
+      expect.objectContaining({
+        input: expect.objectContaining({ recipientAddress: "Jl. Ma\u2019ruf Blok C&D; km 5+200", recipientName: "Siti Aminah" }),
+        row: 2,
+      }),
+    ]);
+  });
+
   it("rejects malformed files before any row preview", async () => {
     const wrongHeader = await previewBulkShipmentCsv(upload(`wrong\n${validRow.join(",")}`), outletId);
     const malformedQuote = await previewBulkShipmentCsv(

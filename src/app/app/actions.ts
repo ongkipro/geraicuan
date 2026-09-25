@@ -361,22 +361,22 @@ async function searchShipmentContactsForRole(
       const matchingContacts = (await listContacts(tx, context, query))
         .filter((contact) => role === "SENDER" ? contact.isSender : contact.isRecipient)
         .slice(0, CONTACT_SEARCH_LIMIT);
-      const addressResults = await Promise.all(
-        matchingContacts.map(async (contact) => {
-          const addresses = await listContactAddresses(tx, context, contact.id);
-          return addresses
-            .filter((address) => address.archivedAt === null)
-            .map((address) => ({
-              addressId: address.id,
-              addressLabel: address.label,
-              contactId: contact.id,
-              destinationAreaLabel: address.destinationAreaLabel,
-              name: contact.name,
-              phone: contact.phone,
-            }));
-        }),
-      );
-      return addressResults.flat();
+      // In turn, not Promise.all: every read shares the transaction's one connection (T-197).
+      const addressResults = [];
+      for (const contact of matchingContacts) {
+        const addresses = await listContactAddresses(tx, context, contact.id);
+        addressResults.push(...addresses
+          .filter((address) => address.archivedAt === null)
+          .map((address) => ({
+            addressId: address.id,
+            addressLabel: address.label,
+            contactId: contact.id,
+            destinationAreaLabel: address.destinationAreaLabel,
+            name: contact.name,
+            phone: contact.phone,
+          })));
+      }
+      return addressResults;
     },
   );
 

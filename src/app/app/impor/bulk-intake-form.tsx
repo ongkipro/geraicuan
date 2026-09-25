@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fieldWidth } from "@/components/cms/cms-layouts";
+import { PaymentStack } from "@/components/cms/shipment-table-cells";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -80,7 +81,7 @@ function PreviewConfirmation({ preview }: { preview: ConfirmablePreview }) {
           const checked = selectedRows.has(row.row);
           return <TableRow data-state={checked ? "selected" : undefined} key={row.row}>
             <TableCell className="sticky left-0 z-10 bg-inherit"><div className="flex min-h-11 items-center justify-center"><Checkbox className="after:-inset-3.5" aria-label={`Pilih baris ${row.row}`} checked={checked} name="rowToken" onCheckedChange={(value) => toggleRow(row.row, value === true)} value={row.confirmationToken} /></div></TableCell>
-            <TableCell className="sticky left-14 z-10 bg-card font-medium">{row.row}</TableCell><TableCell>{row.recipientName}</TableCell><TableCell className="max-w-56 whitespace-normal">{row.destinationQuery}</TableCell><TableCell className="max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell><TableCell className="text-right tabular-nums">{row.packageWeightGrams} g</TableCell><TableCell>{row.isCod ? "COD" : "Non-COD"}</TableCell><TableCell className="text-right tabular-nums">Rp {formatRupiah(row.declaredValueIdr)}</TableCell>
+            <TableCell className="sticky left-14 z-10 bg-card font-medium">{row.row}</TableCell><TableCell>{row.recipientName}</TableCell><TableCell className="max-w-56 whitespace-normal">{row.destinationQuery}</TableCell><TableCell className="max-w-72 whitespace-normal">{row.destinationAreaLabel}</TableCell><TableCell className="text-right tabular-nums">{row.packageWeightGrams} g</TableCell><TableCell><PaymentStack facts={{ declaredValueIdr: null, paymentMethod: row.paymentMethod, providerCodAmountIdr: null }} /></TableCell><TableCell className="text-right tabular-nums">Rp {formatRupiah(row.declaredValueIdr)}</TableCell>
           </TableRow>;
         })}</TableBody>
       </Table>

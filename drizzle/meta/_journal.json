@@ -351,6 +351,34 @@
       "when": 1789548551991,
       "tag": "0049_mengantar_settlement_money",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789548552991,
+      "tag": "0050_cod_ongkir_payment_method",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1789548553991,
+      "tag": "0051_self_service_sign_up",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1789548554991,
+      "tag": "0052_sign_up_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1789548555991,
+      "tag": "0053_rejected_registration_email_release",
+      "breakpoints": true
     }
   ]
 }

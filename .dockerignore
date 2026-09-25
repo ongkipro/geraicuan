@@ -1,0 +1,27 @@
+# T-194: build context for the root Dockerfile. Secrets never enter it.
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+
+.git
+.github
+.delivery
+.next
+node_modules
+coverage
+*.tsbuildinfo
+npm-debug.log*
+.pnpm-debug.log*
+
+# Not part of the app or ops image. The landing site builds from apps/landing
+# with its own Dockerfile and context.
+apps
+docs
+tests
+scripts/ui-audit
+vitest.integration.config.mts
+compose.yaml
+Dockerfile
+.dockerignore

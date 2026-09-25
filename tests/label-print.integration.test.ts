@@ -65,11 +65,18 @@ async function seedProviderShipment(input: {
   status?: SeedStatus;
   isCod?: boolean;
   awb?: string;
+  /** T-193: a pre-T-175 additive (version 1) COD row instead of version 2. */
+  legacyCodFormula?: boolean;
 }) {
   const tenantId = input.tenantId ?? tenantA;
   const outletId = input.outletId ?? outletA;
   const status = input.status ?? "ISSUED";
   const isCod = input.isCod ?? false;
+  // Version 2 for goods 100 000 + shipping 8 000: COD 111 721 (fee 3 352 + VAT 369);
+  // version 1: COD 111 596 (fee 3 240 + VAT 356).
+  const cod = input.legacyCodFormula
+    ? { version: 1, fee: 3240, vat: 356, amount: 111596 }
+    : { version: 2, fee: 3352, vat: 369, amount: 111721 };
   const ids = fixtureIds(input.sequence);
   const awb = status === "ISSUED"
     ? (input.awb ?? `JNE-LABEL-${String(input.sequence).padStart(6, "0")}`)
@@ -126,13 +133,17 @@ async function seedProviderShipment(input: {
       `INSERT INTO shipment_cod_totals (
         tenant_id, shipment_id, snapshot_id, estimate_service_id, currency,
         goods_value_idr, shipping_amount_idr, service_fee_idr, vat_amount_idr,
-        provider_cod_amount_idr
-      ) VALUES ($1, $2, $3, $4, 'IDR', 100000, 8000, 3240, 356, 111596)`,
+        provider_cod_amount_idr, cod_formula_version
+      ) VALUES ($1, $2, $3, $4, 'IDR', 100000, 8000, $5, $6, $7, $8)`,
       [
         tenantId,
         ids.shipmentId,
         ids.estimateSnapshotId,
         ids.estimateServiceId,
+        cod.fee,
+        cod.vat,
+        cod.amount,
+        cod.version,
       ],
     );
   }
@@ -166,7 +177,7 @@ async function seedProviderShipment(input: {
       ids.estimateSnapshotId,
       ids.estimateServiceId,
       isCod,
-      isCod ? 111596 : null,
+      isCod ? cod.amount : null,
       status,
       `provider-order-${input.sequence}`,
       status === "ISSUED",
@@ -238,12 +249,16 @@ describe("tenant-scoped AWB labels", () => {
       isCod: true,
       shippingAmountIdr: 8000,
       insuranceAmountIdr: null,
-      providerCodAmountIdr: 111596,
+      providerCodAmountIdr: 111721,
+      // T-193: one Biaya COD — Mengantar's fee round(111 721 × 333 / 10 000),
+      // VAT inside — and the round-up, adding up to the COD amount.
       codBreakdown: {
         goodsValueIdr: 100000,
         shippingAmountIdr: 8000,
-        serviceFeeIdr: 3240,
-        vatAmountIdr: 356,
+        codFeeIdr: 3720,
+        codFeeVatIncludedIdr: 369,
+        roundingIdr: 1,
+        providerCodAmountIdr: 111721,
       },
       package: {
         content: "Produk sintetis untuk pengujian label",
@@ -268,6 +283,16 @@ describe("tenant-scoped AWB labels", () => {
       printCount: 0,
       lastPrintedAt: null,
     });
+    const breakdown = label.codBreakdown!;
+    expect(breakdown.goodsValueIdr + breakdown.shippingAmountIdr + breakdown.codFeeIdr + breakdown.roundingIdr)
+      .toBe(label.providerCodAmountIdr);
+  });
+
+  it("prints a version 1 COD amount without a breakdown that cannot add up with Mengantar's fee (T-193)", async () => {
+    // 100 000 + 8 000 + round(111 596 × 0.0333) = 111 716 > 111 596: no honest lines exist.
+    const fixture = await seedProviderShipment({ sequence: 2, isCod: true, legacyCodFormula: true });
+    const label = await inTenantA((tx, context) => loadPrintableLabel(tx, context, fixture.shipmentId));
+    expect(label).toMatchObject({ isCod: true, paymentMethod: "COD", providerCodAmountIdr: 111596, codBreakdown: null });
   });
 
   it("appends ordered print and reprint history while denying update and delete", async () => {

@@ -1,4 +1,4 @@
-// T-175 draft-time COD preview: the grossed-up COD amount (formula version 2),
+// T-175 / T-193 draft-time COD preview: the grossed-up COD amount (formula version 2),
 // Mengantar's 3.33% fee as its own deduction, and a seller payout that does not
 // fall below the goods value when shipping is not discounted.
 // Read-only: the `shipment-draft-saved` scenario renders a synthetic saved draft
@@ -18,14 +18,16 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function waitFor(expression){for(let i=0;i<100;i++){if(await s.evaluate(expression).catch(()=>false))return;await pause(150)}throw Error(`Did not settle: ${expression}`)}
 // Expected from the formula, computed here in integers independently of the
 // application: COD = ceil(114 000 × 10000 / 9667) = 117 927 (9667 × 117 927 =
-// 1 140 000 309 ≥ 1 140 000 000 > 9667 × 117 926); markup 3 927 → fee 3 538,
-// VAT 389; Mengantar keeps round(117 927 × 0.0333) = 3 927; payout 100 000.
+// 1 140 000 309 ≥ 1 140 000 000 > 9667 × 117 926); Mengantar keeps
+// round(117 927 × 0.0333) = 3 927, VAT inside it round(3 927 × 11 / 111) = 389,
+// no round-up left (T-193: one Biaya COD); payout 100 000.
 const base=100000+14000;
 const cod=Math.floor((base*10000+9666)/9667);
-const fee=Math.floor(((cod-base)*100+55)/111);
 const mengantarFee=Math.floor((cod*333+5000)/10000);
+const vatInside=Math.floor((mengantarFee*22+111)/222);
+const rounding=cod-base-mengantarFee;
 const payout=cod-14000-mengantarFee;
-assert.equal(cod,117927);assert.equal(payout,100000);
+assert.equal(cod,117927);assert.equal(payout,100000);assert.equal(vatInside,389);assert.equal(rounding,0);
 const idr=n=>new Intl.NumberFormat('id-ID',{currency:'IDR',maximumFractionDigits:0,style:'currency'}).format(n).replace(/\s/g,' ');
 const results=[];
 try{
@@ -45,8 +47,8 @@ try{
   const rows=JSON.parse(await s.evaluate(`JSON.stringify([...document.querySelector('section[aria-labelledby=draft-cod-explanation-title] article dl').children].map(r=>[r.querySelector('dt').innerText.trim(),r.querySelector('dd').innerText.trim().replace(/\\s/g,' '),r.dataset.metricId??null]))`));
   const row=label=>rows.find(([dt])=>dt===label)?.[1];
   assert.equal(row('Total ditagih ke pelanggan'),idr(cod),`COD total at ${width}`);
-  assert.equal(row('Biaya COD'),idr(fee),`fee at ${width}`);
-  assert.equal(row('PPN biaya COD'),idr(cod-base-fee),`VAT at ${width}`);
+  assert.equal(row(`Biaya COD Mengantar 3,33% (termasuk PPN ${idr(vatInside)})`),idr(mengantarFee),`one COD fee, VAT inside, at ${width}`);
+  assert(!rows.some(([dt])=>/^PPN biaya COD|^Biaya COD$|^Pembulatan/.test(dt)),`no separate VAT, stored fee or zero round-up row at ${width}`);
   assert.equal(row('Biaya COD Mengantar (3,33% dari total COD)'),'−'+idr(mengantarFee),`Mengantar fee deduction at ${width}`);
   const payoutRow=rows.find(([dt])=>dt==='Estimasi diterima penjual');
   assert.equal(payoutRow?.[1],idr(payout),`payout at ${width}`);

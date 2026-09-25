@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
-import Link from "next/link";
-
+import { AuthShell } from "@/app/login/_components/auth-shell";
 import { LoginForm } from "@/app/login/_components/login-form";
+import { resolveHostRouting } from "@/lib/auth-config";
 
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { robots: { index: false }, title: "Masuk Super Admin · GeraiCUAN" };
 
 const demoPassword =
   process.env.NODE_ENV !== "production"
@@ -12,6 +12,14 @@ const demoPassword =
     ? process.env.DEV_LOCAL_PASSWORD
     : undefined;
 
+// On the CMS hosts `/` routes back to this login, so "home" is the public
+// landing site when one is configured (PR-58); single-origin mode keeps `/`.
+const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
+
+/**
+ * PR-62: the Super Admin login offers neither sign-up nor public recovery; a
+ * Super Admin account is provisioned and recovered by the platform operator.
+ */
 export default async function SuperAdminLoginPage({
   searchParams = Promise.resolve({}),
 }: {
@@ -24,28 +32,26 @@ export default async function SuperAdminLoginPage({
       : undefined;
 
   return (
-    <main className="auth-page">
-      <div className="auth-login-shell">
-        <p className="auth-brand">GeraiCUAN</p>
-        <section aria-labelledby="login-title" className="auth-card">
-          <header className="auth-heading">
-            <h1 id="login-title">Masuk Super Admin</h1>
-            <p>Untuk pengelolaan tenant dan operasional platform.</p>
-          </header>
-          <LoginForm
-            demoCredentials={
-              demoPassword
-                ? { email: "super@geraicuan.com", password: demoPassword }
-                : undefined
-            }
-            destination="/platform"
-            initialNotice={initialNotice}
-          />
-        </section>
-        <Link className="auth-return" href="/">
-          Kembali ke halaman utama
-        </Link>
-      </div>
-    </main>
+    <AuthShell
+      description={
+        <>
+          <p>Untuk pengelolaan tenant, persetujuan pendaftaran dan operasional platform.</p>
+          <p className="auth-heading-note">Lupa kata sandi? Hubungi pengelola platform.</p>
+        </>
+      }
+      homeHref={homeHref}
+      surface="platform"
+      title="Masuk Super Admin"
+    >
+      <LoginForm
+        demoCredentials={
+          demoPassword
+            ? { email: "super@geraicuan.com", password: demoPassword }
+            : undefined
+        }
+        destination="/platform"
+        initialNotice={initialNotice}
+      />
+    </AuthShell>
   );
 }

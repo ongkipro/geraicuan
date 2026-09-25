@@ -140,6 +140,17 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
+  it.each(["15rb", "Rp15.000", "15000,5", "1 5000"])("refuses a COD Ongkir charge %j holding a letter or symbol before any domain side effect (T-196)", async (charge) => {
+    fixture.issuanceEnabled = true;
+    const form = issuanceForm();
+    form.set("codShippingChargeIdr", charge);
+    await expect(confirmShipmentIssuance({}, form)).resolves.toEqual({
+      error: "Ongkir yang ditagih kurir hanya boleh berisi angka.",
+    });
+    expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("keeps issuance production-gated, then permits an Operator only through the sanctioned fixture", async () => {
     fixture.role = "OPERATOR";
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({

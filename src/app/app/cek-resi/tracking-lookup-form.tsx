@@ -7,6 +7,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { lookupShipmentTracking, type TrackingLookupState } from "@/app/app/cek-resi/actions";
 import { MAX_TRACKING_KEY_LENGTH } from "@/app/app/cek-resi/lookup-key";
 import { DefinitionGrid } from "@/components/cms/detail-section";
+import { PaymentStack } from "@/components/cms/shipment-table-cells";
 import { ShipmentStatusBadge } from "@/components/cms/shipment-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ export function TrackingLookupForm({ initialState = { kind: "idle" } }: {
             </FieldDescription>
             <FieldError id="tracking-key-error">{invalid ? INVALID_MESSAGE : null}</FieldError>
           </Field>
-          <Button className="min-h-11 w-full sm:w-fit" disabled={pending} type="submit">
+          <Button className="ios-btn-primary min-h-11 w-full sm:w-fit" disabled={pending} type="submit">
             {pending
               ? <Loader2 aria-hidden="true" className="animate-spin" />
               : <ScanSearch aria-hidden="true" />}
@@ -110,7 +111,7 @@ export function TrackingLookupForm({ initialState = { kind: "idle" } }: {
 function TrackingResult({ result }: { result: Extract<TrackingLookupState, { kind: "found" }>["result"] }) {
   const status = SHIPMENT_STATUS_PRESENTATION[result.status];
   return (
-    <Card aria-labelledby="hasil-cek-resi-heading" role="region">
+    <Card aria-labelledby="hasil-cek-resi-heading" className="ios-glass-card rounded-2xl border-border/60 shadow-xs" role="region">
       <CardHeader>
         <CardTitle id="hasil-cek-resi-heading">
           Kiriman <span className="font-mono">{result.publicReference}</span>
@@ -134,7 +135,7 @@ function TrackingResult({ result }: { result: Extract<TrackingLookupState, { kin
               : "Belum ada layanan penyedia",
           },
           { label: "Nomor resi", value: result.awb ?? "Belum tersedia" },
-          { label: "Pembayaran", value: result.isCod ? "COD" : "Non-COD" },
+          { label: "Pembayaran", value: <PaymentStack facts={result} /> },
           { label: "Aktivitas terakhir", value: formatWibDateTime(result.updatedAtIso) },
         ]} />
         <Button asChild className="min-h-11 w-full sm:w-fit md:min-h-8" size="sm" variant="outline">

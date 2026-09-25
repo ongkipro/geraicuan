@@ -2,28 +2,19 @@
 
 import {
   BarChart3,
-  BookOpenText,
-  Building2,
-  Calculator,
   ChevronDown,
-  ClipboardList,
   ContactRound,
   FileText,
-  FileUp,
   LayoutDashboard,
   Package,
-  PackagePlus,
-  PackageSearch,
-  PrinterCheck,
-  RotateCcw,
   ScanSearch,
   Settings2,
-  Truck,
+  ShieldCheck,
   X,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -59,22 +50,10 @@ import {
   type TenantCmsRole,
 } from "@/lib/cms-shell-navigation";
 
+// Icons mark top-level rows only (Dasbor and the group headers); submenu
+// items are text so the tree reads as one hierarchy.
 const navigationIcons: Record<string, LucideIcon> = {
-  analytics: BarChart3,
-  contacts: ContactRound,
   dashboard: LayoutDashboard,
-  finance: BookOpenText,
-  import: FileUp,
-  "print-label": PrinterCheck,
-  "quick-rate": Calculator,
-  rts: RotateCcw,
-  settings: Settings2,
-  shipments: Truck,
-  "shipment-new": PackagePlus,
-  "tracking-lookup": PackageSearch,
-  "platform-audit": ClipboardList,
-  "platform-overview": LayoutDashboard,
-  "platform-tenants": Building2,
 };
 
 // PR-54: every group except "Utama" (a single unlabelled destination) is a
@@ -85,12 +64,15 @@ const navigationGroupIcons: Record<string, LucideIcon> = {
   Cek: ScanSearch,
   Laporan: BarChart3,
   Pengelolaan: Settings2,
+  Platform: ShieldCheck,
 };
 
 // PR-54: open/closed state per group persists per browser. Keyed by group
 // label — the accepted PR-54 group set is fixed Indonesian text, not user
-// content, so it is a stable storage key.
-const GROUP_STATE_STORAGE_KEY = "geraicuan.cms-nav-groups";
+// content, so it is a stable storage key. T-187 bumped it to .v2: the old map
+// held implicit `false` for every group the user never touched (the old
+// default was closed), which would hide groups under the new all-open default.
+const GROUP_STATE_STORAGE_KEY = "geraicuan.cms-nav-groups.v2";
 
 function readStoredGroupState(): Record<string, boolean> {
   try {
@@ -116,14 +98,13 @@ function groupHoldsCurrent(group: CmsNavigationGroup) {
   return group.items.some((item) => item.current);
 }
 
-// The route-derived default (open only the group holding the current route)
-// is identical on the server and on first client render, so there is no
-// hydration mismatch; stored preferences are merged in afterward, client-only.
+// T-187: every group starts open, so the whole tree is visible on a first
+// visit. The default is identical on the server and on first client render, so
+// there is no hydration mismatch; stored preferences are merged in afterward,
+// client-only.
 function defaultOpenGroups(groups: CmsNavigationGroup[]) {
   return Object.fromEntries(
-    groups
-      .filter((group) => group.label !== "Utama")
-      .map((group) => [group.label, groupHoldsCurrent(group)]),
+    groups.filter((group) => group.label !== "Utama").map((group) => [group.label, true]),
   );
 }
 
@@ -142,6 +123,7 @@ type CmsNavigationProps = {
 // tooltip there.
 export function CmsNavigation(props: CmsNavigationProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isMobile, setOpenMobile, state } = useSidebar();
   // A mounted tooltip is its own Escape layer even while hidden, so the mobile
   // Sheet would need two Escapes. Tooltips exist only on the collapsed rail.
@@ -150,7 +132,7 @@ export function CmsNavigation(props: CmsNavigationProps) {
   const isPlatform = props.scope === "platform";
   const groups = isPlatform
     ? platformCmsNavigation(pathname)
-    : tenantCmsNavigation(props.role, pathname);
+    : tenantCmsNavigation(props.role, pathname, searchParams);
   const brandHref = isPlatform ? "/platform" : "/app";
   const navigationLabel = isPlatform ? "Navigasi platform" : "Navigasi tenant";
   const closeOnMobile = () => {
@@ -169,7 +151,7 @@ export function CmsNavigation(props: CmsNavigationProps) {
         const next = { ...previous };
         for (const group of groups) {
           if (group.label === "Utama") continue;
-          next[group.label] = groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? false);
+          next[group.label] = groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? true);
         }
         return next;
       });
@@ -204,7 +186,7 @@ export function CmsNavigation(props: CmsNavigationProps) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip={railTooltip("GeraiCUAN")}>
                 <Link href={brandHref} onClick={closeOnMobile}>
-                  <span aria-hidden="true" className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
+                  <span aria-hidden="true" className="flex aspect-square size-8 items-center justify-center rounded-xl bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground shadow-xs">
                     GC
                   </span>
                   <span className="grid flex-1 text-start text-sm leading-tight">
@@ -242,35 +224,56 @@ export function CmsNavigation(props: CmsNavigationProps) {
             if (isRail) {
               // SidebarMenuSub is hidden at the icon rail width, so a
               // collapsed group opens as a DropdownMenu flyout instead.
+              // T-195: the flyout's aria-current link does not exist until the
+              // flyout opens, so the trigger of the group holding the current
+              // page carries it as an accessible description. aria-current is
+              // not used here: the trigger is a menu button, not the page link.
+              // A `hidden` element still supplies the description when
+              // referenced by id, without a second copy in browse mode.
+              const currentItem = group.items.find((item) => item.current);
+              const currentDescriptionId = `cms-nav-rail-current-${group.label.toLowerCase()}`;
               return (
                 <SidebarGroup key={group.label}>
                   <SidebarGroupContent>
                     <SidebarMenu>
                       <SidebarMenuItem>
+                        {currentItem ? (
+                          <span hidden id={currentDescriptionId}>
+                            Halaman saat ini: {currentItem.label}
+                          </span>
+                        ) : null}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <SidebarMenuButton isActive={groupHoldsCurrent(group)} tooltip={group.label}>
+                            <SidebarMenuButton
+                              aria-describedby={currentItem ? currentDescriptionId : undefined}
+                              isActive={Boolean(currentItem)}
+                              tooltip={group.label}
+                            >
                               <GroupIcon aria-hidden="true" />
                               <span>{group.label}</span>
                             </SidebarMenuButton>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" side="right">
                             <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
-                            {group.items.map((item) => {
-                              const Icon = navigationIcons[item.key] ?? FileText;
-                              return (
-                                <DropdownMenuItem asChild key={item.key}>
-                                  <Link
-                                    aria-current={item.current ? "page" : undefined}
-                                    href={item.href}
-                                    onClick={closeOnMobile}
-                                  >
-                                    <Icon aria-hidden="true" />
-                                    <span>{item.label}</span>
-                                  </Link>
-                                </DropdownMenuItem>
-                              );
-                            })}
+                            {/* Icons mark top-level rows only; submenu items are text.
+                                T-197: the current item wears the tree's active tokens
+                                (sidebar accent, medium weight) plus the primary start
+                                marker its tree connector uses, so it differs from focus. */}
+                            {group.items.map((item) => (
+                              <DropdownMenuItem
+                                asChild
+                                className="aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground aria-[current=page]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                                key={item.key}
+                              >
+                                <Link
+                                  aria-current={item.current ? "page" : undefined}
+                                  href={item.href}
+                                  onClick={closeOnMobile}
+                                >
+                                  <span>{item.label}</span>
+                                </Link>
+                              </DropdownMenuItem>
+                            ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </SidebarMenuItem>
@@ -280,59 +283,66 @@ export function CmsNavigation(props: CmsNavigationProps) {
               );
             }
 
-            // The expanded/mobile shape: a split disclosure row. The group
-            // label is its own (non-navigating) heading, and a separate
-            // button carries the chevron and aria-expanded, so no
-            // data-state ever lands on a nav <a> (cms-shell-render pins
-            // that assertion for the item links).
-            const open = openGroups[group.label] ?? groupHoldsCurrent(group);
+            // T-187: the expanded/mobile shape is a tree. The whole group row
+            // (icon, label, chevron) is one native <button> disclosure, so a
+            // click anywhere on it, Enter, or Space toggles the group. Its
+            // accessible name is the visible label; aria-expanded carries the
+            // state. data-state lands on that <button> and the <li>, never on
+            // a nav <a> (cms-shell-render pins that for the item links).
+            const open = openGroups[group.label] ?? true;
             const contentId = `cms-nav-group-${group.label.toLowerCase()}`;
             return (
-              <SidebarGroup key={group.label}>
-                <Collapsible onOpenChange={() => toggleGroup(group.label)} open={open}>
-                  <div className="flex h-8 shrink-0 items-center gap-1 px-2 text-[0.8125rem] font-medium text-sidebar-foreground/70">
-                    <GroupIcon aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="flex-1 truncate">{group.label}</span>
-                    <CollapsibleTrigger asChild>
-                      <button
-                        aria-controls={contentId}
-                        aria-expanded={open}
-                        aria-label={`${open ? "Tutup" : "Buka"} grup ${group.label}`}
-                        className="group/nav-trigger flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-                        type="button"
-                      >
-                        <ChevronDown aria-hidden="true" className="size-4 transition-transform group-data-[state=open]/nav-trigger:rotate-180" />
-                      </button>
-                    </CollapsibleTrigger>
-                  </div>
-                  <CollapsibleContent id={contentId}>
-                    <SidebarGroupContent>
-                      <SidebarMenuSub className="mx-0 border-l-0 px-0">
-                        {group.items.map((item) => {
-                          const Icon = navigationIcons[item.key] ?? FileText;
-                          return (
-                            <SidebarMenuSubItem key={item.key}>
-                              <SidebarMenuSubButton
-                                asChild
-                                className="max-md:min-h-11"
-                                isActive={item.current}
+              <SidebarGroup className="py-1" key={group.label}>
+                <SidebarMenu>
+                  <Collapsible asChild onOpenChange={() => toggleGroup(group.label)} open={open}>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          aria-controls={contentId}
+                          aria-expanded={open}
+                          className="h-9 font-semibold max-md:h-11"
+                          data-nav-group-trigger={group.label}
+                          type="button"
+                        >
+                          <GroupIcon aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                          <ChevronDown aria-hidden="true" className="text-sidebar-foreground/60 transition-transform group-data-[state=open]/menu-button:rotate-180 motion-reduce:transition-none" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent id={contentId}>
+                        {/* Tree guide: each <li> draws its own vertical segment
+                            (::before) under the group icon's centre and a
+                            horizontal connector (::after) to its row; the last
+                            segment stops at its connector. */}
+                        <SidebarMenuSub className="ms-4 me-0 translate-x-0 gap-0.5 border-l-0 px-0 py-0.5">
+                          {group.items.map((item) => {
+                            return (
+                              <SidebarMenuSubItem
+                                className="ps-4 before:absolute before:inset-y-0 before:start-0 before:w-px before:bg-sidebar-foreground/20 after:absolute after:start-0 after:top-1/2 after:h-px after:w-3 after:bg-sidebar-foreground/20 last:before:bottom-1/2 has-[a[aria-current=page]]:after:bg-sidebar-primary"
+                                data-nav-tree-item=""
+                                key={item.key}
                               >
-                                <Link
-                                  aria-current={item.current ? "page" : undefined}
-                                  href={item.href}
-                                  onClick={closeOnMobile}
+                                <SidebarMenuSubButton
+                                  asChild
+                                  className="h-8 rounded-lg data-active:bg-primary/10 data-active:text-primary data-active:font-semibold data-[size=md]:text-[0.9375rem] max-md:h-11"
+                                  isActive={item.current}
                                 >
-                                  <Icon aria-hidden="true" />
-                                  <span>{item.label}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          );
-                        })}
-                      </SidebarMenuSub>
-                    </SidebarGroupContent>
-                  </CollapsibleContent>
-                </Collapsible>
+                                  <Link
+                                    aria-current={item.current ? "page" : undefined}
+                                    href={item.href}
+                                    onClick={closeOnMobile}
+                                  >
+                                    <span>{item.label}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            );
+                          })}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                </SidebarMenu>
               </SidebarGroup>
             );
           })}

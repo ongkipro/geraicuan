@@ -13,13 +13,14 @@ const AUDIT_HEADER = "x-geraicuan-ui-audit";
 const CONCRETE = {
   "/app/pengiriman/[shipmentId]": `/app/pengiriman/${SHIPMENT}`,
   "/app/label/[shipmentId]": `/app/label/${LABELABLE}`,
-  "/app/kontak/[contactId]": `/app/kontak/${CONTACT}`,
+  // T-188: a detail URL names the menu it was opened from, or it redirects.
+  "/app/kontak/[contactId]": `/app/kontak/${CONTACT}?dari=pengirim`,
   "/platform/tenant/[tenantId]": `/platform/tenant/${TENANT_ID}`,
 };
 
 const TENANT = [
   "/app", "/app/pengiriman", "/app/pengiriman/rts", "/app/pengiriman/baru",
-  CONCRETE["/app/pengiriman/[shipmentId]"], "/app/impor", "/app/kontak", "/app/kontak/baru",
+  CONCRETE["/app/pengiriman/[shipmentId]"], "/app/impor", "/app/kontak/pengirim", "/app/kontak/penerima", "/app/kontak/baru",
   CONCRETE["/app/kontak/[contactId]"], "/app/label", CONCRETE["/app/label/[shipmentId]"],
   "/app/analitik", "/app/keuangan", "/app/pengaturan", "/app/anggota",
 ];
@@ -91,6 +92,27 @@ async function login(email, path) {
 const SKELETON = `Boolean(document.querySelector('[data-slot="skeleton"]'))
   && getComputedStyle(document.documentElement).getPropertyValue('--ring').trim() !== ''`;
 
+// T-195: at 768 the CMS sidebar is the icon rail. Its group triggers are menu
+// buttons, and the aria-current link lives in a flyout that is not rendered
+// until opened, so the probe's aria-current count is 0 there by construction.
+// The rail names the current section on the trigger's accessible description
+// instead; read what Chrome computes for assistive technology, not the markup,
+// so a description that never reaches the accessibility tree does not count.
+async function railCurrentSections() {
+  const { result } = await s.send("Runtime.evaluate", {
+    expression: `[...document.querySelectorAll('nav[aria-label^="Navigasi "] button[aria-haspopup="menu"]')].filter(b => b.getBoundingClientRect().width > 0)`,
+  });
+  const { result: entries } = await s.send("Runtime.getProperties", { objectId: result.objectId, ownProperties: true });
+  const sections = [];
+  for (const entry of entries.filter(e => /^\d+$/.test(e.name))) {
+    const { nodes } = await s.send("Accessibility.getPartialAXTree", { objectId: entry.value.objectId, fetchRelatives: false });
+    const description = nodes[0]?.description?.value ?? "";
+    if (/^Halaman saat ini: \S/.test(description)) sections.push(`${nodes[0].name?.value}: ${description}`);
+  }
+  await s.send("Runtime.releaseObject", { objectId: result.objectId });
+  return sections;
+}
+
 const rows = [];
 async function visit(scope, path, w, scenario = null, state = null) {
   await vp(w);
@@ -119,7 +141,14 @@ async function visit(scope, path, w, scenario = null, state = null) {
     await new Promise(r => setTimeout(r, 800));
     landed = await s.evaluate("location.pathname");
   }
+  // The server renders the sidebar expanded; the shell collapses it to the rail
+  // after hydration. A slow page probed before that shows the expanded tree,
+  // and the rail check below would pass without ever seeing the rail.
+  if (scope !== "public" && w === 768 && state !== "loading") {
+    for (let i = 0; i < 20 && !(await s.evaluate(`!!document.querySelector('[data-slot="sidebar"][data-state="collapsed"]')`)); i++) await new Promise(r => setTimeout(r, 250));
+  }
   const probe = JSON.parse(await s.evaluate(PROBE));
+  const railCurrent = scope !== "public" && w === 768 ? await railCurrentSections() : null;
   if (process.env.UI_AUDIT_SCREENSHOTS === "1" && !scenario && w !== 768) {
     const directory = new URL(".output/pages/", import.meta.url);
     mkdirSync(directory, { recursive: true });
@@ -131,7 +160,7 @@ async function visit(scope, path, w, scenario = null, state = null) {
     const text = await s.evaluate("document.querySelector('main')?.innerText ?? document.body.innerText");
     writeFileSync(new URL(`${name}.txt`, directory), text);
   }
-  rows.push({ scope, path, w, scenario, state, landed, skeletonSeen, ...probe });
+  rows.push({ scope, path, w, scenario, state, landed, skeletonSeen, railCurrent, ...probe });
   mkdirSync(new URL('.output/', import.meta.url), {recursive:true});
   writeFileSync(new URL(`.output/${reportName}.json`, import.meta.url),JSON.stringify({partial:true,rows},null,2));
   console.log(`Screened ${path} ${w}px`);
@@ -141,10 +170,30 @@ async function sweep(scope, paths) {
   for (const path of paths) for (const w of VIEWPORTS) await visit(scope, path, w);
 }
 
+// T-197: a shipment detail or label URL carrying a seed UUID redirects to the
+// shipment's public number, which is allocated when the seed runs, so a fixed
+// UUID path screened only a redirect. The seed keeps the UUIDs fixed
+// (scripts/seed-local-dev-users.mjs, 72…012 and 72…014); follow the app's own
+// redirect once per run and screen the numbered page it lands on. An id that no
+// longer resolves to a numbered page stops the run instead of screening a list,
+// a login or a not-found page.
+const CANONICAL = new Map();
+async function resolveNumberedPage(path, pattern) {
+  await setScenario(null);
+  await s.goto(`${ORIGIN}${path}`);
+  await new Promise(r => setTimeout(r, 650));
+  const landed = await s.evaluate("location.pathname");
+  if (!pattern.test(landed)) throw new Error(`${path} did not resolve to a numbered page (landed on ${landed})`);
+  CANONICAL.set(path, landed);
+}
+const screenPath = (path) => CANONICAL.get(path) ?? path;
+
 await sweep("public", selected(PUBLIC));
 if (selected(TENANT).length) {
 await login("tenant@geraicuan.com", "/login/tenant");
-await sweep("tenant", selected(TENANT));
+await resolveNumberedPage(CONCRETE["/app/pengiriman/[shipmentId]"], /^\/app\/pengiriman\/\d+$/);
+await resolveNumberedPage(CONCRETE["/app/label/[shipmentId]"], /^\/app\/label\/\d+$/);
+await sweep("tenant", selected(TENANT).map(screenPath));
 }
 
 // Every declared UI-audit scenario: the empty, loading, error, invalid-query
@@ -153,7 +202,7 @@ const stateRows = [];
 const skippedScenarios = [];
 async function sweepStates(scope, routes) {
   for (const route of routes) {
-    const path = CONCRETE[route] ?? route;
+    const path = screenPath(CONCRETE[route] ?? route);
     for (const { scenario, state } of scenarios[route] ?? []) {
       if (SERVER_ACTION_ONLY.has(scenario)) { skippedScenarios.push(scenario); continue; }
       for (const w of VIEWPORTS) {
@@ -193,7 +242,10 @@ function findings(r, { states = false } = {}) {
   // CMS nav is off-canvas and carries the marker with it, so zero there is the
   // shell's design rather than a missing indicator; `> 1` is always wrong.
   const navVisible = r.scope !== "public" && r.w >= 768;
-  if (r.current > 1 || (navVisible && r.current !== 1)) bits.push(`current=${r.current}`);
+  // At 768 (the icon rail) the current page is exposed either by a top-level
+  // link's aria-current (Dasbor) or by one group trigger's description.
+  const exposed = r.w === 768 ? r.current + (r.railCurrent?.length ?? 0) : r.current;
+  if (r.current > 1 || (navVisible && exposed !== 1)) bits.push(`current=${r.current}${r.w === 768 ? ` railCurrent=${JSON.stringify(r.railCurrent)}` : ""}`);
   if (r.state === "loading" && r.skeletonSeen === false) bits.push("skeletonNeverRendered");
   if (r.stickyIssues?.length) bits.push(`stickyColumn=${JSON.stringify(r.stickyIssues)}`);
   if (r.unlabelledScroll) bits.push(`unreachableScroll=${JSON.stringify(r.unreachableScroll)}`);
@@ -223,7 +275,7 @@ function findings(r, { states = false } = {}) {
 // Exact match only. Any prefix rule accepts a real redirect: /app is a prefix
 // of every tenant route, and a 6-character floor still accepts
 // /app/pengiriman/rts -> /app/pengiriman and /platform/audit -> /platform.
-const redirected = [...rows, ...stateRows].filter(r => r.landed !== r.path);
+const redirected = [...rows, ...stateRows].filter(r => r.landed !== r.path.split("?")[0]);
 
 const problems = rows.map(r => [r, findings(r)]).filter(([, b]) => b.length);
 const stateProblems = stateRows.map(r => [r, findings(r, { states: true })]).filter(([, b]) => b.length);

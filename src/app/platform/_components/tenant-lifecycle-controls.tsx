@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CharacterClassInput } from "@/components/ui/character-class-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -171,10 +172,11 @@ export function ProvisionTenantForm({ auditState = initialState, initialAttemptI
           <input name="lifecycleAction" type="hidden" value="create" />
           <div className="grid max-w-2xl gap-2">
             <Label htmlFor="tenant-name">Nama tenant</Label>
-            <Input
+            <CharacterClassInput
               aria-describedby={state.errors?.tenantName ? "tenant-name-error" : undefined}
               aria-invalid={Boolean(state.errors?.tenantName)}
               autoComplete="organization"
+              characterClass="BUSINESS_NAME"
               className="min-h-11"
               defaultValue={state.values?.name ?? ""}
               id="tenant-name"

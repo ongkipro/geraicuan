@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BULK_TEMPLATE_HEADERS } from "@/lib/bulk-shipment-intake-contract";
@@ -81,11 +83,11 @@ const validRow = [
   "1", "", "", "", "150000", "NON_COD",
 ];
 
-function uploadForm() {
+function uploadForm(row = validRow) {
   const form = new FormData();
   form.set("outletId", outletId);
   form.set("csv", new File([
-    `${BULK_TEMPLATE_HEADERS.join(",")}\n${validRow.join(",")}`,
+    `${BULK_TEMPLATE_HEADERS.join(",")}\n${row.join(",")}`,
   ], "kiriman.csv", { type: "text/csv" }));
   return form;
 }
@@ -133,8 +135,8 @@ describe("bulk import actions", () => {
       declaredValueIdr: 150_000,
       destinationAreaLabel: "Gambir Jakarta Pusat",
       destinationQuery: "Gambir Jakarta Pusat",
-      isCod: false,
       packageWeightGrams: 500,
+      paymentMethod: "NON_COD",
       recipientName: "Penerima",
       row: 2,
     });
@@ -244,6 +246,26 @@ describe("bulk import actions", () => {
       message: "Tidak ada draf yang dibuat.",
     });
     expect(mocks.created).toEqual([]);
+  });
+
+  it("T-190: previews a COD_ONGKIR row as COD Ongkir and creates it as COD Ongkir, never as COD", async () => {
+    const { createSelectedDrafts, uploadBulkIntake } = await import("@/app/app/impor/actions");
+    const { BulkIntakeForm } = await import("@/app/app/impor/bulk-intake-form");
+    const previewState = await uploadBulkIntake({}, uploadForm([...validRow.slice(0, -1), "COD_ONGKIR"]));
+    expect(previewState.preview!.validRows[0]).toMatchObject({ declaredValueIdr: 150_000, paymentMethod: "COD_ONGKIR" });
+
+    const html = renderToStaticMarkup(createElement(BulkIntakeForm, {
+      initialPreview: previewState.preview,
+      outlets: [{ id: outletId, name: "Outlet impor" }],
+    }));
+    const paymentCells = [...html.matchAll(/data-payment-method="([A-Z_]+)"[^>]*>(.*?)<\/span><\/td>/g)]
+      .map(([, method, cell]) => [method, cell!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()]);
+    expect(paymentCells).toEqual([["COD_ONGKIR", "COD Ongkir"]]);
+
+    const confirmation = new FormData();
+    confirmation.set("rowToken", previewState.preview!.validRows[0]!.confirmationToken);
+    await expect(createSelectedDrafts({}, confirmation)).rejects.toThrow("REDIRECT:/app/pengiriman?status=DRAFT");
+    expect(mocks.created[0]!.input).toMatchObject({ isCod: true, paymentMethod: "COD_ONGKIR" });
   });
 });
 

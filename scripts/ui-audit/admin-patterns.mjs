@@ -55,7 +55,8 @@ const PANEL_ROUTES = [
   { entries: 6, param: 'status', route: '/app/pengiriman' },
   { entries: 5, param: 'status', route: '/app/pengiriman/rts' },
   { entries: 3, param: 'cetak', route: '/app/label' },
-  { entries: 3, param: 'status', route: '/app/kontak' },
+  { entries: 3, param: 'status', route: '/app/kontak/pengirim' },
+  { entries: 3, param: 'status', route: '/app/kontak/penerima' },
 ];
 const RANGE_ROUTES = ['/app', '/app/analitik', '/app/keuangan', '/app/pengiriman', '/app/pengiriman/rts', '/app/label'];
 
@@ -164,7 +165,7 @@ try {
       assert.equal(after.pressedValue, m.secondValue, `${route} @${width}: the applied entry is not the pressed one`);
       // The range the page was on must survive the filter.
       const keptRange = await s.evaluate(`new URL(location.href).searchParams.get('rentang')`);
-      if (route !== '/app/kontak') {
+      if (!route.startsWith('/app/kontak/')) {
         assert(keptRange, `${route} @${width}: applying a panel entry dropped the range`);
       }
       results.push({ step: 'panel', route, width, entries: m.entries, minTarget: m.minTarget, applied, keptRange });

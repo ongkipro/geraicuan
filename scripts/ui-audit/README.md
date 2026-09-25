@@ -36,7 +36,7 @@ the same instrument, committed, wired to `pnpm test:ui-audit`.
   page and asserts the probe catches both, plus a regression case (twenty
   offscreen links) proving the focus check examines elements well past
   position 14 (see round 10).
-- `sweep.mjs` — the full orchestrator: 66 route/viewport pairs plus 300+
+- `sweep.mjs` — the full orchestrator: 69 route/viewport pairs plus 300+
   scenario/viewport pairs declared in `scenarios.json`, reporting aggregate
   findings.
 - `scenarios.json` — a snapshot of the scenario/state declarations from
@@ -76,6 +76,10 @@ the same instrument, committed, wired to `pnpm test:ui-audit`.
   width) each catch a live-injected violation. Round 14 found these
   measurements existed and were summed into the sweep's headline numbers
   but had never once been deliberately triggered and confirmed caught.
+- `sidebar-tree.mjs` — T-187 CMS sidebar tree: label-click and keyboard
+  toggles, all groups open by default, stored collapse vs forced current
+  group, tree guide geometry, rail flyout, mobile Sheet; screenshots in
+  `.output/sidebar-tree/`. Logs in once as the tenant.
 - `env.dev.sh`, `env.integration.sh` — thin wrappers around the two env
   blocks root `README.md` already documents, so these scripts don't retype
   them. Both require `POSTGRES_PASSWORD` to already be exported.

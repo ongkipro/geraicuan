@@ -1,9 +1,10 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
 
 import {
   outlets,
+  providerBatches,
   providerOrderSnapshots,
   shipmentCodTotals,
   shipmentDrafts,
@@ -14,7 +15,10 @@ import {
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import {
   BASIS_POINTS,
+  codOngkirBreakEvenIdr,
+  MAX_COD_AMOUNT_IDR,
   MENGANTAR_COD_FEE_BASIS_POINTS,
+  mengantarCodFeeIdr,
 } from "@/lib/mengantar-cod-fee";
 
 const ZERO = BigInt("0");
@@ -38,8 +42,11 @@ const FEE_SHARE_HALF = BigInt("55");
  *   keeps 3.33% of that COD, so the seller came up 0.111% of (goods + shipping)
  *   short on every COD shipment.
  * - 2 (T-175): grossed up — see `calculateCodAmounts`.
+ * - 3 (T-186): COD Ongkir — the courier collects a shipping charge only; see
+ *   `calculateCodOngkirAmounts`.
  */
 export const COD_FORMULA_VERSION = 2;
+export const COD_ONGKIR_FORMULA_VERSION = 3;
 
 export type CodEstimateSelection = {
   shipmentId: string;
@@ -51,6 +58,12 @@ export type CodConfirmationSelection = {
   shipmentId: string;
   estimateSnapshotId: string;
   estimateServiceId: string;
+  /**
+   * T-186: the COD Ongkir charge the operator confirmed. Required for a COD
+   * Ongkir draft and refused for any other method, so a value the form never
+   * showed cannot become money.
+   */
+  codShippingChargeIdr?: number | null;
 };
 
 export type PersistedCodTotals = {
@@ -65,12 +78,51 @@ export type PersistedCodTotals = {
   vatAmountIdr: number;
   providerCodAmountIdr: number;
   codFormulaVersion: number;
+  /** Version 3 only: the shipping Mengantar deducts the charge was checked against. */
+  codShippingBasisIdr: number | null;
   createdAt: Date;
 };
 
 export class CodTotalsUnavailableError extends Error {
   constructor() {
     super("COD totals selection is unavailable.");
+  }
+}
+
+/**
+ * T-193: the shipment already holds a formula version 1 COD totals row and
+ * nothing has been sent to Mengantar with it. Confirming would submit the
+ * pre-T-175 amount, which leaves the seller about 0.111% of goods plus shipping
+ * short. The row is immutable and one per shipment (INSERT/SELECT grants only,
+ * `shipment_cod_totals_shipment_tenant_key`), so it cannot be recomputed as
+ * version 2 either: the shipment is refused and the operator makes a new one.
+ */
+export class CodTotalsFormulaRetiredError extends Error {
+  constructor() {
+    super("COD totals were recorded under a retired formula.");
+  }
+}
+
+/**
+ * A COD Ongkir charge the server will not record. `breakEvenIdr` is the lowest
+ * charge it would accept for the selected service, so the operator can be told
+ * the exact figure; `recordedChargeIdr` is set when the shipment already holds
+ * an immutable charge that a retry did not repeat.
+ */
+export class CodOngkirChargeRefusedError extends Error {
+  readonly reason: "MISSING" | "INVALID" | "BELOW_BREAK_EVEN" | "NOT_COD_ONGKIR" | "ALREADY_RECORDED";
+  readonly breakEvenIdr: number | null;
+  readonly recordedChargeIdr: number | null;
+
+  constructor(
+    reason: CodOngkirChargeRefusedError["reason"],
+    breakEvenIdr: number | null = null,
+    recordedChargeIdr: number | null = null,
+  ) {
+    super("COD Ongkir charge is refused.");
+    this.reason = reason;
+    this.breakEvenIdr = breakEvenIdr;
+    this.recordedChargeIdr = recordedChargeIdr;
   }
 }
 
@@ -132,6 +184,65 @@ export function calculateCodAmounts(goodsValueIdr: number, shippingAmountIdr: nu
   };
 }
 
+/**
+ * COD formula version 3 (T-186, COD Ongkir). The goods were paid for outside
+ * GeraiCUAN, so the COD amount is the operator's shipping charge alone. It must
+ * be at least `codOngkirBreakEvenIdr(shippingDeducted)` — the smallest whole
+ * rupiah whose net of Mengantar's 3.33% still covers the shipping Mengantar
+ * deducts — and may be raised above it; the seller keeps the difference.
+ * `serviceFee + vat` is Mengantar's fee on the charge, half-up, split 100/111
+ * like version 2. Goods and the quote `price` are recorded, never collected.
+ * The database checks the same rules (`drizzle/0050_cod_ongkir_payment_method.sql`).
+ */
+export function calculateCodOngkirAmounts(input: {
+  goodsValueIdr: number;
+  shippingAmountIdr: number;
+  shippingDeductedIdr: number;
+  chargeIdr: number | null;
+}) {
+  if (
+    !Number.isSafeInteger(input.goodsValueIdr)
+    || input.goodsValueIdr <= 0
+    || input.goodsValueIdr > MAX_COD_AMOUNT_IDR
+    || !Number.isSafeInteger(input.shippingAmountIdr)
+    || input.shippingAmountIdr < 0
+    || input.shippingAmountIdr > MAX_COD_AMOUNT_IDR
+  ) {
+    throw new CodTotalsUnavailableError();
+  }
+  const breakEvenIdr = input.shippingDeductedIdr > MAX_COD_AMOUNT_IDR
+    ? null
+    : codOngkirBreakEvenIdr(input.shippingDeductedIdr);
+  if (breakEvenIdr === null) throw new CodTotalsUnavailableError();
+  if (input.chargeIdr === null) {
+    throw new CodOngkirChargeRefusedError("MISSING", breakEvenIdr);
+  }
+  if (
+    !Number.isSafeInteger(input.chargeIdr)
+    || input.chargeIdr <= 0
+    || input.chargeIdr > MAX_COD_AMOUNT_IDR
+  ) {
+    throw new CodOngkirChargeRefusedError("INVALID", breakEvenIdr);
+  }
+  if (input.chargeIdr < breakEvenIdr) {
+    throw new CodOngkirChargeRefusedError("BELOW_BREAK_EVEN", breakEvenIdr);
+  }
+
+  const feeTotal = BigInt(mengantarCodFeeIdr(input.chargeIdr));
+  const serviceFee =
+    (feeTotal * FEE_SHARE_NUMERATOR + FEE_SHARE_HALF) / FEE_SHARE_DENOMINATOR;
+
+  return {
+    codFormulaVersion: COD_ONGKIR_FORMULA_VERSION,
+    codShippingBasisIdr: input.shippingDeductedIdr,
+    goodsValueIdr: input.goodsValueIdr,
+    shippingAmountIdr: input.shippingAmountIdr,
+    serviceFeeIdr: wholeIdr(serviceFee),
+    vatAmountIdr: wholeIdr(feeTotal - serviceFee),
+    providerCodAmountIdr: input.chargeIdr,
+  };
+}
+
 export function calculateCodAmountsOrNull(
   goodsValueIdr: number,
   shippingAmountIdr: number,
@@ -162,6 +273,7 @@ async function loadCodTotalsForSelection(
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
       codFormulaVersion: shipmentCodTotals.codFormulaVersion,
+      codShippingBasisIdr: shipmentCodTotals.codShippingBasisIdr,
       createdAt: shipmentCodTotals.createdAt,
     })
     .from(shipmentCodTotals)
@@ -205,11 +317,67 @@ async function loadExistingProviderOrderCodState(
   return rows[0]?.isCod ?? null;
 }
 
+/**
+ * T-193: whether an order for this selection has already been attempted at
+ * Mengantar — its batch left the never-attempted queue. Only then may a
+ * version 1 totals row be read back: the provider already holds that amount,
+ * and a retry returns the recorded outcome without submitting anything. A batch
+ * still queued and never attempted would be submitted on resume, with the old
+ * amount, so it is refused like a row with no order at all.
+ */
+async function providerSubmissionAttempted(
+  tx: TenantTransaction,
+  context: TenantContext,
+  selection: Pick<CodConfirmationSelection, "shipmentId">,
+) {
+  const rows = await tx
+    .select({ id: providerOrderSnapshots.id })
+    .from(providerOrderSnapshots)
+    .innerJoin(
+      providerBatches,
+      and(
+        eq(providerBatches.id, providerOrderSnapshots.batchId),
+        eq(providerBatches.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(providerOrderSnapshots.tenantId, context.tenantId),
+        eq(providerOrderSnapshots.shipmentId, selection.shipmentId),
+        or(
+          ne(providerBatches.status, "SUBMISSION_QUEUED"),
+          isNotNull(providerBatches.submissionAttemptedAt),
+        ),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * T-193 / T-199: the one decision behind `CodTotalsFormulaRetiredError`. True
+ * when the shipment holds a version 1 COD totals row and no order with it has
+ * been attempted at Mengantar. Confirmation throws on it; the shipment detail
+ * reads it before rendering, so the operator sees the refusal and a disabled
+ * confirm button instead of a current-formula preview the server would refuse.
+ */
+export async function shipmentCodFormulaRetired(
+  tx: TenantTransaction,
+  context: TenantContext,
+  shipmentId: string,
+) {
+  const recorded = await loadCodTotalsForShipment(tx, context, shipmentId);
+  return recorded?.codFormulaVersion === 1
+    && !(await providerSubmissionAttempted(tx, context, { shipmentId }));
+}
+
 type ConfirmationEstimate = {
+  codShippingOnly: boolean;
   currency: "IDR";
   goodsValueIdr: number;
   isCod: boolean;
   shippingAmountIdr: number;
+  shippingDeductedIdr: number;
 };
 
 async function loadConfirmationEstimate(
@@ -222,7 +390,15 @@ async function loadConfirmationEstimate(
       ${shipmentEstimateServices.currency} AS "currency",
       ${shipmentDrafts.declaredValueIdr} AS "goodsValueIdr",
       ${shipmentDrafts.isCod} AS "isCod",
-      ${shipmentEstimateServices.shippingAmountIdr} AS "shippingAmountIdr"
+      ${shipmentDrafts.codShippingOnly} AS "codShippingOnly",
+      ${shipmentEstimateServices.shippingAmountIdr} AS "shippingAmountIdr",
+      -- T-186: the shipping Mengantar deducts, the COD Ongkir break-even basis;
+      -- the same COALESCE as provider_order_snapshots.provider_charged_shipping_idr.
+      coalesce(
+        ${shipmentEstimateServices.specialPriceIdr},
+        ${shipmentEstimateServices.normalPriceIdr},
+        ${shipmentEstimateServices.shippingAmountIdr}
+      ) AS "shippingDeductedIdr"
     FROM ${shipments}
     INNER JOIN ${shipmentDrafts}
       ON ${shipmentDrafts.shipmentId} = ${shipments.id}
@@ -285,8 +461,29 @@ export async function ensureCodTotalsForConfirmation(
   context: TenantContext,
   selection: CodConfirmationSelection,
 ): Promise<PersistedCodTotals | null> {
+  const charge = selection.codShippingChargeIdr ?? null;
+  // Checked on the shipment's row, whichever estimate wrote it: re-estimating
+  // cannot replace it (one immutable row per shipment).
+  if (await shipmentCodFormulaRetired(tx, context, selection.shipmentId)) {
+    throw new CodTotalsFormulaRetiredError();
+  }
   const existing = await loadCodTotalsForSelection(tx, context, selection);
-  if (existing) return existing;
+  if (existing) {
+    // A recorded row is immutable: a retry confirms the charge already stored,
+    // and a charge sent for a shipment that is not COD Ongkir is refused.
+    if (existing.codFormulaVersion === COD_ONGKIR_FORMULA_VERSION) {
+      if (charge !== existing.providerCodAmountIdr) {
+        throw new CodOngkirChargeRefusedError(
+          "ALREADY_RECORDED",
+          null,
+          existing.providerCodAmountIdr,
+        );
+      }
+    } else if (charge !== null) {
+      throw new CodOngkirChargeRefusedError("NOT_COD_ONGKIR");
+    }
+    return existing;
+  }
 
   const existingOrderIsCod = await loadExistingProviderOrderCodState(
     tx,
@@ -294,17 +491,24 @@ export async function ensureCodTotalsForConfirmation(
     selection,
   );
   if (existingOrderIsCod !== null) {
-    if (!existingOrderIsCod) return null;
+    if (!existingOrderIsCod && charge === null) return null;
     throw new CodTotalsUnavailableError();
   }
 
   const estimate = await loadConfirmationEstimate(tx, context, selection);
+  if (!estimate.codShippingOnly && charge !== null) {
+    throw new CodOngkirChargeRefusedError("NOT_COD_ONGKIR");
+  }
   if (!estimate.isCod) return null;
 
-  const amounts = calculateCodAmounts(
-    estimate.goodsValueIdr,
-    estimate.shippingAmountIdr,
-  );
+  const amounts = estimate.codShippingOnly
+    ? calculateCodOngkirAmounts({
+        chargeIdr: charge,
+        goodsValueIdr: estimate.goodsValueIdr,
+        shippingAmountIdr: estimate.shippingAmountIdr,
+        shippingDeductedIdr: estimate.shippingDeductedIdr,
+      })
+    : { ...calculateCodAmounts(estimate.goodsValueIdr, estimate.shippingAmountIdr), codShippingBasisIdr: null };
   const inserted = await tx
     .insert(shipmentCodTotals)
     .values({
@@ -330,6 +534,7 @@ export async function ensureCodTotalsForConfirmation(
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
       codFormulaVersion: shipmentCodTotals.codFormulaVersion,
+      codShippingBasisIdr: shipmentCodTotals.codShippingBasisIdr,
       createdAt: shipmentCodTotals.createdAt,
     });
   const totals =
@@ -342,7 +547,8 @@ export async function ensureCodTotalsForConfirmation(
     totals.serviceFeeIdr !== amounts.serviceFeeIdr ||
     totals.vatAmountIdr !== amounts.vatAmountIdr ||
     totals.providerCodAmountIdr !== amounts.providerCodAmountIdr ||
-    totals.codFormulaVersion !== amounts.codFormulaVersion
+    totals.codFormulaVersion !== amounts.codFormulaVersion ||
+    totals.codShippingBasisIdr !== amounts.codShippingBasisIdr
   ) {
     throw new CodTotalsUnavailableError();
   }
@@ -379,6 +585,8 @@ async function loadSelectedEstimate(
       AND ${shipments.tenantId} = ${context.tenantId}
       AND ${shipments.status} IN ('DRAFT', 'ESTIMATED')
       AND ${shipmentDrafts.isCod} = true
+      -- Version 2 only: a COD Ongkir charge is chosen at confirmation (T-186).
+      AND ${shipmentDrafts.codShippingOnly} = false
       AND ${shipmentEstimateSnapshots.id} = ${selection.snapshotId}
       AND ${shipmentEstimateSnapshots.isCodRequested} = true
       AND ${shipmentEstimateSnapshots.originAreaId} = coalesce(
@@ -442,6 +650,7 @@ export async function persistCodTotalsForEstimate(
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
       codFormulaVersion: shipmentCodTotals.codFormulaVersion,
+      codShippingBasisIdr: shipmentCodTotals.codShippingBasisIdr,
       createdAt: shipmentCodTotals.createdAt,
     });
 
@@ -471,6 +680,7 @@ export async function loadCodTotalsForShipment(
       vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
       codFormulaVersion: shipmentCodTotals.codFormulaVersion,
+      codShippingBasisIdr: shipmentCodTotals.codShippingBasisIdr,
       createdAt: shipmentCodTotals.createdAt,
     })
     .from(shipmentCodTotals)

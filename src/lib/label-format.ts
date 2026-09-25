@@ -77,13 +77,16 @@ export function formatWibDateTimeParts(date: Date) {
 /**
  * District and city from a Mengantar area label ("subdistrict, district, city, province, zip").
  * Counted from the end: drop a trailing postal code, then take the two parts before the province,
- * so a missing subdistrict or a comma inside one never shifts the result. Two-part labels are
- * already "district, city" and are returned unchanged; the full label stays on detail.
+ * so a missing subdistrict or a comma inside one never shifts the result. A shorter label is
+ * already "district, city" or a single area name: it is printed from its cleaned parts — never
+ * the raw label, which could carry the postal code or empty segments (T-193) — and a label with
+ * no area name at all reads "—". The full label stays on detail.
  */
 export function formatDistrictCity(areaLabel: string) {
   const parts = areaLabel.split(",").map((part) => part.trim()).filter(Boolean);
   if (parts.length > 0 && /^\d{5}$/.test(parts[parts.length - 1])) parts.pop();
-  return parts.length >= 3 ? parts.slice(-3, -1).join(", ") : areaLabel;
+  if (parts.length >= 3) return parts.slice(-3, -1).join(", ");
+  return parts.length > 0 ? parts.join(", ") : "—";
 }
 
 /**

@@ -1,14 +1,23 @@
 {
-  "activeRun": null,
+  "activeRun": "RUN-20260917T013105Z-afc9fdd5",
+  "activeTask": "T-180",
+  "capability": "full-stack",
+  "job": "implementation",
   "lastRun": {
     "finishedAt": "2026-09-16T19:10:01Z",
     "result": "PASS",
     "runId": "RUN-20260916T190650Z-c5c3fe5d"
   },
-  "observedHead": "94785ea8a9939af30269ed94ce2b39d4037b587a",
+  "model": "claude-opus-5",
+  "observedHead": "f17fd1bb163d58b43c5692d5b869fc9123366d27",
   "observedState": "IMPLEMENTING",
   "project": "geraicuan",
+  "provider": "anthropic",
+  "reasoningEffort": "high",
+  "requirement": "PR-58",
+  "risk": "R4",
   "schemaVersion": 1,
   "statusAuthority": "STATUS.md",
-  "updatedAt": "2026-09-16T19:10:01Z"
+  "updatedAt": "2026-09-17T01:31:05Z",
+  "worker": "unknown"
 }

@@ -25,6 +25,8 @@ import {
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
+import { codChargeBreakdown, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 
 export type PrintableLabel = {
   shipmentId: string;
@@ -34,15 +36,20 @@ export type PrintableLabel = {
   providerService: string;
   issuedAt: Date;
   isCod: boolean;
+  /**
+   * T-186: COD Ongkir prints the shipping charge as the only amount the courier
+   * collects and never a goods breakdown.
+   */
+  paymentMethod: PaymentMethod;
   shippingAmountIdr: number;
   insuranceAmountIdr: number | null;
   providerCodAmountIdr: number | null;
-  codBreakdown: {
-    goodsValueIdr: number;
-    shippingAmountIdr: number;
-    serviceFeeIdr: number;
-    vatAmountIdr: number;
-  } | null;
+  /**
+   * T-193: goods + shipping + Biaya COD (Mengantar's fee, VAT inside) + rounding
+   * = the COD amount. Null for COD Ongkir, non-COD, and a pre-T-175 version 1
+   * amount, whose lines cannot add up with Mengantar's actual fee.
+   */
+  codBreakdown: CodChargeBreakdown | null;
   package: {
     content: string;
     weightGrams: number;
@@ -82,6 +89,8 @@ export type PrintableShipmentRow = {
   recipientName: string;
   recipientPhone: string;
   isCod: boolean;
+  /** T-190: so the list never prints a COD Ongkir charge as a COD total. */
+  paymentMethod: PaymentMethod;
   providerCodAmountIdr: number | null;
   printCount: number;
 };
@@ -203,6 +212,7 @@ export async function loadPrintableLabel(
       packageWidthCm: shipmentDrafts.packageWidthCm,
       packageHeightCm: shipmentDrafts.packageHeightCm,
       declaredValueIdr: shipmentDrafts.declaredValueIdr,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
       outletName: outlets.name,
       courier: providerBatches.courier,
       providerService: providerOrderSnapshots.providerService,
@@ -215,9 +225,8 @@ export async function loadPrintableLabel(
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       goodsValueIdr: shipmentCodTotals.goodsValueIdr,
       codShippingAmountIdr: shipmentCodTotals.shippingAmountIdr,
-      serviceFeeIdr: shipmentCodTotals.serviceFeeIdr,
-      vatAmountIdr: shipmentCodTotals.vatAmountIdr,
       calculatedProviderCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+      codFormulaVersion: shipmentCodTotals.codFormulaVersion,
     })
     .from(shipments)
     .innerJoin(
@@ -272,7 +281,11 @@ export async function loadPrintableLabel(
     awb.length > 160 ||
     !row.issuedAt ||
     (row.isCod && row.providerCodAmountIdr === null) ||
-    (!row.isCod && row.providerCodAmountIdr !== null)
+    (!row.isCod && row.providerCodAmountIdr !== null) ||
+    // A label states what the courier collects, so the order, the draft's
+    // method and the recorded formula must tell one story (T-186).
+    (row.codShippingOnly && (row.codFormulaVersion !== 3
+      || row.calculatedProviderCodAmountIdr !== row.providerCodAmountIdr))
   ) {
     throw new LabelUnavailableError("NOT_ISSUED");
   }
@@ -313,14 +326,21 @@ export async function loadPrintableLabel(
       ),
     );
 
-  const hasConsistentCodBreakdown =
-    row.isCod &&
+  const paymentMethod = paymentMethodOf(row.isCod, row.codShippingOnly);
+  // The goods + shipping + fee breakdown belongs to full COD only; printing it
+  // on COD Ongkir would tell the courier to collect goods the buyer paid for.
+  const codBreakdown =
+    paymentMethod === "COD" &&
     row.goodsValueIdr !== null &&
     row.codShippingAmountIdr !== null &&
-    row.serviceFeeIdr !== null &&
-    row.vatAmountIdr !== null &&
-    row.calculatedProviderCodAmountIdr !== null &&
-    row.providerCodAmountIdr === row.calculatedProviderCodAmountIdr;
+    row.providerCodAmountIdr !== null &&
+    row.providerCodAmountIdr === row.calculatedProviderCodAmountIdr
+      ? codChargeBreakdown({
+          goodsValueIdr: row.goodsValueIdr,
+          shippingAmountIdr: row.codShippingAmountIdr,
+          providerCodAmountIdr: row.providerCodAmountIdr,
+        })
+      : null;
 
   return {
     shipmentId: row.shipmentId,
@@ -330,17 +350,11 @@ export async function loadPrintableLabel(
     providerService: row.providerService,
     issuedAt: row.issuedAt,
     isCod: row.isCod,
+    paymentMethod,
     shippingAmountIdr: row.shippingAmountIdr,
     insuranceAmountIdr: row.insuranceAmountIdr,
     providerCodAmountIdr: row.providerCodAmountIdr,
-    codBreakdown: hasConsistentCodBreakdown
-      ? {
-          goodsValueIdr: row.goodsValueIdr as number,
-          shippingAmountIdr: row.codShippingAmountIdr as number,
-          serviceFeeIdr: row.serviceFeeIdr as number,
-          vatAmountIdr: row.vatAmountIdr as number,
-        }
-      : null,
+    codBreakdown,
     package: {
       content: row.packageContent,
       weightGrams: row.packageWeightGrams,
@@ -788,6 +802,7 @@ export async function listPrintableShipments(
       recipientName: shipmentParties.name,
       recipientPhone: shipmentParties.phone,
       isCod: providerOrderSnapshots.isCod,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       printCount: sql<number>`(
         SELECT count(*)::integer
@@ -857,6 +872,7 @@ export async function listPrintableShipments(
     recipientName: row.recipientName,
     recipientPhone: row.recipientPhone,
     isCod: row.isCod,
+    paymentMethod: paymentMethodOf(row.isCod, row.codShippingOnly),
     providerCodAmountIdr: row.providerCodAmountIdr,
     printCount: row.printCount,
   }));

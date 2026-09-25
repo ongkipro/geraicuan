@@ -22,6 +22,14 @@ import {
   type TenantTransaction,
 } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { contactAddressErrors, contactIdentityErrors } from "@/lib/contact-directory";
+import {
+  CONTACT_ROLE_NAME_CONFLICT_MESSAGE,
+  CONTACT_ROLES_CARD,
+  DEFAULT_CONTACT_ROLE,
+  parseContactRole,
+} from "@/lib/contact-role-filter";
+import { normalizeFieldText, validate } from "@/lib/field-character-classes";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -31,10 +39,7 @@ import { normalizePartyPhone } from "@/lib/shipment-draft";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_ADDRESS_LABEL_LENGTH = 60;
-const MAX_ADDRESS_LENGTH = 500;
 const MAX_AREA_LENGTH = 160;
-const MAX_NAME_LENGTH = 120;
 
 type IdentityField = "contactName" | "contactPhone" | "roles";
 type AddressField = "addressLabel" | "addressText" | "areaId" | "areaLabel";
@@ -67,7 +72,7 @@ export type ContactArchiveState = { error?: string };
 
 function readText(formData: FormData, field: string) {
   const value = formData.get(field);
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? normalizeFieldText(value) : "";
 }
 
 function requireContactId(formData: FormData) {
@@ -114,16 +119,26 @@ function addressValues(formData: FormData): AddressValues {
 
 function validateIdentity(formData: FormData) {
   const name = readText(formData, "contactName");
-  const phone = normalizePartyPhone(readText(formData, "contactPhone"));
+  const rawPhone = readText(formData, "contactPhone");
+  const phone = normalizePartyPhone(rawPhone);
   const isRecipient = formData.get("roleRecipient") === "on";
   const isSender = formData.get("roleSender") === "on";
-  const fields: IdentityField[] = [];
+  const errors: Partial<Record<IdentityField, string>> = contactIdentityErrors(name, rawPhone, { isSender });
+  if (!isSender && !isRecipient) errors.roles = "Pilih minimal satu peran kontak.";
+  else if (
+    formData.get("card") === CONTACT_ROLES_CARD
+    && errors.contactName
+    && !isSender
+    && name.length > 0
+    && name.length <= 120
+    && validate("BUSINESS_NAME", name)
+  ) {
+    // Unticking Pengirim made the stored store name break the person-name rule.
+    delete errors.contactName;
+    errors.roles = CONTACT_ROLE_NAME_CONFLICT_MESSAGE;
+  }
 
-  if (!name || name.length > MAX_NAME_LENGTH) fields.push("contactName");
-  if (!phone) fields.push("contactPhone");
-  if (!isSender && !isRecipient) fields.push("roles");
-
-  if (fields.length > 0 || !phone) return { fields, ok: false as const };
+  if (Object.keys(errors).length > 0 || !phone) return { errors, ok: false as const };
   return {
     input: { isRecipient, isSender, name, phone },
     ok: true as const,
@@ -135,23 +150,18 @@ function validateAddress(formData: FormData) {
   const addressLabel = readText(formData, "addressLabel");
   const destinationAreaId = readText(formData, "areaId");
   const destinationAreaLabel = readText(formData, "areaLabel");
-  const fields: AddressField[] = [];
-
-  if (!addressLabel || addressLabel.length > MAX_ADDRESS_LABEL_LENGTH) {
-    fields.push("addressLabel");
-  }
-  if (!address || address.length > MAX_ADDRESS_LENGTH) fields.push("addressText");
+  const errors: Partial<Record<AddressField, string>> = contactAddressErrors(addressLabel, address);
   if (
     (destinationAreaId && !destinationAreaLabel) ||
     (!destinationAreaId && destinationAreaLabel)
   ) {
-    fields.push("areaLabel");
+    errors.areaLabel = "Cari dan pilih ulang area tujuan.";
   } else {
-    if (destinationAreaId.length > MAX_AREA_LENGTH) fields.push("areaId");
-    if (destinationAreaLabel.length > MAX_AREA_LENGTH) fields.push("areaLabel");
+    if (destinationAreaId.length > MAX_AREA_LENGTH) errors.areaId = "Pilih area tujuan yang valid.";
+    if (destinationAreaLabel.length > MAX_AREA_LENGTH) errors.areaLabel = "Cari dan pilih ulang area tujuan.";
   }
 
-  if (fields.length > 0) return { fields, ok: false as const };
+  if (Object.keys(errors).length > 0) return { errors, ok: false as const };
   return {
     input: {
       address,
@@ -249,8 +259,7 @@ export async function updateContactAction(
   const contactId = requireContactId(formData);
   const validation = validateIdentity(formData);
   if (!validation.ok) {
-    const errors = Object.fromEntries(validation.fields.map((field) => [field, field === "contactName" ? "Nama wajib diisi dan maksimal 120 karakter." : field === "contactPhone" ? "Nomor telepon kontak tidak valid." : "Pilih minimal satu peran kontak."]));
-    return { errors, message: "Periksa data kontak.", values: identityValues(formData) };
+    return { errors: validation.errors, message: "Periksa data kontak.", values: identityValues(formData) };
   }
 
   try {
@@ -286,7 +295,7 @@ export async function addContactAddressAction(
     : null;
   if (authority && !authority.ok) {
     const localErrors = !validation.ok
-      ? Object.fromEntries(validation.fields.map((field) => [field, field === "addressLabel" ? "Label alamat wajib diisi dan maksimal 60 karakter." : field === "addressText" ? "Alamat wajib diisi dan maksimal 500 karakter." : field === "areaId" ? "Pilih area tujuan yang valid." : "Cari dan pilih ulang area tujuan."]))
+      ? validation.errors
       : {};
     return {
       errors: { ...localErrors, areaLabel: authority.message },
@@ -300,8 +309,7 @@ export async function addContactAddressAction(
   }
   const selectedArea = authority?.ok ? selectedAreaState(formData, authority.option) : undefined;
   if (!validation.ok) {
-    const errors = Object.fromEntries(validation.fields.map((field) => [field, field === "addressLabel" ? "Label alamat wajib diisi dan maksimal 60 karakter." : field === "addressText" ? "Alamat wajib diisi dan maksimal 500 karakter." : field === "areaId" ? "Pilih area tujuan yang valid." : "Cari dan pilih ulang area tujuan."]));
-    return { errors, message: "Periksa alamat baru.", selectedArea, values: addressValues(formData) };
+    return { errors: validation.errors, message: "Periksa alamat baru.", selectedArea, values: addressValues(formData) };
   }
 
   try {
@@ -364,7 +372,7 @@ export async function updateContactAddressAction(
     : null;
   if (authority && !authority.ok) {
     const localErrors = !validation.ok
-      ? Object.fromEntries(validation.fields.map((field) => [field, field === "addressLabel" ? "Label alamat wajib diisi dan maksimal 60 karakter." : field === "addressText" ? "Alamat wajib diisi dan maksimal 500 karakter." : field === "areaId" ? "Pilih area tujuan yang valid." : "Cari dan pilih ulang area tujuan."]))
+      ? validation.errors
       : {};
     return {
       errors: { ...localErrors, areaLabel: authority.message },
@@ -378,8 +386,7 @@ export async function updateContactAddressAction(
   }
   const selectedArea = authority?.ok ? selectedAreaState(formData, authority.option) : undefined;
   if (!validation.ok) {
-    const errors = Object.fromEntries(validation.fields.map((field) => [field, field === "addressLabel" ? "Label alamat wajib diisi dan maksimal 60 karakter." : field === "addressText" ? "Alamat wajib diisi dan maksimal 500 karakter." : field === "areaId" ? "Pilih area tujuan yang valid." : "Cari dan pilih ulang area tujuan."]));
-    return { errors, message: "Periksa perubahan alamat.", selectedArea, values: addressValues(formData) };
+    return { errors: validation.errors, message: "Periksa perubahan alamat.", selectedArea, values: addressValues(formData) };
   }
 
   try {
@@ -443,5 +450,8 @@ export async function archiveContactAction(
     }
     throw error;
   }
-  redirect(`/app/kontak/${contactId}?diarsipkan=1`);
+  // T-188: stay under the menu the contact was opened from.
+  const requestedRole = formData.get("dari");
+  const role = parseContactRole(typeof requestedRole === "string" ? requestedRole : null) ?? DEFAULT_CONTACT_ROLE;
+  redirect(`/app/kontak/${contactId}?dari=${role}&diarsipkan=1`);
 }

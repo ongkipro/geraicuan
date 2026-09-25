@@ -12,6 +12,7 @@ import { lookupShipmentByTrackingKey } from "@/db/shipment-tracking-lookup-repos
 import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import type { shipmentStatuses } from "@/lib/domain-enums";
+import type { PaymentMethod } from "@/lib/payment-method";
 
 export type TrackingLookupState =
   | { kind: "idle" }
@@ -25,9 +26,11 @@ export type TrackingLookupState =
     result: {
       awb: string | null;
       courier: string | null;
+      declaredValueIdr: number;
       destinationAreaLabel: string;
-      isCod: boolean;
       observation: { observedAtIso: string; providerStatus: string } | null;
+      paymentMethod: PaymentMethod;
+      providerCodAmountIdr: number | null;
       providerService: string | null;
       publicReference: string;
       status: (typeof shipmentStatuses)[number];
@@ -70,14 +73,16 @@ export async function lookupShipmentTracking(
       result: {
         awb: result.awb,
         courier: result.courier,
+        declaredValueIdr: result.declaredValueIdr,
         destinationAreaLabel: result.destinationAreaLabel,
-        isCod: result.isCod,
         observation: result.observation
           ? {
             observedAtIso: result.observation.observedAt.toISOString(),
             providerStatus: result.observation.providerStatus,
           }
           : null,
+        paymentMethod: result.paymentMethod,
+        providerCodAmountIdr: result.providerCodAmountIdr,
         providerService: result.providerService,
         publicReference: result.publicReference,
         status: result.status,

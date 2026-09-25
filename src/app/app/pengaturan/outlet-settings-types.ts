@@ -15,6 +15,8 @@ export type SafeOutletReadiness = {
   connectionUpdatedAtLabel: string | null;
   readinessStatus: "ready" | "needs_attention";
   updatedAtLabel: string;
+  /** D-9: this store ships on its own Mengantar account only. */
+  privateConnectionRequired?: boolean;
 };
 
 /** Which parts of an outlet's configuration are still missing, in Indonesian. */
@@ -33,5 +35,8 @@ export function missingOutletConfiguration(outlet: SafeOutletReadiness) {
   if (!outlet.defaultOriginAreaId) missing.push("area asal");
   if (hasLegacyLocation) missing.push("label lokasi Mengantar");
   if (outlet.connectionStatus === "private_attention") missing.push("koneksi Mengantar");
+  if (outlet.privateConnectionRequired && outlet.connectionSource !== "private") {
+    missing.push("akun Mengantar milik toko");
+  }
   return missing;
 }

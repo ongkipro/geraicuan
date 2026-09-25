@@ -387,15 +387,11 @@ describe("Kontak panel counts", () => {
       const page = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
         loadContactDirectoryPage(tx, context, { query: "", role, status: "all" }),
       );
-      for (const [status, metricId] of [
-        ["all", "CON-ALL"],
-        ["active", "CON-ACTIVE"],
-        ["archived", "CON-ARCHIVED"],
-      ] as const) {
+      for (const status of ["all", "active", "archived"] as const) {
         const filtered = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
           loadContactDirectoryPage(tx, context, { query: "", role, status }),
         );
-        expect(page.summary[metricId], `${role}/${status}`).toBe(filtered.rows.length);
+        expect(page.summary[status], `${role}/${status}`).toBe(filtered.rows.length);
       }
     }
   });
@@ -407,16 +403,16 @@ describe("Kontak panel counts", () => {
     const pengirim = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadContactDirectoryPage(tx, context, { query: "", role: "sender", status: "all" }),
     );
-    expect(semua.summary).toEqual({ "CON-ACTIVE": 3, "CON-ALL": 5, "CON-ARCHIVED": 2 });
+    expect(semua.summary).toEqual({ active: 3, all: 5, archived: 2 });
     // Contact 2 holds both roles, so it is counted in both views.
-    expect(pengirim.summary).toEqual({ "CON-ACTIVE": 2, "CON-ALL": 3, "CON-ARCHIVED": 1 });
+    expect(pengirim.summary).toEqual({ active: 2, all: 3, archived: 1 });
   });
 
   it("counts only the reading tenant's contacts", async () => {
     const other = await withTenantContext(appDb, adminB, tenantB, (tx, context) =>
       loadContactDirectoryPage(tx, context, { query: "", role: "all", status: "all" }),
     );
-    expect(other.summary).toEqual({ "CON-ACTIVE": 1, "CON-ALL": 1, "CON-ARCHIVED": 0 });
+    expect(other.summary).toEqual({ active: 1, all: 1, archived: 0 });
   });
 });
 

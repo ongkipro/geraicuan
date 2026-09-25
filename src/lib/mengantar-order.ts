@@ -49,6 +49,15 @@ export type MengantarOrderRequest = {
   quantity: number;
   item_name: string;
   goods_value: number;
+  /**
+   * T-186 / PR-64 COD Ongkir is sent as `is_cod: true` with `cod_amount` = the
+   * shipping charge the courier collects (the recorded version 3 COD total) and
+   * `goods_value` = the declared goods value, which is not collected. This is
+   * PROVISIONAL behind D-5, like the PR-47 keys below: how Mengantar represents a
+   * shipping-only COD is not verified (T-153 — `POST /order` refuses every shape
+   * tried), and no provider key for it is documented, so none is invented here.
+   * A COD amount below the goods value is exactly what T-153 must confirm.
+   */
   is_cod: boolean;
   cod_amount: number;
   // PR-47 field parity with Mengantar's own order form. These key spellings are

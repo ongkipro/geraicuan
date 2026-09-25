@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Session, closeTab, open } from "./cdp.mjs";
 const origin = process.env.UI_AUDIT_ORIGIN;
-assert(origin && ["localhost", "127.0.0.1"].includes(new URL(origin).hostname), "Pass an explicit local UI_AUDIT_ORIGIN");
+// Same local allowlist as the sibling audits: the dev server is audited on its LAN origin (auth trusts it, not 127.0.0.1).
+assert(origin && ["localhost", "127.0.0.1", "100.127.67.86"].includes(new URL(origin).hostname), "Pass an explicit local UI_AUDIT_ORIGIN");
 const target = await open("about:blank");
 const session = await Session.attach(target.webSocketDebuggerUrl);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));

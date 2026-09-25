@@ -355,8 +355,10 @@ describe("tenant shipment analytics repository", () => {
         issuedCount: 2,
         resolvedSubmissionCount: 2,
         providerShippingIdr: 18_000,
-        codServiceFeeIdr: 3_300,
-        codVatIdr: 363,
+        // T-193: the fee Mengantar keeps on COD 113_663 (3_785, not the stored
+        // 3_300 + 363), and the VAT inside it, round(3_785 × 11 / 111).
+        codFeeIdr: 3_785,
+        codFeeVatIncludedIdr: 375,
         // COD 113_663 − shipping 10_000 − Mengantar's 3.33% of the COD (3_785.08):
         // 99_878, the exact shortfall T-175 found. The stored fee said 100_000.
         codDisbursementEstimateIdr: 99_878,
@@ -478,8 +480,8 @@ describe("tenant shipment analytics repository", () => {
         issuedCount: 1,
         resolvedSubmissionCount: 1,
         providerShippingIdr: 7_000,
-        codServiceFeeIdr: 0,
-        codVatIdr: 0,
+        codFeeIdr: 0,
+        codFeeVatIncludedIdr: 0,
         codDisbursementEstimateIdr: 0,
       },
       count: 1,
@@ -542,8 +544,8 @@ describe("tenant shipment analytics repository", () => {
       issuedCount: 1,
       resolvedSubmissionCount: 1,
       providerShippingIdr: 10_000,
-      codServiceFeeIdr: 3_300,
-      codVatIdr: 363,
+      codFeeIdr: 3_785,
+      codFeeVatIncludedIdr: 375,
       // Same shipment, same figure: 113_663 − 10_000 − 3_785.08 = 99_878.
       codDisbursementEstimateIdr: 99_878,
     });
@@ -587,8 +589,8 @@ describe("tenant shipment analytics repository", () => {
       issuedCount: 0,
       resolvedSubmissionCount: 0,
       providerShippingIdr: 0,
-      codServiceFeeIdr: 0,
-      codVatIdr: 0,
+      codFeeIdr: 0,
+      codFeeVatIncludedIdr: 0,
       codDisbursementEstimateIdr: 0,
     });
   });
@@ -629,13 +631,15 @@ describe("tenant shipment analytics repository", () => {
         loadShipmentKpis(tx, context, range("Asia/Jakarta")),
       );
       expect(kpis.codDisbursementEstimateIdr).toBe(102_878);
-      expect(kpis.codServiceFeeIdr + kpis.codVatIdr).toBe(3_663);
+      // T-193: one Biaya COD, so COD − shipping − Biaya COD = the estimate, to the rupiah.
+      expect(kpis.codFeeIdr).toBe(3_785);
+      expect(113_663 - 7_000 - kpis.codFeeIdr).toBe(kpis.codDisbursementEstimateIdr);
       // The read model itself carries no merchandise figure, whatever a legacy
       // column still holds.
       expect(Object.keys(kpis).sort()).toEqual([
         "codDisbursementEstimateIdr",
-        "codServiceFeeIdr",
-        "codVatIdr",
+        "codFeeIdr",
+        "codFeeVatIncludedIdr",
         "createdCount",
         "issuedCount",
         "providerShippingIdr",
@@ -654,10 +658,12 @@ describe("tenant shipment analytics repository", () => {
     }
   });
 
-  it("reports Mengantar's COD fee under both ledger classifications, once each (T-178)", async () => {
-    // Sequence 1's issuance was ledgered before T-178 as the legacy
-    // GERAICUAN_COD_SERVICE_FEE_REVENUE (3_300). A later issuance in the same
-    // period carries MENGANTAR_COD_FEE_COST (4_000). The fee is both, once each.
+  it("reports one Biaya COD from the issued order, whatever the ledger booked (T-193)", async () => {
+    // Sequence 1's issuance was ledgered before T-178 (revenue 3_300 + VAT row
+    // 363). A MENGANTAR_COD_FEE_COST row (4_000) booked in the same period on a
+    // non-COD shipment must not move the figure either: Biaya COD is Mengantar's
+    // fee on each issued COD order, round(113_663 × 333 / 10_000) = 3_785, and
+    // its VAT is inside it.
     const ids = orderIds(2);
     const inserted = await adminPool.query<{ id: string }>(
       `INSERT INTO ledger_entries
@@ -673,7 +679,8 @@ describe("tenant shipment analytics repository", () => {
       const kpis = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
         loadShipmentKpis(tx, context, range("Asia/Jakarta")),
       );
-      expect(kpis.codServiceFeeIdr).toBe(7_300);
+      expect(kpis.codFeeIdr).toBe(3_785);
+      expect(kpis.codFeeVatIncludedIdr).toBe(375);
       // The new type is a cost, and the legacy provider-shipping figure does not absorb it.
       expect(kpis.providerShippingIdr).toBe(18_000);
     } finally {

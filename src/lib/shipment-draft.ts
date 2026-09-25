@@ -1,5 +1,8 @@
 import "server-only";
 
+import { characterClassError, normalizeFieldText, partyNameClass } from "@/lib/field-character-classes";
+import { isPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
+
 const MAX_ADDRESS_LENGTH = 500;
 const MAX_AREA_ID_LENGTH = 160;
 const MAX_AREA_LABEL_LENGTH = 160;
@@ -12,6 +15,12 @@ const MAX_PHONE_LENGTH = 16;
 const MAX_QUANTITY = 1_000;
 const MAX_VALUE_IDR = 2_147_483_647;
 const MAX_WEIGHT_GRAMS = 100_000;
+
+const DIMENSION_LABELS = {
+  packageHeightCm: "Tinggi paket",
+  packageLengthCm: "Panjang paket",
+  packageWidthCm: "Lebar paket",
+} as const;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PROVIDER_AREA_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
@@ -64,9 +73,12 @@ export type ShipmentDraftInput = {
    * unverified and cannot be submitted to the provider.
    */
   destinationAreaVerified: boolean;
+  /** True for COD and COD Ongkir: the courier collects cash. */
   isCod: boolean;
   isHazardous: boolean;
   outletId: string;
+  /** T-186 / PR-64: how the shipment is paid; `isCod` is derived from it. */
+  paymentMethod: PaymentMethod;
   packageContent: string;
   packageHeightCm: number | null;
   packageLengthCm: number | null;
@@ -117,7 +129,7 @@ export type ShipmentDraftValidation =
 
 function readText(formData: FormData, field: string) {
   const value = formData.get(field);
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? normalizeFieldText(value) : "";
 }
 
 /**
@@ -213,25 +225,48 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     errors.destinationAreaLabel = "Nama area tujuan wajib diisi dan maksimal 160 karakter.";
   }
 
-  for (const field of ["senderName", "recipientName"] as const) {
+  // T-196: every field also has a character class. The class message wins over
+  // the generic shape message, so the operator learns what to remove.
+  const classError = (
+    field: ShipmentDraftField & keyof typeof raw,
+    kind: Parameters<typeof characterClassError>[0],
+    label: string,
+  ) => {
+    const message = characterClassError(kind, label, raw[field]);
+    if (message) errors[field] = message;
+    return message !== null;
+  };
+
+  // A sender may be a store ("Toko 88"); a recipient is a person.
+  for (const [field, label, isSender] of [["senderName", "Nama pengirim", true], ["recipientName", "Nama penerima", false]] as const) {
     if (!raw[field] || raw[field].length > MAX_NAME_LENGTH) {
       errors[field] = "Nama wajib diisi dan maksimal 120 karakter.";
+    } else {
+      classError(field, partyNameClass({ isSender }), label);
     }
   }
 
-  for (const field of ["senderAddress", "recipientAddress"] as const) {
+  for (const [field, label] of [["senderAddress", "Alamat pengirim"], ["recipientAddress", "Alamat penerima"]] as const) {
     if (!raw[field] || raw[field].length > MAX_ADDRESS_LENGTH) {
       errors[field] = "Alamat wajib diisi dan maksimal 500 karakter.";
+    } else {
+      classError(field, "ADDRESS", label);
     }
   }
 
   const senderPhone = normalizePartyPhone(raw.senderPhone);
   const recipientPhone = normalizePartyPhone(raw.recipientPhone);
-  if (!senderPhone) errors.senderPhone = "Nomor telepon pengirim tidak valid.";
-  if (!recipientPhone) errors.recipientPhone = "Nomor telepon penerima tidak valid.";
+  if (!classError("senderPhone", "PHONE", "Nomor telepon pengirim") && !senderPhone) {
+    errors.senderPhone = "Nomor telepon pengirim tidak valid.";
+  }
+  if (!classError("recipientPhone", "PHONE", "Nomor telepon penerima") && !recipientPhone) {
+    errors.recipientPhone = "Nomor telepon penerima tidak valid.";
+  }
 
   if (!raw.packageContent || raw.packageContent.length > MAX_CONTENT_LENGTH) {
     errors.packageContent = "Isi paket wajib diisi dan maksimal 240 karakter.";
+  } else {
+    classError("packageContent", "FREE_TEXT", "Isi paket");
   }
 
   // Operational free text Mengantar's own order form collects. Optional, but
@@ -241,6 +276,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     field: "recipientAddressLandmark" | "shippingInstruction",
     maxLength: number,
     message: string,
+    label: string,
   ) => {
     const value = raw[field];
     if (value === "") return null;
@@ -248,17 +284,21 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
       errors[field] = message;
       return null;
     }
-    return value;
+    return classError(field, field === "recipientAddressLandmark" ? "ADDRESS" : "FREE_TEXT", label)
+      ? null
+      : value;
   };
   const shippingInstruction = optionalText(
     "shippingInstruction",
     MAX_INSTRUCTION_LENGTH,
     "Instruksi pengiriman maksimal 500 karakter tanpa karakter kontrol.",
+    "Instruksi pengiriman",
   );
   const recipientAddressLandmark = optionalText(
     "recipientAddressLandmark",
     MAX_LANDMARK_LENGTH,
     "Patokan rumah maksimal 160 karakter tanpa karakter kontrol.",
+    "Patokan rumah",
   );
 
   const isHazardous = readText(formData, "isHazardous") === "true";
@@ -278,7 +318,9 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   }
 
   const packageWeightGrams = readWholeNumber(raw.packageWeightGrams);
-  if (
+  if (classError("packageWeightGrams", "NUMERIC_INTEGER", "Berat paket")) {
+    // The class message already names the problem.
+  } else if (
     !Number.isSafeInteger(packageWeightGrams) ||
     packageWeightGrams < 1 ||
     packageWeightGrams > MAX_WEIGHT_GRAMS
@@ -287,7 +329,9 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   }
 
   const packageQuantity = readWholeNumber(raw.packageQuantity);
-  if (
+  if (classError("packageQuantity", "NUMERIC_INTEGER", "Jumlah paket")) {
+    // The class message already names the problem.
+  } else if (
     !Number.isSafeInteger(packageQuantity) ||
     packageQuantity < 1 ||
     packageQuantity > MAX_QUANTITY
@@ -309,7 +353,9 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   if (hasDimensions) {
     for (const field of dimensionFields) {
       const value = readWholeNumber(raw[field]);
-      if (!Number.isSafeInteger(value) || value < 1 || value > MAX_DIMENSION_CM) {
+      if (classError(field, "NUMERIC_INTEGER", DIMENSION_LABELS[field])) {
+        // The class message already names the problem.
+      } else if (!Number.isSafeInteger(value) || value < 1 || value > MAX_DIMENSION_CM) {
         errors[field] = "Isi panjang, lebar, dan tinggi sekaligus, atau kosongkan ketiganya.";
       } else {
         dimensions[field] = value;
@@ -318,7 +364,9 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
   }
 
   const declaredValueIdr = readRupiah(raw.declaredValue);
-  if (
+  if (classError("declaredValue", "RUPIAH", "Nilai barang")) {
+    // The class message already names the problem.
+  } else if (
     !Number.isSafeInteger(declaredValueIdr) ||
     declaredValueIdr < 0 ||
     declaredValueIdr > MAX_VALUE_IDR
@@ -326,13 +374,20 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     errors.declaredValue = "Nilai barang harus berupa rupiah bulat yang valid.";
   } else if (paymentType === "COD" && declaredValueIdr === 0) {
     errors.declaredValue = "Nilai barang COD harus lebih dari Rp0.";
+  } else if (paymentType === "COD_ONGKIR" && declaredValueIdr === 0) {
+    errors.declaredValue = "Nilai barang untuk COD Ongkir harus lebih dari Rp0.";
   }
 
-  if (paymentType !== "COD" && paymentType !== "NON_COD") {
-    errors.paymentType = "Pilih metode pembayaran yang valid.";
+  if (!isPaymentMethod(paymentType)) {
+    errors.paymentType = "Pilih metode pembayaran: Non-COD, COD, atau COD Ongkir.";
   }
 
-  if (Object.keys(errors).length > 0 || !senderPhone || !recipientPhone) {
+  if (
+    Object.keys(errors).length > 0
+    || !senderPhone
+    || !recipientPhone
+    || !isPaymentMethod(paymentType)
+  ) {
     return { errors, ok: false };
   }
 
@@ -344,7 +399,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
       // Form validation never contacts the provider, so the area starts
       // unverified; the caller flips it after re-checking with Mengantar.
       destinationAreaVerified: false,
-      isCod: paymentType === "COD",
+      isCod: paymentType !== "NON_COD",
       isHazardous,
       outletId: raw.outletId,
       packageContent: raw.packageContent,
@@ -353,6 +408,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
       packageQuantity,
       packageWeightGrams,
       packageWidthCm: dimensions.packageWidthCm,
+      paymentMethod: paymentType,
       pickupAddressId,
       recipientAddress: raw.recipientAddress,
       recipientAddressLandmark,

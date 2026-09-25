@@ -27,6 +27,7 @@ import { listOutletPickupPoints } from "@/db/outlet-pickup-point-repository";
 import { outlets, shipmentDrafts, shipments } from "@/db/schema";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatIdr } from "@/lib/label-format";
+import { PAYMENT_METHOD_LABELS, paymentMethodOf } from "@/lib/payment-method";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -100,6 +101,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
             id: shipments.id,
             publicReference: shipments.publicReference,
             isCod: shipmentDrafts.isCod,
+            codShippingOnly: shipmentDrafts.codShippingOnly,
             outletName: outlets.name,
             status: shipments.status,
           })
@@ -146,6 +148,9 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
     id: auditDraftId,
     publicReference: "GC-10001",
     isCod: true,
+    // T-186: the COD Ongkir scenario is the same synthetic draft, paid for
+    // outside GeraiCUAN, so the courier collects shipping alone.
+    codShippingOnly: auditScenario === "shipment-draft-saved-cod-ongkir",
     outletName: "Outlet Bandung",
     status: "ESTIMATED" as const,
   };
@@ -169,10 +174,33 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
       providerService: "JNE REG",
       shippingAmountIdr: 14_000,
       shippingSourceField: "price" as const,
-    }],
+      normalPriceIdr: null,
+      specialPriceIdr: null,
+      codFeeIdr: null,
+      discountIdr: null,
+    }, ...(auditScenario === "shipment-draft-saved-cod-ongkir"
+      ? [{
+          // A discounted account: Mengantar deducts the special price, so the
+          // break-even rests on 9 800, not on the 12 000 price.
+          codEligible: true,
+          currency: "IDR" as const,
+          deliveryEstimate: "2–3 hari",
+          estimateServiceId: "00000000-0000-4000-0000-000000000004",
+          insuranceAmountIdr: null,
+          insuranceSourceField: null,
+          providerService: "SAP REG",
+          shippingAmountIdr: 12_000,
+          shippingSourceField: "price" as const,
+          normalPriceIdr: 12_000,
+          specialPriceIdr: 9_800,
+          codFeeIdr: 0,
+          discountIdr: 2_200,
+        }]
+      : [])],
     snapshotId: "00000000-0000-4000-0000-000000000003",
   };
   const scenarioHasSavedDraft = auditScenario === "shipment-draft-saved"
+    || auditScenario === "shipment-draft-saved-cod-ongkir"
     || auditScenario === "shipment-draft-estimate-error"
     || auditScenario === "shipment-draft-cod-ineligible";
   const data = auditScenario === "shipment-draft-unconfigured"
@@ -199,7 +227,9 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
     ["Outlet asal", data.savedDraft?.outletName ?? "—"],
     ["Tujuan", data.savedDraft?.destinationAreaLabel ?? "—"],
     ["Nilai barang", data.savedDraft ? formatIdr(data.savedDraft.declaredValueIdr) : "—"],
-    ["Pembayaran", data.savedDraft ? (data.savedDraft.isCod ? "COD" : "Non-COD") : "—"],
+    ["Pembayaran", data.savedDraft
+      ? PAYMENT_METHOD_LABELS[paymentMethodOf(data.savedDraft.isCod, data.savedDraft.codShippingOnly)]
+      : "—"],
   ];
 
   const showDraftForm = !data.savedDraft && data.configuredOutlets.length > 0;
@@ -241,12 +271,15 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
                 auditState={auditScenario === "shipment-draft-estimate-error" ? "error" : null}
                 draftId={data.savedDraft.id}
                 isCod={data.savedDraft.isCod}
+                paymentMethod={paymentMethodOf(data.savedDraft.isCod, data.savedDraft.codShippingOnly)}
                 snapshot={
                   data.estimateSnapshot
                     ? {
                         retrievedAt: data.estimateSnapshot.retrievedAt.toISOString(),
                         services: data.estimateSnapshot.services.map((service) => {
-                          const codBreakdown = data.savedDraft.isCod && service.codEligible
+                          // COD only: a COD Ongkir total is the operator's charge, not a formula.
+                          const fullCod = data.savedDraft.isCod && !data.savedDraft.codShippingOnly;
+                          const codBreakdown = fullCod && service.codEligible
                             ? calculateCodAmountsOrNull(
                                 data.savedDraft.declaredValueIdr,
                                 service.shippingAmountIdr,
@@ -255,7 +288,7 @@ export default async function NewShipmentPage({ searchParams }: NewShipmentPageP
                           return {
                             ...service,
                             codBreakdown,
-                            codEligible: service.codEligible && (!data.savedDraft.isCod || codBreakdown !== null),
+                            codEligible: service.codEligible && (!fullCod || codBreakdown !== null),
                           };
                         }),
                       }

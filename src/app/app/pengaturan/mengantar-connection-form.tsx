@@ -109,7 +109,10 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
     switchMengantarToPlatformDefault,
     initialCredentialState,
   );
-  const [connectionMode, setConnectionMode] = useState(outlet.connectionSource);
+  const privateOnly = Boolean(outlet.privateConnectionRequired);
+  const [connectionMode, setConnectionMode] = useState(
+    privateOnly ? "private" as const : outlet.connectionSource,
+  );
   const apiKeyRef = useRef<HTMLInputElement>(null);
   const privateConnectionRef = useRef<HTMLButtonElement>(null);
   const credentialResultRef = useRef<HTMLDivElement>(null);
@@ -163,6 +166,23 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
           <FieldSet aria-labelledby="outlet-connection-title">
             <ConnectionStatus outlet={outlet} />
 
+            {privateOnly ? (
+              <Alert>
+                <CircleAlert aria-hidden="true" />
+                <AlertTitle>
+                  {outlet.connectionSource === "private"
+                    ? "Toko ini memakai akun Mengantar sendiri"
+                    : "Hubungkan akun Mengantar milik toko"}
+                </AlertTitle>
+                <AlertDescription>
+                  Toko yang mendaftar sendiri mengirim dengan akun Mengantar miliknya, bukan
+                  koneksi yang dikelola GeraiCUAN. Salin API key dari akun Mengantar Anda, lalu
+                  simpan di bawah.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {privateOnly ? null : (
             <Field>
               <FieldTitle>Sumber koneksi</FieldTitle>
               <RadioGroup
@@ -217,6 +237,7 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
                 </FieldLabel>
               </RadioGroup>
             </Field>
+            )}
 
             {connectionMode === "private" ? (
               <form
@@ -282,7 +303,7 @@ export function MengantarConnectionForm({ outlet }: { outlet: SafeOutletReadines
                       : "Simpan API key"}
                 </Button>
               </form>
-            ) : outlet.connectionSource === "private" ? (
+            ) : outlet.connectionSource === "private" && !privateOnly ? (
               <div className="space-y-4">
                 <Alert>
                   <CircleAlert aria-hidden="true" />

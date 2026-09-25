@@ -163,38 +163,37 @@ export async function listContactDirectory(
   if (contactRows.length === 0) return [];
 
   const contactIds = contactRows.map((row) => row.id);
-  const [primaryAddressRows, addressCountRows] = await Promise.all([
-    tx
-      .selectDistinctOn([contactAddresses.contactId], {
-        address: contactAddresses.address,
-        contactId: contactAddresses.contactId,
-        destinationAreaLabel: contactAddresses.destinationAreaLabel,
-      })
-      .from(contactAddresses)
-      .where(
-        and(
-          eq(contactAddresses.tenantId, context.tenantId),
-          inArray(contactAddresses.contactId, contactIds),
-          isNull(contactAddresses.archivedAt),
-        ),
-      )
-      // DISTINCT ON keeps the first row per contact under this order: the
-      // primary address when one exists, else the newest active address. `id`
-      // breaks the tie a multi-row insert creates, because `now()` is one value
-      // per statement and leaves several addresses sharing `created_at`.
-      .orderBy(asc(contactAddresses.contactId), sql`${contactAddresses.isPrimary} DESC`, desc(contactAddresses.createdAt), asc(contactAddresses.id)),
-    tx
-      .select({ contactId: contactAddresses.contactId, total: count() })
-      .from(contactAddresses)
-      .where(
-        and(
-          eq(contactAddresses.tenantId, context.tenantId),
-          inArray(contactAddresses.contactId, contactIds),
-          isNull(contactAddresses.archivedAt),
-        ),
-      )
-      .groupBy(contactAddresses.contactId),
-  ]);
+  // Awaited in turn: both run on the transaction's one connection (T-197).
+  const primaryAddressRows = await tx
+    .selectDistinctOn([contactAddresses.contactId], {
+      address: contactAddresses.address,
+      contactId: contactAddresses.contactId,
+      destinationAreaLabel: contactAddresses.destinationAreaLabel,
+    })
+    .from(contactAddresses)
+    .where(
+      and(
+        eq(contactAddresses.tenantId, context.tenantId),
+        inArray(contactAddresses.contactId, contactIds),
+        isNull(contactAddresses.archivedAt),
+      ),
+    )
+    // DISTINCT ON keeps the first row per contact under this order: the
+    // primary address when one exists, else the newest active address. `id`
+    // breaks the tie a multi-row insert creates, because `now()` is one value
+    // per statement and leaves several addresses sharing `created_at`.
+    .orderBy(asc(contactAddresses.contactId), sql`${contactAddresses.isPrimary} DESC`, desc(contactAddresses.createdAt), asc(contactAddresses.id));
+  const addressCountRows = await tx
+    .select({ contactId: contactAddresses.contactId, total: count() })
+    .from(contactAddresses)
+    .where(
+      and(
+        eq(contactAddresses.tenantId, context.tenantId),
+        inArray(contactAddresses.contactId, contactIds),
+        isNull(contactAddresses.archivedAt),
+      ),
+    )
+    .groupBy(contactAddresses.contactId);
   const addressByContact = new Map(primaryAddressRows.map((row) => [row.contactId, row]));
   const countByContact = new Map(addressCountRows.map((row) => [row.contactId, row.total]));
 
@@ -527,11 +526,8 @@ export async function archiveContact(
   if (updated.length !== 1) throw new ContactUnavailableError();
 }
 
-export type ContactDirectorySummary = {
-  "CON-ACTIVE": number;
-  "CON-ALL": number;
-  "CON-ARCHIVED": number;
-};
+/** Keyed by the `status` value each count answers; the page names the role-scoped metric IDs (spec 19 CON-SENDER-*, CON-RECIPIENT-*). */
+export type ContactDirectorySummary = Record<ContactStatusFilter, number>;
 
 /**
  * PR-52: the Kontak directory and its state panel in one pass.
@@ -567,9 +563,9 @@ export async function loadContactDirectoryPage(
   return {
     rows,
     summary: {
-      "CON-ACTIVE": summaryRow?.active ?? 0,
-      "CON-ALL": summaryRow?.all ?? 0,
-      "CON-ARCHIVED": summaryRow?.archived ?? 0,
+      active: summaryRow?.active ?? 0,
+      all: summaryRow?.all ?? 0,
+      archived: summaryRow?.archived ?? 0,
     },
   };
 }

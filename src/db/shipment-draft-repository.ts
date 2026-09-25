@@ -63,6 +63,7 @@ async function inspectExistingSubmission(
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       destinationAreaVerifiedAt: shipmentDrafts.destinationAreaVerifiedAt,
       isCod: shipmentDrafts.isCod,
+      codShippingOnly: shipmentDrafts.codShippingOnly,
       isHazardous: shipmentDrafts.isHazardous,
       packageContent: shipmentDrafts.packageContent,
       packageHeightCm: shipmentDrafts.packageHeightCm,
@@ -107,6 +108,7 @@ async function inspectExistingSubmission(
       draft.destinationAreaLabel === input.destinationAreaLabel &&
       (draft.destinationAreaVerifiedAt !== null) === input.destinationAreaVerified &&
       draft.isCod === input.isCod &&
+      draft.codShippingOnly === (input.paymentMethod === "COD_ONGKIR") &&
       draft.isHazardous === input.isHazardous &&
       draft.recipientAddressLandmark === input.recipientAddressLandmark &&
       draft.shippingInstruction === input.shippingInstruction &&
@@ -202,6 +204,9 @@ export async function createShipmentDraft(
     // this submission; NULL is an explicit "unverified" the order path refuses.
     destinationAreaVerifiedAt: input.destinationAreaVerified ? new Date() : null,
     isCod: input.isCod,
+    // T-186: an envelope sealed before the method existed carries none and
+    // stays what `isCod` says; only an explicit COD Ongkir sets it.
+    codShippingOnly: input.isCod && input.paymentMethod === "COD_ONGKIR",
     isHazardous: input.isHazardous,
     recipientAddressLandmark: input.recipientAddressLandmark,
     shippingInstruction: input.shippingInstruction,

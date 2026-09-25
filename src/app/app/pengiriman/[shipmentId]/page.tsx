@@ -32,12 +32,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/db/client";
-import { calculateCodAmounts } from "@/db/cod-totals-repository";
+import { calculateCodAmounts, shipmentCodFormulaRetired } from "@/db/cod-totals-repository";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
 import { shipmentLabelHref } from "@/lib/shipment-number";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { isDataStale } from "@/lib/data-freshness";
+import { codChargeBreakdown, shippingMengantarDeductsIdr } from "@/lib/mengantar-cod-fee";
+import { PAYMENT_AMOUNT_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import {
   formatDimensions,
   formatIdr,
@@ -129,7 +131,19 @@ export default async function ShipmentDetailPage({
     db,
     principal.userId,
     principal.tenantId,
-    (tx, context) => loadShipmentDetail(tx, context, shipmentId),
+    async (tx, context) => {
+      const loaded = await loadShipmentDetail(tx, context, shipmentId);
+      // T-199: a version 1 COD totals row that was never submitted is refused on
+      // confirmation, so the detail says so before the operator tries.
+      return loaded
+        ? {
+            ...loaded,
+            codFormulaRetired: loaded.status === "ESTIMATED"
+              && loaded.isCod
+              && await shipmentCodFormulaRetired(tx, context, shipmentId),
+          }
+        : null;
+    },
   );
   if (auditScenario === "shipment-detail-stream") detailPromise = delayResult(detailPromise, 1_200);
   const loadedDetail = await detailPromise;
@@ -159,6 +173,36 @@ export default async function ShipmentDetailPage({
       ...detail,
       provider: { ...auditProvider, batchStatus: "SUBMITTING", recoveryStatus: null },
       status: "SUBMISSION_QUEUED",
+    };
+  } else if (auditScenario === "shipment-detail-cod-formula-retired") {
+    // T-199: an estimated COD shipment holding a never-submitted version 1 row.
+    detail = {
+      ...detail,
+      codFormulaRetired: true,
+      estimate: detail.estimate ?? {
+        isCodRequested: true,
+        retrievedAt: detail.generatedAt,
+        services: [{
+          codEligible: true,
+          codFeeIdr: null,
+          currency: "IDR",
+          deliveryEstimate: "1-2 hari",
+          discountIdr: null,
+          estimateServiceId: "00000000-0000-4199-8000-000000000001",
+          insuranceAmountIdr: null,
+          insuranceSourceField: null,
+          normalPriceIdr: 14_000,
+          providerService: "JNE REG",
+          shippingAmountIdr: 14_000,
+          shippingSourceField: "price",
+          specialPriceIdr: null,
+        }],
+        snapshotId: "00000000-0000-4199-8000-000000000002",
+      },
+      isCod: true,
+      paymentMethod: "COD",
+      provider: null,
+      status: "ESTIMATED",
     };
   } else if (auditScenario === "shipment-detail-payment-paying") {
     detail = {
@@ -195,12 +239,13 @@ export default async function ShipmentDetailPage({
   );
   const estimateOptions: ShipmentEstimateOption[] =
     detail.estimate?.services.map((service) => ({
+      // COD only: a COD Ongkir amount is the charge chosen with the service.
       codBreakdown:
-        detail.isCod && service.codEligible
-          ? calculateCodAmounts(
+        detail.paymentMethod === "COD" && service.codEligible && !detail.codFormulaRetired
+          ? codChargeBreakdown(calculateCodAmounts(
               detail.package.declaredValueIdr,
               service.shippingAmountIdr,
-            )
+            ))
           : null,
       codEligible: service.codEligible,
       deliveryEstimate: service.deliveryEstimate,
@@ -208,6 +253,7 @@ export default async function ShipmentDetailPage({
       insuranceAmountIdr: service.insuranceAmountIdr,
       providerService: service.providerService,
       shippingAmountIdr: service.shippingAmountIdr,
+      shippingDeductedIdr: shippingMengantarDeductsIdr(service),
     })) ?? [];
 
   const emptyNote = "rounded-lg border border-dashed bg-muted/40 p-3 text-sm text-muted-foreground";
@@ -375,7 +421,7 @@ export default async function ShipmentDetailPage({
               { label: "Berat / jumlah", value: `${formatWeight(detail.package.weightGrams)} · ${detail.package.quantity} koli` },
               { label: "Dimensi", value: dimensions ?? "Tidak dicatat" },
               { label: "Nilai barang", value: formatIdr(detail.package.declaredValueIdr) },
-              { label: "Pembayaran", value: detail.isCod ? "COD" : "Non-COD" },
+              { label: "Pembayaran", value: PAYMENT_METHOD_LABELS[detail.paymentMethod] },
             ]} />
           </CardContent>
         </Card>
@@ -392,7 +438,7 @@ export default async function ShipmentDetailPage({
                   { label: "Pengirim", party: detail.sender },
                   { label: "Penerima", party: detail.recipient },
                 ].map(({ label, party }) => (
-                  <article className="grid min-w-0 content-start gap-1.5 rounded-lg border p-4 text-sm" key={label}>
+                  <article className="grid min-w-0 content-start gap-1.5 rounded-lg border bg-muted/20 p-4 text-sm" key={label}>
                     <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
                     <p className="font-medium wrap-anywhere">{party.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">{party.phone}</p>
@@ -408,9 +454,11 @@ export default async function ShipmentDetailPage({
 
         {detail.status === "ESTIMATED" && detail.estimate ? (
           <ShipmentIssuancePanel
+            codFormulaRetired={detail.codFormulaRetired}
             fixtureEnabled={isSanctionedOrderFixtureEnabled()}
             isCod={detail.isCod}
             options={estimateOptions}
+            paymentMethod={detail.paymentMethod}
             shipmentId={detail.shipmentId}
             snapshotId={detail.estimate.snapshotId}
           />
@@ -486,7 +534,10 @@ export default async function ShipmentDetailPage({
                   label: "Ongkir / asuransi",
                   value: `${formatIdr(detail.provider.shippingAmountIdr)} · ${detail.provider.insuranceAmountIdr === null ? "asuransi tidak dikembalikan" : formatIdr(detail.provider.insuranceAmountIdr)}`,
                 },
-                ...(detail.provider.providerCodAmountIdr === null ? [] : [{ label: "Total COD penyedia", value: formatIdr(detail.provider.providerCodAmountIdr) }]),
+                ...(detail.provider.providerCodAmountIdr === null ? [] : [{
+                  label: PAYMENT_AMOUNT_LABELS[detail.paymentMethod],
+                  value: formatIdr(detail.provider.providerCodAmountIdr),
+                }]),
                 {
                   label: "Status pembayaran",
                   value: detail.provider.isPaid === null ? "Belum diketahui" : detail.provider.isPaid ? "Lunas menurut penyedia" : "Belum lunas menurut penyedia",

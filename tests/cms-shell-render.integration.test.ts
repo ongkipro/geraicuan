@@ -6,16 +6,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CmsShell } from "@/app/_components/cms-shell";
 
-let mockPathname = "/app/kontak";
+let mockPathname = "/app/kontak/pengirim";
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
   usePathname: () => mockPathname,
+  useSearchParams: () => new URLSearchParams(mockSearch),
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
 }));
 
 // Server render gives the desktop tree (useIsMobile's server snapshot is
 // false), so these assertions read the markup the browser first receives.
-function renderTenantShell(pathname: string) {
+function renderTenantShell(pathname: string, search = "") {
   mockPathname = pathname;
+  mockSearch = search;
   return renderToStaticMarkup(
     createElement(
       CmsShell,
@@ -39,24 +42,23 @@ function currentLabels(html: string) {
   );
 }
 
-// Attribute order in the rendered tag depends on Radix's Slot merge, not on
-// JSX source order, so these look up the tag by its (unique, ours) aria-label
-// and then check aria-expanded within that tag — order-independent.
-function toggleButtonTag(html: string, groupLabel: string, state: "open" | "closed") {
-  const label = state === "open" ? `Tutup grup ${groupLabel}` : `Buka grup ${groupLabel}`;
-  return new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`).exec(html)?.[0] ?? null;
+// T-187: each group row is one <button> whose visible label is its accessible
+// name. Attribute order in the rendered tag depends on Radix's Slot merge, so
+// look the tag up by our data-nav-group-trigger attribute and read the rest of
+// the button (tag plus content) order-independently.
+function groupTrigger(html: string, groupLabel: string) {
+  return new RegExp(`<button(?=[^>]*data-nav-group-trigger="${groupLabel}")[^>]*>[\\s\\S]*?</button>`).exec(html)?.[0] ?? null;
 }
 
 function toggleButton(html: string, groupLabel: string) {
-  const openTag = toggleButtonTag(html, groupLabel, "open");
-  if (openTag && openTag.includes('aria-expanded="true"')) return "open";
-  const closedTag = toggleButtonTag(html, groupLabel, "closed");
-  if (closedTag && closedTag.includes('aria-expanded="false"')) return "closed";
+  const trigger = groupTrigger(html, groupLabel);
+  if (trigger?.includes('aria-expanded="true"')) return "open";
+  if (trigger?.includes('aria-expanded="false"')) return "closed";
   return null;
 }
 
 describe("rendered CMS shell", () => {
-  const html = renderTenantShell("/app/kontak");
+  const html = renderTenantShell("/app/kontak/pengirim");
 
   it("renders one labelled navigation landmark with the GeraiCUAN brand anchor", () => {
     expect(html.match(/<nav aria-label="Navigasi tenant"/g)).toHaveLength(1);
@@ -65,7 +67,15 @@ describe("rendered CMS shell", () => {
   });
 
   it("marks only the current destination", () => {
-    expect(currentLabels(html)).toEqual(["Kontak"]);
+    expect(currentLabels(html)).toEqual(["Pengirim"]);
+  });
+
+  // T-188: the rendered sidebar reads the URL's own search params, so a
+  // contact opened from Penerima keeps Penerima current.
+  it("marks the contact menu the detail or create form was opened from", () => {
+    expect(currentLabels(renderTenantShell("/app/kontak/00000000-0000-4000-8000-000000000663", "dari=penerima"))).toEqual(["Penerima"]);
+    expect(currentLabels(renderTenantShell("/app/kontak/baru", "peran=penerima"))).toEqual(["Penerima"]);
+    expect(currentLabels(renderTenantShell("/app/kontak/baru"))).toEqual(["Pengirim"]);
   });
 
   it("exposes exactly one accessible sidebar toggle, sized for touch", () => {
@@ -79,10 +89,11 @@ describe("rendered CMS shell", () => {
   it("mounts no tooltip layers on navigation while the sidebar is expanded, and no data-state on any nav link", () => {
     // A mounted Radix tooltip marks its trigger with data-state; each one is a
     // separate Escape layer, so none may exist on the expanded or mobile nav.
-    // The group disclosure trigger carries data-state on its own <button>,
-    // never on the item <a>, which is the shape this assertion pins.
+    // The group disclosure trigger carries data-state on its own <button> (and
+    // its <li>), never on the item <a>, which is the shape this assertion pins.
     const nav = /<nav aria-label="Navigasi tenant"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
-    expect(nav).toContain('href="/app/kontak"');
+    expect(nav).toContain('href="/app/kontak/pengirim"');
+    expect(nav).toContain('href="/app/kontak/penerima"');
     expect(nav).not.toMatch(/<a[^>]*data-state=/);
   });
 
@@ -93,20 +104,16 @@ describe("rendered CMS shell", () => {
   });
 });
 
-describe("PR-54 collapsible navigation groups", () => {
-  it("opens only the group holding the current route, forced open regardless of the (absent, client-only) stored preference", () => {
-    const html = renderTenantShell("/app/kontak");
+describe("PR-54 / T-187 collapsible navigation tree", () => {
+  it("opens every group on a first visit (no stored preference exists on the server render)", () => {
+    const html = renderTenantShell("/app/kontak/pengirim");
     // Utama is a single unlabelled destination, never collapsible.
     expect(html).toContain("<span>Dasbor</span>");
-    // Data holds the current route (Kontak), so it is open and its item renders.
-    expect(toggleButton(html, "Data")).toBe("open");
-    expect(html).toContain("<span>Kontak</span>");
-    // Every other group starts closed, so their items are not in the markup at all.
-    for (const group of ["Pengiriman", "Cek", "Laporan", "Pengelolaan"]) {
-      expect(toggleButton(html, group)).toBe("closed");
+    for (const group of ["Pengiriman", "Data", "Cek", "Laporan", "Pengelolaan"]) {
+      expect(toggleButton(html, group)).toBe("open");
     }
-    for (const hiddenLabel of ["Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Cek resi", "Cek tarif", "Analitik", "Keuangan", "Pengaturan"]) {
-      expect(html).not.toContain(`<span>${hiddenLabel}</span>`);
+    for (const label of ["Pengirim", "Penerima", "Buat kiriman", "Impor CSV", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Cek resi", "Cek tarif", "Analitik", "Laporan pengiriman", "Riwayat cetak resi", "Keuangan", "Pengaturan"]) {
+      expect(html).toContain(`<span>${label}</span>`);
     }
   });
 
@@ -125,14 +132,33 @@ describe("PR-54 collapsible navigation groups", () => {
     }
   });
 
-  it("keeps the disclosure row split: a plain heading label plus a separate chevron button carrying aria-expanded", () => {
-    const html = renderTenantShell("/app/kontak");
-    // The chevron button is its own element with its own accessible name;
-    // it never wraps (and never is) the group's own text label.
-    const tag = toggleButtonTag(html, "Data", "open");
-    expect(tag).toContain('aria-expanded="true"');
-    expect(tag).toContain('aria-controls="cms-nav-group-data"');
-    expect(html).toContain('<span class="flex-1 truncate">Data</span>');
+  it("makes the whole row (icon, label, chevron) one native disclosure button named by its visible label", () => {
+    const html = renderTenantShell("/app/kontak/pengirim");
+    const trigger = groupTrigger(html, "Data");
+    expect(trigger).not.toBeNull();
+    expect(trigger).toContain('type="button"');
+    expect(trigger).toContain('aria-expanded="true"');
+    expect(trigger).toContain('aria-controls="cms-nav-group-data"');
+    // The label text lives INSIDE the button, so clicking it toggles the group;
+    // no aria-label overrides the visible name (WCAG 2.5.3).
+    expect(trigger).toMatch(/<span[^>]*>Data<\/span>/);
+    expect(trigger).not.toMatch(/^<button[^>]*aria-label=/);
+    // Row height: 36px desktop, 44px touch.
+    expect(trigger).toMatch(/\bh-9\b/);
+    expect(trigger).toMatch(/\bmax-md:h-11\b/);
+    // The old split shape (a separate "Buka/Tutup grup" chevron button) is gone.
+    expect(html).not.toMatch(/aria-label="(Buka|Tutup) grup /);
+  });
+
+  it("draws each group's items as a tree: guide and connector pseudo-elements on every item, the last guide stopping at its connector", () => {
+    const html = renderTenantShell("/app/kontak/pengirim");
+    const items = [...html.matchAll(/<li[^>]*data-nav-tree-item[^>]*>/g)].map((match) => match[0]);
+    expect(items).toHaveLength(14);
+    for (const item of items) {
+      expect(item).toMatch(/before:absolute/);
+      expect(item).toMatch(/after:absolute/);
+      expect(item).toMatch(/last:before:bottom-1\/2/);
+    }
   });
 });
 
@@ -154,6 +180,9 @@ describe("mobile shell contracts that server render cannot reach", () => {
   });
 
   it("persists group open state in localStorage, read only in an effect (never during the SSR-equivalent render)", () => {
+    // T-187: stored collapse is honoured, the current-route group always wins,
+    // and a group absent from storage defaults to open.
+    expect(navigation).toContain("groupHoldsCurrent(group) || (stored[group.label] ?? previous[group.label] ?? true)");
     expect(navigation).toContain('window.localStorage.getItem(GROUP_STATE_STORAGE_KEY)');
     expect(navigation).toContain('window.localStorage.setItem(GROUP_STATE_STORAGE_KEY');
     expect(navigation).toMatch(/useEffect\(\(\) => \{[\s\S]*?applyStoredGroupState\(\);/);

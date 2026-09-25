@@ -154,9 +154,7 @@ describe("shipment draft contact and COD experience", () => {
           codBreakdown: {
             goodsValueIdr: 100_000,
             providerCodAmountIdr: 113_790,
-            serviceFeeIdr: 3_414,
             shippingAmountIdr: 10_000,
-            vatAmountIdr: 376,
           },
           codEligible: true,
           deliveryEstimate: "2–3 hari",
@@ -171,8 +169,10 @@ describe("shipment draft contact and COD experience", () => {
     expect(text).toContain("Layanan fixture T27");
     expect(text).toContain("Nilai barang dideklarasikan Rp 100.000");
     expect(text).toContain("Ongkir penyedia Rp 10.000");
-    expect(text).toContain("Biaya COD Rp 3.414");
-    expect(text).toContain("PPN biaya COD Rp 376");
+    // T-193: one Biaya COD — Mengantar's fee on the total, VAT inside — and the round-up.
+    expect(text).toContain("Biaya COD Mengantar 3,33% (termasuk PPN Rp 375) Rp 3.789");
+    expect(text).toContain("Pembulatan ke rupiah Rp 1");
+    expect(text).not.toMatch(/PPN biaya COD|Rp 3\.414|Rp 376/);
     expect(text).toContain("Total ditagih ke pelanggan Rp 113.790");
     expect(text).toContain("belum mengonfirmasi layanan atau membuat pesanan ke penyedia");
   });

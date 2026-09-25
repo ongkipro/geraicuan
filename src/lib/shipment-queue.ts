@@ -317,7 +317,7 @@ export function shipmentLifecycleActions(
     case "ISSUED":
       return [
         {
-          description: "Buka label 100 × 150 mm dan riwayat cetak kiriman ini.",
+          description: "Buka label 10 × 15 cm (bawaan) atau 10 × 10 cm dan riwayat cetak kiriman ini.",
           href: `/app/label/${encodedId}`,
           id: "open-label",
           kind: "link",

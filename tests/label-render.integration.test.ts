@@ -118,6 +118,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
     destinationAreaLabel: "Gambir, Jakarta Pusat",
     insuranceAmountIdr: null,
     isCod: false,
+    paymentMethod: "NON_COD",
     issuedAt: new Date("2026-09-01T01:00:00.000Z"),
     lastPrintedAt: null,
     outletName: "Outlet Label Pusat",

@@ -44,9 +44,42 @@ origin checks for the same explicit host.
 | Operator | `operator@geraicuan.com` | `admin123` | `/app` |
 | Super Admin | `super@geraicuan.com` | `admin123` | `/platform` |
 
-`pnpm db:seed-local` only accepts a database at
-`127.0.0.1/geraicuan_test`. It refreshes the local fixture users and the
-runtime role password from `DEV_LOCAL_PASSWORD`.
+`pnpm db:seed-local` only accepts `127.0.0.1` and the database
+`geraicuan_test` (or a disposable `geraicuan_<name>_seed`), written as
+`postgres://user:password@127.0.0.1:port/database` with no query parameters
+(pg lets `?host=`, `?port=` or `?options=` override the URL, so any query is
+refused), and it connects with the parsed fields
+(`scripts/local-database-target.mjs`). No hostname guard can see through a
+tunnel: a `127.0.0.1` port forwarded over SSH to a remote database passes the
+check, so never point the seed, least of all `--reset`, at such a port. It refreshes the
+fixture users, the runtime role password from `DEV_LOCAL_PASSWORD`, and one
+demo dataset, without calling Mengantar or sending mail. It imports
+`src/lib/*.ts` directly, so it needs Node.js 22.18+ (type stripping).
+
+| What | Seeded |
+| --- | --- |
+| Store | **Sekar Batik Nusantara** (ACTIVE, id `70000000-0000-4000-8000-000000000001`), outlet *Gudang Jakarta Barat* with 3 labelled pickup points (default Kebon Jeruk, Tanah Abang, Bekasi) |
+| Approval queue (`/platform/pendaftaran`) | *Kopi Senja Nusantara* (PROVISIONING, email verified), *Dapur Sambal Bu Tini* (PROVISIONING, email not verified), *Grosir Aksesoris HP 99* (rejected → ARCHIVED); all `PRIVATE_ONLY`, written by `register_tenant_self_service` and `review_tenant_registration`; owners sign in with the same password |
+| Contacts | 23 across Jabodetabek, Bandung, Surabaya, Yogyakarta, Semarang, Malang, Medan, Makassar, Denpasar, Palembang: 5 active + 1 archived senders, 18 active + 2 archived recipients, 3 dual-role; synthetic phones `0812-9000-xxxx` |
+| Shipments | 60 over the last ~60 days (Asia/Jakarta), `GC-10000`–`GC-10059` in creation order: 28 delivered, 10 issued (6 printed — one paid through unpaid recovery — and 4 not yet printed), 2 problem, 7 returns, 1 awaiting upstream payment, 2 failed, 1 queued, 1 unknown submission, 4 estimated, 4 drafts; Non-COD 22 / COD 27 / COD Ongkir 11; JNE, SiCepat, J&T, Shopee Express, SAP, AnterAja, ID Express, Lion Parcel, POS |
+| Money | COD totals v2 and COD Ongkir v3 from `src/lib/mengantar-cod-fee.ts`; issuance and recovery ledger entries, one manual reversal, 7 settlement pulls (settlement, return-charge and refund lines; delivered/problem/RTS transitions), a matched monthly and a daily reconciliation with one variance |
+
+Two modes:
+
+```bash
+pnpm db:seed-local              # replace the seed-owned rows; keep rows you created
+pnpm db:seed-local -- --reset   # also delete every tenant and user the seed does not own
+```
+
+A plain run deletes and rewrites only the seed's own rows (fixed ids), so it
+is idempotent and moves the demo dates forward when re-run on a later day.
+`--reset` additionally deletes every other tenant with all its rows (for
+example leftover `Rate Limit Tenant` and `T24 Tenant` fixtures), every user
+except the three accounts above, every operational row of the demo store
+(including shipments you created there), sessions, verifications and rate
+limits, then reseeds in the same transaction and prints row counts per tenant
+before and after. The demo store's Mengantar connection, if you configured
+one, is kept. Back up the database first.
 
 ## Running the checks
 
@@ -70,7 +103,7 @@ pnpm test:integration
 
 **The suite destroys the local demo data.** Several suites tear down with
 `TRUNCATE ... tenants, users CASCADE`, which removes the seeded
-`Local Development Tenant` along with everything else. Nothing is corrupted, but
+demo store `Sekar Batik Nusantara` along with everything else. Nothing is corrupted, but
 open the browser after a suite run and the CMS looks empty. Re-seed first:
 
 ```bash
@@ -100,12 +133,26 @@ source. It also needs the dev server running. See
 `scripts/ui-audit/README.md` for what each script does and why the coverage
 looks the way it does.
 
-`pnpm build` needs a production-shaped configuration, because startup fails
-closed without it — two exact HTTPS origins and a trusted proxy allowlist:
+`pnpm build` needs a production-shaped configuration, because `next build`
+loads the auth and database modules and they fail closed without it — the runtime
+database URL, the three host origins, and Better Auth's origins and trusted proxy
+allowlist (placeholders are enough; no secret is needed to build):
 
 ```bash
-BETTER_AUTH_URL='https://app.example.com' BETTER_AUTH_TRUSTED_ORIGINS='https://app.example.com,https://cuan.example.com' BETTER_AUTH_TRUSTED_PROXY_CIDRS='10.0.0.0/8' pnpm build
+APP_DATABASE_URL='postgresql://placeholder@db.invalid:5432/placeholder' \
+BETTER_AUTH_URL='https://app.example.com' \
+BETTER_AUTH_TRUSTED_ORIGINS='https://app.example.com,https://bos.example.com' \
+BETTER_AUTH_TRUSTED_PROXY_CIDRS='10.0.0.0/8' \
+GERAICUAN_TENANT_ORIGIN='https://app.example.com' \
+GERAICUAN_PLATFORM_ORIGIN='https://bos.example.com' \
+GERAICUAN_PUBLIC_ORIGIN='https://example.com' \
+pnpm build
 ```
+
+The production images build with `docker build .` (app, standalone output),
+`docker build --target ops .` (migrations and the first Super Admin bootstrap)
+and `docker build apps/landing`; see `docs/spec/15-DEVOPS-CICD-MIGRATIONS.md`
+DEP-1 and DEP-3.
 
 `pnpm test:migration-upgrade` verifies the migration chain from an empty
 database and takes `MIGRATION_CHECK_DATABASE_URL`, which must point at a
@@ -128,15 +175,12 @@ closed.
 
 ## Deployment host boundary
 
-The future production entry points are intentionally role-specific:
+Production serves three hosts (D-7): `https://geraicuan.com` (the Astro landing
+site in `apps/landing`), `https://app.geraicuan.com` (tenant CMS, sign-up and
+recovery) and `https://bos.geraicuan.com` (Super Admin), the last two from one
+Next.js deployment routed by the `Host` header with host-only session cookies.
+Host routing does not replace server-side role and tenant authorization.
 
-- Tenant CMS: `https://app.namadomain.com`
-- Super Admin CMS: `https://cuan.namadomain.com`
-
-Host routing improves entry-point clarity but does not replace server-side role
-and tenant authorization. Configure Better Auth trusted origins and cookies for
-only these exact hosts; do not enable cross-subdomain cookie sharing by default.
-Production startup fails closed unless `BETTER_AUTH_URL` is one of exactly two
-explicit HTTPS origins in `BETTER_AUTH_TRUSTED_ORIGINS` (tenant and platform),
-with no wildcard, credentials, path, query, or fragment. A trusted proxy CIDR
-allowlist is also required.
+How to deploy, every environment variable per service, DNS/TLS, Resend, migrations,
+the smoke checklist and rollback: `docs/spec/15-DEVOPS-CICD-MIGRATIONS.md`
+(DEP-1 to DEP-6) and the runbook in `RELEASE.md`.

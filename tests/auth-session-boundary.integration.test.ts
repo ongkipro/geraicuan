@@ -35,10 +35,12 @@ beforeAll(async () => {
   await ensureIntegrationRuntimeRole(admin, appDatabaseUrl);
   const passwordHash = await hashPassword(password);
   await admin.query(
-    `INSERT INTO users (id, name, email, status) VALUES
-      ('auth-tenant', 'Auth Tenant', 'auth-tenant@example.test', 'ACTIVE'),
-      ('auth-platform', 'Auth Platform', 'auth-platform@example.test', 'ACTIVE'),
-      ('auth-suspended', 'Auth Suspended', 'auth-suspended@example.test', 'SUSPENDED')`,
+    // Verified: an unverified account cannot sign in at all (D-10), which would
+    // mask the scope and status refusals these tests are about.
+    `INSERT INTO users (id, name, email, email_verified, status) VALUES
+      ('auth-tenant', 'Auth Tenant', 'auth-tenant@example.test', true, 'ACTIVE'),
+      ('auth-platform', 'Auth Platform', 'auth-platform@example.test', true, 'ACTIVE'),
+      ('auth-suspended', 'Auth Suspended', 'auth-suspended@example.test', true, 'SUSPENDED')`,
   );
   for (const userId of ["auth-tenant", "auth-platform", "auth-suspended"]) {
     await admin.query(

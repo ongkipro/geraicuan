@@ -1,4 +1,6 @@
 // Read-only fixture browser regression (PR-44): prefixed per-tenant numbers, numeric routes, no visible UUIDs.
+// PR-44 addresses detail and label *paths* by number; the draft editor's `/app/pengiriman/baru?draft=<uuid>`
+// query is a Server-Action-style input (docs/spec/18-SYSTEM-MAP.md /app) and is not a shipment route.
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {Session,open,closeTab} from './cdp.mjs';
@@ -25,7 +27,7 @@ await s.goto(origin+'/app/label/72000000-0000-4000-8000-000000000013');await wai
 results.push({width,redirects:{uuid:true,prefixed:true,label:true},shipmentNumber,prefix});
 for(const route of ['/app/pengiriman','/app','/app/analitik','/app/keuangan',`/app/pengiriman/${shipmentNumber}`,`/app/label/${shipmentNumber}`]){
  await s.goto(origin+route);await wait(`document.readyState==='complete'&&!document.querySelector('[data-slot=skeleton]')`);await pause(300);
- const check=await s.evaluate(`(()=>{const m=document.querySelector('main'),text=m.innerText;return {publicCount:(text.match(/\\b[A-Z0-9]{2,5}-[0-9]{5,}\\b/g)||[]).length,legacyCount:(text.match(/\\b[0-9]{5,}-[0-9]{6}-[0-9]{3,}\\b/g)||[]).length,uuidCount:(text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi)||[]).length,uuidLinks:[...document.querySelectorAll('main a[href*="/app/pengiriman/"],main a[href*="/app/label/"]')].filter(a=>/[0-9a-f]{8}-[0-9a-f]{4}-/i.test(a.getAttribute('href'))).length,overflow:document.documentElement.scrollWidth>innerWidth}})()`);
+ const check=await s.evaluate(`(()=>{const m=document.querySelector('main'),text=m.innerText;return {publicCount:(text.match(/\\b[A-Z0-9]{2,5}-[0-9]{5,}\\b/g)||[]).length,legacyCount:(text.match(/\\b[0-9]{5,}-[0-9]{6}-[0-9]{3,}\\b/g)||[]).length,uuidCount:(text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi)||[]).length,uuidLinks:[...document.querySelectorAll('main a[href*="/app/pengiriman/"],main a[href*="/app/label/"]')].filter(a=>/[0-9a-f]{8}-[0-9a-f]{4}-/i.test(new URL(a.getAttribute('href'),location.origin).pathname)).length,overflow:document.documentElement.scrollWidth>innerWidth}})()`);
  assert(check.publicCount>0,route+' prefixed number');assert.equal(check.legacyCount,0,route+' legacy reference');assert.equal(check.uuidCount,0,route+' visible UUID');assert.equal(check.uuidLinks,0,route+' UUID link');assert(!check.overflow,route+' overflow');results.push({route,width,...check});
  if(route.endsWith('/'+shipmentNumber)){
   const selector=route.includes('/label/')?'.label-footer':'main h1';await s.evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center',behavior:'instant'})`);await pause(100);

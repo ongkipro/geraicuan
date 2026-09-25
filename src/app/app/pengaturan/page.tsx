@@ -40,7 +40,7 @@ export default async function TenantProfileSettingsPage({
 }: TenantProfileSettingsPageProps) {
   let principal;
   try {
-    principal = await requireCmsScope("tenant");
+    principal = await requireCmsScope("tenant", { allowPendingApproval: true });
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) {
       redirect("/login/tenant");
@@ -82,6 +82,7 @@ export default async function TenantProfileSettingsPage({
     principal.userId,
     principal.tenantId,
     (tx, context) => loadTenantShipmentPrefix(tx, context),
+    { allowPendingApproval: true },
   );
 
   return (

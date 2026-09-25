@@ -32,6 +32,15 @@ export const tenantStatuses = [
   "ARCHIVED",
 ] as const;
 export const identityStatuses = ["ACTIVE", "SUSPENDED"] as const;
+/**
+ * D-9 (T-181, 0051): whether a tenant may resolve the platform-default Mengantar
+ * credentials. Existing and Super Admin-created tenants keep the default; a
+ * self-registered store is `PRIVATE_ONLY` and ships on its own account.
+ */
+export const mengantarCredentialPolicies = [
+  "PLATFORM_DEFAULT_ALLOWED",
+  "PRIVATE_ONLY",
+] as const;
 
 export const auditEventActions = [
   "TENANT_CREATED",
@@ -47,6 +56,10 @@ export const auditEventActions = [
   "MENGANTAR_PLATFORM_DEFAULT_RESTORED",
   "SHIPMENT_PREFIX_LOCKED",
   "SHIPMENT_PREFIX_UNLOCKED",
+  // T-181/T-182 (0051): written only by the registration and review functions.
+  "TENANT_SELF_REGISTERED",
+  "TENANT_REGISTRATION_APPROVED",
+  "TENANT_REGISTRATION_REJECTED",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
@@ -203,6 +216,25 @@ export const rateLimits = pgTable("rate_limits", {
   lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
 
+/**
+ * T-181 (0051): anonymous sign-up, verification and recovery attempts, counted
+ * per client and per email. Keys are HMACs, so no address or IP is stored.
+ * Better Auth's own `rate_limits` is not reused: it prunes every row older than
+ * its longest window (60 s here), which would reset these hour-long windows.
+ */
+export const publicAuthRateLimits = pgTable(
+  "public_auth_rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+  },
+  () => [
+    check("public_auth_rate_limits_key_valid", sql`key ~ '^[a-z-]+:[0-9a-f]{64}$'`),
+    check("public_auth_rate_limits_count_positive", sql`count > 0`),
+  ],
+);
+
 export const tenants = pgTable(
   "tenants",
   {
@@ -215,12 +247,27 @@ export const tenants = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    mengantarCredentialPolicy: text("mengantar_credential_policy", {
+      enum: mengantarCredentialPolicies,
+    })
+      .notNull()
+      .default("PLATFORM_DEFAULT_ALLOWED"),
+    /** The store's WhatsApp number from sign-up, canonical `0` + Indonesian NSN. */
+    contactWhatsapp: text("contact_whatsapp"),
   },
   () => [
     check("tenants_name_not_blank", sql`char_length(btrim(name)) > 0`),
     check(
       "tenants_status_valid",
       sql`status IN ('PROVISIONING', 'ACTIVE', 'SUSPENDED', 'ARCHIVED')`,
+    ),
+    check(
+      "tenants_mengantar_credential_policy_valid",
+      sql`mengantar_credential_policy IN ('PLATFORM_DEFAULT_ALLOWED', 'PRIVATE_ONLY')`,
+    ),
+    check(
+      "tenants_contact_whatsapp_valid",
+      sql`contact_whatsapp IS NULL OR contact_whatsapp ~ '^0[2-9][0-9]{7,11}$'`,
     ),
   ],
 );
@@ -646,6 +693,13 @@ export const shipmentDrafts = pgTable(
     packageHeightCm: integer("package_height_cm"),
     declaredValueIdr: integer("declared_value_idr").notNull(),
     isCod: boolean("is_cod").notNull().default(false),
+    /**
+     * T-186 / D-12: true only for COD Ongkir — the goods were paid outside
+     * GeraiCUAN and the courier collects a shipping charge alone. The default
+     * keeps every earlier draft, and any writer that does not name it, NON_COD
+     * or COD exactly as `is_cod` says (migration 0050).
+     */
+    codShippingOnly: boolean("cod_shipping_only").notNull().default(false),
     cogsAmountIdr: integer("cogs_amount_idr"),
     // PR-47 field parity with Mengantar's own order form.
     shippingInstruction: text("shipping_instruction"),
@@ -700,6 +754,10 @@ export const shipmentDrafts = pgTable(
     check(
       "shipment_drafts_cod_declared_value_positive",
       sql`NOT is_cod OR declared_value_idr > 0`,
+    ),
+    check(
+      "shipment_drafts_cod_shipping_only_requires_cod",
+      sql`NOT cod_shipping_only OR is_cod`,
     ),
     check(
       "shipment_drafts_shipping_instruction_valid",
@@ -896,6 +954,12 @@ export const shipmentCodTotals = pgTable(
      * writer that does not name a version, on the additive rule.
      */
     codFormulaVersion: integer("cod_formula_version").notNull().default(1),
+    /**
+     * T-186: the shipping Mengantar deducts that a version 3 (COD Ongkir) charge
+     * was checked against — special price, else normal price, else `price`.
+     * NULL on every version 1 and 2 row, required on version 3.
+     */
+    codShippingBasisIdr: integer("cod_shipping_basis_idr"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -954,7 +1018,7 @@ export const shipmentCodTotals = pgTable(
     ),
     check(
       "shipment_cod_totals_formula_version_known",
-      sql`cod_formula_version IN (1, 2)`,
+      sql`cod_formula_version IN (1, 2, 3)`,
     ),
     // Version 1 (additive), unchanged from 0011 but scoped to its own rows.
     check(
@@ -966,10 +1030,11 @@ export const shipmentCodTotals = pgTable(
       "shipment_cod_totals_vat_exact",
       sql`cod_formula_version <> 1 OR vat_amount_idr::bigint = ((service_fee_idr::bigint * 11 + 50) / 100)`,
     ),
-    // Both versions: the COD amount is goods + shipping + fee + VAT.
+    // Versions 1 and 2: the COD amount is goods + shipping + fee + VAT. A
+    // version 3 (COD Ongkir) amount collects no goods (T-186, migration 0050).
     check(
       "shipment_cod_totals_provider_cod_amount_exact",
-      sql`provider_cod_amount_idr::bigint =
+      sql`cod_formula_version = 3 OR provider_cod_amount_idr::bigint =
         goods_value_idr::bigint
         + shipping_amount_idr::bigint
         + service_fee_idr::bigint
@@ -986,6 +1051,31 @@ export const shipmentCodTotals = pgTable(
       "shipment_cod_totals_service_fee_split_v2",
       sql`cod_formula_version <> 2 OR service_fee_idr::bigint =
         (((provider_cod_amount_idr::bigint - goods_value_idr::bigint - shipping_amount_idr::bigint) * 100 + 55) / 111)`,
+    ),
+    // Version 3 (T-186, COD Ongkir): the charge never goes below break-even on
+    // the shipping Mengantar deducts, and fee + VAT is Mengantar's 3.33% of the
+    // charge, split 100/111 like version 2. No version 3 rule reads goods.
+    check(
+      "shipment_cod_totals_shipping_basis_v3",
+      sql`(cod_formula_version = 3) = (cod_shipping_basis_idr IS NOT NULL)
+        AND (cod_shipping_basis_idr IS NULL OR cod_shipping_basis_idr >= 0)`,
+    ),
+    check(
+      "shipment_cod_totals_cod_ongkir_break_even_v3",
+      sql`cod_formula_version <> 3 OR (
+        cod_shipping_basis_idr IS NOT NULL
+        AND provider_cod_amount_idr::bigint * 9667 >= cod_shipping_basis_idr::bigint * 10000
+      )`,
+    ),
+    check(
+      "shipment_cod_totals_cod_ongkir_fee_v3",
+      sql`cod_formula_version <> 3 OR service_fee_idr::bigint + vat_amount_idr::bigint =
+        ((provider_cod_amount_idr::bigint * 333 + 5000) / 10000)`,
+    ),
+    check(
+      "shipment_cod_totals_cod_ongkir_fee_split_v3",
+      sql`cod_formula_version <> 3 OR service_fee_idr::bigint =
+        (((service_fee_idr::bigint + vat_amount_idr::bigint) * 100 + 55) / 111)`,
     ),
   ],
 );
@@ -1789,7 +1879,10 @@ export const auditEvents = pgTable(
         'MENGANTAR_CREDENTIAL_REPLACED',
         'MENGANTAR_PLATFORM_DEFAULT_RESTORED',
         'SHIPMENT_PREFIX_LOCKED',
-        'SHIPMENT_PREFIX_UNLOCKED'
+        'SHIPMENT_PREFIX_UNLOCKED',
+        'TENANT_SELF_REGISTERED',
+        'TENANT_REGISTRATION_APPROVED',
+        'TENANT_REGISTRATION_REJECTED'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),

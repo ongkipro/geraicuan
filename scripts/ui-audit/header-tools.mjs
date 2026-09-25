@@ -15,7 +15,7 @@ async function login(role){await s.send('Network.clearBrowserCookies');await s.s
 try{
 for(const d of ['Page','Runtime','Network'])await s.send(d+'.enable');
 await s.send('Emulation.setFocusEmulationEnabled',{enabled:true});
-for(const [role,count] of [['tenant',14],['operator',9],['super',3]].filter(([role])=>!process.env.AUDIT_ROLE||process.env.AUDIT_ROLE===role)){
+for(const [role,count] of [['tenant',15],['operator',10],['super',4]].filter(([role])=>!process.env.AUDIT_ROLE||process.env.AUDIT_ROLE===role)){
 await login(role);
 await s.send('Network.setExtraHTTPHeaders',{headers:{'x-geraicuan-ui-audit':role==='super'?'platform-overview-empty':role==='operator'?'shipment-rts-paginated':'members-populated'}});
 await s.goto(origin+(role==='super'?'/platform':role==='operator'?'/app/pengiriman/rts':'/app/anggota'));

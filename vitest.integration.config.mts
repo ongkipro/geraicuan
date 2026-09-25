@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.integration.test.ts"],
+    // T-197: a test fails when one pg client receives a query while it runs another.
+    setupFiles: ["./tests/pg-query-overlap-guard.ts"],
     fileParallelism: false,
   },
 });

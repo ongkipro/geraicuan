@@ -76,6 +76,25 @@ describe("platform tenant lifecycle action", () => {
     expect(mocks.execute).not.toHaveBeenCalled();
   });
 
+  it("refuses a hidden format character in a tenant name but keeps digits (T-196)", async () => {
+    const hidden = await submitPlatformTenantLifecycle({}, lifecycleForm({
+      attemptId: randomUUID(),
+      confirmation: "confirmed",
+      lifecycleAction: "create",
+      tenantName: "Toko\u202E88",
+    }));
+    expect(hidden).toMatchObject({ errors: { tenantName: expect.stringContaining("karakter kontrol") }, outcome: "invalid" });
+    expect(mocks.execute).not.toHaveBeenCalled();
+
+    mocks.execute.mockResolvedValue({ id: randomUUID(), status: "ACTIVE" });
+    await expect(submitPlatformTenantLifecycle({}, lifecycleForm({
+      attemptId: randomUUID(),
+      confirmation: "confirmed",
+      lifecycleAction: "create",
+      tenantName: "Grosir Aksesoris HP 99",
+    }))).resolves.toMatchObject({ outcome: "success" });
+  });
+
   it("rotates the attempt only after a successful exact mutation", async () => {
     const attemptId = randomUUID();
     const tenantId = randomUUID();

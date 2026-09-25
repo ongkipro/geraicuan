@@ -2,7 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +15,13 @@ type SearchProps = { scope: "tenant"; role: TenantCmsRole } | { scope: "platform
 
 export function CmsHeaderSearch(props: SearchProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const groups = props.scope === "platform"
     ? platformCmsNavigation(pathname)
-    : tenantCmsNavigation(props.role, pathname);
+    : tenantCmsNavigation(props.role, pathname, searchParams);
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {

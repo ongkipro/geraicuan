@@ -61,6 +61,7 @@ export async function confirmFixtureBackedShipmentIssuance(
           shipmentId: confirmation.shipmentId,
           estimateSnapshotId: confirmation.estimateSnapshotId,
           estimateServiceId: confirmation.estimateServiceId,
+          codShippingChargeIdr: confirmation.codShippingChargeIdr ?? null,
         });
       }
     },

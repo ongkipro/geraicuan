@@ -34,6 +34,7 @@ import {
   enforceBulkImportRateLimit,
 } from "@/lib/bulk-import-rate-limit";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import type { PaymentMethod } from "@/lib/payment-method";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -45,8 +46,9 @@ type ConfirmableBulkPreviewRow = {
   declaredValueIdr: number;
   destinationAreaLabel: string;
   destinationQuery: string;
-  isCod: boolean;
   packageWeightGrams: number;
+  /** T-190: the row's method, so a COD_ONGKIR row previews as COD Ongkir. */
+  paymentMethod: PaymentMethod;
   recipientName: string;
   row: number;
 };
@@ -190,8 +192,8 @@ export async function uploadBulkIntake(
         declaredValueIdr: row.input.declaredValueIdr,
         destinationAreaLabel: row.input.destinationAreaLabel,
         destinationQuery: row.destinationQuery,
-        isCod: row.input.isCod,
         packageWeightGrams: row.input.packageWeightGrams,
+        paymentMethod: row.input.paymentMethod,
         recipientName: row.input.recipientName,
         row: row.row,
       })),

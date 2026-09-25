@@ -81,7 +81,7 @@ export default async function PickupSettingsPage({
 }: PickupSettingsPageProps) {
   let principal;
   try {
-    principal = await requireCmsScope("tenant");
+    principal = await requireCmsScope("tenant", { allowPendingApproval: true });
   } catch (error) {
     if (error instanceof CmsAuthorizationDeniedError) {
       redirect("/login/tenant");
@@ -123,6 +123,7 @@ export default async function PickupSettingsPage({
     principal.userId,
     principal.tenantId,
     (tx, context) => listOutletReadiness(tx, context),
+    { allowPendingApproval: true },
   );
 
   const orderedOutlets = [...outlets].sort((left, right) => {
@@ -145,6 +146,7 @@ export default async function PickupSettingsPage({
           principal.userId,
           principal.tenantId,
           (tx, context) => listOutletPickupPoints(tx, context, activeOutlet.id),
+          { allowPendingApproval: true },
         )).map(({ isDefault, originAreaLabel, pickupAddressId, pickupAddressLabel }) => ({
           isDefault,
           originAreaLabel,

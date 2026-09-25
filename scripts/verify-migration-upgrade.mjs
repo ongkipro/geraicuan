@@ -24,6 +24,26 @@ const settlementMoneyIndex = migrations.findIndex((migration) =>
 if (settlementMoneyIndex <= destinationAuthorityIndex) {
   throw new Error("Expected the settlement-money upgrade boundary.");
 }
+const codOngkirIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0050_cod_ongkir_payment_method"));
+if (codOngkirIndex <= settlementMoneyIndex) {
+  throw new Error("Expected the COD Ongkir upgrade boundary.");
+}
+const signUpIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0051_self_service_sign_up"));
+if (signUpIndex <= codOngkirIndex) {
+  throw new Error("Expected the self-service sign-up upgrade boundary.");
+}
+const signUpHardeningIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0052_sign_up_security_hardening"));
+if (signUpHardeningIndex !== signUpIndex + 1) {
+  throw new Error("Expected the sign-up security hardening upgrade boundary right after 0051.");
+}
+const emailReleaseIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0053_rejected_registration_email_release"));
+if (emailReleaseIndex !== signUpHardeningIndex + 1) {
+  throw new Error("Expected the rejected-registration email release boundary right after 0052.");
+}
 
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
@@ -281,7 +301,7 @@ try {
     throw new Error("The pre-0049 settlement and ledger fixtures were not written.");
   }
 
-  await applyMigrations(migrations.slice(settlementMoneyIndex));
+  await applyMigrations(migrations.slice(settlementMoneyIndex, codOngkirIndex));
 
   const { rows: fixture } = await client.query(`
     SELECT
@@ -512,6 +532,165 @@ try {
   }
   await insertCod(3414, 376, 113790, 2);
 
+  // T-186 (0050): the COD totals production holds *before* 0050 — a version 1
+  // additive row (931) and a version 2 gross-up row (908) — and a COD draft
+  // beside a non-COD one, all written before the migration runs. Every one must
+  // come through with its values and version intact, a NULL basis, and the
+  // drafts still what `is_cod` said.
+  await client.query(`
+    INSERT INTO shipment_drafts (
+      shipment_id, tenant_id, destination_area_id, destination_area_label,
+      package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000908', '00000000-0000-0000-0000-000000000901',
+      'migration-destination-908', 'Migration Destination 908', 'Migration COD Package', 1000, 1, 100000, true
+    )
+  `);
+  const codRowsText = async () => (await client.query(`
+    SELECT id::text, shipment_id::text, goods_value_idr, shipping_amount_idr, service_fee_idr,
+           vat_amount_idr, provider_cod_amount_idr, cod_formula_version, created_at::text
+    FROM shipment_cod_totals ORDER BY id
+  `)).rows;
+  const codRowsBefore = await codRowsText();
+  if (
+    codRowsBefore.length !== 2
+    || JSON.stringify(codRowsBefore.map((row) => row.cod_formula_version).sort()) !== JSON.stringify([1, 2])
+  ) {
+    throw new Error(`The pre-0050 version 1 and version 2 COD totals were not written: ${JSON.stringify(codRowsBefore)}`);
+  }
+
+  await applyMigrations(migrations.slice(codOngkirIndex, signUpIndex));
+
+  const { rows: basisAfter } = await client.query(
+    "SELECT count(*)::int AS rows, count(cod_shipping_basis_idr)::int AS with_basis FROM shipment_cod_totals",
+  );
+  const { rows: draftMethods } = await client.query(`
+    SELECT shipment_id::text, is_cod, cod_shipping_only FROM shipment_drafts ORDER BY shipment_id
+  `);
+  if (
+    JSON.stringify(await codRowsText()) !== JSON.stringify(codRowsBefore)
+    || basisAfter[0]?.rows !== 2
+    || basisAfter[0]?.with_basis !== 0
+    || JSON.stringify(draftMethods) !== JSON.stringify([
+      { shipment_id: "00000000-0000-0000-0000-000000000903", is_cod: false, cod_shipping_only: false },
+      { shipment_id: "00000000-0000-0000-0000-000000000908", is_cod: true, cod_shipping_only: false },
+    ])
+  ) {
+    throw new Error(`A COD total or a draft changed across 0050: ${JSON.stringify({ basisAfter, draftMethods })}`);
+  }
+  const { rows: codOngkirChecks } = await client.query(`
+    SELECT conname FROM pg_constraint
+    WHERE contype = 'c' AND convalidated
+      AND conname IN (
+        'shipment_cod_totals_formula_version_known',
+        'shipment_cod_totals_provider_cod_amount_exact',
+        'shipment_cod_totals_service_fee_exact',
+        'shipment_cod_totals_vat_exact',
+        'shipment_cod_totals_provider_cod_amount_gross_up_v2',
+        'shipment_cod_totals_service_fee_split_v2',
+        'shipment_cod_totals_shipping_basis_v3',
+        'shipment_cod_totals_cod_ongkir_break_even_v3',
+        'shipment_cod_totals_cod_ongkir_fee_v3',
+        'shipment_cod_totals_cod_ongkir_fee_split_v3',
+        'shipment_drafts_cod_shipping_only_requires_cod'
+      )
+  `);
+  const { rows: codOngkirPolicy } = await client.query(`
+    SELECT with_check FROM pg_policies
+    WHERE tablename = 'shipment_cod_totals' AND policyname = 'shipment_cod_totals_active_tenant_insert'
+  `);
+  const policyText = codOngkirPolicy[0]?.with_check ?? "";
+  if (
+    codOngkirChecks.length !== 11
+    || !policyText.includes("cod_shipping_only")
+    || !policyText.includes("special_price_idr")
+    || !policyText.includes("cod_shipping_basis_idr")
+    // 0046's origin rule must survive the re-creation.
+    || !policyText.includes("default_origin_area_id")
+  ) {
+    throw new Error(`0050 checks are not all validated, or the COD totals INSERT policy did not move with them: ${JSON.stringify({ codOngkirChecks, policyText })}`);
+  }
+  // Version 3 on a new shipment: break-even on the special price Mengantar
+  // deducts (9 800 → 10 138), one rupiah below refused, a missing basis refused,
+  // a basis on version 2 refused, a COD Ongkir draft that is not COD refused.
+  await client.query(`
+    INSERT INTO shipment_drafts (
+      shipment_id, tenant_id, destination_area_id, destination_area_label,
+      package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod, cod_shipping_only
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000909', '00000000-0000-0000-0000-000000000901',
+      'migration-destination-909', 'Migration Destination 909', 'Migration Paid Package', 1000, 1, 250000, true, true
+    )
+  `);
+  await client.query(`
+    INSERT INTO shipment_estimate_snapshots (
+      id, tenant_id, shipment_id, outlet_id, origin_area_id, destination_area_id,
+      destination_area_label, weight_grams, is_cod_requested, credential_source
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000951', '00000000-0000-0000-0000-000000000901',
+      '00000000-0000-0000-0000-000000000909', '00000000-0000-0000-0000-000000000902',
+      'migration-origin-902', 'migration-destination-909', 'Migration Destination 909', 1000, true, 'platform_default'
+    )
+  `);
+  await client.query(`
+    INSERT INTO shipment_estimate_services (
+      id, tenant_id, snapshot_id, provider_service, currency, shipping_amount_idr,
+      shipping_source_field, delivery_estimate, cod_eligible, normal_price_idr, special_price_idr
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000952', '00000000-0000-0000-0000-000000000901',
+      '00000000-0000-0000-0000-000000000951', 'MIGRATION ONGKIR', 'IDR', 12000, 'price', '1-2 days', true, 12000, 9800
+    )
+  `);
+  const insertCodOngkir = (fee, vat, cod, version, basis) => client.query(`
+    INSERT INTO shipment_cod_totals (
+      tenant_id, shipment_id, snapshot_id, estimate_service_id, currency,
+      goods_value_idr, shipping_amount_idr, service_fee_idr, vat_amount_idr,
+      provider_cod_amount_idr, cod_formula_version, cod_shipping_basis_idr
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000901', '00000000-0000-0000-0000-000000000909',
+      '00000000-0000-0000-0000-000000000951', '00000000-0000-0000-0000-000000000952',
+      'IDR', 250000, 12000, $1, $2, $3, $4, $5
+    )
+  `, [fee, vat, cod, version, basis]);
+  const refusedCodOngkir = async (...args) => {
+    try {
+      await insertCodOngkir(...args);
+    } catch (error) {
+      if (error.code === "23514") return true;
+      throw error;
+    }
+    return false;
+  };
+  const refusedDraft = async () => {
+    try {
+      await client.query(`
+        INSERT INTO shipment_drafts (
+          shipment_id, tenant_id, destination_area_id, destination_area_label,
+          package_content, package_weight_grams, package_quantity, declared_value_idr, is_cod, cod_shipping_only
+        ) VALUES (
+          '00000000-0000-0000-0000-000000000913', '00000000-0000-0000-0000-000000000911',
+          'migration-destination-913', 'Migration Destination 913', 'Migration Package', 1000, 1, 1000, false, true
+        )
+      `);
+    } catch (error) {
+      if (error.code === "23514") return true;
+      throw error;
+    }
+    return false;
+  };
+  // 10 138 × 333 / 10 000 = 337.6 → 338 = 305 fee + 33 VAT; 10 137 → 338 = 305 + 33.
+  if (
+    !(await refusedCodOngkir(305, 33, 10137, 3, 9800))
+    || !(await refusedCodOngkir(305, 33, 10138, 3, null))
+    || !(await refusedCodOngkir(304, 34, 10138, 3, 9800))
+    || !(await refusedCodOngkir(305, 34, 10138, 3, 9800))
+    || !(await refusedCodOngkir(3414, 376, 113790, 2, 10000))
+    || !(await refusedDraft())
+  ) {
+    throw new Error("0050 accepted a COD Ongkir charge below break-even, a wrong fee, a missing basis, a basis on version 2, or a non-COD COD Ongkir draft.");
+  }
+  await insertCodOngkir(305, 33, 10138, 3, 9800);
+
   // T-178 (0049): every settlement amount written before the change reads back
   // as the same value at the new scale, and the ledger row is identical.
   const settlementAfter = await settlementRowsText();
@@ -635,6 +814,380 @@ try {
   await insertFeeEntry("MENGANTAR_COD_FEE_COST", "EXPENSE", "migration-fee-cost");
   // An instance on the previous release during a deploy still ledgers its issuance.
   await insertFeeEntry("GERAICUAN_COD_SERVICE_FEE_REVENUE", "REVENUE", "migration-previous-release");
+
+
+  // T-181/T-182/T-183 (0051): the tenants, users, memberships and audit rows
+  // that exist before self-service sign-up, in every shape that matters — an
+  // ACTIVE, a SUSPENDED and a legacy PROVISIONING tenant, verified and
+  // unverified users, a platform role, and lifecycle, member and credential
+  // audit events — are written first, and must come through unchanged and
+  // still valid.
+  await client.query(`
+    INSERT INTO tenants (id, name, status) VALUES
+      ('00000000-0000-0000-0000-000000000961', 'Migration Legacy Provisioning', 'PROVISIONING'),
+      ('00000000-0000-0000-0000-000000000962', 'Migration Suspended', 'SUSPENDED')
+  `);
+  await client.query(`
+    INSERT INTO users (id, name, email, email_verified, status) VALUES
+      ('migration-unverified-user', 'Migration Unverified', 'migration.unverified@example.test', false, 'ACTIVE'),
+      ('migration-provisioning-admin', 'Migration Provisioning Admin', 'migration.provisioning@example.test', true, 'ACTIVE'),
+      ('migration-platform-admin', 'Migration Platform Admin', 'migration.platform@example.test', true, 'ACTIVE'),
+      ('migration-suspended-user', 'Migration Suspended User', 'migration.suspended@example.test', true, 'SUSPENDED'),
+      ('migration-unverified-platform-admin', 'Migration Unverified Platform Admin', 'migration.unverified.platform@example.test', false, 'ACTIVE'),
+      ('migration-unverified-no-access', 'Migration Unverified No Access', 'migration.unverified.none@example.test', false, 'ACTIVE'),
+      ('migration-unverified-suspended-member', 'Migration Unverified Suspended Member', 'migration.unverified.suspended@example.test', false, 'ACTIVE')
+  `);
+  await client.query(`
+    INSERT INTO memberships (tenant_id, user_id, role, status) VALUES
+      ('00000000-0000-0000-0000-000000000961', 'migration-provisioning-admin', 'TENANT_ADMIN', 'ACTIVE'),
+      ('00000000-0000-0000-0000-000000000962', 'migration-unverified-user', 'OPERATOR', 'ACTIVE'),
+      ('00000000-0000-0000-0000-000000000911', 'migration-suspended-user', 'OPERATOR', 'SUSPENDED'),
+      ('00000000-0000-0000-0000-000000000901', 'migration-unverified-suspended-member', 'OPERATOR', 'SUSPENDED')
+  `);
+  await client.query("INSERT INTO platform_roles (user_id) VALUES ('migration-platform-admin'), ('migration-unverified-platform-admin')");
+  await client.query(`
+    INSERT INTO audit_events (id, actor_id, actor_role, tenant_id, action, target_type, target_id, outcome, from_status, to_status, metadata) VALUES
+      ('00000000-0000-0000-0000-000000000971', 'migration-platform-admin', 'SUPER_ADMIN', '00000000-0000-0000-0000-000000000962', 'TENANT_CREATED', 'TENANT', '00000000-0000-0000-0000-000000000962', 'SUCCESS', NULL, 'ACTIVE', '{"attemptId":"00000000-0000-4000-8000-000000000971","fingerprint":"f"}'),
+      ('00000000-0000-0000-0000-000000000972', 'migration-platform-admin', 'SUPER_ADMIN', '00000000-0000-0000-0000-000000000962', 'TENANT_SUSPENDED', 'TENANT', '00000000-0000-0000-0000-000000000962', 'SUCCESS', 'ACTIVE', 'SUSPENDED', '{"attemptId":"00000000-0000-4000-8000-000000000972","fingerprint":"f"}'),
+      ('00000000-0000-0000-0000-000000000973', 'migration-fixture-user', 'TENANT_MEMBER', '00000000-0000-0000-0000-000000000901', 'MENGANTAR_CREDENTIAL_CREATED', 'OUTLET', '00000000-0000-0000-0000-000000000902', 'SUCCESS', NULL, NULL, '{"connectionSource":"private","credentialChange":"created"}'),
+      ('00000000-0000-0000-0000-000000000974', 'migration-provisioning-admin', 'TENANT_MEMBER', '00000000-0000-0000-0000-000000000961', 'MEMBER_INVITED', 'MEMBERSHIP', 'UNRESOLVED_MEMBER', 'DENIED', NULL, NULL, '{"attemptId":"00000000-0000-4000-8000-000000000974"}')
+  `);
+  const identitySnapshot = async () => {
+    const tables = {};
+    for (const [table, order] of [["tenants", "id"], ["users", "id"], ["memberships", "id"], ["platform_roles", "user_id"], ["audit_events", "id"]]) {
+      const { rows } = await client.query(`SELECT to_jsonb(t) - 'mengantar_credential_policy' - 'contact_whatsapp' AS row FROM ${table} t ORDER BY ${order}`);
+      tables[table] = rows.map((row) => row.row);
+    }
+    return tables;
+  };
+  const identityBefore = await identitySnapshot();
+  const expectedCounts = { tenants: 5, users: 8, memberships: 5, platform_roles: 2, audit_events: 4 };
+  for (const [table, count] of Object.entries(expectedCounts)) {
+    // A guard that compares two empty lists proves nothing.
+    if (identityBefore[table].length < count) {
+      throw new Error(`Pre-0051 fixtures missing for ${table}: ${identityBefore[table].length} < ${count}`);
+    }
+  }
+
+  await applyMigrations(migrations.slice(signUpIndex, signUpHardeningIndex));
+
+  const identityAfter = await identitySnapshot();
+  if (JSON.stringify(identityAfter) !== JSON.stringify(identityBefore)) {
+    throw new Error(`An existing tenant, user, membership, platform role or audit row changed across 0051: ${JSON.stringify({ identityBefore, identityAfter })}`);
+  }
+  const { rows: tenantPolicies } = await client.query(`
+    SELECT count(*)::int AS tenants,
+      count(*) FILTER (WHERE mengantar_credential_policy = 'PLATFORM_DEFAULT_ALLOWED' AND contact_whatsapp IS NULL)::int AS unchanged
+    FROM tenants
+  `);
+  if (tenantPolicies[0].tenants < 5 || tenantPolicies[0].unchanged !== tenantPolicies[0].tenants) {
+    throw new Error(`An existing tenant did not keep the platform-default credential policy: ${JSON.stringify(tenantPolicies)}`);
+  }
+  const { rows: signUpChecks } = await client.query(`
+    SELECT conname FROM pg_constraint
+    WHERE contype = 'c' AND convalidated
+      AND conname IN ('audit_events_action_valid', 'tenants_mengantar_credential_policy_valid', 'tenants_contact_whatsapp_valid', 'public_auth_rate_limits_key_valid', 'public_auth_rate_limits_count_positive', 'tenants_status_valid', 'memberships_role_valid')
+  `);
+  if (signUpChecks.length !== 7) {
+    throw new Error(`0051 checks are not all validated against the existing rows: ${JSON.stringify(signUpChecks)}`);
+  }
+  // Exactly the setup policies accept PROVISIONING; every policy on a table that
+  // ships still requires ACTIVE and names no PROVISIONING.
+  const MOVED = [
+    "outlets_active_tenant",
+    "outlet_pickup_points_active_tenant_select", "outlet_pickup_points_active_tenant_insert",
+    "outlet_pickup_points_active_tenant_update", "outlet_pickup_points_active_tenant_delete",
+    "mengantar_connections_active_tenant_select", "mengantar_connections_tenant_admin_insert",
+    "mengantar_connections_tenant_admin_update", "mengantar_connections_tenant_admin_delete",
+    "managed_secret_payloads_active_tenant_select", "managed_secret_payloads_tenant_admin_insert",
+    "mengantar_credential_rate_limits_tenant_admin", "audit_events_mengantar_credential_guard",
+  ];
+  const { rows: policies } = await client.query(`
+    SELECT tablename, policyname, coalesce(qual, '') || ' ' || coalesce(with_check, '') AS text FROM pg_policies
+  `);
+  const provisioningPolicies = policies.filter((policy) => policy.text.includes("PROVISIONING")).map((policy) => policy.policyname).sort();
+  const expectedProvisioning = [...MOVED, "tenants_self_registration_insert", "tenants_registration_review_update"].sort();
+  const SHIPPING_TABLES = [
+    "shipments", "shipment_drafts", "shipment_parties", "shipment_estimate_snapshots", "shipment_estimate_services",
+    "shipment_cod_totals", "provider_batches", "provider_order_snapshots", "provider_unpaid_recoveries",
+    "provider_settlement_pulls", "provider_settlement_items", "provider_order_status_observations",
+    "ledger_entries", "reconciliation_runs", "print_events", "shipment_rts_events", "shipment_rate_limits",
+    "contacts", "contact_addresses",
+  ];
+  const shippingPolicies = policies.filter((policy) =>
+    SHIPPING_TABLES.includes(policy.tablename) && !policy.policyname.endsWith("_credential_policy"));
+  if (
+    JSON.stringify(provisioningPolicies) !== JSON.stringify(expectedProvisioning)
+    || shippingPolicies.length < 30
+    || !shippingPolicies.every((policy) => /status = 'ACTIVE'::text/.test(policy.text) && !policy.text.includes("PROVISIONING"))
+  ) {
+    throw new Error(`0051 moved a policy it should not have, or missed one: ${JSON.stringify({ provisioningPolicies, expectedProvisioning, shippingPolicies: shippingPolicies.length })}`);
+  }
+  const { rows: allocation } = await client.query("SELECT prosrc FROM pg_proc WHERE proname = 'allocate_shipment_reference'");
+  if (!allocation[0]?.prosrc.includes("t.status = 'ACTIVE'") || allocation[0].prosrc.includes("PROVISIONING")) {
+    throw new Error("Shipment number allocation no longer requires an ACTIVE tenant.");
+  }
+  // The runtime role: cannot move a tenant out of PROVISIONING even with the
+  // platform-admin setting, cannot write the self-registration audit action,
+  // cannot write users; can register a store, which is PROVISIONING and
+  // PRIVATE_ONLY with its admin, outlet and audit event.
+  const asRuntime = async (work) => {
+    await client.query("BEGIN");
+    try {
+      await client.query("SET LOCAL ROLE geraicuan_app");
+      return await work();
+    } catch (error) {
+      return { code: error.code, message: error.message };
+    } finally {
+      await client.query("ROLLBACK");
+    }
+  };
+  const legacyTransition = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.platform_admin', 'true', true)");
+    await client.query("UPDATE tenants SET status = 'ACTIVE' WHERE id = '00000000-0000-0000-0000-000000000961'");
+    return { code: "accepted" };
+  });
+  const forgedAudit = await asRuntime(async () => {
+    await client.query(`INSERT INTO audit_events (actor_role, tenant_id, action, target_type, target_id, outcome)
+      VALUES ('TENANT_MEMBER', '00000000-0000-0000-0000-000000000901', 'TENANT_SELF_REGISTERED', 'TENANT', '00000000-0000-0000-0000-000000000901', 'SUCCESS')`);
+    return { code: "accepted" };
+  });
+  const verifyUser = await asRuntime(async () => {
+    await client.query("UPDATE users SET email_verified = true WHERE id = 'migration-unverified-user'");
+    const { rows } = await client.query("SELECT email_verified FROM users WHERE id = 'migration-unverified-user'");
+    return { code: rows[0]?.email_verified === true ? "verified" : "unchanged" };
+  });
+  const renameUser = await asRuntime(async () => {
+    await client.query("UPDATE users SET name = 'x' WHERE id = 'migration-unverified-user'");
+    return { code: "accepted" };
+  });
+  const registration = await asRuntime(async () => {
+    const { rows } = await client.query(`SELECT register_tenant_self_service('migration.signup@example.test', 'Pemilik Migrasi', repeat('h', 64), 'Toko Migrasi', '081234567890') AS tenant_id`);
+    await client.query("RESET ROLE");
+    const { rows: created } = await client.query(`
+      SELECT t.status, t.mengantar_credential_policy, m.role, u.email_verified,
+        (SELECT count(*)::int FROM outlets o WHERE o.tenant_id = t.id) AS outlets,
+        (SELECT count(*)::int FROM audit_events e WHERE e.tenant_id = t.id AND e.action = 'TENANT_SELF_REGISTERED') AS audits
+      FROM tenants t JOIN memberships m ON m.tenant_id = t.id JOIN users u ON u.id = m.user_id WHERE t.id = $1`, [rows[0].tenant_id]);
+    return { code: "registered", created };
+  });
+  if (
+    legacyTransition.code !== "42501"
+    || forgedAudit.code !== "42501"
+    || verifyUser.code !== "verified"
+    || renameUser.code !== "42501"
+    || registration.code !== "registered"
+    || JSON.stringify(registration.created) !== JSON.stringify([{ status: "PROVISIONING", mengantar_credential_policy: "PRIVATE_ONLY", role: "TENANT_ADMIN", email_verified: false, outlets: 1, audits: 1 }])
+  ) {
+    throw new Error(`0051 guards did not hold for the runtime role: ${JSON.stringify({ legacyTransition, forgedAudit, verifyUser, renameUser, registration })}`);
+  }
+  if (JSON.stringify(await identitySnapshot()) !== JSON.stringify(identityBefore)) {
+    throw new Error("The 0051 guard probes left a change behind.");
+  }
+
+  // Security review follow-up (0052). A store registered while 0051 was the
+  // latest migration — the developer database's shape — must stay unverified;
+  // every pre-0051 account with an ACTIVE membership or a platform role is
+  // verified (M1), and nothing else about any row moves.
+  await client.query("BEGIN");
+  await client.query("SET LOCAL ROLE geraicuan_app");
+  const { rows: selfRegistered } = await client.query(`
+    SELECT register_tenant_self_service('migration.between@example.test', 'Pemilik Antara', repeat('h', 64), 'Toko Antara', '081234567891') AS tenant_id`);
+  await client.query("COMMIT");
+  if (!selfRegistered[0]?.tenant_id) throw new Error("The between-migrations store was not registered.");
+  const withoutVerification = (snapshot) => ({
+    ...snapshot,
+    users: snapshot.users.map((row) => {
+      const rest = { ...row };
+      delete rest.email_verified;
+      delete rest.updated_at;
+      return rest;
+    }),
+  });
+  const verificationById = async () => Object.fromEntries((await client.query(
+    "SELECT id, email_verified FROM users ORDER BY id",
+  )).rows.map((row) => [row.id, row.email_verified]));
+  const beforeHardening = await identitySnapshot();
+  const verificationBefore = await verificationById();
+  const selfRegisteredUser = (await client.query(
+    "SELECT id FROM users WHERE email = 'migration.between@example.test'",
+  )).rows[0]?.id;
+  if (
+    verificationBefore["migration-unverified-user"] !== false
+    || verificationBefore["migration-unverified-platform-admin"] !== false
+    || verificationBefore[selfRegisteredUser] !== false
+  ) {
+    throw new Error(`Pre-0052 unverified fixtures are missing: ${JSON.stringify(verificationBefore)}`);
+  }
+
+  await applyMigrations(migrations.slice(signUpHardeningIndex, emailReleaseIndex));
+
+  const verificationAfter = await verificationById();
+  const expectedVerification = {
+    ...verificationBefore,
+    "migration-unverified-user": true,
+    "migration-unverified-platform-admin": true,
+  };
+  if (
+    JSON.stringify(verificationAfter) !== JSON.stringify(expectedVerification)
+    || verificationAfter["migration-unverified-no-access"] !== false
+    || verificationAfter["migration-unverified-suspended-member"] !== false
+    || verificationAfter[selfRegisteredUser] !== false
+    || JSON.stringify(withoutVerification(await identitySnapshot())) !== JSON.stringify(withoutVerification(beforeHardening))
+  ) {
+    throw new Error(`0052 did not verify exactly the pre-sign-up accounts with access, or changed another row: ${JSON.stringify({ verificationBefore, verificationAfter })}`);
+  }
+  const unverifyOperator = await asRuntime(async () => {
+    await client.query("UPDATE users SET email_verified = false WHERE id = 'migration-fixture-user'");
+    return { code: "accepted" };
+  });
+  const verifySelfRegistered = await asRuntime(async () => {
+    const { rowCount } = await client.query("UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1", [selfRegisteredUser]);
+    return { code: rowCount === 1 ? "verified" : "unchanged" };
+  });
+  const queueFor = (userId) => asRuntime(async () => {
+    await client.query("SELECT set_config('app.platform_admin', 'true', true), set_config('app.user_id', $1, true)", [userId]);
+    const { rows } = await client.query("SELECT count(*)::int AS n FROM platform_registration_queue");
+    return { code: String(rows[0].n) };
+  });
+  const forgedQueue = await queueFor("migration-fixture-user");
+  const superAdminQueue = await queueFor("migration-platform-admin");
+  const formatCharacterName = await asRuntime(async () => {
+    await client.query("SELECT register_tenant_self_service('migration.bidi@example.test', 'Pemilik \u202Eisarg', repeat('h', 64), 'Toko Bidi', '081234567892')");
+    return { code: "registered" };
+  });
+  if (
+    unverifyOperator.code !== "42501"
+    || verifySelfRegistered.code !== "verified"
+    || forgedQueue.code !== "0"
+    || superAdminQueue.code !== "2"
+    || formatCharacterName.code !== "22023"
+  ) {
+    throw new Error(`0052 guards did not hold for the runtime role: ${JSON.stringify({ unverifyOperator, verifySelfRegistered, forgedQueue, superAdminQueue, formatCharacterName })}`);
+  }
+  if (JSON.stringify(await verificationById()) !== JSON.stringify(verificationAfter)) {
+    throw new Error("The 0052 guard probes left a change behind.");
+  }
+
+  // T-198 (0053). Rejections made while 0052 was the latest migration: only the
+  // never-verified owner of a rejected registration, with no platform role and
+  // no store that is not ARCHIVED, has its address released; a verified owner,
+  // an owner holding a platform role, a legacy archived store's unverified
+  // admin and a pending registration are untouched.
+  const committedAsRuntime = async (work) => {
+    await client.query("BEGIN");
+    try {
+      await client.query("SET LOCAL ROLE geraicuan_app");
+      const result = await work();
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+  };
+  const registerStore = async (email, whatsapp) => {
+    const { rows } = await client.query(
+      "SELECT register_tenant_self_service($1, 'Pemilik Ditolak', repeat('h', 64), 'Toko Ditolak', $2) AS tenant_id",
+      [email, whatsapp],
+    );
+    return rows[0].tenant_id;
+  };
+  const rejectStore = async (tenantId) => {
+    await client.query("SELECT set_config('app.user_id', 'migration-platform-admin', true)");
+    await client.query("SELECT * FROM review_tenant_registration($1, 'REJECT', 'Data tidak valid', gen_random_uuid())", [tenantId]);
+  };
+  const rejectedFixtures = {};
+  for (const [key, email, whatsapp] of [
+    ["unverified", "migration.rejected.unverified@example.test", "081234567893"],
+    ["verified", "migration.rejected.verified@example.test", "081234567894"],
+    ["platformRole", "migration.rejected.role@example.test", "081234567895"],
+  ]) {
+    const tenantId = await committedAsRuntime(() => registerStore(email, whatsapp));
+    const userId = (await client.query("SELECT id FROM users WHERE email = $1", [email])).rows[0].id;
+    if (key === "verified") await client.query("UPDATE users SET email_verified = true WHERE id = $1", [userId]);
+    if (key === "platformRole") await client.query("INSERT INTO platform_roles (user_id) VALUES ($1)", [userId]);
+    await committedAsRuntime(() => rejectStore(tenantId));
+    rejectedFixtures[key] = { email, tenantId, userId };
+  }
+  await client.query(`
+    INSERT INTO tenants (id, name, status) VALUES ('00000000-0000-0000-0000-000000000981', 'Migration Archived Legacy', 'ACTIVE')
+  `);
+  await client.query("UPDATE tenants SET status = 'ARCHIVED' WHERE id = '00000000-0000-0000-0000-000000000981'");
+  await client.query(`
+    INSERT INTO users (id, name, email, email_verified, status)
+    VALUES ('migration-archived-unverified', 'Migration Archived Unverified', 'migration.archived.unverified@example.test', false, 'ACTIVE')
+  `);
+  await client.query(`
+    INSERT INTO memberships (tenant_id, user_id, role, status)
+    VALUES ('00000000-0000-0000-0000-000000000981', 'migration-archived-unverified', 'TENANT_ADMIN', 'ACTIVE')
+  `);
+  const beforeRelease = await identitySnapshot();
+  const rejectedUnverifiedBefore = beforeRelease.users.find((row) => row.id === rejectedFixtures.unverified.userId);
+  if (
+    !rejectedUnverifiedBefore
+    || rejectedUnverifiedBefore.email !== rejectedFixtures.unverified.email
+    || rejectedUnverifiedBefore.email_verified !== false
+    || beforeRelease.tenants.filter((row) => Object.values(rejectedFixtures).some((fixture) => fixture.tenantId === row.id) && row.status === "ARCHIVED").length !== 3
+    || beforeRelease.users.find((row) => row.email === "migration.between@example.test")?.email_verified !== false
+  ) {
+    throw new Error(`Pre-0053 rejected-registration fixtures are missing: ${JSON.stringify(rejectedUnverifiedBefore)}`);
+  }
+
+  await applyMigrations(migrations.slice(emailReleaseIndex));
+
+  const afterRelease = await identitySnapshot();
+  const releasedAfter = afterRelease.users.find((row) => row.id === rejectedFixtures.unverified.userId);
+  const expectedRelease = {
+    ...beforeRelease,
+    users: beforeRelease.users.map((row) => row.id === rejectedFixtures.unverified.userId
+      ? { ...row, email: `released+${row.id}@registration.invalid`, status: "SUSPENDED", updated_at: releasedAfter?.updated_at }
+      : row),
+  };
+  if (JSON.stringify(afterRelease) !== JSON.stringify(expectedRelease)) {
+    throw new Error(`0053 released an address it should not have, or changed another row: ${JSON.stringify({ before: beforeRelease.users, after: afterRelease.users })}`);
+  }
+  // After 0053: a rejection releases a never-verified address inside the review
+  // itself, the released address registers a new account and store, a verified
+  // owner keeps theirs, and the review can read an owner's platform role.
+  const releaseProbe = await asRuntime(async () => {
+    const tenantId = await registerStore("migration.release.probe@example.test", "081234567896");
+    const { rows: [owner] } = await client.query("SELECT id FROM users WHERE email = 'migration.release.probe@example.test'");
+    await rejectStore(tenantId);
+    const { rows: [released] } = await client.query("SELECT email, status FROM users WHERE id = $1", [owner.id]);
+    // The audit row is not the runtime role's to read.
+    await client.query("RESET ROLE");
+    const { rows: [audit] } = await client.query(
+      "SELECT metadata ->> 'ownerEmailReleased' AS released FROM audit_events WHERE tenant_id = $1 AND action = 'TENANT_REGISTRATION_REJECTED'",
+      [tenantId],
+    );
+    await client.query("SET LOCAL ROLE geraicuan_app");
+    const again = await registerStore("migration.release.probe@example.test", "081234567896");
+    const { rows: [fresh] } = await client.query("SELECT id FROM users WHERE email = 'migration.release.probe@example.test'");
+    return {
+      code: released.email === `released+${owner.id}@registration.invalid` && released.status === "SUSPENDED"
+        && audit.released === "true" && again && again !== tenantId && fresh.id !== owner.id
+        ? "released" : JSON.stringify({ released, audit, again, fresh }),
+    };
+  });
+  const verifiedProbe = await asRuntime(async () => {
+    const tenantId = await registerStore("migration.keep.probe@example.test", "081234567897");
+    await client.query("RESET ROLE");
+    await client.query("UPDATE users SET email_verified = true WHERE email = 'migration.keep.probe@example.test'");
+    await client.query("SET LOCAL ROLE geraicuan_app");
+    await rejectStore(tenantId);
+    const { rows } = await client.query("SELECT status FROM users WHERE email = 'migration.keep.probe@example.test'");
+    return { code: rows[0]?.status === "ACTIVE" ? "kept" : JSON.stringify(rows) };
+  });
+  const { rows: reviewPolicy } = await client.query(
+    "SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'platform_roles' AND policyname = 'platform_roles_registration_review_read' AND cmd = 'SELECT'",
+  );
+  if (releaseProbe.code !== "released" || verifiedProbe.code !== "kept" || reviewPolicy[0].n !== 1) {
+    throw new Error(`0053 did not hold for the runtime role: ${JSON.stringify({ releaseProbe, verifiedProbe, reviewPolicy })}`);
+  }
+  if (JSON.stringify(await identitySnapshot()) !== JSON.stringify(afterRelease)) {
+    throw new Error("The 0053 probes left a change behind.");
+  }
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);
 } finally {

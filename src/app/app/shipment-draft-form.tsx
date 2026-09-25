@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CircleAlert, ClipboardList, MapPinHouse, Package as PackageIcon, UserRound, Wallet, Warehouse } from "lucide-react";
+import { AlertTriangle, CircleAlert, ClipboardList, MapPin, MapPinHouse, Package as PackageIcon, UserRound, Wallet, Warehouse } from "lucide-react";
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 
 import {
@@ -24,10 +24,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cardBandClassName, fieldWidth, FieldRow } from "@/components/cms/cms-layouts";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel, FieldSet, FieldTitle } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/character-class-input";
+import { partyNameClass } from "@/lib/field-character-classes";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { isPaymentMethod, PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 type OutletPickupPoint = {
   pickupAddressId: string;
@@ -261,12 +262,12 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
   const inputField = (
     field: string,
     label: ReactNode,
-    input: Omit<ComponentProps<typeof Input>, "aria-describedby" | "aria-invalid" | "id" | "name">,
+    input: Omit<ComponentProps<typeof CharacterClassInput>, "aria-describedby" | "aria-invalid" | "id" | "name">,
     options: { className?: string; hint?: ReactNode } = {},
   ) => (
     <Field className={options.className} data-invalid={Boolean(fieldError(field))}>
       <FieldLabel htmlFor={field}>{label}</FieldLabel>
-      <Input
+      <CharacterClassInput
         aria-describedby={options.hint ? `${field}-hint ${field}-error` : describedBy(field)}
         aria-invalid={Boolean(fieldError(field))}
         className="min-h-11 md:min-h-8"
@@ -281,7 +282,7 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
   const addressField = (field: string, label: string) => (
     <Field data-invalid={Boolean(fieldError(field))}>
       <FieldLabel htmlFor={field}>{label}</FieldLabel>
-      <Textarea aria-describedby={describedBy(field)} aria-invalid={Boolean(fieldError(field))} defaultValue={values[field as keyof typeof values]} id={field} name={field} required rows={3} />
+      <CharacterClassTextarea aria-describedby={describedBy(field)} aria-invalid={Boolean(fieldError(field))} defaultValue={values[field as keyof typeof values]} characterClass="ADDRESS" id={field} name={field} required rows={3} />
       <FieldError error={fieldError(field)} id={`${field}-error`} />
     </Field>
   );
@@ -343,79 +344,91 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
       <Card>
         <CardHeader className={cardBandClassName}>
           <CardTitle id="draft-origin-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<Warehouse aria-hidden="true" className="size-4 text-muted-foreground" />Gudang asal</CardTitle>
-          <CardDescription>Titik pickup dan akun Mengantar yang dipakai untuk kiriman ini.</CardDescription>
+          <CardDescription>Outlet dan titik penjemputan paket untuk kiriman ini.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Field className={fieldWidth.lg} data-invalid={Boolean(fieldError("outletId"))}>
-            <FieldLabel htmlFor="outletId">Outlet asal</FieldLabel>
-            <Select
-              onValueChange={(value) => {
-                setSelectedOutletId(value);
-                // Another outlet has other pickup points; fall back to its default.
-                setPickupAddressId("");
-                setDestination({ mode: "empty" });
-                setDestinationRevision((revision) => revision + 1);
-                setDestinationEditedAfterSubmit(true);
-                setDestinationResetMessage(
-                  "Outlet berubah. Area tujuan sebelumnya dihapus; pilih ulang area untuk outlet ini.",
-                );
-              }}
-              value={selectedOutletId}
-            >
-              <SelectTrigger
-                aria-describedby={describedBy("outletId")}
-                aria-invalid={Boolean(fieldError("outletId"))}
-                className="min-h-11 w-full md:min-h-8"
-                id="outletId"
+          <FieldSet aria-labelledby="draft-origin-heading" className="min-w-0 gap-5">
+            <Field className={fieldWidth.lg} data-invalid={Boolean(fieldError("outletId"))}>
+              <FieldLabel htmlFor="outletId">Outlet asal</FieldLabel>
+              <Select
+                onValueChange={(value) => {
+                  setSelectedOutletId(value);
+                  // Another outlet has other pickup points; fall back to its default.
+                  setPickupAddressId("");
+                  setDestination({ mode: "empty" });
+                  setDestinationRevision((revision) => revision + 1);
+                  setDestinationEditedAfterSubmit(true);
+                  setDestinationResetMessage(
+                    "Outlet berubah. Area tujuan sebelumnya dihapus; pilih ulang area untuk outlet ini.",
+                  );
+                }}
+                value={selectedOutletId}
               >
-                <SelectValue placeholder="Pilih outlet" />
-              </SelectTrigger>
-              <SelectContent>
-                {outlets.map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <input name="outletId" type="hidden" value={selectedOutletId} />
-            <FieldError error={fieldError("outletId")} id="outletId-error" />
-            <FieldDescription>Outlet menentukan akun Mengantar untuk pencarian area dan estimasi.</FieldDescription>
-            <p aria-live="polite" className="text-sm text-muted-foreground empty:hidden" role="status">
-              {destinationResetMessage}
-            </p>
-          </Field>
-          {pickupPoints.length > 1 ? (
-            <Field className={fieldWidth.lg} data-invalid={Boolean(fieldError("pickupAddressId"))}>
-              <FieldLabel htmlFor="pickupAddressId">Titik pickup</FieldLabel>
-              <Select onValueChange={setPickupAddressId} value={effectivePickup?.pickupAddressId ?? ""}>
                 <SelectTrigger
-                  aria-describedby={describedBy("pickupAddressId")}
-                  aria-invalid={Boolean(fieldError("pickupAddressId"))}
+                  aria-describedby={describedBy("outletId")}
+                  aria-invalid={Boolean(fieldError("outletId"))}
                   className="min-h-11 w-full md:min-h-8"
-                  id="pickupAddressId"
+                  id="outletId"
                 >
-                  <SelectValue placeholder="Pilih titik pickup" />
+                  <SelectValue placeholder="Pilih outlet" />
                 </SelectTrigger>
                 <SelectContent>
-                  {pickupPoints.map((point) => (
-                    <SelectItem key={point.pickupAddressId} value={point.pickupAddressId}>
-                      {point.isDefault ? `${point.pickupAddressLabel} · Utama` : point.pickupAddressLabel}
-                    </SelectItem>
-                  ))}
+                  {outlets.map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <input name="pickupAddressId" type="hidden" value={effectivePickup?.pickupAddressId ?? ""} />
-              <FieldError error={fieldError("pickupAddressId")} id="pickupAddressId-error" />
-              <FieldDescription>
-                Titik utama outlet dipakai kecuali Anda memilih yang lain. Area asal:{" "}
-                {effectivePickup?.originAreaLabel ?? "—"}.
-              </FieldDescription>
+              <input name="outletId" type="hidden" value={selectedOutletId} />
+              <FieldError error={fieldError("outletId")} id="outletId-error" />
+              <p aria-live="polite" className="text-sm text-muted-foreground empty:hidden" role="status">
+                {destinationResetMessage}
+              </p>
             </Field>
-          ) : effectivePickup ? (
-            <Field className={fieldWidth.lg}>
-              <FieldTitle>Titik pickup</FieldTitle>
-              <p className="text-sm leading-6 [overflow-wrap:anywhere]">{effectivePickup.pickupAddressLabel}</p>
-              <input name="pickupAddressId" type="hidden" value={effectivePickup.pickupAddressId} />
-              <FieldDescription>Area asal: {effectivePickup.originAreaLabel}.</FieldDescription>
-            </Field>
-          ) : null}
+            {pickupPoints.length > 1 ? (
+              <Field className={fieldWidth.full} data-invalid={Boolean(fieldError("pickupAddressId"))}>
+                <FieldLabel htmlFor="pickupAddressId">Titik pickup</FieldLabel>
+                <Select onValueChange={setPickupAddressId} value={effectivePickup?.pickupAddressId ?? ""}>
+                  <SelectTrigger
+                    aria-describedby={describedBy("pickupAddressId")}
+                    aria-invalid={Boolean(fieldError("pickupAddressId"))}
+                    className="min-h-11 w-full md:min-h-8"
+                    id="pickupAddressId"
+                  >
+                    <SelectValue placeholder="Pilih titik pickup" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickupPoints.map((point) => (
+                      <SelectItem key={point.pickupAddressId} value={point.pickupAddressId}>
+                        {point.isDefault ? `${point.pickupAddressLabel} · Utama` : point.pickupAddressLabel}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <input name="pickupAddressId" type="hidden" value={effectivePickup?.pickupAddressId ?? ""} />
+                <FieldError error={fieldError("pickupAddressId")} id="pickupAddressId-error" />
+                <FieldDescription>
+                  Area asal: {effectivePickup?.originAreaLabel ?? "—"}
+                </FieldDescription>
+              </Field>
+            ) : effectivePickup ? (
+              <Field className={fieldWidth.full}>
+                <FieldTitle>Titik pickup</FieldTitle>
+                <div className="rounded-lg border bg-muted/20 px-3.5 py-2.5 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-foreground leading-snug [overflow-wrap:anywhere]">{effectivePickup.pickupAddressLabel}</p>
+                    {effectivePickup.isDefault ? (
+                      <span className="inline-flex shrink-0 items-center rounded-md border border-border/80 bg-background px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground shadow-xs">
+                        Utama
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground/70" />
+                    Area asal: <span className="font-medium text-foreground">{effectivePickup.originAreaLabel}</span>
+                  </p>
+                </div>
+                <input name="pickupAddressId" type="hidden" value={effectivePickup.pickupAddressId} />
+              </Field>
+            ) : null}
+          </FieldSet>
         </CardContent>
       </Card>
 
@@ -432,8 +445,8 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               saveError={fieldError("senderContactSelection")}
             />
             <FieldRow>
-              {inputField("senderName", "Nama pengirim", { autoFocus: autoFocusFirstField && !state.errors, defaultValue: values.senderName, required: true }, { className: fieldWidth.lg })}
-              {inputField("senderPhone", "Nomor telepon", { defaultValue: values.senderPhone, required: true, type: "tel" }, { className: fieldWidth.md })}
+              {inputField("senderName", "Nama pengirim", { autoFocus: autoFocusFirstField && !state.errors, characterClass: partyNameClass({ isSender: true }), defaultValue: values.senderName, required: true }, { className: fieldWidth.lg })}
+              {inputField("senderPhone", "Nomor telepon", { characterClass: "PHONE", defaultValue: values.senderPhone, required: true, type: "tel" }, { className: fieldWidth.md })}
             </FieldRow>
             {addressField("senderAddress", "Alamat pengirim")}
           </FieldSet>
@@ -453,14 +466,14 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               saveError={fieldError("recipientContactSelection")}
             />
             <FieldRow>
-              {inputField("recipientName", "Nama penerima", { defaultValue: values.recipientName, required: true }, { className: fieldWidth.lg })}
-              {inputField("recipientPhone", "Nomor telepon", { defaultValue: values.recipientPhone, required: true, type: "tel" }, { className: fieldWidth.md })}
+              {inputField("recipientName", "Nama penerima", { characterClass: "PERSON_NAME", defaultValue: values.recipientName, required: true }, { className: fieldWidth.lg })}
+              {inputField("recipientPhone", "Nomor telepon", { characterClass: "PHONE", defaultValue: values.recipientPhone, required: true, type: "tel" }, { className: fieldWidth.md })}
             </FieldRow>
             {addressField("recipientAddress", "Alamat penerima")}
             {inputField(
               "recipientAddressLandmark",
               <span>Patokan rumah <span className="font-normal text-muted-foreground">(Opsional)</span></span>,
-              { defaultValue: values.recipientAddressLandmark, maxLength: 160, placeholder: "Contoh: seberang masjid, pagar hijau" },
+              { characterClass: "ADDRESS", defaultValue: values.recipientAddressLandmark, maxLength: 160, placeholder: "Contoh: seberang masjid, pagar hijau" },
               { className: fieldWidth.full, hint: "Membantu kurir menemukan alamat. Dicetak pada label bila diisi." },
             )}
             {selectedOutletId ? (
@@ -499,17 +512,17 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
         </CardHeader>
         <CardContent>
           <FieldSet aria-labelledby="draft-package-heading" className="min-w-0 gap-5">
-            {inputField("packageContent", "Isi paket", { defaultValue: values.packageContent, required: true }, { className: fieldWidth.lg })}
+            {inputField("packageContent", "Isi paket", { characterClass: "FREE_TEXT", defaultValue: values.packageContent, required: true }, { className: fieldWidth.lg })}
             <FieldRow>
-              {inputField("packageWeightGrams", "Berat (gram)", { defaultValue: values.packageWeightGrams, inputMode: "numeric", required: true, type: "text" }, { className: fieldWidth.sm })}
-              {inputField("packageQuantity", "Jumlah paket", { defaultValue: values.packageQuantity ?? "1", min: "1", required: true, type: "number" }, { className: fieldWidth.xs })}
+              {inputField("packageWeightGrams", "Berat (gram)", { characterClass: "NUMERIC_INTEGER", defaultValue: values.packageWeightGrams, required: true, type: "text" }, { className: fieldWidth.sm })}
+              {inputField("packageQuantity", "Jumlah paket", { characterClass: "NUMERIC_INTEGER", defaultValue: values.packageQuantity ?? "1", required: true, type: "text" }, { className: fieldWidth.xs })}
             </FieldRow>
             <fieldset className="contents">
               <legend className="sr-only">Dimensi paket</legend>
               <FieldRow>
-                {inputField("packageLengthCm", "Panjang (cm)", { defaultValue: values.packageLengthCm, inputMode: "numeric", type: "text" }, { className: fieldWidth.xs })}
-                {inputField("packageWidthCm", "Lebar (cm)", { defaultValue: values.packageWidthCm, inputMode: "numeric", type: "text" }, { className: fieldWidth.xs })}
-                {inputField("packageHeightCm", "Tinggi (cm)", { defaultValue: values.packageHeightCm, inputMode: "numeric", type: "text" }, { className: fieldWidth.xs })}
+                {inputField("packageLengthCm", "Panjang (cm)", { characterClass: "NUMERIC_INTEGER", defaultValue: values.packageLengthCm, type: "text" }, { className: fieldWidth.xs })}
+                {inputField("packageWidthCm", "Lebar (cm)", { characterClass: "NUMERIC_INTEGER", defaultValue: values.packageWidthCm, type: "text" }, { className: fieldWidth.xs })}
+                {inputField("packageHeightCm", "Tinggi (cm)", { characterClass: "NUMERIC_INTEGER", defaultValue: values.packageHeightCm, type: "text" }, { className: fieldWidth.xs })}
               </FieldRow>
             </fieldset>
           </FieldSet>
@@ -527,11 +540,12 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
               <FieldLabel htmlFor="shippingInstruction">
                 Instruksi pengiriman <span className="font-normal text-muted-foreground">(Opsional)</span>
               </FieldLabel>
-              <Textarea
+              <CharacterClassTextarea
                 aria-describedby={fieldError("shippingInstruction")
                   ? "shippingInstruction-hint shippingInstruction-error"
                   : "shippingInstruction-hint"}
                 aria-invalid={Boolean(fieldError("shippingInstruction"))}
+                characterClass="FREE_TEXT"
                 defaultValue={values.shippingInstruction}
                 id="shippingInstruction"
                 maxLength={500}
@@ -555,29 +569,12 @@ export function ShipmentDraftForm({ autoFocusFirstField, outlets, submissionId }
           <CardTitle id="draft-payment-heading" className="flex items-center gap-2">{/* icon marks the section at a glance */}<Wallet aria-hidden="true" className="size-4 text-muted-foreground" />Nilai dan pembayaran</CardTitle>
         </CardHeader>
         <CardContent>
-          <FieldSet aria-labelledby="draft-payment-heading" className="min-w-0 gap-5">
-            <fieldset
-              aria-describedby={describedBy("paymentType")}
-              aria-invalid={Boolean(fieldError("paymentType"))}
-              className="grid gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              id="paymentType"
-              tabIndex={-1}
-            >
-              <legend className="mb-1 text-sm font-medium">Metode pembayaran</legend>
-              <p className="max-w-2xl text-sm text-muted-foreground">
-                COD berarti pembeli membayar ke kurir saat paket tiba; nilai tagihannya dihitung
-                setelah layanan dipilih. Non-COD berarti pembeli sudah membayar ke Paduka.
-              </p>
-              <RadioGroup className="grid gap-3 sm:grid-cols-2" defaultValue={values.paymentType === "COD" ? "COD" : "NON_COD"} name="paymentType" required>
-                <FieldLabel className="min-h-11 w-full cursor-pointer items-center rounded-lg border px-4 py-2 font-normal" htmlFor="paymentType-non-cod"><RadioGroupItem id="paymentType-non-cod" value="NON_COD" />Non-COD (Ongkir dibayar pengirim)</FieldLabel>
-                <FieldLabel className="min-h-11 w-full cursor-pointer items-center rounded-lg border px-4 py-2 font-normal" htmlFor="paymentType-cod"><RadioGroupItem id="paymentType-cod" value="COD" />COD (Bayar di tempat oleh penerima)</FieldLabel>
-              </RadioGroup>
-              <FieldError error={fieldError("paymentType")} id="paymentType-error" />
-            </fieldset>
-            <FieldRow>
-              {inputField("declaredValue", "Nilai barang (Rp)", { defaultValue: values.declaredValue, inputMode: "numeric", required: true, type: "text" }, { className: fieldWidth.money })}
-            </FieldRow>
-          </FieldSet>
+          <PaymentMethodFields
+            declaredValueError={fieldError("declaredValue")}
+            defaultDeclaredValue={values.declaredValue}
+            defaultMethod={values.paymentType}
+            paymentTypeError={fieldError("paymentType")}
+          />
         </CardContent>
       </Card>
 
@@ -628,5 +625,163 @@ export function HazardousDeclaration({ defaultChecked = false, invalid = false }
         </p>
       ) : null}
     </>
+  );
+}
+
+type PaymentMethodOption = {
+  description: string;
+  fieldAnnouncement: string;
+  value: PaymentMethod;
+};
+
+/** T-186 / PR-64: the three ways a shipment is paid, in the order operators meet them. */
+const PAYMENT_METHOD_OPTIONS: readonly PaymentMethodOption[] = [
+  {
+    description: "Pembeli sudah membayar. Kurir tidak menagih apa pun ke penerima.",
+    fieldAnnouncement: "Kolom nilai barang untuk asuransi ditampilkan.",
+    value: "NON_COD",
+  },
+  {
+    description: "Kurir menagih nilai barang, ongkir, dan biaya COD ke penerima.",
+    fieldAnnouncement: "Kolom nilai barang ditampilkan. Total COD dihitung otomatis setelah layanan dipilih.",
+    value: "COD",
+  },
+  {
+    description: "Barang sudah dibayar di luar GeraiCUAN. Kurir hanya menagih ongkir ke penerima.",
+    fieldAnnouncement: "Kolom nilai barang yang sudah dibayar ditampilkan. Ongkir yang ditagih diatur saat memilih layanan.",
+    value: "COD_ONGKIR",
+  },
+];
+
+type PaymentMethodFieldsProps = {
+  declaredValueError?: string;
+  defaultDeclaredValue?: string;
+  defaultMethod?: string;
+  paymentTypeError?: string;
+};
+
+/**
+ * The payment choice and the one field that belongs to it (PR-64). Only the
+ * chosen method's panel is rendered, so a field for another method is never in
+ * the form and never submitted; the goods value typed in one panel carries to
+ * the next because it is the same fact. Exported so a render test can bind each
+ * method's field to that method alone.
+ */
+export function PaymentMethodFields({
+  declaredValueError,
+  defaultDeclaredValue = "",
+  defaultMethod,
+  paymentTypeError,
+}: PaymentMethodFieldsProps) {
+  const [method, setMethod] = useState<PaymentMethod>(
+    isPaymentMethod(defaultMethod) ? defaultMethod : "NON_COD",
+  );
+  const [declaredValue, setDeclaredValue] = useState(defaultDeclaredValue);
+  const [announcement, setAnnouncement] = useState("");
+  const invalidValue = Boolean(declaredValueError);
+  const valueInput = (label: string, hint: string) => (
+    <Field className={fieldWidth.lg} data-invalid={invalidValue}>
+      <FieldLabel htmlFor="declaredValue">{label}</FieldLabel>
+      <CharacterClassInput
+        aria-describedby={invalidValue ? "declaredValue-hint declaredValue-error" : "declaredValue-hint"}
+        aria-invalid={invalidValue}
+        characterClass="RUPIAH"
+        className="min-h-11 md:min-h-9 sm:max-w-56"
+        id="declaredValue"
+        name="declaredValue"
+        onChange={(event) => setDeclaredValue(event.target.value)}
+        required
+        type="text"
+        value={declaredValue}
+      />
+      <FieldDescription id="declaredValue-hint">{hint}</FieldDescription>
+      <FieldError error={declaredValueError} id="declaredValue-error" />
+    </Field>
+  );
+  const computedNote = (title: string, body: ReactNode) => (
+    <div className="grid gap-1 rounded-lg border border-dashed bg-muted/30 p-4 text-sm">
+      <p className="font-medium">{title}</p>
+      <p className="leading-6 text-muted-foreground">{body}</p>
+    </div>
+  );
+
+  return (
+    <FieldSet aria-labelledby="draft-payment-heading" className="min-w-0 gap-5">
+      <fieldset
+        aria-describedby={paymentTypeError ? "paymentType-error" : undefined}
+        aria-invalid={Boolean(paymentTypeError)}
+        className="grid gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        id="paymentType"
+        tabIndex={-1}
+      >
+        <legend className="mb-1 text-base font-medium">Metode pembayaran</legend>
+        <RadioGroup
+          className="grid gap-3 md:grid-cols-3"
+          name="paymentType"
+          onValueChange={(value) => {
+            if (!isPaymentMethod(value)) return;
+            setMethod(value);
+            setAnnouncement(
+              PAYMENT_METHOD_OPTIONS.find((option) => option.value === value)?.fieldAnnouncement ?? "",
+            );
+          }}
+          required
+          value={method}
+        >
+          {PAYMENT_METHOD_OPTIONS.map((option) => (
+            <FieldLabel
+              className="min-h-14 w-full cursor-pointer items-start gap-3 rounded-lg border-2 px-4 py-3 font-normal transition-colors hover:border-primary/40 hover:bg-muted/20 has-data-checked:border-primary has-data-checked:bg-primary/5"
+              htmlFor={`paymentType-${option.value}`}
+              key={option.value}
+            >
+              <RadioGroupItem
+                aria-describedby={`paymentType-${option.value}-description`}
+                className="mt-1 size-5"
+                id={`paymentType-${option.value}`}
+                value={option.value}
+              />
+              <span className="grid gap-1">
+                <span className="text-base font-semibold">{PAYMENT_METHOD_LABELS[option.value]}</span>
+                <span className="text-sm leading-5 text-muted-foreground" id={`paymentType-${option.value}-description`}>
+                  {option.description}
+                </span>
+              </span>
+            </FieldLabel>
+          ))}
+        </RadioGroup>
+        <FieldError error={paymentTypeError} id="paymentType-error" />
+      </fieldset>
+      <p aria-live="polite" className="sr-only" role="status">{announcement}</p>
+      <div className="grid gap-4" data-payment-panel={method}>
+        {method === "NON_COD" ? (
+          valueInput(
+            "Nilai barang untuk asuransi (Rp)",
+            "Nilai barang yang dipertanggungkan dan dikirim ke Mengantar. Kurir tidak menagih apa pun.",
+          )
+        ) : method === "COD" ? (
+          <>
+            {valueInput(
+              "Nilai barang (Rp)",
+              "Harga barang yang dibayar penerima kepada kurir.",
+            )}
+            {computedNote(
+              "Total COD dihitung otomatis",
+              "Setelah layanan dipilih, total yang ditagih kurir = nilai barang + ongkir + biaya COD Mengantar (3,33% dari total). Angka ini tidak diketik.",
+            )}
+          </>
+        ) : (
+          <>
+            {valueInput(
+              "Nilai barang yang sudah dibayar (Rp)",
+              "Tidak ditagih kurir. Dikirim ke Mengantar sebagai nilai barang untuk asuransi.",
+            )}
+            {computedNote(
+              "Ongkir yang ditagih kurir diatur saat memilih layanan",
+              "Nilai awalnya titik impas: ongkir yang dipotong Mengantar ditambah biaya COD 3,33%. Boleh dinaikkan, tidak boleh diturunkan; selisihnya diterima penjual.",
+            )}
+          </>
+        )}
+      </div>
+    </FieldSet>
   );
 }

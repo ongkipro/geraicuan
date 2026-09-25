@@ -1,0 +1,350 @@
+---
+// GeraiCUAN public landing page (T-184, PR-63, D-11). Static; no client JavaScript.
+import { Font } from "astro:assets";
+import "../styles/landing.css";
+import { COD_ONGKIR_SAMPLE as codOngkir, SAMPLE_LABEL as label, encodeCode128B, formatIdr } from "../lib/sample.mjs";
+
+// The one build-time configuration value: where the tenant CMS lives. A bare
+// http(s) origin only, so a mistyped value fails the build instead of shipping a
+// CTA that points somewhere else.
+const configuredOrigin = import.meta.env.PUBLIC_APP_ORIGIN || "https://app.geraicuan.com";
+const parsedOrigin = new URL(configuredOrigin);
+if (
+  !["http:", "https:"].includes(parsedOrigin.protocol) ||
+  parsedOrigin.username || parsedOrigin.password ||
+  parsedOrigin.pathname !== "/" || parsedOrigin.search || parsedOrigin.hash
+) {
+  throw new Error(`PUBLIC_APP_ORIGIN must be a bare http(s) origin, got ${JSON.stringify(configuredOrigin)}`);
+}
+const appOrigin = parsedOrigin.origin;
+const signUpUrl = `${appOrigin}/daftar`;
+const signInUrl = `${appOrigin}/login`;
+
+const canonical = "https://geraicuan.com/";
+const title = "GeraiCUAN — Order Mengantar, label thermal, laporan kirim";
+const description =
+  "Buat order kirim lewat Mengantar dengan Non-COD, COD, atau COD Ongkir, cetak label thermal 10 × 15 cm, dan pantau biaya kirim, biaya COD, serta dana cair dalam satu laporan.";
+
+const packageBars = encodeCode128B(label.awb);
+const cod = label.cod;
+
+const steps = [
+  ["Daftar dan hubungkan Mengantar", "Verifikasi email, simpan API key akun Mengantar milik toko Anda, dan atur titik pickup. Toko mulai mengirim setelah disetujui Super Admin GeraiCUAN."],
+  ["Buat order", "Masukkan kiriman satu per satu atau impor dari file CSV. Pilih Non-COD, COD, atau COD Ongkir, lalu cek tarif kurir sebelum memilih."],
+  ["Cetak label thermal", "Resi dari Mengantar langsung menjadi label 10 × 15 cm yang siap dicetak dan ditempel."],
+  ["Pantau kiriman dan laporan", "Lihat status setiap kiriman, cek resi, dan baca laporan ongkir serta COD per periode."],
+];
+
+// T-186 / PR-64: the three payment methods, named as the CMS names them (src/lib/payment-method.ts).
+const paymentMethods = [
+  {
+    key: "NON_COD",
+    name: "Non-COD",
+    when: "Pembeli sudah membayar lunas",
+    text: "Kurir hanya mengantar dan tidak menagih apa pun. Isi nilai barang untuk asuransi; nilainya dikirim ke Mengantar sebagai nilai barang.",
+    collects: "Tidak ada",
+    input: "Nilai barang untuk asuransi",
+  },
+  {
+    key: "COD",
+    name: "COD",
+    when: "Pembeli membayar saat paket tiba",
+    text: "Total COD dihitung otomatis, bukan diketik: harga barang, ongkir, dan biaya COD Mengantar 3,33%. Dana yang cair tetap menutup harga barang, jadi toko tidak nombok.",
+    collects: "Harga barang + ongkir + biaya COD",
+    input: "Nilai barang; totalnya dihitung sistem",
+  },
+  {
+    key: "COD_ONGKIR",
+    name: "COD Ongkir",
+    when: "Barang sudah dibayar, ongkir dibayar saat paket tiba",
+    text: "Kurir hanya menagih ongkir. Nilainya dimulai dari titik impas dan boleh Anda naikkan; selisihnya untuk toko. Nilai di bawah titik impas ditolak.",
+    collects: "Ongkir saja",
+    input: "Ongkir yang ditagih, minimal titik impas",
+  },
+];
+
+const reports = [
+  ["Biaya kirim, biaya COD, dan dana cair", "Setiap periode menunjukkan biaya kirim Mengantar, biaya COD yang dipotong Mengantar, dan estimasi dana yang dicairkan, beserta metode pembayaran tiap kiriman. Laporannya bisa diunduh sebagai CSV."],
+  ["Satu filter tanggal", "Hari ini, kemarin, minggu ini, bulan ini, bulan lalu, 7 atau 30 hari terakhir, atau rentang sendiri, dalam WIB. Kontrolnya sama di dasbor, analitik, laporan, dan keuangan."],
+  ["Panel status kiriman", "Langsung terlihat berapa kiriman yang siap dilanjutkan, sudah terbit resinya, dalam perjalanan, terkirim, atau perlu perhatian. Klik untuk menyaring daftarnya."],
+  ["Cek resi dan cek tarif", "Cari kiriman dari nomor resi atau nomor kiriman, dan bandingkan tarif kurir sebelum membuat order."],
+  ["Rekap per kurir", "Dasbor merangkum jumlah kiriman, yang terkirim, retur, dan biaya kirim untuk setiap kurir."],
+  ["Data toko terpisah", "Setiap toko hanya melihat datanya sendiri. Undang anggota tim sebagai admin toko atau operator, dan aksesnya mengikuti peran itu."],
+];
+---
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#2e47ba" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:site_name" content="GeraiCUAN" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <Font cssVariable="--font-inter" preload />
+  </head>
+  <body>
+    <a class="skip-link" href="#utama">Lompat ke konten utama</a>
+
+    <header class="site-header">
+      <div class="container">
+        <a class="brand" href="/">
+          <svg aria-hidden="true" width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2e47ba" /><path fill="#fff" d="M8 9h2v14H8zm4 0h1v14h-1zm3 0h3v14h-3zm5 0h1v14h-1zm3 0h2v14h-2z" /></svg>
+          GeraiCUAN
+        </a>
+        <nav class="site-nav" aria-label="Navigasi utama">
+          <ul>
+            <li><a class="text-link" href="#cara-kerja">Cara kerja</a></li>
+            <li><a class="text-link" href="#pembayaran">Metode bayar</a></li>
+            <li><a class="text-link" href="#label-thermal">Label thermal</a></li>
+            <li><a class="text-link" href="#laporan">Laporan</a></li>
+          </ul>
+        </nav>
+        <div class="header-actions">
+          <a class="btn btn-outline" href={signInUrl} data-cta="masuk">Masuk</a>
+          <a class="btn btn-primary" href={signUpUrl} data-cta="daftar">Daftar</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="utama">
+      <section class="hero" aria-labelledby="judul">
+        <div class="container">
+          <div>
+            <p class="eyebrow">Untuk penjual online dan outlet pengiriman</p>
+            <h1 id="judul">Buat order kirim, cetak label thermal, dan pantau laporannya di satu tempat.</h1>
+            <p class="lead">
+              GeraiCUAN terhubung ke Mengantar. Pilih kurir yang tersedia, termasuk Shopee Express, terbitkan resi,
+              cetak di printer thermal, lalu lihat ongkir, biaya COD, dan estimasi dana cair tanpa hitung manual.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan toko</a>
+              <a class="btn btn-outline btn-lg" href={signInUrl} data-cta="masuk">Masuk</a>
+            </div>
+            <p class="fine-print">
+              Setelah mendaftar, verifikasi email Anda. Hubungkan akun Mengantar milik toko Anda; toko bisa mulai mengirim setelah pendaftaran disetujui Super Admin GeraiCUAN.
+            </p>
+          </div>
+
+          <figure class="label-figure">
+            <div class="thermal" aria-hidden="true">
+              <div class="thermal-row thermal-head">
+                <span class="thermal-courier">{label.courier}</span>
+                <span class="thermal-tag">GeraiCUAN</span>
+              </div>
+              <div class="thermal-row">
+                <svg class="thermal-barcode" viewBox={`0 0 ${packageBars.modules} 1`} preserveAspectRatio="none" shape-rendering="crispEdges">
+                  {packageBars.bars.map(([x, width]) => <rect x={x} y="0" width={width} height="1" fill="#000" />)}
+                </svg>
+                <p class="thermal-awb">{label.awb}</p>
+              </div>
+              <div class="thermal-row">
+                <p><span class="thermal-tag">Penerima</span> <span class="thermal-name">{label.recipientName}</span> {label.recipientPhone}</p>
+                <p>{label.recipientArea}</p>
+                <p>{label.recipientAddress}</p>
+              </div>
+              <div class="thermal-row">
+                <p><span class="thermal-tag">Pengirim</span> {label.senderName} · {label.content} · {label.weight}</p>
+              </div>
+              <div class="thermal-row">
+                <p class="thermal-cod"><span>COD — tagih ke penerima</span> <b>{formatIdr(cod.codIdr)}</b></p>
+                <div class="thermal-money">
+                  <div><span>Nilai barang</span><span>{formatIdr(cod.goodsIdr)}</span></div>
+                  <div><span>Ongkir Mengantar</span><span>{formatIdr(cod.shippingIdr)}</span></div>
+                  <div><span>Biaya COD (termasuk PPN)</span><span>{formatIdr(cod.mengantarFeeIdr)}</span></div>
+                  {cod.roundingIdr > 0 ? <div><span>Pembulatan</span><span>{formatIdr(cod.roundingIdr)}</span></div> : null}
+                </div>
+              </div>
+              <p class="thermal-cut">✂ potong di sini</p>
+              <div class="thermal-stub">
+                <p class="thermal-stub-title">Bukti serah terima · untuk pengirim</p>
+                <div class="thermal-head">
+                  <span class="thermal-courier">{label.courier}</span>
+                  <span>COD <b>{formatIdr(cod.codIdr)}</b></span>
+                </div>
+                <svg class="thermal-barcode" viewBox={`0 0 ${packageBars.modules} 1`} preserveAspectRatio="none" shape-rendering="crispEdges">
+                  {packageBars.bars.map(([x, width]) => <rect x={x} y="0" width={width} height="1" fill="#000" />)}
+                </svg>
+                <p class="thermal-awb">{label.awb}</p>
+              </div>
+            </div>
+            <figcaption>
+              Contoh label 10 × 15 cm dengan data rekaan: label paket di atas, bukti serah terima untuk pengirim di bawah garis potong.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section section-muted" id="cara-kerja" aria-labelledby="judul-cara-kerja">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Cara kerja</p>
+            <h2 id="judul-cara-kerja">Empat langkah dari pesanan sampai laporan</h2>
+            <p>
+              Kurir yang ditawarkan Mengantar: JNE, J&amp;T, SiCepat, Ninja, SAP, ID Express, AnterAja, Lion Parcel,
+              SPX Shopee Express, Paxel, dan POS Indonesia. Pilihan yang muncul mengikuti rute dan akun Mengantar Anda.
+            </p>
+          </div>
+          <ol class="steps">
+            {steps.map(([heading, text]) => (
+              <li><h3>{heading}</h3><p>{text}</p></li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="pembayaran" aria-labelledby="judul-pembayaran">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Metode pembayaran</p>
+            <h2 id="judul-pembayaran">Tiga metode pembayaran, dihitung sesuai potongan Mengantar</h2>
+            <p>Pilih metodenya di setiap kiriman. Kolom yang muncul menyesuaikan metode itu, dan label thermal mencetak apa yang harus ditagih kurir.</p>
+          </div>
+          <ul class="methods">
+            {paymentMethods.map((method) => (
+              <li class="method" data-payment-method={method.key}>
+                <div>
+                  <h3>{method.name}</h3>
+                  <p class="method-when">{method.when}</p>
+                </div>
+                <p>{method.text}</p>
+                <dl class="method-facts">
+                  <div><dt>Kurir menagih pembeli</dt><dd>{method.collects}</dd></div>
+                  <div><dt>Yang Anda isi</dt><dd>{method.input}</dd></div>
+                </dl>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section class="section section-muted" id="cod" aria-labelledby="judul-cod">
+        <div class="container split">
+          <div class="section-head">
+            <p class="eyebrow">COD dan COD Ongkir presisi</p>
+            <h2 id="judul-cod">Nilai COD dihitung supaya toko tidak nombok</h2>
+            <p>
+              Mengantar memotong biaya COD sebesar 3,33% dari nilai yang ditagih ke pembeli. GeraiCUAN menghitung nilai COD
+              terkecil, dibulatkan ke rupiah penuh, yang setelah dipotong biaya itu tetap menutup harga barang dan ongkir.
+            </p>
+            <p>
+              Untuk COD Ongkir, titik impas adalah ongkir terkecil yang setelah dipotong 3,33% tetap menutup ongkir Mengantar.
+              Anda boleh menagih lebih tinggi, dan GeraiCUAN menampilkan selisih untuk toko saat Anda mengetik.
+            </p>
+            <p>Biaya COD adalah potongan Mengantar, bukan biaya dari GeraiCUAN.</p>
+          </div>
+          <div class="cod-tables">
+            <table class="cod-table">
+              <caption>Contoh perhitungan satu order COD</caption>
+              <tbody>
+                <tr><th scope="row">Harga barang</th><td data-cod="goods">{formatIdr(cod.goodsIdr)}</td></tr>
+                <tr><th scope="row">Ongkir Mengantar</th><td data-cod="shipping">{formatIdr(cod.shippingIdr)}</td></tr>
+                <tr><th scope="row">Nilai COD ditagih ke pembeli</th><td data-cod="cod">{formatIdr(cod.codIdr)}</td></tr>
+                <tr><th scope="row">Biaya COD Mengantar (3,33%)<span class="note">termasuk PPN</span></th><td data-cod="fee">− {formatIdr(cod.mengantarFeeIdr)}</td></tr>
+                <tr><th scope="row">Ongkir dibayar dari dana COD</th><td>− {formatIdr(cod.shippingIdr)}</td></tr>
+                <tr class="is-total"><th scope="row">Estimasi dana dicairkan Mengantar<span class="note">tidak kurang dari harga barang</span></th><td data-cod="disbursement">{formatIdr(cod.disbursementIdr)}</td></tr>
+              </tbody>
+            </table>
+            <table class="cod-table">
+              <caption>Contoh perhitungan satu order COD Ongkir</caption>
+              <tbody>
+                <tr><th scope="row">Ongkir Mengantar</th><td data-cod-ongkir="shipping">{formatIdr(codOngkir.shippingIdr)}</td></tr>
+                <tr><th scope="row">Titik impas<span class="note">batas terendah yang bisa ditagih</span></th><td data-cod-ongkir="break-even">{formatIdr(codOngkir.breakEvenIdr)}</td></tr>
+                <tr><th scope="row">Ongkir ditagih ke pembeli<span class="note">dinaikkan oleh toko</span></th><td data-cod-ongkir="charge">{formatIdr(codOngkir.chargeIdr)}</td></tr>
+                <tr><th scope="row">Biaya COD Mengantar (3,33%)</th><td data-cod-ongkir="fee">− {formatIdr(codOngkir.mengantarFeeIdr)}</td></tr>
+                <tr><th scope="row">Ongkir dibayar dari dana COD</th><td>− {formatIdr(codOngkir.shippingIdr)}</td></tr>
+                <tr class="is-total"><th scope="row">Selisih untuk toko<span class="note">barang tidak ditagih kurir</span></th><td data-cod-ongkir="difference">{formatIdr(codOngkir.sellerDifferenceIdr)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="label-thermal" aria-labelledby="judul-label">
+        <div class="container split">
+          <div>
+            <div class="section-head">
+              <p class="eyebrow">Label thermal</p>
+              <h2 id="judul-label">Label yang jelas dibaca kurir, dan bukti untuk pengirim</h2>
+            </div>
+            <ul class="checklist">
+              <li><strong>10 × 15 cm sebagai bawaan:</strong> label paket 10 × 10 cm ditambah bukti serah terima 10 × 5 cm untuk pengirim. Tinggal potong di garis putus-putus.</li>
+              <li><strong>Atau 10 × 10 cm saja</strong> bila tidak perlu bukti serah terima.</li>
+              <li><strong>Barcode resi Code 128</strong> hitam pekat dengan zona kosong di kiri dan kanan, diukur untuk kepala printer thermal 203 dpi.</li>
+              <li><strong>Jelas apa yang ditagih:</strong> label COD mencetak nilai COD beserta rinciannya, label COD Ongkir menulis "tagih ongkir saja" karena barang sudah dibayar, dan label Non-COD menulis "jangan tagih penerima".</li>
+              <li><strong>Mudah dibaca:</strong> nama penerima dan nomor resi dicetak tebal.</li>
+              <li><strong>Bukti pengirim tidak memuat nama, alamat, atau nomor telepon penerima.</strong></li>
+              <li><strong>Riwayat cetak tercatat,</strong> termasuk cetak ulang.</li>
+            </ul>
+          </div>
+          <div class="sizes">
+            <figure class="size">
+              <div class="size-sheet" aria-hidden="true">
+                <div class="size-part is-package">Label paket<br />10 × 10 cm</div>
+                <div class="size-part is-stub">Bukti pengirim<br />10 × 5 cm</div>
+              </div>
+              <figcaption><strong>10 × 15 cm</strong>Bawaan</figcaption>
+            </figure>
+            <figure class="size">
+              <div class="size-sheet" aria-hidden="true">
+                <div class="size-part is-package">Label paket<br />10 × 10 cm</div>
+              </div>
+              <figcaption><strong>10 × 10 cm</strong>Tanpa bukti pengirim</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-muted" id="laporan" aria-labelledby="judul-laporan">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Laporan</p>
+            <h2 id="judul-laporan">Laporan pengiriman yang langsung bisa dibaca</h2>
+            <p>Tidak perlu menyusun rekap sendiri di spreadsheet. Laporan disusun dari kiriman toko Anda di GeraiCUAN.</p>
+          </div>
+          <ul class="cards">
+            {reports.map(([heading, text]) => (
+              <li><h3>{heading}</h3><p>{text}</p></li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section class="cta-band" aria-labelledby="judul-mulai">
+        <div class="container">
+          <div>
+            <h2 id="judul-mulai">Mulai kirim dari toko Anda</h2>
+            <p>Daftar dengan email dan nomor WhatsApp toko, lalu hubungkan akun Mengantar milik toko Anda. Setelah email terverifikasi dan pendaftaran disetujui Super Admin, toko Anda siap membuat order.</p>
+          </div>
+          <div class="cta-row">
+            <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan toko</a>
+            <a class="btn btn-outline btn-lg" href={signInUrl} data-cta="masuk">Sudah punya akun? Masuk</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p><strong>GeraiCUAN</strong> · Pengiriman lewat Mengantar · Bahasa Indonesia · Rupiah · WIB · © 2026</p>
+        <nav aria-label="Akun">
+          <ul>
+            <li><a class="text-link" href={signInUrl} data-cta="masuk">Masuk</a></li>
+            <li><a class="text-link" href={signUpUrl} data-cta="daftar">Daftar</a></li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

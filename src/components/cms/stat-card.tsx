@@ -19,32 +19,67 @@ export type StatCardProps = {
   href?: string;
   footer?: ReactNode;
   className?: string;
+  /** Vibrant iOS accent tone */
+  accent?: "blue" | "emerald" | "indigo" | "amber" | "rose" | "neutral";
 };
 
-/** Dashboard KPI card on the shadcn-admin anatomy. Server component. */
-export function StatCard({ className, description, footer, href, icon: Icon, title, value, valueLabel }: StatCardProps) {
+const accentMap = {
+  blue: {
+    card: "hover:border-blue-500/40",
+    icon: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400",
+  },
+  emerald: {
+    card: "hover:border-emerald-500/40",
+    icon: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400",
+  },
+  indigo: {
+    card: "hover:border-indigo-500/40",
+    icon: "bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
+  },
+  amber: {
+    card: "hover:border-amber-500/40",
+    icon: "bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
+  },
+  rose: {
+    card: "hover:border-rose-500/40",
+    icon: "bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400",
+  },
+  neutral: {
+    card: "hover:border-primary/40",
+    icon: "bg-muted text-muted-foreground",
+  },
+} as const;
+
+/** Dashboard KPI card on Apple iOS glassmorphism standards. Server component. */
+export function StatCard({ accent = "neutral", className, description, footer, href, icon: Icon, title, value, valueLabel }: StatCardProps) {
   const descriptionId = useId();
   const titleId = useId();
   const valueId = useId();
   const spokenValue = valueLabel ?? (typeof value === "string" || typeof value === "number" ? String(value) : undefined);
+  const theme = accentMap[accent] ?? accentMap.neutral;
+
   const card = (
     <Card
       className={cn(
-        "h-full gap-2",
-        href && "transition-colors group-hover/stat:bg-muted/40",
+        "h-full gap-2.5 rounded-2xl p-5 border border-border/60 transition-all duration-200 backdrop-blur-xl bg-card/85 shadow-xs",
+        href && "hover:-translate-y-0.5 hover:shadow-md hover:border-border active:scale-[0.99]",
+        href && theme.card,
         className,
       )}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-        {/* A div, not CardTitle's h2: four KPI headings would crowd the page outline. */}
-        <div className="text-sm font-medium" data-slot="card-title" id={titleId}>{title}</div>
-        {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /> : null}
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0">
+        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground" data-slot="card-title" id={titleId}>{title}</div>
+        {Icon ? (
+          <span className={cn("flex size-9 items-center justify-center rounded-xl transition-all duration-200", theme.icon)}>
+            <Icon aria-hidden="true" className="size-4.5 shrink-0" />
+          </span>
+        ) : null}
       </CardHeader>
-      <CardContent className="grid gap-1">
-        <div className="text-2xl font-bold tabular-nums" data-slot="stat-value" id={valueId}>{value}</div>
+      <CardContent className="grid gap-1.5 p-0">
+        <div className="text-3xl sm:text-[2rem] font-bold tracking-tight tabular-nums text-foreground leading-none py-0.5" data-slot="stat-value" id={valueId}>{value}</div>
         {description ? <div className="text-xs text-muted-foreground" data-slot="stat-description" id={descriptionId}>{description}</div> : null}
       </CardContent>
-      {footer ? <CardFooter className="text-xs text-muted-foreground">{footer}</CardFooter> : null}
+      {footer ? <CardFooter className="p-0 pt-1 text-xs text-muted-foreground">{footer}</CardFooter> : null}
     </Card>
   );
 
@@ -53,10 +88,9 @@ export function StatCard({ className, description, footer, href, icon: Icon, tit
   return (
     <Link
       aria-describedby={description ? descriptionId : undefined}
-      // A ReactNode value has no safe string form: name the link by the rendered title and value instead.
       aria-label={spokenValue === undefined ? undefined : `${title}: ${spokenValue}`}
       aria-labelledby={spokenValue === undefined ? `${titleId} ${valueId}` : undefined}
-      className="group/stat block min-h-11 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group/stat block h-full min-h-11 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       href={href}
     >
       {card}

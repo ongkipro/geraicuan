@@ -101,7 +101,7 @@ export function SettingsLayout({
                       aria-current={current ? "true" : undefined}
                       className={cn(
                         "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground lg:min-h-9 lg:py-1.5",
-                        current ? "bg-muted text-foreground" : "text-muted-foreground",
+                        current ? "bg-muted font-semibold text-foreground" : "text-muted-foreground",
                       )}
                       href={href}
                     >
@@ -169,7 +169,7 @@ export function SettingsCard({
 }: SettingsCardProps) {
   return (
     <section aria-labelledby={id} className={cn("min-w-0", className)}>
-      <Card>
+      <Card className="ios-glass-card rounded-2xl border-border/60 shadow-xs">
         <CardHeader>
           {/* `tabIndex={-1}` makes the heading a valid `#hash` focus target, which
             is how the outlet selector moves focus into the card it just changed. */}

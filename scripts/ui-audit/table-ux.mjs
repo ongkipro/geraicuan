@@ -66,7 +66,16 @@ async function observe(route, width) {
         headers:heads.map(h=>getComputedStyle(h).backgroundColor)};
     });
   })()`);
-  assert(tables.length, `No rendered table at ${route}`);
+  // T-188: the contact directories render a table only from md; below md the same rows are cards.
+  const cardsBelowMd = route.startsWith('/app/kontak/');
+  const cards = cardsBelowMd ? await session.evaluate(`[...document.querySelectorAll('main ul[aria-label^="Daftar "]')].map(list=>({height:list.getBoundingClientRect().height,items:list.children.length}))`) : [];
+  if (cardsBelowMd && width < 768) {
+    assert.equal(tables.length, 0, `${route}/${width} table must not render below md`);
+    assert(cards.length === 1 && cards[0].height > 0 && cards[0].items > 0, `${route}/${width} card list ${JSON.stringify(cards)}`);
+  } else {
+    assert(tables.length, `No rendered table at ${route}`);
+    if (cardsBelowMd) assert(cards.every(list => list.height === 0), `${route}/${width} card list must be hidden from md ${JSON.stringify(cards)}`);
+  }
   for (const table of tables) {
     assert.equal(table.hintVisible, table.scrollWidth - table.width > 1, `${route}/${width} overflow hint ${JSON.stringify(table)}`);
     assert.equal(table.described, table.hintVisible);
@@ -85,9 +94,9 @@ async function observe(route, width) {
   assert.equal(probe.contrastFails, 0);
   assert.equal(probe.weakFocusRing, 0);
   // Keep the table and its hint in frame instead of recording only the page header.
-  await session.evaluate(`document.querySelector('[data-slot="table-scroll-shell"]').scrollIntoView({block:'start',behavior:'instant'});window.scrollBy({top:-80,behavior:'instant'})`);
+  await session.evaluate(`(()=>{const shell=[...document.querySelectorAll('[data-slot="table-scroll-shell"]')].find(e=>e.getBoundingClientRect().height>0)||document.querySelector('main ul[aria-label^="Daftar "]');shell.scrollIntoView({block:'start',behavior:'instant'});window.scrollBy({top:-80,behavior:'instant'})})()`);
   await screenshot(`${route.replace(/[^a-z0-9]+/gi,'-')}-${width}`);
-  results.push({route,width,tables,probe});
+  results.push({route,width,tables,cards,probe});
   writeFileSync(new URL('partial-report.json',output),JSON.stringify(results,null,2));
   console.log(`Screened ${route} ${width}px`);
 }
@@ -98,7 +107,7 @@ try {
   for (const role of ['tenant','super']) {
     await login(role);
     const routes = role === 'tenant'
-      ? ['/app?support=created','/app/pengiriman','/app/pengiriman/rts','/app/kontak','/app/label','/app/analitik','/app/keuangan']
+      ? ['/app?support=created','/app/pengiriman','/app/pengiriman/rts','/app/kontak/pengirim','/app/kontak/penerima','/app/label','/app/analitik','/app/keuangan']
       : ['/platform','/platform/tenant','/platform/audit'];
     if (!process.argv.includes('--interactions-only')) {
       for (const route of routes) for (const width of [390,768,1440]) await observe(route,width);

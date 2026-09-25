@@ -10,9 +10,12 @@ import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { validateContactDirectory } from "@/lib/contact-directory";
 import {
-  contactRoleFilterToRepositoryRole,
-  parseContactRoleFilter,
+  contactRoleFor,
+  contactRoleToRepositoryRole,
+  DEFAULT_CONTACT_ROLE,
+  parseContactRole,
   parseContactStatusFilter,
+  type ContactRole,
 } from "@/lib/contact-role-filter";
 import {
   lockMengantarAccountAuthority,
@@ -43,6 +46,8 @@ export type CreateContactState = {
     query: string;
   };
   successId?: string;
+  /** T-188: the list the new contact is shown under — the role the form was opened for, when the contact holds it. */
+  successRole?: ContactRole;
   values?: ContactValues;
 };
 
@@ -110,8 +115,9 @@ export async function searchContacts(
   const { status } = parseContactStatusFilter(
     typeof requestedStatus === "string" ? requestedStatus : undefined,
   );
-  const role = contactRoleFilterToRepositoryRole(
-    parseContactRoleFilter(typeof requestedPeran === "string" ? requestedPeran : undefined).peran,
+  // T-188: a search never leaves its list's role; anything else is the default list.
+  const role = contactRoleToRepositoryRole(
+    parseContactRole(typeof requestedPeran === "string" ? requestedPeran : undefined) ?? DEFAULT_CONTACT_ROLE,
   );
   if (query && (query.length < 2 || query.length > 80)) {
     return {
@@ -229,5 +235,10 @@ export async function saveContact(
     }
     throw error;
   }
-  return { message: "Kontak tersimpan dan siap dipakai pada draf baru.", successId: contactId };
+  const requestedRole = formData.get("peran");
+  return {
+    message: "Kontak tersimpan dan siap dipakai pada draf baru.",
+    successId: contactId,
+    successRole: contactRoleFor(validation.input, parseContactRole(typeof requestedRole === "string" ? requestedRole : null)),
+  };
 }

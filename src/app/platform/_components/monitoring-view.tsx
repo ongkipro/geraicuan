@@ -83,6 +83,7 @@ import {
 import { DATA_STALE_AFTER_MS } from "@/lib/data-freshness";
 import { formatCount, formatDuration, formatShortId } from "@/lib/platform-monitoring-format";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
+import { LEGACY_COD_FEE_VAT_LABEL, LEGACY_COD_FEE_VAT_NOTE } from "@/lib/mengantar-cod-fee";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageKind = "overview" | "tenant-list" | "tenant-detail" | "audit";
@@ -147,6 +148,14 @@ function currentValue(value: string | string[] | undefined) {
 }
 function fulfilled<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
+}
+/** Settles one reader. Callers await these in turn: every reader shares the transaction's one connection (T-197). */
+async function settle<T>(read: () => Promise<T>): Promise<PromiseSettledResult<T>> {
+  try {
+    return { status: "fulfilled", value: await read() };
+  } catch (reason) {
+    return { reason, status: "rejected" };
+  }
 }
 
 
@@ -498,7 +507,7 @@ function FinanceSummary({ finance, filters }: { finance: Finance; filters: Platf
     MENGANTAR_INSURANCE_COST: "Asuransi Mengantar",
     MENGANTAR_COD_FEE_COST: "Biaya COD Mengantar",
     GERAICUAN_COD_SERVICE_FEE_REVENUE: "Pendapatan jasa COD (entri lama)",
-    COD_SERVICE_FEE_VAT_PAYABLE: "PPN jasa COD",
+    COD_SERVICE_FEE_VAT_PAYABLE: `${LEGACY_COD_FEE_VAT_LABEL} · entri lama`,
     NON_COD_UPSTREAM_PAYMENT: "Pembayaran non-COD",
     COD_REMITTANCE: "Remitansi COD",
   };
@@ -512,7 +521,7 @@ function FinanceSummary({ finance, filters }: { finance: Finance; filters: Platf
             <StatCard description="Bukan pendapatan GeraiCUAN." icon={Landmark} title="Pokok COD — liabilitas" value={idrFormatter.format(finance.ledger.codPrincipalLiabilityIdr)}/>
             <StatCard title="Biaya provider" value={idrFormatter.format(finance.ledger.providerCostIdr)}/>
             <StatCard description="Entri lama. Biaya COD kini dicatat sebagai biaya provider karena dipotong Mengantar." title="Pendapatan jasa COD (entri lama)" value={idrFormatter.format(finance.ledger.revenueIdr)}/>
-            <StatCard title="PPN terutang" value={idrFormatter.format(finance.ledger.vatPayableIdr)}/>
+            <StatCard description={LEGACY_COD_FEE_VAT_NOTE} title={LEGACY_COD_FEE_VAT_LABEL} value={idrFormatter.format(finance.ledger.legacyCodFeeVatIdr)}/>
             <StatCard title="Pemulihan non-COD" value={idrFormatter.format(finance.ledger.upstreamRecoveryPaymentIdr)}/>
           </div>
         </section>
@@ -553,7 +562,7 @@ export async function MonitoringView({kind,route,rawParams,tenantId}:PageInput){
     const options=knownTenant?await readFilterOptions(tx,{kind:"tenant",tenantId:knownTenant}):globalOptions;
     const parsed=parsePlatformFilters(rawParams,{route,now,knownTenantIds:globalOptions.tenants.map(t=>t.id),knownOutletIds:options.outlets.map(o=>o.id),knownCouriers:options.couriers,forcedTenantId:tenantId});
     const limit=kind==="overview"?10:25;
-    const results=await Promise.allSettled([readPlatformHealth(tx,parsed.filters,now),readPlatformCounts(tx,parsed.filters),readPreviousPeriodHeadline(tx,parsed.filters),readTrend(tx,parsed.filters),listTenantUsage(tx,parsed.filters,limit),listAuditEvents(tx,parsed.filters,limit),kind==="tenant-detail"?readTenantDetail(tx,parsed.filters):Promise.resolve(null),kind==="tenant-detail"?readPlatformTenantFinanceSummary(tx,parsed.filters):Promise.resolve(null)] as const);
+    const results=[await settle(()=>readPlatformHealth(tx,parsed.filters,now)),await settle(()=>readPlatformCounts(tx,parsed.filters)),await settle(()=>readPreviousPeriodHeadline(tx,parsed.filters)),await settle(()=>readTrend(tx,parsed.filters)),await settle(()=>listTenantUsage(tx,parsed.filters,limit)),await settle(()=>listAuditEvents(tx,parsed.filters,limit)),await settle(async()=>kind==="tenant-detail"?readTenantDetail(tx,parsed.filters):null),await settle(async()=>kind==="tenant-detail"?readPlatformTenantFinanceSummary(tx,parsed.filters):null)] as const;
     return {now,options,parsed,results};
   });
   const [healthResult,countsResult,previousResult,trendResult,usageResult,auditResult,detailResult,financeResult]=data.results;
@@ -583,7 +592,9 @@ export async function MonitoringView({kind,route,rawParams,tenantId}:PageInput){
   if(auditScenario==="platform-tenant-empty")usage={rows:[],total:0};
   if(auditScenario==="platform-tenant-paginated"&&usage)usage={...usage,total:Math.max(60,usage.total)};
   if(auditScenario==="platform-audit-empty")audit={rows:[],total:0};
-  if(auditScenario==="platform-audit-paginated"&&audit)audit={...audit,total:Math.max(60,audit.total)};
+  // Ten pages past whatever the database holds, so the scenario always differs from the base
+  // route: a `Math.max(60, total)` floor stopped taking effect once the seed held 72 events.
+  if(auditScenario==="platform-audit-paginated"&&audit)audit={...audit,total:audit.total+PAGE_SIZE*10};
   const filters=data.parsed.filters;const actualRoute=tenantId?`/platform/tenant/${tenantId}`:route;
   await recordPlatformMonitoringAccess(db,principal.userId,{route,scope:detail?"tenant":filters.scope.kind,tenantId:detail?detail.tenant.id:filters.scope.kind==="tenant"?filters.scope.tenantId:undefined});
   const canonical=`${actualRoute}?${data.parsed.canonicalQuery.toString()}`;
@@ -595,7 +606,7 @@ export async function MonitoringView({kind,route,rawParams,tenantId}:PageInput){
   const scenarioInvalid=auditScenario?.endsWith("-invalid-query");
   const provisionState=auditScenario==="platform-tenant-provision-success"?{outcome:"success" as const,message:"Tenant audit berhasil diprovisikan."}:auditScenario==="platform-tenant-provision-error"?{outcome:"error" as const,message:"Provisioning tenant gagal. Nilai aman dipertahankan.",values:{name:"Tenant audit"}}:undefined;
   const lifecycleState=auditScenario==="platform-tenant-detail-lifecycle-success"?{outcome:"success" as const,message:"Status tenant berhasil diperbarui."}:auditScenario==="platform-tenant-detail-lifecycle-error"?{outcome:"error" as const,message:"Perubahan status gagal. Nilai aman dipertahankan.",values:{expectedName:detail?.tenant.name}}:undefined;
-  return <PageContainer><PageHeader description={title.intro} eyebrow={title.eyebrow} title={title.title}/>{data.parsed.issues.length||scenarioInvalid?<AlertRegion className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm"><h2 className="font-medium">Filter disesuaikan</h2><ul className="mt-2 list-disc pl-5 text-muted-foreground">{data.parsed.issues.map((issue,index)=><li key={`${issue}-${index}`}>{platformIssueMessage(issue)}</li>)}{scenarioInvalid?<li>Parameter URL tidak dikenal; filter aman tetap digunakan.</li>:null}</ul><Button asChild className="mt-3 min-h-11" variant="outline"><Link href={canonical} prefetch={false}>Buka URL yang sudah dirapikan</Link></Button></AlertRegion>:null}<ScopeBar actualRoute={actualRoute} filters={filters} generatedAt={presentedAt} tenantName={detail?.tenant.name}/>
+  return <PageContainer><PageHeader description={title.intro} eyebrow={title.eyebrow} title={title.title}/>{data.parsed.issues.length||scenarioInvalid?<AlertRegion className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm"><h2 className="font-medium">Filter disesuaikan</h2><ul className="mt-2 list-disc pl-5">{data.parsed.issues.map((issue,index)=><li key={`${issue}-${index}`}>{platformIssueMessage(issue)}</li>)}{scenarioInvalid?<li>Parameter URL tidak dikenal; filter aman tetap digunakan.</li>:null}</ul><Button asChild className="mt-3 min-h-11" variant="outline"><Link href={canonical} prefetch={false}>Buka URL yang sudah dirapikan</Link></Button></AlertRegion>:null}<ScopeBar actualRoute={actualRoute} filters={filters} generatedAt={presentedAt} tenantName={detail?.tenant.name}/>
   {stale?<Alert role="alert" variant="destructive"><AlertTitle>Data platform mungkin sudah kedaluwarsa</AlertTitle><AlertDescription className="space-y-3"><p>Snapshot terakhir melewati batas kesegaran. Data dianggap perlu diperbarui setelah {DATA_STALE_AFTER_MS/60_000} menit. Muat ulang sebelum mengambil keputusan siklus tenant.</p><Button asChild className="min-h-11" variant="outline"><Link href={canonical} prefetch={false}>Muat ulang data</Link></Button></AlertDescription></Alert>:null}
   {kind==="tenant-list"?<ProvisionTenantForm auditState={provisionState} initialAttemptId={randomUUID()}/>:null}
   {kind==="tenant-detail"&&detail?<TenantLifecycleControls auditState={lifecycleState} initialAttemptId={randomUUID()} status={detail.tenant.status} tenantId={detail.tenant.id} tenantName={detail.tenant.name}/>:null}

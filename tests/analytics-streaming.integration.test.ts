@@ -15,8 +15,8 @@ const fixture = vi.hoisted(() => ({
     eventGeneratedAt: new Date("2026-08-31T12:00:00.000Z"),
     current: {
       codPrincipalIdr: 0,
-      codServiceFeeIdr: 0,
-      codVatIdr: 0,
+      codFeeIdr: 0,
+      codFeeVatIncludedIdr: 0,
       createdCount: 0,
       issuedCount: 0,
       providerShippingIdr: 0,
@@ -24,8 +24,8 @@ const fixture = vi.hoisted(() => ({
     },
     previous: {
       codPrincipalIdr: 0,
-      codServiceFeeIdr: 0,
-      codVatIdr: 0,
+      codFeeIdr: 0,
+      codFeeVatIncludedIdr: 0,
       createdCount: 0,
       issuedCount: 0,
       providerShippingIdr: 0,

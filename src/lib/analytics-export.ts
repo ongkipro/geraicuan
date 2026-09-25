@@ -24,6 +24,7 @@ export function serializeAnalyticsCsv(rows: ShipmentRow[]) {
     "awb",
     "is_cod",
     "cod_amount_idr",
+    "payment_method",
   ];
   const body = rows.map((row) => [
     row.publicReference,
@@ -36,6 +37,7 @@ export function serializeAnalyticsCsv(rows: ShipmentRow[]) {
     row.cnoteNo,
     row.isCod,
     row.providerCodAmountIdr,
+    row.paymentMethod,
   ]);
   return `\uFEFF${[header, ...body]
     .map((row) => row.map(csvCell).join(","))

@@ -116,16 +116,18 @@ try {
  await s.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
  await login();
  await s.goto(origin+'/app/label');await wait(`document.querySelectorAll('main a[href^="/app/label/"]').length>0`);
- const hrefs=await s.evaluate(`[...new Set([...document.querySelectorAll('main a[href^="/app/label/"]')].map(a=>a.getAttribute('href').split('?')[0]))].slice(0,12)`);
+ const hrefs=await s.evaluate(`[...new Set([...document.querySelectorAll('main a[href^="/app/label/"]')].map(a=>a.getAttribute('href').split('?')[0]))]`);
  const picked={};
  for(const href of hrefs){
   await s.goto(origin+href);await wait(`!!document.querySelector('.label-sheet')||!!document.getElementById('status-label')`);
   if(!(await s.evaluate(`!!document.querySelector('.label-sheet')`)))continue;
-  const cod=await s.evaluate(`/^COD/.test(document.querySelector('.label-payment span').textContent)`);
-  picked[cod?'cod':'nonCod']??=href;
-  if(picked.cod&&picked.nonCod)break;
+  // "COD ONGKIR —" also starts with COD, so classify on the full heading (T-190).
+  const heading=await s.evaluate(`document.querySelector('.label-payment span').textContent`);
+  picked[/^COD ONGKIR/.test(heading)?'codOngkir':/^COD/.test(heading)?'cod':'nonCod']??=href;
+  if(picked.cod&&picked.nonCod&&picked.codOngkir)break;
  }
- assert(picked.cod&&picked.nonCod,'need one COD and one non-COD printable label: '+JSON.stringify(picked));
+ // Scan every listed label until all three kinds are found; a COD Ongkir label must be exercised, not skipped.
+ assert(picked.cod&&picked.nonCod&&picked.codOngkir,'need one COD, one COD Ongkir and one non-COD printable label: '+JSON.stringify(picked));
 
  // Default, remembered choice, and a storage that throws.
  const href=picked.cod;
@@ -172,7 +174,9 @@ try {
    assert.equal(print.printedBoxes,0,`${label}: ${print.printedBoxes} other boxes visible in print`);
    if(size==='10x15'){
     assert.match(print.stubText,/Bukti serah terima/i);assert.match(print.stubText,/Diserahkan/);assert.match(print.stubText,/WIB/);
-    assert.equal(kind==='cod',/COD\s*Rp/.test(print.stubText),`${label}: COD amount on the stub only when COD`);
+    assert.equal(kind==='cod',/(^|[^A-Z])COD\s*Rp/.test(print.stubText),`${label}: COD amount on the stub only when COD`);
+    assert.equal(kind==='codOngkir',/COD ONGKIR\s*Rp/.test(print.stubText),`${label}: shipping charge on the stub only when COD Ongkir`);
+    results.push({step:'stub-payment',label,codAmount:/(^|[^A-Z])COD\s*Rp/.test(print.stubText),codOngkirCharge:/COD ONGKIR\s*Rp/.test(print.stubText),stubPayment:(print.stubText.match(/COD[^\n]*Rp[^\n]*|[^\n]*NON[- ]?COD[^\n]*/i)||[''])[0].trim()});
    }
    // Screenshot of the sheet in print media, and a PDF at the CSS page size.
    const clip=await s.evaluate(`(()=>{const r=document.querySelector('.label-sheet').getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:2}})()`);

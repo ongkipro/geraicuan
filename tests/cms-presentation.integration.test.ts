@@ -87,7 +87,7 @@ describe("CMS presentation contract", () => {
 
   it("wraps a real Pattern B page (kontak/baru) in the form-layout rail geometry with a named aside", async () => {
     const { default: NewContactPage } = await import("@/app/app/kontak/baru/page");
-    const html = renderToStaticMarkup(await NewContactPage());
+    const html = renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({}) }));
 
     // minmax(0,1fr) and not a bare 1fr: a wide table inside a grid item with
     // min-width auto is what blows the frame out.
@@ -102,7 +102,7 @@ describe("CMS presentation contract", () => {
     const { default: ContactDetailPage } = await import("@/app/app/kontak/[contactId]/page");
     const html = renderToStaticMarkup(await ContactDetailPage({
       params: Promise.resolve({ contactId: "00000000-0000-4000-8000-000000000803" }),
-      searchParams: Promise.resolve({}),
+      searchParams: Promise.resolve({ dari: "pengirim" }),
     }));
 
     expect(html).toContain("@4xl/page:grid-cols-[minmax(0,1fr)_22rem]");
@@ -126,7 +126,7 @@ describe("CMS presentation contract", () => {
 
   it("sizes named controls by their data instead of stretching to the column (B5)", async () => {
     const { default: NewContactPage } = await import("@/app/app/kontak/baru/page");
-    const html = renderToStaticMarkup(await NewContactPage());
+    const html = renderToStaticMarkup(await NewContactPage({ searchParams: Promise.resolve({}) }));
 
     // Every `data-slot="field"` div's own class attribute; the nearest one
     // preceding a given `for="…"` label is that field's own wrapper.
@@ -149,7 +149,7 @@ describe("CMS presentation contract", () => {
     const { default: ContactDetailPage } = await import("@/app/app/kontak/[contactId]/page");
     const html = renderToStaticMarkup(await ContactDetailPage({
       params: Promise.resolve({ contactId: "00000000-0000-4000-8000-000000000803" }),
-      searchParams: Promise.resolve({}),
+      searchParams: Promise.resolve({ dari: "pengirim" }),
     }));
 
     expect(html).toMatch(/<h1[^>]*>/);

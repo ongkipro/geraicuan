@@ -27,17 +27,19 @@ const AREA = "Kebon Kacang, Tanah Abang, Jakarta Pusat, DKI Jakarta, 10240";
 function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel {
   return {
     awb: "JX1234567890",
-    codBreakdown: { goodsValueIdr: 425_000, serviceFeeIdr: 13_260, shippingAmountIdr: 17_000, vatAmountIdr: 1_459 },
+    // T-193: goods 425 000 + shipping 17 000, formula version 2: COD 457 226, Mengantar's fee 15 226, no rounding.
+    codBreakdown: { codFeeIdr: 15_226, codFeeVatIncludedIdr: 1_509, goodsValueIdr: 425_000, providerCodAmountIdr: 457_226, roundingIdr: 0, shippingAmountIdr: 17_000 },
     courier: "JNE",
     destinationAreaLabel: AREA,
     insuranceAmountIdr: 2_000,
     isCod: true,
+    paymentMethod: "COD",
     issuedAt: new Date("2026-09-14T08:24:00.000Z"),
     lastPrintedAt: null,
     outletName: "Outlet Tanah Abang",
     package: { content: "Kain batik tulis", declaredValueIdr: 425_000, heightCm: 12, lengthCm: 25, quantity: 2, weightGrams: 2_125, widthCm: 18 },
     printCount: 0,
-    providerCodAmountIdr: 456_719,
+    providerCodAmountIdr: 457_226,
     providerService: "JNE REG",
     publicReference: "GC-10024",
     recipient: RECIPIENT,
@@ -122,15 +124,25 @@ describe("thermal sheet layouts", () => {
 
     for (const expected of [
       "JNE", "REG", "JX1234567890", RECIPIENT.name, RECIPIENT.phone, RECIPIENT.address, AREA,
-      SENDER.name, SENDER.phone, SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 456.719",
-      "Nilai barang", "Rp 425.000", "Ongkir Mengantar", "Rp 17.000", "Biaya COD", "Rp 13.260", "PPN biaya COD", "Rp 1.459",
+      SENDER.name, SENDER.phone, SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 457.226",
+      "Nilai barang", "Rp 425.000", "Ongkir Mengantar", "Rp 17.000", "Biaya COD (termasuk PPN)", "Rp 15.226",
       "Kain batik tulis", "2,125 kg · 2 koli", "25 × 18 × 12 cm", "Asuransi Mengantar", "Rp 2.000",
       "GC-10024", formatWibDateTime(new Date("2026-09-14T08:24:00.000Z")),
     ]) {
       expect(pkg).toContain(expected);
     }
+    // T-193: one COD fee — never a separate VAT line that reads as added on top — and a
+    // rounding line only when the round-up leaves one.
+    expect(pkg).not.toMatch(/PPN biaya COD|Pembulatan/);
+    const rounded = text(packageOf(render(printableLabel({
+      codBreakdown: { codFeeIdr: 3_789, codFeeVatIncludedIdr: 375, goodsValueIdr: 100_000, providerCodAmountIdr: 113_790, roundingIdr: 1, shippingAmountIdr: 10_000 },
+      providerCodAmountIdr: 113_790,
+    }))));
+    for (const expected of ["Rp 113.790", "Nilai barang Rp 100.000", "Ongkir Mengantar Rp 10.000", "Biaya COD (termasuk PPN) Rp 3.789", "Pembulatan Rp 1 "]) {
+      expect(rounded).toContain(expected);
+    }
     expect(packageOf(render(printableLabel())).match(/<svg[^>]*class="label-barcode"/g)).toHaveLength(1);
-    expect(text(packageOf(render(printableLabel({ codBreakdown: null, isCod: false, providerCodAmountIdr: null }))))).toContain("NON-COD — JANGAN TAGIH PENERIMA");
+    expect(text(packageOf(render(printableLabel({ codBreakdown: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))))).toContain("NON-COD — JANGAN TAGIH PENERIMA");
   });
 
   it("puts on the sender stub exactly what proves and traces the handover", () => {
@@ -143,7 +155,7 @@ describe("thermal sheet layouts", () => {
     expect(stubHtml.match(/<svg[^>]*class="label-barcode"/g)).toHaveLength(1);
     expect(stub).toMatch(/JNE\s+REG/);
     expect(stub).toContain("Tanah Abang, Jakarta Pusat");
-    expect(stub).toContain("COD Rp 456.719");
+    expect(stub).toContain("COD Rp 457.226");
     // The recorded print request's time is the handover time, in WIB.
     expect(stub).toContain(`Diserahkan ${formatWibDateTime(printedAt)}`);
     expect(formatWibDateTime(printedAt)).toMatch(/14\.05 WIB$/);
@@ -170,7 +182,7 @@ describe("thermal sheet layouts", () => {
   });
 
   it("shows no money on a non-COD stub", () => {
-    const stub = text(stubOf(render(printableLabel({ codBreakdown: null, insuranceAmountIdr: null, isCod: false, providerCodAmountIdr: null }))));
+    const stub = text(stubOf(render(printableLabel({ codBreakdown: null, insuranceAmountIdr: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))));
 
     expect(stub).toContain("NON-COD");
     expect(stub).not.toContain("Rp");

@@ -10,6 +10,7 @@ import { outlets } from "@/db/schema";
 import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { enforceEstimateRateLimit, EstimateRateLimitedError } from "@/lib/estimate-rate-limit";
+import { characterClassError } from "@/lib/field-character-classes";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -81,7 +82,12 @@ export async function checkShippingRates(
   }
   const weightGrams = typeof weight === "string" && /^[0-9]{1,6}$/.test(weight)
     ? Number(weight) : NaN;
-  if (!Number.isSafeInteger(weightGrams) || weightGrams < 1 || weightGrams > 100_000) {
+  const weightClass = typeof weight === "string"
+    ? characterClassError("NUMERIC_INTEGER", "Berat paket", weight)
+    : null;
+  if (weightClass) {
+    fieldErrors.weightGrams = weightClass;
+  } else if (!Number.isSafeInteger(weightGrams) || weightGrams < 1 || weightGrams > 100_000) {
     fieldErrors.weightGrams = "Masukkan berat bulat antara 1 dan 100.000 gram.";
   }
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
