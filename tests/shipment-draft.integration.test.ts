@@ -9,6 +9,7 @@ import {
   createShipmentDraft,
   DraftSubmissionConflictError,
   loadShipmentDraftDestinationForVerification,
+  loadShipmentFlowDraft,
   OutletUnavailableError,
   stampShipmentDraftDestinationVerified,
 } from "@/db/shipment-draft-repository";
@@ -240,6 +241,54 @@ describe("tenant shipment drafts", () => {
       .from(schema.shipmentDrafts)
       .where(eq(schema.shipmentDrafts.shipmentId, unverifiedId));
     expect(unverified?.destinationAreaVerifiedAt).toBeNull();
+  });
+
+  it("round-trips the T-232 pickup vehicle, treats another vehicle as another submission, and refuses one on a drop-off", async () => {
+    const validated = validateShipmentDraft(submission());
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const pickupInput = {
+      ...validated.input,
+      handoverType: "PICKUP" as const,
+      pickupDate: "2026-09-30",
+      pickupSlot: "10:00",
+      pickupVehicle: "TRUK" as const,
+    };
+    const submissionId = "00000000-0000-4000-8000-000000000232";
+    const created = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, pickupInput, submissionId));
+    expect(created).toBe(submissionId);
+    const loaded = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      loadShipmentFlowDraft(tx, context, submissionId));
+    expect(loaded).toMatchObject({ handoverType: "PICKUP", pickupVehicle: "TRUK" });
+
+    await expect(withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, pickupInput, submissionId))).resolves.toBe(submissionId);
+    await expect(withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, { ...pickupInput, pickupVehicle: "MOTOR" }, submissionId)))
+      .rejects.toBeInstanceOf(DraftSubmissionConflictError);
+
+    // A drop-off never stores one, whatever the caller passes.
+    const dropId = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, { ...validated.input, handoverType: "DROP_OFF", pickupVehicle: "MOBIL" }));
+    const [drop] = await adminDb
+      .select({ pickupVehicle: schema.shipmentDrafts.pickupVehicle })
+      .from(schema.shipmentDrafts)
+      .where(eq(schema.shipmentDrafts.shipmentId, dropId));
+    expect(drop?.pickupVehicle).toBeNull();
+
+    // The database refuses a vehicle on a drop-off and an unknown vehicle, even for the admin role.
+    await expect(adminPool.query(
+      "UPDATE shipment_drafts SET pickup_vehicle = 'MOBIL' WHERE shipment_id = $1", [dropId],
+    )).rejects.toMatchObject({ constraint: "shipment_drafts_pickup_vehicle_pickup_only" });
+    await expect(adminPool.query(
+      "UPDATE shipment_drafts SET pickup_vehicle = 'BECAK' WHERE shipment_id = $1", [submissionId],
+    )).rejects.toMatchObject({ constraint: "shipment_drafts_pickup_vehicle_known" });
+    // Nor may a pickup with a vehicle be turned into a drop-off underneath it.
+    await expect(adminPool.query(
+      "UPDATE shipment_drafts SET handover_type = 'DROP_OFF', pickup_date = NULL, pickup_slot = NULL WHERE shipment_id = $1",
+      [submissionId],
+    )).rejects.toMatchObject({ constraint: "shipment_drafts_pickup_vehicle_pickup_only" });
   });
 
   it("replays one canonical submission without creating duplicate rows", async () => {

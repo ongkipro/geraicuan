@@ -1,0 +1,65 @@
+/*
+ * Invoice (nota) sheet and its print rules (spec 10 §14, PR-80), beside the label's
+ * `label.css`, which stays byte-identical. Black on white only. 80 mm roll: sheet 80 mm
+ * wide with 4 mm side padding (72 mm printable), body 11pt, resi 14pt mono bold, total
+ * 13pt bold, rules 0.5pt. A4: the same blocks in two columns, 16px body.
+ *
+ * Print groups: a view that holds labels and invoices prints them as two jobs because
+ * the media differ (100 mm label vs 80 mm roll / A4). `print-group.ts` sets
+ * `html[data-print-group]` for the job; without it (Ctrl+P) everything prints in order.
+ */
+.invoice-preview { overflow:auto; padding:1rem; border:1px solid var(--border); border-radius:.35rem; background:var(--muted); }
+.invoice-sheet { box-sizing:border-box; color:#000; background:#fff; outline:1px solid var(--input); font-family:var(--font-sans); font-variant-numeric:tabular-nums; }
+.invoice-sheet p, .invoice-sheet dl, .invoice-sheet dd, .invoice-sheet ul { margin:0; padding:0; }
+.invoice-sheet ul { list-style:none; }
+.invoice-sheet > section { padding-block:2mm; border-top:.5pt solid #000; }
+.invoice-sheet > section:first-child { padding-top:0; border-top:0; }
+.invoice-gerai-name { font-weight:700; }
+.invoice-gerai-address { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; }
+.invoice-title { font-weight:700; letter-spacing:.08em; }
+.invoice-mono { font-family:var(--font-mono); }
+.invoice-resi { font-family:var(--font-mono); font-size:14pt; font-weight:700; line-height:1.15; overflow-wrap:anywhere; }
+.invoice-row { display:flex; align-items:baseline; justify-content:space-between; gap:3mm; }
+.invoice-row > :first-child { flex:none; }
+.invoice-row > :last-child { min-width:0; text-align:right; overflow-wrap:anywhere; }
+.invoice-item { display:flex; align-items:baseline; justify-content:space-between; gap:3mm; }
+.invoice-item > :first-child { min-width:0; overflow-wrap:anywhere; }
+.invoice-item > :last-child { flex:none; }
+.invoice-total { font-size:13pt; font-weight:700; }
+.invoice-note { font-weight:700; }
+.invoice-footer { font-size:9pt; }
+
+/* 80 mm thermal roll (default). */
+.invoice-sheet[data-medium="80mm"] { width:80mm; padding:4mm; font-size:11pt; line-height:1.3; page:invoice-80mm; }
+/* A4: two columns, 16px body. */
+.invoice-sheet[data-medium="a4"] {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:12mm;
+  grid-template-areas:"gerai head" "ship money" "items money" "foot foot";
+  width:186mm; min-height:273mm; padding:0; align-content:start; font-size:16px; line-height:1.4; page:invoice-a4;
+}
+.invoice-sheet[data-medium="a4"] > section:first-child { padding-top:2mm; }
+.invoice-sheet[data-medium="a4"] > .invoice-block-gerai { grid-area:gerai; }
+.invoice-sheet[data-medium="a4"] > .invoice-block-head { grid-area:head; padding-top:2mm; border-top:0; text-align:right; }
+.invoice-sheet[data-medium="a4"] > .invoice-block-shipment { grid-area:ship; }
+.invoice-sheet[data-medium="a4"] > .invoice-block-items { grid-area:items; }
+.invoice-sheet[data-medium="a4"] > .invoice-block-money { grid-area:money; align-self:start; }
+.invoice-sheet[data-medium="a4"] > .invoice-footer { grid-area:foot; }
+.invoice-sheet[data-medium="a4"] .invoice-footer { font-size:13px; }
+.invoice-sheet[data-medium="a4"] .invoice-resi { font-size:20px; }
+.invoice-sheet[data-medium="a4"] .invoice-total { font-size:20px; }
+
+/* Screen only: an A4 sheet is scaled to its column (print resets it). */
+.invoice-preview > .invoice-sheet[data-medium="a4"] { zoom:var(--invoice-preview-zoom,1); }
+.print-sequence { display:grid; justify-items:start; gap:1rem; }
+
+@page invoice-80mm { size:80mm 297mm; margin:0; }
+@page invoice-a4 { size:A4; margin:12mm; }
+@media print {
+  .invoice-preview { overflow:visible; padding:0; border:0; background:none; }
+  .invoice-preview > .invoice-sheet[data-medium="a4"] { zoom:1; }
+  .invoice-sheet { outline:0; }
+  .print-sequence { display:block; }
+  .print-sequence > * + * { break-before:page; }
+  html[data-print-group="label"] .invoice-print-group,
+  html[data-print-group="invoice"] .label-print-group { display:none !important; }
+}

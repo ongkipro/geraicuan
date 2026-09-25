@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
-
 import { cn } from "cn"
+
 import {
   Dialog,
   DialogContent,
@@ -48,10 +48,6 @@ function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn(
           "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
@@ -59,6 +55,11 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
+        {/* Inside the content, so the title exists only while the dialog is open (it named a stray heading when closed). */}
+        <DialogHeader className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         {children}
       </DialogContent>
     </Dialog>
@@ -71,11 +72,11 @@ function CommandInput({
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
-      <InputGroup className="h-[46px]! min-h-[46px]! rounded-lg! border-input bg-background shadow-none *:data-[slot=input-group-addon]:pl-2!">
+      <InputGroup className="h-10! rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "h-[44px]! min-h-[44px]! w-full min-w-0 flex-1 shrink border-0 bg-transparent text-sm outline-none ring-0 disabled:cursor-not-allowed disabled:opacity-50",
+            "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
           {...props}

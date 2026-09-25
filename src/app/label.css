@@ -1,0 +1,116 @@
+/*
+ * Thermal label sheet and its print rules, moved verbatim from the pre-v3 globals.css
+ * (d0db307, T-176) so the label geometry is untouched by the UI v3 rebuild (spec 10 §10).
+ * Imported by the root layout. The shell print rules at the end replace the old `.cms-*`
+ * ones: they hide the v3 sidebar and top bar so a label prints at its page origin.
+ */
+.label-preview { overflow:auto; padding:1rem; border:1px solid var(--hairline); border-radius:.35rem; background:var(--surface-sunken); }
+.label-history { margin-top:2rem; padding-bottom:3rem; }
+.label-history > h2 { margin:0 0 1rem; font-family:var(--font-display); font-size:1.75rem; }
+.label-caution details { color:var(--ink-muted); }
+.label-caution summary { display:flex; align-items:center; min-height:44px; color:var(--primary); cursor:pointer; }
+.label-caution details p { white-space:pre-wrap; }
+/* T-176 thermal label. Sizes in mm for a 203 dpi head (1 dot = 0.125 mm). Pure black
+   on white only: no greys, tints, opacity or background fills, which a thermal head
+   renders as noise and which browsers drop from print anyway. Text floor 7pt; rules
+   in whole CSS px because Chrome snaps borders to them (1px = 0.26 mm, 2 dots; the
+   COD box and the cut line 2px = 4 dots); Code 128 modules 0.25 mm (2 dots) with a
+   10-module quiet zone inside the SVG box. The screen outline does not take space, so the preview has
+   exactly the printed geometry. */
+.label-sheet { position:relative; width:100mm; height:150mm; page:label-100x150; overflow:hidden; outline:1px solid var(--hairline-strong); color:#000; background:#fff; font-family:var(--font-text); font-size:8pt; line-height:1.2; font-variant-numeric:tabular-nums; }
+.label-sheet[data-label-size="10x10"] { height:100mm; page:label-100x100; }
+.label-sheet p, .label-sheet dl, .label-sheet dd { margin:0; }
+.label-package { display:grid; height:100mm; padding:3mm; grid-template-rows:8mm 17mm minmax(0,1fr) 8.4mm 14.4mm 10.8mm 4.8mm; overflow:hidden; }
+.label-package > * { min-width:0; overflow:hidden; padding-block:.7mm; border-top:1px solid #000; }
+.label-package > :first-child { padding-top:0; border-top:0; }
+.label-eyebrow { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.label-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; }
+.label-courier { font-size:15pt; font-weight:800; line-height:1.1; }
+.label-service { font-size:10pt; font-weight:700; }
+.label-mark { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.label-awb-block { display:flex; flex-direction:column; align-items:center; gap:.5mm; }
+.label-barcode { display:block; flex:none; }
+.label-awb { max-width:100%; font-family:var(--font-mono); font-size:12pt; font-weight:700; line-height:1.1; letter-spacing:.04em; text-align:center; overflow-wrap:anywhere; }
+.label-awb .label-eyebrow { font-family:var(--font-text); letter-spacing:.06em; }
+.label-party-line { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:1.5mm; }
+/* Recipient type steps down with the density tier, so short addresses print large
+   for a courier at arm's length and the 480-character ceiling still fits. */
+.label-party-name { font-size:12pt; font-weight:800; line-height:1.15; overflow-wrap:anywhere; }
+.label-party-phone { font-size:11pt; font-weight:700; }
+.label-party-area { font-size:9.5pt; font-weight:700; line-height:1.2; }
+.label-party-address { margin-top:.3mm !important; font-size:9pt; line-height:1.2; overflow-wrap:anywhere; }
+.label-recipient[data-density="long"] .label-party-name { font-size:10.5pt; }
+.label-recipient[data-density="long"] .label-party-phone { font-size:10pt; }
+.label-recipient[data-density="long"] .label-party-area { font-size:8.5pt; }
+.label-recipient[data-density="long"] .label-party-address { font-size:8pt; line-height:1.15; }
+.label-recipient[data-density="dense"] .label-party-name { font-size:10pt; }
+.label-recipient[data-density="dense"] .label-party-phone { font-size:9.5pt; }
+.label-recipient[data-density="dense"] .label-party-area { font-size:8pt; }
+.label-recipient[data-density="dense"] .label-party-address { font-size:7.25pt; line-height:1.12; }
+.label-recipient[data-density="ultra"] .label-party-name { font-size:9.5pt; }
+.label-recipient[data-density="ultra"] .label-party-phone { font-size:9pt; }
+.label-recipient[data-density="ultra"] .label-party-area { font-size:8pt; }
+.label-recipient[data-density="ultra"] .label-party-address { font-size:7pt; line-height:1.12; }
+.label-sender-line { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:7.5pt; line-height:1.15; overflow-wrap:anywhere; }
+.label-sender .label-party-name { font-size:7.5pt; font-weight:700; }
+.label-sender .label-party-phone { font-size:7.5pt; font-weight:700; }
+.label-sender .label-party-address { margin:0 !important; font-size:7.5pt; }
+.label-sender-line * { line-height:inherit; }
+.label-payment { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding:.2mm 1.5mm; border:2px solid #000; line-height:1.1; }
+.label-payment span { font-size:7.5pt; font-weight:700; letter-spacing:.04em; }
+.label-payment b { font-size:13pt; font-weight:800; }
+.label-money { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; margin-top:.5mm; font-size:7pt; line-height:1.15; }
+.label-money > div { display:flex; justify-content:space-between; gap:1mm; }
+.label-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; font-size:7.5pt; line-height:1.15; }
+.label-facts > div { display:grid; grid-template-columns:auto minmax(0,1fr); gap:0 1.2mm; min-width:0; }
+.label-facts-wide { grid-column:1 / -1; }
+.label-facts dt { font-weight:700; white-space:nowrap; }
+.label-facts dd { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.label-footer { font-size:7pt; line-height:1.2; }
+.label-cut { position:absolute; left:0; right:0; top:100mm; height:4mm; margin-top:-2mm; display:flex; align-items:center; gap:1.5mm; padding-inline:1mm; }
+.label-cut-rule { flex:1; height:0; border-top:2px dashed #000; }
+.label-cut-mark { display:flex; align-items:center; gap:1mm; font-size:7pt; font-weight:700; white-space:nowrap; }
+.label-cut-icon { width:3.5mm; height:3.5mm; stroke-width:2.25; }
+.label-stub { display:grid; height:50mm; padding:3mm; grid-template-rows:4.5mm 6.5mm 15mm minmax(0,1fr); overflow:hidden; }
+.label-stub > * { min-width:0; overflow:hidden; }
+.label-stub-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; border-bottom:1px solid #000; }
+.label-stub-title { flex:none; font-size:7pt; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.label-stub-outlet { min-width:0; overflow:hidden; font-size:8pt; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
+.label-stub-service { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding-top:.6mm; }
+.label-stub .label-courier { font-size:12pt; }
+.label-stub .label-service { font-size:9pt; }
+.label-stub-payment { flex:none; font-size:8pt; font-weight:700; }
+.label-stub-payment b { font-size:11pt; font-weight:800; }
+.label-stub .label-awb { font-size:11pt; }
+.label-stub-facts { display:grid; align-content:start; gap:.8mm; padding-top:1.2mm; font-size:10pt; line-height:1.2; }
+.label-stub-facts > div { display:grid; grid-template-columns:21mm minmax(0,1fr); align-items:baseline; gap:1.5mm; }
+.label-stub-facts dt { font-size:8pt; font-weight:400; }
+.label-stub-facts dd { min-width:0; overflow:hidden; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
+@page label-100x150 { size:100mm 150mm; margin:0; }
+@page label-100x100 { size:100mm 100mm; margin:0; }
+@media print {
+  .label-hide { display:none !important; }
+  html, body { margin:0; background:#fff; }
+  .label-preview { overflow:visible; padding:0; border:0; background:none; }
+  .label-sheet { outline:0; }
+}
+@media print {
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-slot="site-header"] {
+    display: none !important;
+  }
+  [data-slot="sidebar-wrapper"],
+  [data-slot="sidebar-inset"] {
+    display: block;
+    min-height: 0;
+    /* The inset variant's screen margin would push a label off its page origin (T-176). */
+    margin: 0;
+    background: #fff;
+  }
+  [data-slot="app-content"] {
+    width: auto;
+    max-width: none;
+    padding: 0;
+  }
+}

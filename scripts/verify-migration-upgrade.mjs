@@ -1189,6 +1189,20 @@ try {
     throw new Error("The 0053 probes left a change behind.");
   }
 
+  // 0057 (T-232): every pre-existing draft passes the new CHECKs (validated, all
+  // NULL) and the table-level INSERT/SELECT grants reach the new column.
+  const { rows: [vehicle] } = await client.query(`
+    SELECT count(*)::int AS drafts, count(pickup_vehicle)::int AS with_vehicle,
+      (SELECT count(*)::int FROM pg_constraint WHERE conrelid = 'shipment_drafts'::regclass AND convalidated
+        AND conname IN ('shipment_drafts_pickup_vehicle_known', 'shipment_drafts_pickup_vehicle_pickup_only')) AS validated,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.column_privileges
+        WHERE table_name = 'shipment_drafts' AND column_name = 'pickup_vehicle' AND grantee = 'geraicuan_app') AS privileges
+    FROM shipment_drafts
+  `);
+  if (vehicle.drafts < 1 || vehicle.with_vehicle !== 0 || vehicle.validated !== 2 || vehicle.privileges !== "INSERT,SELECT") {
+    throw new Error(`0057 pickup_vehicle did not upgrade cleanly: ${JSON.stringify(vehicle)}`);
+  }
+
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);
 } finally {
   await client.end();

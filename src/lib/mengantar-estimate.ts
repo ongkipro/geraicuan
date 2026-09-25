@@ -24,10 +24,32 @@ type ProviderService = {
   estimatedDate?: unknown;
   estimatedPrice?: unknown;
   estimatedSpecialPrice?: unknown;
+  coverage_cod?: unknown;
   price?: unknown;
   unsupported?: unknown;
+  unsupportedPickup?: unknown;
   unsupported_cod?: unknown;
 };
+
+/**
+ * DATA-13: a service Mengantar cannot collect from this origin or pick up at
+ * is hidden. `unsupportedOriginSicepat`/`unsupportedOriginNinja`/
+ * `unsupportedPickup` are captured (as `false`) in the sandbox estimate; any
+ * other `unsupportedOrigin*` spelling is covered by the prefix.
+ */
+function isOriginOrPickupUnsupported(service: ProviderService) {
+  return service.unsupportedPickup === true
+    || Object.entries(service).some(([key, value]) => key.startsWith("unsupportedOrigin") && value === true);
+}
+
+/**
+ * DATA-13: the captures omit `unsupported_cod` on JNE, JNECargo, SiCepat,
+ * SiCepatCargo and Ninja, which still accept COD. COD is refused only on an
+ * explicit `unsupported_cod: true` or `coverage_cod: false`.
+ */
+function isCodEligible(service: ProviderService) {
+  return service.unsupported_cod !== true && service.coverage_cod !== false;
+}
 
 const MALFORMED_AMOUNT = Symbol("malformed provider amount");
 
@@ -101,6 +123,7 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
       !PROVIDER_SERVICE_PATTERN.test(providerService) ||
       providerService.length > MAX_PROVIDER_SERVICE_LENGTH ||
       service.unsupported === true ||
+      isOriginOrPickupUnsupported(service) ||
       (service.currency !== undefined && service.currency !== "IDR") ||
       typeof price !== "number" ||
       !Number.isSafeInteger(price) ||
@@ -131,7 +154,7 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
     }
 
     services.push({
-      codEligible: service.unsupported_cod === false,
+      codEligible: isCodEligible(service),
       codFeeIdr,
       currency: "IDR",
       deliveryEstimate,
@@ -151,7 +174,8 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
     const allUnsupported = entries.length > 0 && entries.every(([name, value]) => (
       PROVIDER_SERVICE_PATTERN.test(name)
       && value && typeof value === "object" && !Array.isArray(value)
-      && (value as ProviderService).unsupported === true
+      && ((value as ProviderService).unsupported === true
+        || isOriginOrPickupUnsupported(value as ProviderService))
     ));
     if (allUnsupported) throw new MengantarNoSupportedServicesError();
     throw new MengantarEstimateError();

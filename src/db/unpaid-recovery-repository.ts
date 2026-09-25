@@ -24,6 +24,8 @@ export type PreparedUnpaidRecovery = {
   providerOrderSnapshotId: string;
   shipmentId: string;
   providerOrderId: string;
+  /** Mengantar `batch`; NULL on rows accepted before T-223 (DATA-13). */
+  providerBatchId: string | null;
   created: boolean;
   status: (typeof providerUnpaidRecoveries.$inferSelect)["status"];
 };
@@ -63,6 +65,7 @@ type RecoveryCandidate = {
   providerOrderSnapshotId: string;
   shipmentId: string;
   providerOrderId: string | null;
+  providerBatchId: string | null;
   orderStatus: (typeof providerOrderSnapshots.$inferSelect)["status"];
   isCod: boolean;
   isPaid: boolean | null;
@@ -126,6 +129,7 @@ export async function prepareUnpaidRecoveries(
       providerOrderSnapshotId: providerOrderSnapshots.id,
       shipmentId: providerOrderSnapshots.shipmentId,
       providerOrderId: providerOrderSnapshots.providerOrderId,
+      providerBatchId: providerOrderSnapshots.providerBatchId,
       orderStatus: providerOrderSnapshots.status,
       isCod: providerOrderSnapshots.isCod,
       isPaid: providerOrderSnapshots.isPaid,
@@ -230,6 +234,7 @@ export async function prepareUnpaidRecoveries(
         providerOrderSnapshotId: target.providerOrderSnapshotId,
         shipmentId: target.shipmentId,
         providerOrderId,
+        providerBatchId: target.providerBatchId?.trim() || null,
         created: createdOrderIds.has(target.providerOrderSnapshotId),
         status: recovery.status,
       };
@@ -333,6 +338,7 @@ export async function completeUnpaidRecovery(
       shipmentId: providerOrderSnapshots.shipmentId,
       orderStatus: providerOrderSnapshots.status,
       providerOrderId: providerOrderSnapshots.providerOrderId,
+      providerBatchId: providerOrderSnapshots.providerBatchId,
       isCod: providerOrderSnapshots.isCod,
       isPaid: providerOrderSnapshots.isPaid,
       cnoteNo: providerOrderSnapshots.cnoteNo,
@@ -376,7 +382,8 @@ export async function completeUnpaidRecovery(
     || target.isPaid !== false
     || target.cnoteNo !== null
     || !target.providerOrderId
-    || target.providerOrderId.trim() !== providerBatchId
+    || !target.providerBatchId
+    || target.providerBatchId.trim() !== providerBatchId
     || target.courier.trim().toUpperCase() !== result.courier.trim().toUpperCase()
     || cnoteNo.length < 1
     || cnoteNo.length > 160
@@ -399,7 +406,7 @@ export async function completeUnpaidRecovery(
         eq(providerOrderSnapshots.batchId, batchId),
         eq(providerOrderSnapshots.tenantId, context.tenantId),
         eq(providerOrderSnapshots.status, "AWAITING_UPSTREAM_PAYMENT"),
-        eq(providerOrderSnapshots.providerOrderId, providerBatchId),
+        eq(providerOrderSnapshots.providerBatchId, providerBatchId),
         eq(providerOrderSnapshots.isCod, false),
         eq(providerOrderSnapshots.isPaid, false),
         isNull(providerOrderSnapshots.cnoteNo),

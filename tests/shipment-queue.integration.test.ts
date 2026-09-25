@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   loadShipmentDetail,
   loadShipmentQueuePage,
+  StaleShipmentFilterDeniedError,
 } from "@/db/shipment-queue-repository";
 import * as schema from "@/db/schema";
 import {
@@ -49,6 +50,14 @@ function shipmentId(sequence: number) {
 }
 
 async function deleteShipmentFixtures() {
+  await adminPool.query(
+    "DELETE FROM provider_order_status_observations WHERE tenant_id IN ($1, $2)",
+    [tenantA, tenantB],
+  );
+  await adminPool.query(
+    "DELETE FROM provider_settlement_pulls WHERE tenant_id IN ($1, $2)",
+    [tenantA, tenantB],
+  );
   await adminPool.query(
     "DELETE FROM provider_order_snapshots WHERE tenant_id IN ($1, $2)",
     [tenantA, tenantB],
@@ -381,6 +390,81 @@ describe("tenant shipment lifecycle queue", () => {
     ]);
   });
 
+  it("filters Tanpa update 48 jam / 4 hari from the latest provider observation, Tenant Admin only", async () => {
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000);
+    const pullA = "00000000-0000-2141-0000-000000000001";
+    const pullB = "00000000-0000-2141-0000-000000000002";
+    const pullA2 = "00000000-0000-2141-0000-000000000003";
+    for (const [pullId, tenantId, outletId] of [[pullA, tenantA, outletA], [pullB, tenantB, outletB], [pullA2, tenantA, outletA]]) {
+      await adminPool.query(
+        `INSERT INTO provider_settlement_pulls (id, tenant_id, outlet_id, actor_user_id, credential_source,
+          provider_account_key, period_start, period_end, matched_item_count, matched_status_count)
+         VALUES ($1, $2, $3, $4, 'platform_default', $5, '2026-09-01', '2026-10-01', 0, 1)`,
+        [pullId, tenantId, outletId, adminA, "d".repeat(64)],
+      );
+    }
+    async function observe(
+      shipment: string,
+      input: { observedAt: Date; lastHistoryAt?: Date; tenantId?: string; outletId?: string; pullId?: string; providerStatus?: string },
+    ) {
+      await adminPool.query(
+        `INSERT INTO provider_order_status_observations (tenant_id, pull_id, shipment_id, outlet_id, cnote_no,
+          provider_status, last_history_at, observed_at)
+         VALUES ($1, $2, $3, $4, 'AWB', $7, $5, $6)`,
+        [input.tenantId ?? tenantA, input.pullId ?? pullA, shipment, input.outletId ?? outletA,
+          input.lastHistoryAt ?? null, input.observedAt, input.providerStatus ?? "PENDING PICKUP"],
+      );
+    }
+    const setStatus = (id: string, status: ShipmentStatus) =>
+      adminPool.query("UPDATE shipments SET status = $2 WHERE id = $1", [id, status]);
+
+    // Courier news 50 h old although pulled 1 h ago: stale 48 h, not 4 d.
+    const news50h = await seedIssuedEvent({ sequence: 41, resolvedAt: hoursAgo(120) });
+    await observe(news50h, { observedAt: hoursAgo(1), lastHistoryAt: hoursAgo(50) });
+    // Latest observation wins over an older, staler one: fresh.
+    const refreshed = await seedIssuedEvent({ sequence: 42, resolvedAt: hoursAgo(200) });
+    await observe(refreshed, { observedAt: hoursAgo(150), lastHistoryAt: hoursAgo(150) });
+    await observe(refreshed, { observedAt: hoursAgo(2), lastHistoryAt: hoursAgo(3), pullId: pullA2 });
+    // No lastHistory: the observation time counts. 100 h → both windows; in transit.
+    const inTransit100h = await seedIssuedEvent({ sequence: 43, resolvedAt: hoursAgo(300) });
+    await setStatus(inTransit100h, "IN_TRANSIT");
+    await observe(inTransit100h, { observedAt: hoursAgo(100) });
+    // No lastHistory, the same status pulled again 1 h ago: the first sighting (100 h) counts.
+    const repulled = await seedIssuedEvent({ sequence: 47, resolvedAt: hoursAgo(300) });
+    await observe(repulled, { observedAt: hoursAgo(100) });
+    await observe(repulled, { observedAt: hoursAgo(1), pullId: pullA2 });
+    // No lastHistory, the status changed 10 h ago: fresh, although first seen 200 h ago.
+    const changed = await seedIssuedEvent({ sequence: 48, resolvedAt: hoursAgo(300) });
+    await observe(changed, { observedAt: hoursAgo(200) });
+    await observe(changed, { observedAt: hoursAgo(10), pullId: pullA2, providerStatus: "DELIVERY PROBLEM" });
+    // Never observed: issuance time. 60 h → 48 h only; a problem shipment.
+    const problemNeverObserved = await seedIssuedEvent({ sequence: 44, resolvedAt: hoursAgo(60) });
+    await setStatus(problemNeverObserved, "PROBLEM");
+    // Old but finished: never stale.
+    const delivered = await seedIssuedEvent({ sequence: 45, resolvedAt: hoursAgo(300) });
+    await setStatus(delivered, "DELIVERED");
+    await observe(delivered, { observedAt: hoursAgo(200), lastHistoryAt: hoursAgo(200) });
+    // Recently issued, never observed: fresh.
+    await seedIssuedEvent({ sequence: 46, resolvedAt: hoursAgo(5) });
+    // Another tenant's stale shipment stays out.
+    const otherTenant = await seedIssuedEvent({ sequence: 941, resolvedAt: hoursAgo(300), tenantId: tenantB, outletId: outletB });
+    await observe(otherTenant, { observedAt: hoursAgo(200), tenantId: tenantB, outletId: outletB, pullId: pullB });
+
+    const result = await withTenantContext(appDb, adminA, tenantA, async (tx, context) => ({
+      stale48: await loadShipmentQueuePage(tx, context, { page: 1, pageSize: 20, status: "STALE_48H" }),
+      stale4d: await loadShipmentQueuePage(tx, context, { page: 1, pageSize: 20, status: "STALE_4D" }),
+    }));
+    expect(new Set(result.stale48.rows.map((row) => row.shipmentId)))
+      .toEqual(new Set([news50h, inTransit100h, repulled, problemNeverObserved]));
+    expect(result.stale48.totalCount).toBe(4);
+    expect(new Set(result.stale4d.rows.map((row) => row.shipmentId))).toEqual(new Set([inTransit100h, repulled]));
+
+    expect(parseShipmentQueueQuery({ status: "STALE_4D" })).toEqual({ issues: [], page: 1, status: "STALE_4D" });
+    await expect(withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
+      loadShipmentQueuePage(tx, context, { page: 1, pageSize: 20, status: "STALE_48H" }),
+    )).rejects.toBeInstanceOf(StaleShipmentFilterDeniedError);
+  });
+
   it("filters the action-required lifecycle statuses without awaiting payment", async () => {
     await seedShipment({ sequence: 11, status: "AWAITING_UPSTREAM_PAYMENT" });
     await seedShipment({ sequence: 12, status: "SUBMISSION_UNKNOWN" });
@@ -447,6 +531,29 @@ describe("tenant shipment lifecycle queue", () => {
     expect(new Set(all.rows.map((row) => row.status))).toEqual(
       new Set(["DRAFT", "ESTIMATED", "FAILED"]),
     );
+  });
+
+  it("searches by shipment number or resi only and narrows the counts with the list", async () => {
+    const firstId = await seedShipment({ sequence: 1, status: "DRAFT" });
+    await seedShipment({ sequence: 2, status: "ESTIMATED" });
+    await seedShipment({ sequence: 902, status: "DRAFT", tenantId: tenantB, outletId: outletB });
+
+    const load = (search?: string) =>
+      withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
+        loadShipmentQueuePage(tx, context, { page: 1, pageSize: 10, search, status: "ALL" }));
+    const all = await load();
+    const target = all.rows.find((row) => row.shipmentId === firstId)!;
+    const found = await load(target.publicReference.toUpperCase());
+
+    expect(found.rows.map((row) => row.shipmentId)).toEqual([firstId]);
+    expect(found.totalCount).toBe(1);
+    expect(Object.values(found.summary).some((count) => count === 1)).toBe(true);
+    expect((await load("ZZZ-NOPE")).totalCount).toBe(0);
+
+    // The URL term is validated before it reaches SQL: no wildcards, names or phones.
+    expect(parseShipmentQueueQuery({ cari: "%" }).search).toBeUndefined();
+    expect(parseShipmentQueueQuery({ cari: "Budi Santoso" }).issues).toHaveLength(1);
+    expect(parseShipmentQueueQuery({ cari: " gc-100 " }).search).toBe("GC-100");
   });
 
   it("paginates deterministically and clamps a page beyond the filtered result", async () => {

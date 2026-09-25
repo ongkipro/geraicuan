@@ -1,0 +1,237 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * T-217 (UI v3): Pengaturan and Anggota screens — pure ordering/access rules and key markup.
+ * No database: the Server Actions are replaced by stubs, `next/navigation` by a fixed route.
+ */
+
+const route = vi.hoisted(() => ({ pathname: "/app/pengaturan" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => route.pathname,
+  useRouter: () => ({ push: () => undefined }),
+}));
+vi.mock("@/app/app/pengaturan/actions", () => ({
+  addOutletPickupPoint: async () => ({}),
+  loadMengantarPickupOptions: async () => ({}),
+  removeOutletPickupPoint: async () => ({}),
+  savePrivateMengantarCredential: async () => ({}),
+  saveShipmentPrefix: async () => ({}),
+  setDefaultOutletPickupPoint: async () => ({}),
+  switchMengantarToPlatformDefault: async () => ({}),
+}));
+vi.mock("@/app/app/anggota/actions", () => ({
+  changeMemberRoleAction: async () => ({}),
+  deactivateMemberAction: async () => ({}),
+  inviteMemberAction: async () => ({}),
+}));
+
+const logic = await import("@/app/app/pengaturan/_components/settings-logic");
+const { SettingsNav } = await import("@/app/app/pengaturan/_components/settings-nav");
+const { ShipmentPrefixCard } = await import("@/app/app/pengaturan/_components/shipment-prefix-card");
+const { ConnectionForm } = await import("@/app/app/pengaturan/koneksi/connection-form");
+const { PickupPoints } = await import("@/app/app/pengaturan/pickup/pickup-points");
+const { MemberAccessDialog } = await import("@/app/app/anggota/_components/member-access-dialog");
+const { InviteMemberCard } = await import("@/app/app/anggota/_components/invite-member-card");
+
+const filledButtons = (html: string) => html.match(/data-slot="button" data-variant="default"/g)?.length ?? 0;
+
+const outlet = {
+  connectionIssue: null,
+  connectionSource: "platform_default",
+  connectionStatus: "platform_default",
+  connectionUpdatedAtLabel: null,
+  defaultOriginAreaId: "o-1",
+  defaultOriginAreaLabel: "Coblong, Kota Bandung",
+  defaultPickupAddressId: "p-1",
+  defaultPickupAddressLabel: "Gudang Utama",
+  id: "79000000-0000-4000-8000-000000000001",
+  name: "Outlet Pusat",
+  readinessStatus: "ready",
+  updatedAtLabel: "25 Sep 2026, 10.13 WIB",
+} as const;
+
+describe("settings rules", () => {
+  it("orders outlets needing attention first, then by name, and picks the requested one", () => {
+    const outlets = [
+      { id: "c", name: "Cabang", readinessStatus: "ready" as const },
+      { id: "b", name: "Beta", readinessStatus: "needs_attention" as const },
+      { id: "a", name: "Alfa", readinessStatus: "ready" as const },
+    ];
+    const ordered = logic.orderOutlets(outlets);
+    expect(ordered.map((item) => item.id)).toEqual(["b", "a", "c"]);
+    expect(logic.pickActiveOutlet(ordered, "c")?.id).toBe("c");
+    expect(logic.pickActiveOutlet(ordered, "unknown")?.id).toBe("b");
+    expect(logic.pickActiveOutlet(ordered, ["c"])?.id).toBe("b");
+    expect(logic.pickActiveOutlet([], "c")).toBeNull();
+  });
+
+  it("orders members active first, viewer first, admins before operators", () => {
+    const members = [
+      { id: "1", name: "Zaki", role: "OPERATOR" as const, status: "ACTIVE" as const, userId: "u1" },
+      { id: "2", name: "Ayu", role: "OPERATOR" as const, status: "SUSPENDED" as const, userId: "u2" },
+      { id: "3", name: "Budi", role: "TENANT_ADMIN" as const, status: "ACTIVE" as const, userId: "u3" },
+      { id: "4", name: "Wulan", role: "OPERATOR" as const, status: "ACTIVE" as const, userId: "viewer" },
+    ];
+    expect(logic.orderMembers(members, "viewer").map((member) => member.id)).toEqual(["4", "3", "1", "2"]);
+    expect(logic.summarizeMembers(members)).toEqual({
+      active: 3, activeAdmins: 1, activeOperators: 2, inactive: 1, total: 4,
+    });
+  });
+
+  it("protects the last active admin, the viewer and suspended members from the manage action", () => {
+    const admin = { id: "1", name: "A", role: "TENANT_ADMIN" as const, status: "ACTIVE" as const, userId: "u1" };
+    expect(logic.memberAccess(admin, "viewer", 1)).toMatchObject({ isLastActiveAdmin: true, manageable: false, note: "Admin terakhir dilindungi" });
+    expect(logic.memberAccess(admin, "viewer", 2)).toMatchObject({ manageable: true, note: null });
+    expect(logic.memberAccess(admin, "u1", 2)).toMatchObject({ isCurrentUser: true, manageable: false });
+    expect(logic.memberAccess({ ...admin, status: "SUSPENDED" }, "viewer", 1)).toMatchObject({ isLastActiveAdmin: false, manageable: false });
+    expect(logic.initials("Ayu  Admin Utama")).toBe("AA");
+    expect(logic.initials("   ")).toBe("?");
+  });
+
+  it("names the connection in one sentence", () => {
+    expect(logic.connectionSentence(outlet)).toBe("Koneksi bawaan GeraiCUAN");
+    expect(logic.connectionSentence({ ...outlet, privateConnectionRequired: true })).toBe("Belum terhubung ke akun Mengantar gerai");
+    expect(logic.connectionSentence({ ...outlet, connectionSource: "private", connectionStatus: "private_attention" }))
+      .toContain("perlu diperiksa");
+  });
+});
+
+describe("settings sub-menu", () => {
+  beforeEach(() => {
+    route.pathname = "/app/pengaturan";
+  });
+
+  it.each([
+    ["/app/pengaturan/pickup", "Titik pickup"],
+    ["/app/anggota", "Anggota & akses"],
+    ["/app/pengaturan", "Profil gerai"],
+  ])("lists the five pages in order and marks %s current", (pathname, current) => {
+    route.pathname = pathname;
+    const html = renderToStaticMarkup(createElement(SettingsNav));
+    const links = [...html.matchAll(/<a([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, body]) => ({
+      current: attributes.includes('aria-current="page"'),
+      label: body.replace(/<[^>]+>/g, "").replace("&amp;", "&").trim(),
+    }));
+    expect(links.map((link) => link.label)).toEqual(["Profil gerai", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota & akses"]);
+    expect(links.filter((link) => link.current).map((link) => link.label)).toEqual([current]);
+  });
+});
+
+describe("shipment prefix card", () => {
+  it("offers one filled lock action while unlocked, without a confirmation value in the form", () => {
+    const html = renderToStaticMarkup(createElement(ShipmentPrefixCard, {
+      attemptId: "00000000-0000-4000-8000-000000000001", lockedAtLabel: null, prefix: "GC", suggestedPrefix: "SBN",
+    }));
+    expect(html).toContain('name="prefix"');
+    expect(html).toContain('value="SBN"');
+    expect(html).toContain("Simpan dan kunci awalan");
+    expect(filledButtons(html)).toBe(1);
+    // Only the dialog's confirm button carries confirmation=locked, and the dialog is closed.
+    expect(html).not.toContain('value="locked"');
+  });
+
+  it("shows the locked prefix read-only", () => {
+    const html = renderToStaticMarkup(createElement(ShipmentPrefixCard, {
+      attemptId: "00000000-0000-4000-8000-000000000001", lockedAtLabel: "25 Sep 2026, 10.13 WIB", prefix: "SBN", suggestedPrefix: "SBN",
+    }));
+    expect(html).toContain("Terkunci");
+    expect(html).toContain("SBN-10013");
+    expect(html).not.toContain('name="prefix"');
+    expect(filledButtons(html)).toBe(0);
+  });
+});
+
+describe("Koneksi Mengantar", () => {
+  it("marks the persisted source as Digunakan and asks for no key on the platform default", () => {
+    const html = renderToStaticMarkup(createElement(ConnectionForm, { outlet }));
+    expect(html.match(/Digunakan/g)).toHaveLength(1);
+    expect(html).toContain('role="radiogroup"');
+    expect(html).not.toContain('name="apiKey"');
+  });
+
+  it("renders the API key field blank for an outlet on its own account", () => {
+    const html = renderToStaticMarkup(createElement(ConnectionForm, {
+      outlet: { ...outlet, connectionSource: "private", connectionStatus: "private_ready", connectionUpdatedAtLabel: "1 Sep 2026, 07.00 WIB" },
+    }));
+    const field = html.match(/<input[^>]*name="apiKey"[^>]*>/)?.[0] ?? "";
+    expect(field).toContain('type="password"');
+    expect(field).not.toContain("value=");
+    expect(html).toContain("Ganti API key");
+  });
+
+  it("offers no platform default to a gerai that must ship on its own account", () => {
+    const html = renderToStaticMarkup(createElement(ConnectionForm, { outlet: { ...outlet, privateConnectionRequired: true } }));
+    expect(html).not.toContain('role="radiogroup"');
+    expect(html).toContain('name="apiKey"');
+  });
+});
+
+describe("Titik pickup", () => {
+  const points = [
+    { isDefault: true, originAreaLabel: "Coblong, Kota Bandung", pickupAddressId: "p-1", pickupAddressLabel: "Gudang Utama" },
+    { isDefault: false, originAreaLabel: "Sukajadi, Kota Bandung", pickupAddressId: "p-2", pickupAddressLabel: "Gudang Dua" },
+  ];
+
+  it("offers Jadikan utama only on the non-default point and Hapus on every point", () => {
+    const html = renderToStaticMarkup(createElement(PickupPoints, {
+      connectionSource: "platform_default", outletId: outlet.id, outletName: outlet.name, points,
+    }));
+    expect(html.match(/Jadikan utama/g)).toHaveLength(1);
+    expect(html.match(/>Hapus</g)).toHaveLength(2);
+    expect(html).toContain("Utama");
+    // No filled primary: adding a pickup point is an outline action (reference).
+    expect(filledButtons(html)).toBe(0);
+    expect(html).toContain("Pilih alamat pickup dulu.");
+  });
+
+  it("says the outlet cannot ship without a pickup point", () => {
+    const html = renderToStaticMarkup(createElement(PickupPoints, {
+      connectionSource: "platform_default", outletId: outlet.id, outletName: outlet.name, points: [],
+    }));
+    expect(html).toContain("Belum ada titik pickup");
+    expect(html).toContain("belum dapat membuat kiriman");
+  });
+});
+
+describe("Anggota & akses", () => {
+  it("replaces Kelola akses with the protection sentence for the last admin", () => {
+    const props = {
+      deactivateAttemptId: "00000000-0000-4000-8000-000000000002", email: "a@example.test", membershipId: "00000000-0000-4000-8000-000000000003",
+      name: "Ayu", role: "TENANT_ADMIN" as const, roleAttemptId: "00000000-0000-4000-8000-000000000004",
+    };
+    const protectedHtml = renderToStaticMarkup(createElement(MemberAccessDialog, { ...props, manageable: false, note: "Admin terakhir dilindungi" }));
+    expect(protectedHtml).toContain("Admin terakhir dilindungi");
+    expect(protectedHtml).not.toContain("Kelola akses");
+    const manageableHtml = renderToStaticMarkup(createElement(MemberAccessDialog, { ...props, manageable: true, note: null }));
+    expect(manageableHtml).toContain('aria-label="Kelola akses Ayu"');
+  });
+
+  it("submits the invite from the card footer with the form's field names", () => {
+    const html = renderToStaticMarkup(createElement(InviteMemberCard, { attemptId: "00000000-0000-4000-8000-000000000005" }));
+    expect(html).toContain('name="email"');
+    expect(html).toContain('name="attemptId"');
+    expect(html).toContain('form="member-invite-form"');
+    expect(filledButtons(html)).toBe(1);
+  });
+});
+
+describe("loading and error states", () => {
+  it("keeps the header and sub-menu while members load and shows skeleton cards", async () => {
+    route.pathname = "/app/anggota";
+    const { default: MembersLoading } = await import("@/app/app/anggota/loading");
+    const html = renderToStaticMarkup(createElement(MembersLoading));
+    expect(html).toContain("Anggota &amp; akses</h1>");
+    expect(html).toContain('aria-label="Menu pengaturan"');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('data-slot="skeleton"');
+  });
+
+  it("offers a retry when a settings page fails", async () => {
+    const { default: SettingsError } = await import("@/app/app/pengaturan/error");
+    const html = renderToStaticMarkup(createElement(SettingsError, { error: new Error("x"), reset: () => undefined }));
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Coba lagi");
+  });
+});

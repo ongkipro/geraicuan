@@ -253,6 +253,32 @@ describe("provider settlement reconciliation", () => {
     expect(String((adminUpdate as { cause?: unknown })?.cause ?? adminUpdate)).toMatch(/permission denied/);
   });
 
+  it("T-223: stores lastHistory desc/time and pod_code on the status observation, NULL when unreadable", async () => {
+    const delivered = await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0005");
+    const returned = await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0003");
+    const contract = JSON.parse(readFileSync("tests/fixtures/mengantar-order-contract.shape.json", "utf8"));
+    const list = structuredClone(orders.list);
+    list.data[0].lastHistory = contract.fields.lastHistory.shape;
+    list.data[0].pod_code = contract.fields.pod_code.shape;
+    list.data[1].lastHistory = { date: "not-a-date" };
+    const snapshot = { ...fixtureSnapshot(), orderStatuses: normalizeMengantarOrderPage(list).orders };
+
+    await record(snapshot);
+    const { rows } = await adminPool.query(
+      `SELECT shipment_id, last_history_desc, last_history_at, pod_code
+         FROM provider_order_status_observations ORDER BY provider_status`,
+    );
+    expect(rows).toEqual([
+      {
+        shipment_id: delivered,
+        last_history_desc: contract.fields.lastHistory.shape.desc,
+        last_history_at: new Date("2026-09-05T09:16:00.000Z"),
+        pod_code: "D02",
+      },
+      { shipment_id: returned, last_history_desc: null, last_history_at: null, pod_code: null },
+    ]);
+  });
+
   it("stores no receiver, goods or pickup columns", async () => {
     const { rows } = await adminPool.query(
       `SELECT table_name, column_name FROM information_schema.columns

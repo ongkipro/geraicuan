@@ -2,6 +2,15 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @custom-variant dark (&:is(.dark *));
+
+/*
+ * GeraiCUAN UI v3 tokens — spec 10 v3.2 §2 (ADR-0001, D-18): the Mengantar-app look measured in
+ * `mengantar-app-ui-analysis.md` (§8 sketch), held to the 40+ floor (secondary ≥ 6:1, input ≥ 3:1). Light is the product scheme; the `.dark` block below is
+ * dormant (nothing activates it) and exists only so shadcn's `dark:` classes stay meaningful.
+ * The thermal label's print CSS lives unchanged in `label.css` (spec 10 §10).
+ */
+
+/* Semantic aliases read by the label sheet and the token contrast guard. */
 :root, .dark {
   --canvas:var(--background);
   --surface:var(--card);
@@ -11,437 +20,175 @@
   --hairline:var(--border);
   --hairline-strong:var(--input);
   --accent-hover:var(--primary-hover);
-  --field-border:var(--input);
 }
-/* T-132: shared blue interaction palette on neutral surfaces. Keep semantic
-   status and categorical chart colours independent from the brand accent. */
+
 :root {
+  --font-text:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  /* §2.1 colour: blue-grey canvas, navy ink, white borderless cards. */
+  --background:#f2f4f8;
+  --foreground:#203551;
+  --card:#ffffff;
+  --card-foreground:#203551;
+  --popover:#ffffff;
+  --popover-foreground:#203551;
+  --primary:#2e47ba;
+  --primary-hover:#243a9b;
+  --primary-foreground:#ffffff;
+  --secondary:#eef1f6;
+  --secondary-foreground:#203551;
+  --muted:#eef1f6;
+  /* Mengantar #6C7E95/12px fails the 40+ floor (D7 rejected): 6.9:1 on card, 6.3:1 on canvas. */
+  --muted-foreground:#4f5b6b;
   --accent:#eef2ff;
+  --accent-foreground:#2e47ba;
+  --destructive:#b42318;
+  --border:#e3e8f0;
+  /* D8 rejected: Mengantar #BFCEE0 is faint. #8C8C8C holds 3:1 on card (3.4) and canvas (3.05). */
+  --input:#8c8c8c;
   --ring:#2e47ba;
-  --danger:#b42318;
-  --danger-surface:#fff1f0;
+  /* Status tones: text on its own tint (status badges, variance, danger). */
   --ok:#087443;
   --ok-surface:#ecfdf3;
   --warn:#a15c07;
   --warn-surface:#fffaeb;
-  --overlay:rgb(15 23 42 / 46%);
-  --elevation-resting:0 1px 2px -1px rgb(16 24 40 / 8%), 0 1px 3px 0 rgb(16 24 40 / 5%);
-  /* The zebra stripe must be opaque: a pinned first column inherits the row's
-     background, and a translucent one lets the scrolled cells show through it. */
-  --table-stripe:oklch(0.976 0 0);
-  --font-display:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
-  --font-text:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
-  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  --card:oklch(1 0 0);
-  --card-foreground:oklch(0.145 0 0);
-  --popover:oklch(1 0 0);
-  --popover-foreground:oklch(0.145 0 0);
-  --primary:#2e47ba;
-  --primary-hover:#243a9b;
-  --primary-foreground:#ffffff;
-  --secondary:oklch(0.97 0 0);
-  --secondary-foreground:oklch(0.205 0 0);
-  --muted:oklch(0.97 0 0);
-  /* T-203: secondary text for readers aged 40+ — about 7.5:1 on card and 7:1 on the sunken ground. */
-  --muted-foreground:oklch(0.45 0 0);
-  --accent-foreground:#2e47ba;
-  --destructive:oklch(0.505 0.19 27.5);
-  --border:oklch(0.922 0 0);
-  /* Spec 10 §2.1: a resting field boundary is informational, so it holds 3:1 on white (V-39). */
-  --input:oklch(0.64 0 0);
-  /* Okabe-Ito categorical ramp (spec 19): series differ by hue, not only
-     lightness. --chart-3 (#e69f00) is 2.25:1 on white, so it is never a line
-     stroke without a marker/label; the stroke tokens are measured in tests. */
+  --danger:#b42318;
+  --danger-surface:#fff1f0;
+  /* In progress / waiting on the provider (spec 10 v3.1 §2.1, from GeraiOS v0.5). */
+  --info:#245a85;
+  --info-surface:#e9f1f8;
+  /* Okabe-Ito categorical series; each series also carries a marker or label. */
   --chart-1:#0072b2;
   --chart-2:#009e73;
   --chart-3:#e69f00;
   --chart-4:#cc79a7;
   --chart-5:#d55e00;
-  --radius:0.45rem;
-  --sidebar:oklch(1 0 0);
-  --sidebar-foreground:oklch(0.145 0 0);
+  /* §3 the sidebar sits on the canvas; the current item is a white pill. */
+  --sidebar:#f2f4f8;
+  --sidebar-foreground:#203551;
   --sidebar-primary:#2e47ba;
   --sidebar-primary-foreground:#ffffff;
-  --sidebar-accent:#eef2ff;
+  --sidebar-accent:#ffffff;
   --sidebar-accent-foreground:#2e47ba;
-  --sidebar-border:oklch(0.922 0 0);
+  --sidebar-border:#e3e8f0;
   --sidebar-ring:#2e47ba;
-  --background:oklch(1 0 0);
-  --foreground:oklch(0.145 0 0);
+  /* Opaque hover/stripe row fill (a pinned cell inherits it). */
+  --table-stripe:#f6f8fc;
+  /* §2.1 inner tile inside a card, and one pastel tint per status meaning (tiles only). */
+  --tile:#f6f8fc;
+  --tile-info:#edf4fb;
+  --tile-ok:#effaf3;
+  --tile-warn:#fffbeb;
+  --tile-danger:#fff5f5;
+  /* §2.3 borderless card: Mengantar's 0 15px 20px rgba(217,223,232,.2) is invisible on the canvas,
+     so its alpha is doubled and a 1px navy contact shadow gives the card an edge. */
+  --elevation-card:0 1px 3px rgb(32 53 81 / 8%), 0 15px 20px rgb(217 223 232 / 40%);
+  /* The one restrained elevation for sticky bars. */
+  --elevation-resting:0 1px 2px -1px rgb(16 24 40 / 8%), 0 1px 3px 0 rgb(16 24 40 / 5%);
+  --radius:0.5rem;
 }
-* { box-sizing: border-box; }
-body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--font-text); }
-/*
- * PR-62 / T-183: sign-in, sign-up and recovery for operators aged 40+. Larger
- * type than the CMS (17px body, 28px heading), 48px fields and a 52px primary
- * action, every link a 44px target. The tenant surface sits on a light ground
- * with the brand blue; the Super Admin surface on a dark ground with its own
- * badge, so the two are never mistaken for each other.
- */
-.auth-page {
-  display:grid;
-  min-height:100vh;
-  place-items:center;
-  padding:1.5rem;
-  background:var(--surface-sunken);
-  font-size:1.0625rem;
-  line-height:1.6;
-}
-.auth-page[data-surface="platform"] { background:#0f172a; }
-.auth-login-shell { width:min(100%,27rem); }
-.auth-login-shell[data-width="wide"] { width:min(100%,36rem); }
-.auth-masthead { display:grid; justify-items:center; gap:.5rem; margin:0 0 1.25rem; text-align:center; }
-.auth-brand {
-  margin:0;
-  color:var(--ink);
-  font-size:1.5rem;
-  font-weight:800;
-  letter-spacing:-.01em;
-}
-.auth-page[data-surface="platform"] .auth-brand { color:#f8fafc; }
-.auth-surface-tag {
-  display:inline-flex;
-  align-items:center;
-  gap:.4rem;
-  min-height:2rem;
-  padding:.25rem .75rem;
-  border-radius:999px;
-  font-size:.9375rem;
-  font-weight:600;
-  background:var(--accent);
-  color:var(--accent-foreground);
-}
-.auth-page[data-surface="platform"] .auth-surface-tag { background:#fbbf24; color:#1c1917; }
-.auth-surface-tag svg { width:1.1rem; height:1.1rem; }
-.auth-card {
-  padding:1.75rem 1.5rem;
-  border:1px solid var(--hairline);
-  border-top:4px solid var(--primary);
-  border-radius:calc(var(--radius) * 2);
-  background:var(--surface);
-  box-shadow:0 1px 3px rgb(23 32 51 / 6%), 0 8px 24px -12px rgb(23 32 51 / 12%);
-}
-.auth-page[data-surface="platform"] .auth-card { border-color:#334155; border-top-color:#fbbf24; }
-@media (min-width:40rem) { .auth-card { padding:2.25rem 2.25rem; } }
-.auth-heading { margin-bottom:1.5rem; }
-.auth-card h1 { margin:0 0 .5rem; font-size:1.75rem; line-height:1.25; font-weight:700; letter-spacing:-.01em; color:var(--ink); }
-.auth-card h2 { margin:0; font-size:1.125rem; line-height:1.4; font-weight:700; color:var(--ink); }
-.auth-card p { margin:0; color:var(--ink-muted); font-size:1rem; line-height:1.6; }
-.auth-heading p { color:#475467; font-size:1.0625rem; }
-.auth-heading p.auth-heading-note { margin-top:.5rem; }
-.auth-form { display:grid; gap:1.25rem; }
-.auth-section { display:grid; gap:1.25rem; margin:0; padding:0; border:0; min-width:0; }
-.auth-section + .auth-section { padding-top:.5rem; }
-.auth-section > legend { padding:0; margin-bottom:1rem; font-size:1.125rem; font-weight:700; color:var(--ink); }
-.auth-field { display:grid; gap:.5rem; }
-.auth-field > label, .auth-field [data-slot="label"] { font-size:1rem; font-weight:600; color:var(--ink); line-height:1.4; }
-.auth-field [data-slot="input"] {
-  min-height:3rem;
-  padding-inline:.875rem;
-  border-color:#98a2b3;
-  background:var(--surface);
-  font-size:1.0625rem;
-}
-.auth-field [data-slot="input"][aria-invalid="true"] { border-color:var(--danger); border-width:2px; }
-.auth-hint { margin:0; color:#475467; font-size:.9375rem; line-height:1.5; }
-.auth-card .auth-hint { color:#475467; font-size:.9375rem; }
-.auth-field-error { margin:0; color:var(--danger); font-size:.9375rem; font-weight:600; line-height:1.5; }
-.auth-card .auth-field-error { color:var(--danger); font-size:.9375rem; }
-.auth-submit { width:100%; min-height:3.25rem; margin-top:.25rem; font-size:1.0625rem; font-weight:700; }
-.auth-secondary-action { width:100%; min-height:3rem; font-size:1rem; font-weight:600; }
-.auth-form [data-slot="alert"], .auth-card [data-slot="alert"] { margin:0; padding:.875rem 1rem; font-size:1rem; line-height:1.55; }
-.auth-card [data-slot="alert-title"] { font-size:1.0625rem; font-weight:700; }
-.auth-card [data-slot="alert-description"] { font-size:1rem; }
-.auth-check {
-  display:grid;
-  grid-template-columns:auto 1fr;
-  align-items:start;
-  gap:.75rem;
-  min-height:44px;
-  padding:.75rem;
-  border:1px solid var(--hairline);
-  border-radius:var(--radius);
-  font-size:1rem;
-  line-height:1.5;
-  cursor:pointer;
-}
-.auth-check input[type="checkbox"] { width:1.5rem; height:1.5rem; margin:0; accent-color:var(--primary); cursor:pointer; }
-.auth-check input[type="checkbox"]:focus-visible { outline:3px solid var(--ring); outline-offset:2px; }
-.auth-check[data-invalid="true"] { border-color:var(--danger); border-width:2px; }
-.auth-steps { display:grid; gap:.75rem; margin:0; padding:0; list-style:none; counter-reset:auth-step; }
-.auth-steps li { display:grid; grid-template-columns:2rem 1fr; gap:.75rem; align-items:start; color:var(--ink); font-size:1rem; line-height:1.55; counter-increment:auth-step; }
-.auth-steps li::before {
-  content:counter(auth-step);
-  display:grid;
-  place-items:center;
-  width:2rem;
-  height:2rem;
-  border-radius:999px;
-  background:var(--accent);
-  color:var(--accent-foreground);
-  font-weight:700;
-}
-.auth-links { display:grid; gap:.25rem; margin-top:1.25rem; padding-top:1.25rem; border-top:1px solid var(--hairline); }
-.auth-link {
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:.35rem;
-  min-height:44px;
-  color:var(--primary);
-  font-size:1rem;
-  font-weight:600;
-  text-align:center;
-  text-decoration:underline;
-  text-underline-offset:.2em;
-}
-.auth-link:hover { color:var(--primary-hover); }
-.auth-link:focus-visible { outline:3px solid var(--ring); outline-offset:2px; border-radius:.25rem; }
-.auth-demo-callout {
-  gap:.75rem;
-  border-color:var(--hairline);
-  background:var(--surface-sunken);
-}
-.auth-demo-callout code { font-family:var(--font-mono); font-size:.9375rem; font-weight:600; }
-.auth-return {
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  min-height:44px;
-  margin-top:1rem;
-  color:#475467;
-  font-size:1rem;
-  text-decoration:underline;
-  text-underline-offset:.2em;
-}
-.auth-page[data-surface="platform"] .auth-return { color:#cbd5e1; }
-.auth-return:focus-visible { outline:3px solid var(--ring); outline-offset:2px; border-radius:.25rem; }
-.auth-page[data-surface="platform"] .auth-return:focus-visible { outline-color:#b45309; }
-.auth-return:hover { color:var(--primary); text-decoration:underline; text-underline-offset:.18em; }
-.auth-page[data-surface="platform"] .auth-return:hover { color:#f8fafc; }
-.label-preview { overflow:auto; padding:1rem; border:1px solid var(--hairline); border-radius:.35rem; background:var(--surface-sunken); }
-.label-history { margin-top:2rem; padding-bottom:3rem; }
-.label-history > h2 { margin:0 0 1rem; font-family:var(--font-display); font-size:1.75rem; }
-.label-caution details { color:var(--ink-muted); }
-.label-caution summary { display:flex; align-items:center; min-height:44px; color:var(--primary); cursor:pointer; }
-.label-caution details p { white-space:pre-wrap; }
-/* T-176 thermal label. Sizes in mm for a 203 dpi head (1 dot = 0.125 mm). Pure black
-   on white only: no greys, tints, opacity or background fills, which a thermal head
-   renders as noise and which browsers drop from print anyway. Text floor 7pt; rules
-   in whole CSS px because Chrome snaps borders to them (1px = 0.26 mm, 2 dots; the
-   COD box and the cut line 2px = 4 dots); Code 128 modules 0.25 mm (2 dots) with a
-   10-module quiet zone inside the SVG box. The screen outline does not take space, so the preview has
-   exactly the printed geometry. */
-.label-sheet { position:relative; width:100mm; height:150mm; page:label-100x150; overflow:hidden; outline:1px solid var(--hairline-strong); color:#000; background:#fff; font-family:var(--font-text); font-size:8pt; line-height:1.2; font-variant-numeric:tabular-nums; }
-.label-sheet[data-label-size="10x10"] { height:100mm; page:label-100x100; }
-.label-sheet p, .label-sheet dl, .label-sheet dd { margin:0; }
-.label-package { display:grid; height:100mm; padding:3mm; grid-template-rows:8mm 17mm minmax(0,1fr) 8.4mm 14.4mm 10.8mm 4.8mm; overflow:hidden; }
-.label-package > * { min-width:0; overflow:hidden; padding-block:.7mm; border-top:1px solid #000; }
-.label-package > :first-child { padding-top:0; border-top:0; }
-.label-eyebrow { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.label-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; }
-.label-courier { font-size:15pt; font-weight:800; line-height:1.1; }
-.label-service { font-size:10pt; font-weight:700; }
-.label-mark { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.label-awb-block { display:flex; flex-direction:column; align-items:center; gap:.5mm; }
-.label-barcode { display:block; flex:none; }
-.label-awb { max-width:100%; font-family:var(--font-mono); font-size:12pt; font-weight:700; line-height:1.1; letter-spacing:.04em; text-align:center; overflow-wrap:anywhere; }
-.label-awb .label-eyebrow { font-family:var(--font-text); letter-spacing:.06em; }
-.label-party-line { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:1.5mm; }
-/* Recipient type steps down with the density tier, so short addresses print large
-   for a courier at arm's length and the 480-character ceiling still fits. */
-.label-party-name { font-size:12pt; font-weight:800; line-height:1.15; overflow-wrap:anywhere; }
-.label-party-phone { font-size:11pt; font-weight:700; }
-.label-party-area { font-size:9.5pt; font-weight:700; line-height:1.2; }
-.label-party-address { margin-top:.3mm !important; font-size:9pt; line-height:1.2; overflow-wrap:anywhere; }
-.label-recipient[data-density="long"] .label-party-name { font-size:10.5pt; }
-.label-recipient[data-density="long"] .label-party-phone { font-size:10pt; }
-.label-recipient[data-density="long"] .label-party-area { font-size:8.5pt; }
-.label-recipient[data-density="long"] .label-party-address { font-size:8pt; line-height:1.15; }
-.label-recipient[data-density="dense"] .label-party-name { font-size:10pt; }
-.label-recipient[data-density="dense"] .label-party-phone { font-size:9.5pt; }
-.label-recipient[data-density="dense"] .label-party-area { font-size:8pt; }
-.label-recipient[data-density="dense"] .label-party-address { font-size:7.25pt; line-height:1.12; }
-.label-recipient[data-density="ultra"] .label-party-name { font-size:9.5pt; }
-.label-recipient[data-density="ultra"] .label-party-phone { font-size:9pt; }
-.label-recipient[data-density="ultra"] .label-party-area { font-size:8pt; }
-.label-recipient[data-density="ultra"] .label-party-address { font-size:7pt; line-height:1.12; }
-.label-sender-line { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:7.5pt; line-height:1.15; overflow-wrap:anywhere; }
-.label-sender .label-party-name { font-size:7.5pt; font-weight:700; }
-.label-sender .label-party-phone { font-size:7.5pt; font-weight:700; }
-.label-sender .label-party-address { margin:0 !important; font-size:7.5pt; }
-.label-sender-line * { line-height:inherit; }
-.label-payment { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding:.2mm 1.5mm; border:2px solid #000; line-height:1.1; }
-.label-payment span { font-size:7.5pt; font-weight:700; letter-spacing:.04em; }
-.label-payment b { font-size:13pt; font-weight:800; }
-.label-money { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; margin-top:.5mm; font-size:7pt; line-height:1.15; }
-.label-money > div { display:flex; justify-content:space-between; gap:1mm; }
-.label-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; font-size:7.5pt; line-height:1.15; }
-.label-facts > div { display:grid; grid-template-columns:auto minmax(0,1fr); gap:0 1.2mm; min-width:0; }
-.label-facts-wide { grid-column:1 / -1; }
-.label-facts dt { font-weight:700; white-space:nowrap; }
-.label-facts dd { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.label-footer { font-size:7pt; line-height:1.2; }
-.label-cut { position:absolute; left:0; right:0; top:100mm; height:4mm; margin-top:-2mm; display:flex; align-items:center; gap:1.5mm; padding-inline:1mm; }
-.label-cut-rule { flex:1; height:0; border-top:2px dashed #000; }
-.label-cut-mark { display:flex; align-items:center; gap:1mm; font-size:7pt; font-weight:700; white-space:nowrap; }
-.label-cut-icon { width:3.5mm; height:3.5mm; stroke-width:2.25; }
-.label-stub { display:grid; height:50mm; padding:3mm; grid-template-rows:4.5mm 6.5mm 15mm minmax(0,1fr); overflow:hidden; }
-.label-stub > * { min-width:0; overflow:hidden; }
-.label-stub-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; border-bottom:1px solid #000; }
-.label-stub-title { flex:none; font-size:7pt; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
-.label-stub-outlet { min-width:0; overflow:hidden; font-size:8pt; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
-.label-stub-service { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding-top:.6mm; }
-.label-stub .label-courier { font-size:12pt; }
-.label-stub .label-service { font-size:9pt; }
-.label-stub-payment { flex:none; font-size:8pt; font-weight:700; }
-.label-stub-payment b { font-size:11pt; font-weight:800; }
-.label-stub .label-awb { font-size:11pt; }
-.label-stub-facts { display:grid; align-content:start; gap:.8mm; padding-top:1.2mm; font-size:10pt; line-height:1.2; }
-.label-stub-facts > div { display:grid; grid-template-columns:21mm minmax(0,1fr); align-items:baseline; gap:1.5mm; }
-.label-stub-facts dt { font-size:8pt; font-weight:400; }
-.label-stub-facts dd { min-width:0; overflow:hidden; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
-@page label-100x150 { size:100mm 150mm; margin:0; }
-@page label-100x100 { size:100mm 100mm; margin:0; }
-@media print {
-  .label-hide { display:none !important; }
-  html, body { margin:0; background:#fff; }
-  .label-preview { overflow:visible; padding:0; border:0; background:none; }
-  .label-sheet { outline:0; }
-}
-/* Shared authenticated CMS shell and operational primitives. */
-/* Reserve the scrollbar gutter so a short page centres like a long one. */
-html { scrollbar-gutter:stable; }
-/* PR-60: a store awaiting approval — a status, drawn in the warning tokens. */
-.approval-banner { border-color:var(--warn); background:var(--warn-surface); color:var(--ink); }
-.approval-banner > svg, .approval-banner [data-slot="alert-title"] { color:var(--warn); }
-/* T-204: the top bar is one 64px row at every width. */
-.cms-main { --cms-header-h:4rem; width:100%; max-width:88rem; margin-inline:auto; padding:1.5rem 1rem 3rem; }
-.cms-skip-link { position:fixed; left:-9999px; top:0; z-index:20; padding:.75rem; color:var(--primary); background:var(--surface); }
-.cms-skip-link:focus-visible { left:.5rem; top:.5rem; }
-.cms-signout { display:grid; gap:.5rem; margin-top:.4rem; }
-.cms-signout-button { width:100%; }
-.cms-control-error { margin:0; color:var(--danger); font-size:.8125rem; line-height:1.4; }
-@media (min-width:768px) {
-  .cms-main { padding-inline:1.5rem; }
-}
-@media (min-width:1024px) {
-  .cms-main { padding-inline:2rem; }
-}
+
 @theme inline {
-  /* T-203 type scale for an operator audience aged 40+ (spec 10 §2.2). Every `text-*` utility in the
-     app resolves here, so the whole product moves together: 13 meta · 15 UI · 16 body · 18 · 20 · 26 page title. */
+  /* §2.2 type scale (40+ readers): 13 meta · 15 UI/body · 16 nav/card title · 26 · 30 KPI · 32 H1. */
   --text-xs:0.8125rem;
-  --text-xs--line-height:1.125rem;
+  --text-xs--line-height:1.5;
   --text-sm:0.9375rem;
-  --text-sm--line-height:1.375rem;
+  --text-sm--line-height:1.5;
   --text-base:1rem;
-  --text-base--line-height:1.5rem;
+  --text-base--line-height:1.5;
   --text-lg:1.125rem;
-  --text-lg--line-height:1.625rem;
+  --text-lg--line-height:1.5;
   --text-xl:1.25rem;
-  --text-xl--line-height:1.75rem;
+  --text-xl--line-height:1.4;
   --text-2xl:1.625rem;
-  --text-2xl--line-height:2rem;
+  --text-2xl--line-height:1.5;
   --text-3xl:1.875rem;
-  --text-3xl--line-height:2.25rem;
+  --text-3xl--line-height:1.5;
+  --text-h1:2rem;
+  --text-h1--line-height:1.25;
+  /* §2.3 content width: 1120px, left-aligned in the main area (`max-w-content`). */
+  --container-content:70rem;
+  --font-sans:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
+  --font-heading:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   --shadow-resting:var(--elevation-resting);
-  --font-heading:var(--font-inter);
-  --font-sans:var(--font-inter);
-  --color-sidebar-ring:var(--sidebar-ring);
-  --color-sidebar-border:var(--sidebar-border);
-  --color-sidebar-accent-foreground:var(--sidebar-accent-foreground);
-  --color-sidebar-accent:var(--sidebar-accent);
-  --color-sidebar-primary-foreground:var(--sidebar-primary-foreground);
-  --color-sidebar-primary:var(--sidebar-primary);
-  --color-sidebar-foreground:var(--sidebar-foreground);
-  --color-sidebar:var(--sidebar);
-  --color-chart-5:var(--chart-5);
-  --color-chart-4:var(--chart-4);
-  --color-chart-3:var(--chart-3);
-  --color-chart-2:var(--chart-2);
-  --color-chart-1:var(--chart-1);
-  --color-ring:var(--ring);
-  --color-input:var(--input);
-  --color-border:var(--border);
-  --color-destructive:var(--destructive);
-  --color-accent-foreground:var(--accent-foreground);
-  --color-accent:var(--accent);
-  --color-muted-foreground:var(--muted-foreground);
-  --color-muted:var(--muted);
-  --color-secondary-foreground:var(--secondary-foreground);
-  --color-secondary:var(--secondary);
-  --color-primary-foreground:var(--primary-foreground);
+  --shadow-card:var(--elevation-card);
+  --color-background:var(--background);
+  --color-foreground:var(--foreground);
+  --color-card:var(--card);
+  --color-card-foreground:var(--card-foreground);
+  --color-popover:var(--popover);
+  --color-popover-foreground:var(--popover-foreground);
   --color-primary:var(--primary);
   --color-primary-hover:var(--primary-hover);
-  --color-popover-foreground:var(--popover-foreground);
-  --color-popover:var(--popover);
-  --color-card-foreground:var(--card-foreground);
-  --color-card:var(--card);
-  --color-foreground:var(--foreground);
-  --color-background:var(--background);
-  --radius-sm:calc(var(--radius) * 0.6);
-  --radius-md:calc(var(--radius) * 0.8);
+  --color-primary-foreground:var(--primary-foreground);
+  --color-secondary:var(--secondary);
+  --color-secondary-foreground:var(--secondary-foreground);
+  --color-muted:var(--muted);
+  --color-muted-foreground:var(--muted-foreground);
+  --color-accent:var(--accent);
+  --color-accent-foreground:var(--accent-foreground);
+  --color-destructive:var(--destructive);
+  --color-border:var(--border);
+  --color-input:var(--input);
+  --color-ring:var(--ring);
+  --color-ok:var(--ok);
+  --color-ok-surface:var(--ok-surface);
+  --color-warn:var(--warn);
+  --color-warn-surface:var(--warn-surface);
+  --color-info:var(--info);
+  --color-info-surface:var(--info-surface);
+  --color-danger:var(--danger);
+  --color-danger-surface:var(--danger-surface);
+  --color-table-stripe:var(--table-stripe);
+  --color-tile:var(--tile);
+  --color-tile-info:var(--tile-info);
+  --color-tile-ok:var(--tile-ok);
+  --color-tile-warn:var(--tile-warn);
+  --color-tile-danger:var(--tile-danger);
+  --color-chart-1:var(--chart-1);
+  --color-chart-2:var(--chart-2);
+  --color-chart-3:var(--chart-3);
+  --color-chart-4:var(--chart-4);
+  --color-chart-5:var(--chart-5);
+  --color-sidebar:var(--sidebar);
+  --color-sidebar-foreground:var(--sidebar-foreground);
+  --color-sidebar-primary:var(--sidebar-primary);
+  --color-sidebar-primary-foreground:var(--sidebar-primary-foreground);
+  --color-sidebar-accent:var(--sidebar-accent);
+  --color-sidebar-accent-foreground:var(--sidebar-accent-foreground);
+  --color-sidebar-border:var(--sidebar-border);
+  --color-sidebar-ring:var(--sidebar-ring);
+  /* §2.3 radius: controls 8px (`rounded-lg`), inner tiles 10px (`rounded-xl`), cards 16px (`rounded-2xl`). */
+  --radius-sm:calc(var(--radius) * 0.5);
+  --radius-md:calc(var(--radius) * 0.75);
   --radius-lg:var(--radius);
-  --radius-xl:calc(var(--radius) * 1.4);
-  --radius-2xl:calc(var(--radius) * 1.8);
-  --radius-3xl:calc(var(--radius) * 2.2);
-  --radius-4xl:calc(var(--radius) * 2.6);
+  --radius-xl:calc(var(--radius) * 1.25);
+  --radius-2xl:calc(var(--radius) * 2);
+  --radius-3xl:calc(var(--radius) * 2);
+  --radius-4xl:calc(var(--radius) * 2.5);
 }
+
 @layer base {
   /* Native fallback; shadcn utilities own their single focus indicator. */
   :focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
   * {
     @apply border-border outline-ring;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
-    @apply font-sans;
+    @apply bg-background font-sans;
   }
-}
-[data-slot="sidebar-wrapper"],
-[data-slot="sidebar-inset"] {
-  background: var(--surface-sunken);
-}
-.cms-signout {
-  display: grid;
-  gap: .5rem;
-}
-.cms-signout-button {
-  width: 100%;
-}
-.cms-control-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: .75rem;
-  line-height: 1.4;
-}
-@media print {
-  [data-slot="sidebar"],
-  [data-slot="sidebar-gap"],
-  [data-slot="sidebar-inset"] > header,
-  .cms-skip-link {
-    display: none !important;
-  }
-  [data-slot="sidebar-wrapper"],
-  [data-slot="sidebar-inset"] {
-    display: block;
-    min-height: 0;
-    /* The inset variant's screen margin would push a label off its page origin (T-176). */
-    margin: 0;
-    background: #fff;
-  }
-  .cms-main {
-    width: auto;
-    max-width: none;
-    padding: 0;
+  body {
+    @apply bg-background text-sm text-foreground antialiased;
   }
 }
 
+/* The CMS ground behind the white cards (§2.1 `--background` #F2F4F8). */
+[data-slot="sidebar-inset"] { background:var(--background); }
+
 .dark {
   --elevation-resting:0 1px 2px -1px rgb(0 0 0 / 55%), 0 1px 3px 0 rgb(0 0 0 / 40%);
+  --elevation-card:0 1px 3px rgb(0 0 0 / 40%);
   --table-stripe:oklch(0.235 0 0);
   --background:oklch(0.145 0 0);
   --foreground:oklch(0.985 0 0);
@@ -462,63 +209,12 @@ html { scrollbar-gutter:stable; }
   --border:oklch(1 0 0 / 10%);
   --input:oklch(1 0 0 / 15%);
   --ring:#a5b4fc;
-  --chart-1:#0072b2;
-  --chart-2:#009e73;
-  --chart-3:#e69f00;
-  --chart-4:#cc79a7;
-  --chart-5:#d55e00;
   --sidebar:oklch(0.205 0 0);
   --sidebar-foreground:oklch(0.985 0 0);
   --sidebar-primary:#a5b4fc;
   --sidebar-primary-foreground:#171717;
-  --sidebar-accent:#202b50;
+  --sidebar-accent:oklch(0.205 0 0);
   --sidebar-accent-foreground:#a5b4fc;
   --sidebar-border:oklch(1 0 0 / 10%);
   --sidebar-ring:#a5b4fc;
 }
-
-/* Shared work surfaces: structure and density, using the supplied theme tokens. */
-.cms-workspace { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:calc(var(--radius) * 1.8); background:var(--card); }
-.cms-section-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; font-size:1rem; font-weight:600; letter-spacing:-.015em; }
-/* T-204 reference filter row: one wrapping line of 40px controls (44px below md) —
-   range trigger, outlet select, "Terapkan", "Hapus filter" — aligned on their bottom
-   edge so a field that still carries a visible label lines up with the rest. The
-   field wrappers dissolve (display:contents) so every control is a flex item of the
-   row; an advanced disclosure takes its own full-width line after the actions. */
-.cms-filter-bar { display:flex; flex-wrap:wrap; align-items:flex-end; min-width:0; gap:.75rem; }
-.cms-filter-bar > * { min-width:0; }
-.cms-filter-bar > :first-child,
-.cms-filter-bar > :first-child > div:first-of-type:not([role="group"]) { display:contents; }
-.cms-filter-bar > :first-child > div:first-of-type > *,
-.cms-filter-bar > :first-child > [role="group"] { flex:1 1 10rem; min-width:0; }
-/* Below md the range trigger takes the first line; the other fields and the actions share the next. */
-.cms-filter-bar > :first-child > div:first-of-type > :has(> .cms-range-filter),
-.cms-filter-bar > :first-child > [role="group"] { flex-basis:100%; }
-.cms-filter-bar > :first-child > .cms-filter-advanced { order:1; flex:1 1 100%; min-width:0; }
-.cms-filter-bar > :last-child { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; }
-.cms-filter-advanced > summary { display:flex; width:fit-content; min-height:44px; align-items:center; gap:.5rem; list-style:none; cursor:pointer; color:var(--foreground); font-size:var(--text-sm); font-weight:500; }
-.cms-filter-advanced > summary::-webkit-details-marker { display:none; }
-.cms-filter-advanced[open] > summary > svg:last-child { transform:rotate(180deg); }
-.cms-filter-advanced[open] { padding-bottom:.25rem; }
-/* T-163 — the one date-range control (PR-53). A native <details>, so the named
-   `rentang`, `dari` and `sampai` controls stay in the page's single GET form
-   whether the panel is open or shut; CSS alone makes it read as a popover from
-   md and as a bottom sheet below it. */
-.cms-range-filter { position:relative; min-width:0; }
-.cms-range-filter > summary { display:flex; width:100%; min-height:44px; align-items:center; gap:.5rem; padding:0 .75rem; border:1px solid var(--input); border-radius:var(--radius-lg, .5rem); background:var(--background); color:var(--foreground); font-size:var(--text-sm); font-weight:500; list-style:none; cursor:pointer; }
-.cms-range-filter > summary::-webkit-details-marker { display:none; }
-.cms-range-filter > summary:hover { background:var(--muted); }
-.cms-range-filter[open] > summary > svg:last-child { transform:rotate(180deg); }
-.cms-range-popover { position:fixed; inset-inline:0; bottom:0; z-index:50; display:grid; gap:1rem; max-height:85dvh; overflow:auto; padding:1rem; border-top:1px solid var(--border); border-radius:calc(var(--radius) * 1.4) calc(var(--radius) * 1.4) 0 0; background:var(--popover, var(--card)); color:var(--popover-foreground, var(--foreground)); box-shadow:0 -10px 30px rgb(16 24 40 / 18%); }
-@media (min-width:768px) {
-  .cms-filter-bar > :first-child > div:first-of-type > *,
-  .cms-filter-bar > :first-child > div:first-of-type > :has(> .cms-range-filter),
-  .cms-filter-bar > :first-child > [role="group"] { flex:0 1 auto; }
-  .cms-filter-bar .cms-range-filter { min-width:16rem; }
-  .cms-filter-advanced > summary { min-height:40px; }
-  .cms-range-filter > summary { min-height:40px; }
-  .cms-range-popover { position:absolute; inset-inline:auto; left:0; top:calc(100% + .375rem); bottom:auto; width:max-content; max-width:min(54rem, calc(100vw - 2rem)); max-height:min(80dvh, 40rem); border:1px solid var(--border); border-radius:calc(var(--radius) * 1.4); box-shadow:0 10px 30px rgb(16 24 40 / 14%); }
-}
-
-
-

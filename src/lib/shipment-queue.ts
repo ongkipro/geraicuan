@@ -11,13 +11,31 @@ export type ShipmentQueueStatusFilter =
   | "NEEDS_ATTENTION"
   | "READY_TO_PROGRESS"
   | "ISSUED_TODAY"
+  | StaleShipmentFilter
   | "ALL";
+
+/**
+ * T-231 / PR-89: "Tanpa update 48 jam / 4 hari" — a shipment still ISSUED,
+ * IN_TRANSIT or PROBLEM whose last provider news is older than the window. The
+ * evidence is `provider_order_status_observations`, which row-level security
+ * shows to a Tenant Admin only (T-146), so these filters are Tenant Admin only.
+ */
+export const STALE_SHIPMENT_FILTERS = {
+  STALE_48H: { hours: 48, label: "Tanpa update 48 jam" },
+  STALE_4D: { hours: 96, label: "Tanpa update 4 hari" },
+} as const;
+export type StaleShipmentFilter = keyof typeof STALE_SHIPMENT_FILTERS;
+export const STALE_SHIPMENT_STATUSES = ["ISSUED", "IN_TRANSIT", "PROBLEM"] as const satisfies readonly ShipmentStatus[];
+
+export function isStaleShipmentFilter(value: unknown): value is StaleShipmentFilter {
+  return typeof value === "string" && Object.hasOwn(STALE_SHIPMENT_FILTERS, value);
+}
 export type TenantShipmentRole = (typeof membershipRoles)[number];
 
 export const SHIPMENT_QUEUE_PAGE_SIZE = 20;
 
 export const SHIPMENT_STATUS_PRESENTATION: Record<
-  Exclude<ShipmentQueueStatusFilter, "ALL" | "ACTION_REQUIRED">,
+  Exclude<ShipmentQueueStatusFilter, "ALL" | "ACTION_REQUIRED" | StaleShipmentFilter>,
   {
     guidance: string;
     label: string;
@@ -119,6 +137,9 @@ export const SHIPMENT_STATUS_OPTIONS: readonly {
   { label: SHIPMENT_STATUS_PRESENTATION.NEEDS_ATTENTION.label, value: "NEEDS_ATTENTION" },
   { label: "Siap dilanjutkan", value: "READY_TO_PROGRESS" },
   { label: "Resi terbit hari ini", value: "ISSUED_TODAY" },
+  // Tenant Admin only: the page drops these for an operator (see STALE_SHIPMENT_FILTERS).
+  { label: STALE_SHIPMENT_FILTERS.STALE_48H.label, value: "STALE_48H" },
+  { label: STALE_SHIPMENT_FILTERS.STALE_4D.label, value: "STALE_4D" },
   ...shipmentStatuses.map((status) => ({
     label: SHIPMENT_STATUS_PRESENTATION[status].label,
     value: status,
@@ -205,10 +226,15 @@ function firstValue(value: SearchValue) {
 export type ShipmentQueueQuery = {
   issues: string[];
   page: number;
+  /** `cari`: a shipment number or resi fragment, upper-cased; never a name or phone (no PII in URLs). */
+  search?: string;
   status: ShipmentQueueStatusFilter;
 };
 
+const SHIPMENT_SEARCH_PATTERN = /^[A-Za-z0-9-]{3,40}$/;
+
 export function parseShipmentQueueQuery(input: {
+  cari?: SearchValue;
   page?: SearchValue;
   status?: SearchValue;
 }): ShipmentQueueQuery {
@@ -222,6 +248,7 @@ export function parseShipmentQueueQuery(input: {
       requestedStatus === "NEEDS_ATTENTION" ||
       requestedStatus === "READY_TO_PROGRESS" ||
       requestedStatus === "ISSUED_TODAY" ||
+      isStaleShipmentFilter(requestedStatus) ||
       (shipmentStatuses as readonly string[]).includes(requestedStatus)
     ) {
       status = requestedStatus as ShipmentQueueStatusFilter;
@@ -241,7 +268,17 @@ export function parseShipmentQueueQuery(input: {
     }
   }
 
-  return { issues, page, status };
+  const requestedSearch = firstValue(input.cari)?.trim();
+  let search: string | undefined;
+  if (requestedSearch) {
+    if (SHIPMENT_SEARCH_PATTERN.test(requestedSearch)) {
+      search = requestedSearch.toUpperCase();
+    } else {
+      issues.push("Pencarian hanya menerima nomor kiriman atau resi (3–40 huruf, angka, atau tanda hubung).");
+    }
+  }
+
+  return { issues, page, search, status };
 }
 
 /**

@@ -270,3 +270,241 @@ export function evaluateCodOngkirCharge(
     sellerDifferenceIdr: codOngkirSellerDifferenceIdr(charge, shippingDeductedIdr),
   };
 }
+
+// ---------------------------------------------------------------------------
+// T-211 (PR-70/PR-72): handover type, pickup schedule and product weight in kg.
+// Pure and clock-injected so the form, the server validation and tests share one rule.
+
+/** How the parcel reaches the courier. Stored only; not sent to Mengantar until T-153. */
+export const HANDOVER_TYPES = ["PICKUP", "DROP_OFF"] as const;
+export type HandoverType = (typeof HANDOVER_TYPES)[number];
+export const HANDOVER_TYPE_LABELS: Record<HandoverType, string> = {
+  DROP_OFF: "Drop di outlet",
+  PICKUP: "Penjemputan terjadwal",
+};
+
+export function isHandoverType(value: unknown): value is HandoverType {
+  return typeof value === "string" && (HANDOVER_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * T-232 / PR-90 / D-19: the vehicle a scheduled pickup needs (Mengantar app "Volume").
+ * Optional and PICKUP only. Stored and shown; not sent to Mengantar until T-153.
+ */
+export const PICKUP_VEHICLES = ["MOTOR", "MOBIL", "TRUK"] as const;
+export type PickupVehicle = (typeof PICKUP_VEHICLES)[number];
+export const PICKUP_VEHICLE_LABELS: Record<PickupVehicle, string> = {
+  MOBIL: "Mobil",
+  MOTOR: "Motor",
+  TRUK: "Truk",
+};
+
+export function isPickupVehicle(value: unknown): value is PickupVehicle {
+  return typeof value === "string" && (PICKUP_VEHICLES as readonly string[]).includes(value);
+}
+
+/** One-hour pickup windows 09.00–18.00 WIB, stored by their start ("09:00"). */
+export const PICKUP_SLOTS = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"] as const;
+export type PickupSlot = (typeof PICKUP_SLOTS)[number];
+/** A same-day slot must start at least this far ahead. */
+export const PICKUP_LEAD_MINUTES = 90;
+/** Dates offered: today and the next six days (WIB). */
+export const PICKUP_DATE_WINDOW_DAYS = 7;
+
+const WIB_OFFSET_HOURS = 7;
+
+export function isPickupSlot(value: unknown): value is PickupSlot {
+  return typeof value === "string" && (PICKUP_SLOTS as readonly string[]).includes(value);
+}
+
+/** "09:00" → "09.00–10.00 WIB". */
+export function pickupSlotLabel(slot: string) {
+  const hour = Number(slot.slice(0, 2));
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(hour)}.00–${pad(hour + 1)}.00 WIB`;
+}
+
+/** The WIB calendar date of an instant, "YYYY-MM-DD". */
+export function jakartaDateKey(now: Date) {
+  const shifted = new Date(now.getTime() + WIB_OFFSET_HOURS * 3_600_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function addDays(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** The instant a slot starts on a WIB date. */
+function slotStart(dateKey: string, slot: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return Date.UTC(year, month - 1, day, Number(slot.slice(0, 2)) - WIB_OFFSET_HOURS, 0);
+}
+
+/** Slots still bookable on a date: a same-day slot starts ≥ 90 minutes from now. */
+export function availablePickupSlots(dateKey: string, now: Date): PickupSlot[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return [];
+  return PICKUP_SLOTS.filter((slot) => slotStart(dateKey, slot) - now.getTime() >= PICKUP_LEAD_MINUTES * 60_000);
+}
+
+/** The pickup dates to offer (WIB), today first; today drops out once its last slot has passed. */
+export function pickupDateOptions(now: Date) {
+  const today = jakartaDateKey(now);
+  const format = new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "long", timeZone: "UTC", weekday: "long", year: "numeric" });
+  return Array.from({ length: PICKUP_DATE_WINDOW_DAYS }, (_, index) => addDays(today, index))
+    .filter((dateKey) => availablePickupSlots(dateKey, now).length > 0)
+    .map((dateKey) => ({ label: format.format(new Date(`${dateKey}T00:00:00.000Z`)), value: dateKey }));
+}
+
+/** "2026-09-30" → "Rabu, 30 Sep 2026". */
+export function pickupDateLabel(dateKey: string) {
+  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", timeZone: "UTC", weekday: "long", year: "numeric" })
+    .format(new Date(`${dateKey}T00:00:00.000Z`));
+}
+
+export type PickupScheduleError = "date" | "slot";
+
+/** The one schedule rule: a date inside the window and a slot still bookable on it. */
+export function checkPickupSchedule(dateKey: string, slot: string, now: Date): PickupScheduleError | null {
+  const today = jakartaDateKey(now);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || Number.isNaN(Date.parse(`${dateKey}T00:00:00.000Z`))
+    || dateKey < today || dateKey > addDays(today, PICKUP_DATE_WINDOW_DAYS - 1)) return "date";
+  if (!isPickupSlot(slot) || !availablePickupSlots(dateKey, now).includes(slot)) return "slot";
+  return null;
+}
+
+/**
+ * "2", "0,25", "1.5" kg → whole grams as a string, exactly (no float arithmetic); at most three
+ * decimals. Anything else is "" so the server's own weight message answers it.
+ */
+export function kilogramsToGrams(value: string) {
+  const match = /^(\d{1,6})(?:[.,](\d{1,3}))?$/.exec(value.trim());
+  if (!match) return "";
+  const grams = Number(match[1]) * 1_000 + Number((match[2] ?? "").padEnd(3, "0"));
+  return grams > 0 ? String(grams) : "";
+}
+
+/** Grams → "1,25 kg" for summaries. */
+export function gramsToKilogramLabel(grams: number) {
+  return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(grams / 1_000)} kg`;
+}
+
+/**
+ * PR-72: the total weight of the product rows (each row's weight is that row's total), in grams.
+ * Rows without a name are unused and ignored; any unreadable weight on a named row gives "".
+ */
+export function composeProductWeightGrams(rows: readonly (ProductRow & { weightKg: string })[]) {
+  const named = rows.filter((row) => row.name.trim() !== "");
+  const counted = named.length > 0 ? named : rows;
+  const grams = counted.map((row) => kilogramsToGrams(row.weightKg));
+  if (grams.length === 0 || grams.some((value) => value === "")) return "";
+  return String(grams.reduce((sum, value) => sum + Number(value), 0));
+}
+
+/** "Pengirim di label" while masking is off (PR-71): the gerai's name, WhatsApp and pickup address. */
+export function geraiSenderIdentity(
+  gerai: { name: string; phone: string | null },
+  point: { pickupAddressLabel: string } | null,
+) {
+  return { address: geraiAddress(point), name: gerai.name, phone: gerai.phone ?? "" };
+}
+
+/**
+ * T-205 → T-211: whether "Konfirmasi & terbitkan AWB" may be pressed, and the one sentence that
+ * says why not. The physical-check tick is a client gate on top of the server's own
+ * `confirmation=confirmed` requirement; every other refusal stays the server's.
+ */
+export function issuanceGate(input: {
+  codFormulaRetired: boolean;
+  codOngkirBlocked: boolean;
+  consented: boolean;
+  fixtureEnabled: boolean;
+  pending: boolean;
+  physicalCheck: boolean;
+  selected: boolean;
+}) {
+  const confirmDisabled = input.codFormulaRetired || !input.selected || !input.fixtureEnabled || input.pending || input.codOngkirBlocked;
+  const message = input.codFormulaRetired
+    ? null
+    : !input.fixtureEnabled
+      ? "Penerbitan dikunci untuk data ini."
+      : !input.selected
+        ? "Pilih layanan terlebih dahulu."
+        : input.codOngkirBlocked
+          ? "Periksa ongkir COD yang ditagih kurir."
+          : !input.consented
+            ? input.physicalCheck
+              ? "Centang “Paket sudah dicek fisik” terlebih dahulu."
+              : "Centang konfirmasi di atas terlebih dahulu."
+            : null;
+  return { confirmDisabled, message, submitDisabled: confirmDisabled || !input.consented };
+}
+
+/** The option fields the charge lines read (a `ShipmentEstimateOption` satisfies it). */
+export type IssuanceChargeOption = {
+  codBreakdown: {
+    codFeeIdr: number;
+    goodsValueIdr: number;
+    providerCodAmountIdr: number;
+    roundingIdr: number;
+    shippingAmountIdr: number;
+  } | null;
+  insuranceAmountIdr: number | null;
+  shippingAmountIdr: number;
+  shippingDeductedIdr?: number;
+};
+
+export type IssuanceCharges = {
+  note: string;
+  rows: { label: string; amountIdr: number | null }[];
+  total: { label: string; amountIdr: number | null };
+};
+
+/**
+ * T-211: the "Rincian komponen biaya" lines and the big total of the Buat kiriman rail for one
+ * chosen service. COD adds up exactly (goods + ongkir + Mengantar's 3,33% + rounding = total,
+ * T-193); COD Ongkir's total is the charge the courier collects; Non-COD's is the ongkir.
+ * Null when no service is chosen or a COD service carries no honest breakdown.
+ */
+export function issuanceCharges(input: {
+  codOngkirChargeIdr: number | null;
+  declaredValueIdr: number;
+  option: IssuanceChargeOption | null;
+  paymentMethod: "COD" | "COD_ONGKIR" | "NON_COD";
+}): IssuanceCharges | null {
+  const { option } = input;
+  if (!option) return null;
+  if (input.paymentMethod === "COD") {
+    const breakdown = option.codBreakdown;
+    if (!breakdown) return null;
+    return {
+      note: "Ditagih kurir ke penerima saat serah terima.",
+      rows: [
+        { amountIdr: breakdown.goodsValueIdr, label: "Nilai barang" },
+        { amountIdr: breakdown.shippingAmountIdr, label: "Ongkir" },
+        { amountIdr: breakdown.codFeeIdr, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` },
+        ...(breakdown.roundingIdr > 0 ? [{ amountIdr: breakdown.roundingIdr, label: "Pembulatan" }] : []),
+      ],
+      total: { amountIdr: breakdown.providerCodAmountIdr, label: "Total tagihan COD" },
+    };
+  }
+  if (input.paymentMethod === "COD_ONGKIR") {
+    return {
+      note: "Barang sudah dibayar; kurir hanya menagih ongkir.",
+      rows: [
+        { amountIdr: input.declaredValueIdr, label: "Nilai barang (sudah dibayar)" },
+        { amountIdr: option.shippingDeductedIdr ?? null, label: "Ongkir dipotong Mengantar" },
+      ],
+      total: { amountIdr: input.codOngkirChargeIdr, label: "Ongkir ditagih kurir" },
+    };
+  }
+  return {
+    note: "Kurir tidak menagih apa pun ke penerima.",
+    rows: [
+      { amountIdr: input.declaredValueIdr, label: "Nilai barang (asuransi)" },
+      ...(option.insuranceAmountIdr === null ? [] : [{ amountIdr: option.insuranceAmountIdr, label: "Asuransi" }]),
+    ],
+    total: { amountIdr: option.shippingAmountIdr, label: "Ongkir layanan" },
+  };
+}

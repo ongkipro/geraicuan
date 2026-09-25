@@ -49,7 +49,8 @@ describe("Mengantar estimate normalization", () => {
       insuranceAmountIdr: null,
       insuranceSourceField: null,
       deliveryEstimate: "2 - 3 days",
-      codEligible: false,
+      // T-223 (DATA-13): JNE omits `unsupported_cod`; absent no longer means "no COD".
+      codEligible: true,
       normalPriceIdr: 8_000,
       specialPriceIdr: 5_600,
       codFeeIdr: 0,
@@ -64,6 +65,38 @@ describe("Mengantar estimate normalization", () => {
       shippingAmountIdr: 22_500,
       codEligible: false,
     }));
+  });
+
+  it("T-223: offers COD unless the capture says otherwise, and hides origin/pickup-unsupported services", async () => {
+    const fixture = await loadFixture();
+    const data = fixture.response.body.data as Record<string, Record<string, unknown>>;
+    const cod = (services: ReturnType<typeof normalizeMengantarEstimateServices>) =>
+      Object.fromEntries(services.map((service) => [service.providerService, service.codEligible]));
+
+    // Captured shapes: key absent (JNE, SiCepat, Ninja), explicit false (SAP),
+    // explicit true (SapCargo), coverage_cod true (SAP/SAPLite).
+    expect(cod(normalizeMengantarEstimateServices(data))).toMatchObject({
+      JNE: true, JNECargo: true, SiCepat: true, SiCepatCargo: true, Ninja: true,
+      SAP: true, SAPLite: true, SapCargo: false,
+    });
+
+    const flipped = normalizeMengantarEstimateServices({
+      ...data,
+      SAP: { ...data.SAP, coverage_cod: false },
+      SiCepat: { ...data.SiCepat, unsupportedOriginSicepat: true },
+      Ninja: { ...data.Ninja, unsupportedOriginNinja: true },
+      SiCepatCargo: { ...data.SiCepatCargo, unsupportedPickup: true },
+    });
+    expect(cod(flipped).SAP).toBe(false);
+    for (const hidden of ["SiCepat", "Ninja", "SiCepatCargo"]) {
+      expect(flipped.map((service) => service.providerService)).not.toContain(hidden);
+    }
+
+    // Only origin/pickup-unsupported services left: an unsupported route, not a provider failure.
+    expect(() => normalizeMengantarEstimateServices({
+      SiCepat: { ...data.SiCepat, unsupportedOriginSicepat: true },
+      Ninja: { ...data.Ninja, unsupportedPickup: true },
+    })).toThrow(MengantarNoSupportedServicesError);
   });
 
   it("fails closed for an unrecognized provider payload", () => {

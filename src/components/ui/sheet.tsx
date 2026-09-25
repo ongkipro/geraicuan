@@ -77,7 +77,7 @@ function SheetContent({
             >
               <XIcon
               />
-              <span className="sr-only">Tutup navigasi</span>
+              <span className="sr-only">Tutup</span>
             </Button>
           </SheetPrimitive.Close>
         )}

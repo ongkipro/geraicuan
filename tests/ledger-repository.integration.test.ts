@@ -153,6 +153,7 @@ async function issueOrder(
     completeProviderOrder(tx, context, ids.batchId, {
       shipmentId: ids.shipmentId,
       providerOrderId: `provider-${ids.orderId}`,
+      providerBatchId: `provider-batch-${ids.orderId}`,
       isPaid,
       cnoteNo,
     }));
@@ -273,9 +274,10 @@ describe("immutable tenant operational ledger", () => {
       [recoveryId, tenantA, order.batchId, order.orderId, userA],
     );
 
+    // T-223 (DATA-13): recovery correlates on the stored Mengantar batch, not the order id.
     await withTenantContext(appDb, userA, tenantA, (tx, context) =>
       completeUnpaidRecovery(tx, context, order.batchId, recoveryId, {
-        providerBatchId: `provider-${order.orderId}`,
+        providerBatchId: `provider-batch-${order.orderId}`,
         courier: "JNE",
         cnoteNo: "AWB-RECOVERED",
       }));
@@ -292,7 +294,7 @@ describe("immutable tenant operational ledger", () => {
 
     await expect(withTenantContext(appDb, userA, tenantA, (tx, context) =>
       completeUnpaidRecovery(tx, context, order.batchId, recoveryId, {
-        providerBatchId: `provider-${order.orderId}`,
+        providerBatchId: `provider-batch-${order.orderId}`,
         courier: "JNE",
         cnoteNo: "AWB-RECOVERED",
       }))).rejects.toThrow("Unpaid recovery is unavailable.");

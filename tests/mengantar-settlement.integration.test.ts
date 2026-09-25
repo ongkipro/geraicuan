@@ -8,12 +8,14 @@ import {
   MengantarSettlementTooLargeError,
   normalizeMengantarInvoicePage,
   normalizeMengantarOrderPage,
+  parseMengantarWibTimestamp,
 } from "@/lib/mengantar-settlement";
 import { providerSettlementAccountKey } from "@/db/provider-settlement-repository";
 import { validateMengantarTransportScope } from "@/lib/mengantar-order";
 
 const invoices = JSON.parse(readFileSync("tests/fixtures/mengantar-invoices.sanitized.json", "utf8"));
 const orders = JSON.parse(readFileSync("tests/fixtures/mengantar-orders.sanitized.json", "utf8"));
+const orderContract = JSON.parse(readFileSync("tests/fixtures/mengantar-order-contract.shape.json", "utf8"));
 const credentials = { apiKey: "SECRET-KEY-must-never-leak", baseUrl: "https://provider.example.test", pickupAddressId: "pickup" };
 const period = { start: new Date("2026-09-01T00:00:00+07:00"), end: new Date("2026-10-01T00:00:00+07:00") };
 const clone = <T>(value: T): T => structuredClone(value);
@@ -102,13 +104,50 @@ describe("Mengantar settlement contract", () => {
     expect(() => normalizeMengantarInvoicePage({ ...invoices.reconciliation, success: false }, "SETTLEMENT")).toThrow(MengantarSettlementError);
   });
 
+  it("T-223: reads lastHistory desc/time (WIB) and pod_code from the captured record shape", () => {
+    const [first, second, third] = clone(orders.list.data);
+    // Captured values: lastHistory {date "05-09-2026 16:16", desc, code "D02"}, pod_code "D02".
+    first.lastHistory = orderContract.fields.lastHistory.shape;
+    first.pod_code = orderContract.fields.pod_code.shape;
+    second.lastHistory = { date: "31-02-2026 10:00", desc: "  \n " };
+    second.pod_code = { nested: true };
+    third.lastHistory = "not an object";
+    third.pod_code = 402;
+    const page = normalizeMengantarOrderPage({ ...orders.list, data: [first, second, third] });
+
+    expect(page.orders[0]).toMatchObject({
+      lastHistoryDesc: orderContract.fields.lastHistory.shape.desc,
+      lastHistoryAt: new Date("2026-09-05T09:16:00.000Z"),
+      podCode: "D02",
+    });
+    expect(page.orders[1]).toMatchObject({ status: "RTS", lastHistoryDesc: null, lastHistoryAt: null, podCode: null });
+    expect(page.orders[2]).toMatchObject({ lastHistoryDesc: null, lastHistoryAt: null, podCode: "402" });
+  });
+
+  it.each([
+    ["05-09-2026 16:16", "2026-09-05T09:16:00.000Z"],
+    ["01-01-2026 03:00:30", "2025-12-31T20:00:30.000Z"],
+    ["2026-09-05T16:16:00Z", null],
+    ["05-09-2026", null],
+    ["32-01-2026 10:00", null],
+    ["29-02-2026 10:00", null],
+    ["05-09-2026 24:00", null],
+    [null, null],
+    [1_757_000_000, null],
+  ])("parses Mengantar WIB time %j defensively", (value, expected) => {
+    const parsed = parseMengantarWibTimestamp(value);
+    expect(parsed?.toISOString() ?? null).toBe(expected);
+  });
+
   it("keeps order statuses with an AWB, skips deleted orders and drops PII", () => {
     const page = normalizeMengantarOrderPage(orders.list);
     expect(page.pageLength).toBe(5);
+    // T-223: this capture carries no `lastHistory`/`pod_code`, so the new evidence fields are null.
+    const noHistory = { lastHistoryDesc: null, lastHistoryAt: null, podCode: null };
     expect(page.orders).toEqual([
-      { cnoteNo: "SANITIZED-CNOTE-0005", status: "DELIVERED" },
-      { cnoteNo: "SANITIZED-CNOTE-0003", status: "RTS" },
-      { cnoteNo: "SANITIZED-CNOTE-0006", status: "UNDELIVERED" },
+      { cnoteNo: "SANITIZED-CNOTE-0005", status: "DELIVERED", ...noHistory },
+      { cnoteNo: "SANITIZED-CNOTE-0003", status: "RTS", ...noHistory },
+      { cnoteNo: "SANITIZED-CNOTE-0006", status: "UNDELIVERED", ...noHistory },
     ]);
     expect(JSON.stringify(page)).not.toMatch(/SENTINEL/);
   });

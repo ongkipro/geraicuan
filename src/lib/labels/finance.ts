@@ -1,4 +1,4 @@
-import { normalizeProviderDeliveryStatus, PROVIDER_DELIVERY_STATUS_MAP } from "@/lib/provider-delivery-status";
+import { lookupProviderDeliveryStatus, normalizeProviderDeliveryStatus } from "@/lib/provider-delivery-status";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 
 /**
@@ -9,6 +9,9 @@ import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 const PROVIDER_ONLY_STATUS_LABELS: Readonly<Record<string, string>> = {
   "PENDING PICKUP": "Menunggu dijemput kurir",
   RTS: "Retur",
+  // T-231: unverified app vocabulary (§9.3) that names no lifecycle state.
+  "MENUNGGU PENJEMPUTAN": "Menunggu dijemput kurir",
+  "UNPAID ORDER": "Belum dibayar ke Mengantar",
 };
 
 /**
@@ -20,6 +23,6 @@ export function providerOrderStatusLabel(status: string | null | undefined): str
   if (!status?.trim()) return "—";
   const normalized = normalizeProviderDeliveryStatus(status);
   if (Object.hasOwn(PROVIDER_ONLY_STATUS_LABELS, normalized)) return PROVIDER_ONLY_STATUS_LABELS[normalized];
-  const mapped = Object.hasOwn(PROVIDER_DELIVERY_STATUS_MAP, normalized) ? PROVIDER_DELIVERY_STATUS_MAP[normalized] : null;
+  const mapped = lookupProviderDeliveryStatus(normalized);
   return mapped ? SHIPMENT_STATUS_PRESENTATION[mapped].label : `Status tidak dikenal (${normalized})`;
 }

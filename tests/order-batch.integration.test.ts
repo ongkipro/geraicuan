@@ -22,6 +22,8 @@ import {
   buildMengantarOrderPayload,
   MengantarOrderPayloadError,
   orchestrateFixtureBackedMengantarOrders,
+  ORDER_CONFLICT_MAX_ATTEMPTS,
+  readMengantarOrderHttpResponse,
   type MengantarOrderRequest,
   type MengantarOrderTransport,
   type MengantarOrderTransportBinding,
@@ -1121,6 +1123,184 @@ describe("fixture-backed Mengantar order orchestration", () => {
     expect(maxActive).toBe(1);
   });
 
+  it("T-223: serializes a JNE submission under the same account lock as dynamic couriers", async () => {
+    const firstConfirmation = await seedEstimatedShipment(12, tenantA, outletA, "JNE");
+    const secondConfirmation = await seedEstimatedShipment(13, tenantA, outletA2, "JNE");
+    let active = 0;
+    let maxActive = 0;
+    let releaseFirst!: () => void;
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const transport: MengantarOrderTransport = {
+      async submit() {
+        calls += 1;
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        if (calls === 1) {
+          signalStarted();
+          await gate;
+        }
+        active -= 1;
+        return { success: true, data: fixture.paid.response.data.slice(calls - 1, calls) };
+      },
+    };
+
+    const first = orchestrateFixtureBackedMengantarOrders(input([firstConfirmation], transport));
+    await started;
+    const second = orchestrateFixtureBackedMengantarOrders(input([secondConfirmation], transport));
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(calls).toBe(2);
+    expect(maxActive).toBe(1);
+  });
+
+  describe("T-223 HTTP transport: 409 retry and captured identity", () => {
+    // Identity values from the sanitized GET /order capture (`_id`, `ORDER_ID`)
+    // and the batch shape from the stored-record contract capture (`batch`).
+    let capturedIdentity: { _id: string; ORDER_ID: string; batch: string };
+
+    beforeAll(async () => {
+      const orders = JSON.parse(await readFile(
+        new URL("./fixtures/mengantar-orders.sanitized.json", import.meta.url), "utf8",
+      )) as { list: { data: Array<{ _id: string; ORDER_ID: string }> } };
+      const contract = JSON.parse(await readFile(
+        new URL("./fixtures/mengantar-order-contract.shape.json", import.meta.url), "utf8",
+      )) as { fields: { batch: { shape: string } } };
+      const [first] = orders.list.data;
+      capturedIdentity = { _id: first!._id, ORDER_ID: first!.ORDER_ID, batch: contract.fields.batch.shape };
+    });
+
+    function httpTransport(statuses: number[]) {
+      const sleeps: number[] = [];
+      let calls = 0;
+      const stubbedFetch = async () => {
+        const status = statuses[Math.min(calls, statuses.length - 1)]!;
+        calls += 1;
+        return status === 409
+          ? new Response(JSON.stringify({ success: false, message: "Sedang ada proses pembuatan order" }), { status })
+          : new Response(JSON.stringify({
+              success: true,
+              data: [{ ...capturedIdentity, isPaid: true, cnote_no: "SANITIZED-CNOTE-0409" }],
+            }), { status, headers: { "content-type": "application/json" } });
+      };
+      const transport: MengantarOrderTransport = {
+        async submit() {
+          return readMengantarOrderHttpResponse(await stubbedFetch());
+        },
+      };
+      return {
+        transport,
+        sleeps,
+        sleep: async (ms: number) => { sleeps.push(ms); },
+        calls: () => calls,
+      };
+    }
+
+    async function snapshot() {
+      const [row] = await adminDb
+        .select({
+          status: schema.providerOrderSnapshots.status,
+          providerOrderId: schema.providerOrderSnapshots.providerOrderId,
+          providerBatchId: schema.providerOrderSnapshots.providerBatchId,
+          cnoteNo: schema.providerOrderSnapshots.cnoteNo,
+          safeResponseCode: schema.providerOrderSnapshots.safeResponseCode,
+        })
+        .from(schema.providerOrderSnapshots);
+      return row;
+    }
+
+    it("retries a 409 with bounded backoff, then reads `_id` and `batch` from the accepted response", async () => {
+      const confirmation = await seedEstimatedShipment(14, tenantA, outletA, "JNE");
+      const http = httpTransport([409, 409, 200]);
+
+      const result = await orchestrateFixtureBackedMengantarOrders({
+        ...input([confirmation], http.transport),
+        sleep: http.sleep,
+      });
+
+      expect(result.batches[0]).toMatchObject({ status: "COMPLETED", submitted: true });
+      expect(http.calls()).toBe(3);
+      expect(http.sleeps).toEqual([500, 1000]);
+      expect(await snapshot()).toEqual({
+        status: "ISSUED",
+        providerOrderId: capturedIdentity._id,
+        providerBatchId: capturedIdentity.batch,
+        cnoteNo: "SANITIZED-CNOTE-0409",
+        safeResponseCode: "ORDER_ACCEPTED",
+      });
+    });
+
+    it("maps a final 409 to the unknown path without accepting the order or retrying again", async () => {
+      const confirmation = await seedEstimatedShipment(15, tenantA, outletA, "JNE");
+      const http = httpTransport([409]);
+
+      const result = await orchestrateFixtureBackedMengantarOrders({
+        ...input([confirmation], http.transport),
+        sleep: http.sleep,
+      });
+
+      expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+      expect(http.calls()).toBe(ORDER_CONFLICT_MAX_ATTEMPTS);
+      expect(http.sleeps).toEqual([500, 1000]);
+      expect(await snapshot()).toEqual({
+        status: "SUBMISSION_UNKNOWN",
+        providerOrderId: null,
+        providerBatchId: null,
+        cnoteNo: null,
+        safeResponseCode: "ORDER_PROVIDER_CONFLICT",
+      });
+      const [shipment] = await adminDb
+        .select({ status: schema.shipments.status })
+        .from(schema.shipments)
+        .where(eq(schema.shipments.id, confirmation.shipmentId));
+      expect(shipment?.status).toBe("SUBMISSION_UNKNOWN");
+
+      const again = await orchestrateFixtureBackedMengantarOrders({
+        ...input([confirmation], http.transport),
+        sleep: http.sleep,
+      });
+      expect(again.batches[0]?.submitted).toBe(false);
+      expect(http.calls()).toBe(ORDER_CONFLICT_MAX_ATTEMPTS);
+    });
+
+    it("falls back to `ORDER_ID` when `_id` is absent", async () => {
+      const confirmation = await seedEstimatedShipment(16, tenantA, outletA, "JNE");
+      await orchestrateFixtureBackedMengantarOrders(input([confirmation], {
+        async submit() {
+          return {
+            success: true,
+            data: [{ ORDER_ID: capturedIdentity.ORDER_ID, isPaid: true, cnote_no: "SANITIZED-CNOTE-0410" }],
+          };
+        },
+      }));
+      expect(await snapshot()).toMatchObject({
+        status: "ISSUED",
+        providerOrderId: capturedIdentity.ORDER_ID,
+        providerBatchId: null,
+      });
+    });
+
+    it("fails a response whose `batch` and `batch_id` disagree closed", async () => {
+      const confirmation = await seedEstimatedShipment(17, tenantA, outletA, "JNE");
+      const result = await orchestrateFixtureBackedMengantarOrders(input([confirmation], {
+        async submit() {
+          return {
+            success: true,
+            data: [{ ...capturedIdentity, batch_id: "SANITIZED-OTHER-BATCH", isPaid: true, cnote_no: "SANITIZED-CNOTE-0411" }],
+          };
+        },
+      }));
+      expect(result.batches[0]?.status).toBe("SUBMISSION_UNKNOWN");
+      expect(await snapshot()).toMatchObject({
+        providerOrderId: null,
+        safeResponseCode: "ORDER_RESPONSE_IDENTITY_AMBIGUOUS",
+      });
+    });
+  });
+
   it("fails conflicting provider order identities closed", async () => {
     const confirmation = await seedEstimatedShipment(19, tenantA, outletA, "JNE");
     const result = await orchestrateFixtureBackedMengantarOrders(input([confirmation], {
@@ -1443,7 +1623,8 @@ describe("fixture-backed Mengantar order orchestration", () => {
       courier: "JNE",
       safeProviderStatus: "COMPLETED",
       retryResult: "accepted",
-      queueResult: "queued",
+      // T-223 (DATA-13): every courier, JNE included, is serialized per Mengantar account.
+      queueResult: "serialized",
     });
     expect(Object.keys(tenantAEvents[0]!).sort()).toEqual([
       "actorId",

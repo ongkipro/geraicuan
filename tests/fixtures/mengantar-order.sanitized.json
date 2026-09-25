@@ -23,6 +23,7 @@
       "data": [
         {
           "order_id": "SANITIZED-ORDER-UNPAID",
+          "batch": "SANITIZED-BATCH-UNPAID",
           "isPaid": false,
           "cnote_no": null
         }

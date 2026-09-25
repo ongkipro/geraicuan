@@ -139,6 +139,7 @@ describe("tenant isolation posture", () => {
       "shipment_cod_totals",
       "shipment_estimate_services",
       "shipment_estimate_snapshots",
+      "shipment_invoices",
       "shipment_parties",
       "shipment_rts_events",
     ]) {
@@ -155,7 +156,8 @@ describe("tenant isolation posture", () => {
     expect(await effectiveGrants("provider_order_snapshots")).toEqual([
       "INSERT",
       "SELECT",
-      "UPDATE(cnote_no,is_paid,provider_order_id,resolved_at,safe_response_code,status)",
+      // T-223 / 0056: provider_batch_id is written when an order is accepted.
+      "UPDATE(cnote_no,is_paid,provider_batch_id,provider_order_id,resolved_at,safe_response_code,status)",
     ]);
     expect(await effectiveGrants("provider_unpaid_recoveries")).toEqual([
       "INSERT",

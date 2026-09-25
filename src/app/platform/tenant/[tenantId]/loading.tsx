@@ -1,0 +1,5 @@
+import { PlatformSkeleton } from "../../_components/platform-skeleton";
+
+export default function PlatformTenantDetailLoading() {
+  return <PlatformSkeleton cards={[4, 4, 5, 2, 2]} description="Memuat data tenant…" label="Memuat detail tenant" tiles={4} title="Detail tenant" />;
+}

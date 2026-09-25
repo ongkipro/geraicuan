@@ -20,6 +20,7 @@
 | `provider_batches` | Yes | Idempotency key, courier, upstream batch ID, queue/status. |
 | `provider_order_snapshots` | Yes | Sanitized request/response fields, provider order ID, AWB, fees, `is_paid`. |
 | `print_events` | Yes | Shipment label print/reprint event and actor/time. |
+| `shipment_invoices` | Yes | Immutable nota for one issued shipment: number, issuer, snapshot document and charge (DATA-14). |
 | `ledger_entries` | Yes | Immutable operational money entry, source transition, effective time, and reversal reference. |
 | `reconciliation_runs` | Yes | Daily/monthly tenant reconciliation period, source totals, variance, status, and actor. |
 | `audit_events` | Scope-tagged | Security-sensitive Super Admin/tenant-admin changes. |
@@ -197,3 +198,66 @@ Party phones are stored in one canonical Indonesian form (`0` + NSN), so `+62…
 - **Review** moves `PROVISIONING` → `ACTIVE` (approval, owner verified) or → `ARCHIVED` (rejection, reason in audit `metadata.reason`). Nothing else may move a tenant out of `PROVISIONING`.
 - **Policies moved for setup** and the shipping policies left ACTIVE-only are listed in `06-TENANT-ISOLATION.md` TEN-5. As DATA-11 records, the application rule and the database rule move together: the approval gate in `withTenantContext` is backed by the unchanged ACTIVE-only shipping policies, and the D-9 resolver refusal by RESTRICTIVE `*_credential_policy` INSERT policies on `shipment_estimate_snapshots`, `provider_batches` and `provider_settlement_pulls`.
 - **Upgrade proof.** `scripts/verify-migration-upgrade.mjs` writes ACTIVE, SUSPENDED and legacy PROVISIONING tenants, verified/unverified/suspended users, memberships, a platform role and four audit rows before 0051, refuses to compare fewer than the expected rows, proves them unchanged after, checks the constraints validated, the exact set of `PROVISIONING` policies, ≥30 ACTIVE-only shipping policies and the allocation function, and exercises the runtime role (no self-transition, no forged audit action, verification column writable, name not, registration shape).
+
+## DATA-14 — Shipment invoices (PR-76–PR-80, T-221, planned migration 0055)
+- Owner: Engineering owner
+- Status: Accepted design 2026-09-26; not built until T-221.
+
+`shipment_invoices` is a tenant-scoped, **insert-only** nota for one issued shipment. It is a charge document, not payment evidence (spec 02 §v3.1; GeraiOS spec 11 BILL-1/3/4).
+
+| Column | Rule |
+|---|---|
+| `id` uuid PK; `tenant_id`, `shipment_id` NOT NULL | FK `(shipment_id, tenant_id)` → `shipments(id, tenant_id)` ON DELETE RESTRICT; **UNIQUE (`shipment_id`)** — at most one invoice per shipment. |
+| `provider_order_snapshot_id` NOT NULL | FK `(id, tenant_id)` → `provider_order_snapshots`; the snapshot must carry `cnote_no` (checked in the issuing statement, which reads it in the same transaction). |
+| `invoice_number` text NOT NULL | `'INV-' || shipments.public_reference`; UNIQUE (`tenant_id`, `invoice_number`); CHECK `^INV-[A-Z0-9]{2,5}-[0-9]{5,}$`. Derived, so no counter or gap handling is needed. |
+| `issued_at` timestamptz NOT NULL default now(); `issued_by_user_id` NOT NULL | Issuer identity for audit. |
+| `template_version` smallint NOT NULL default 1 | Rendering version; a reprint uses the stored version. |
+| `document` jsonb NOT NULL | The rendered snapshot: `gerai {name, whatsapp, address}`, `resi`, `courierService`, `sender {name, phone, city}` (the label sender after masking, PR-71), `recipient {name, city}` (no full address or phone — privacy minimum), `items [{name, quantity}]` (≤ 20), `weightGrams`, `deliveryEstimate`. CHECK `jsonb_typeof(document) = 'object'`. |
+| `shipping_charge_idr` integer NOT NULL ≥ 0 | The confirmed provider `price` (`provider_order_snapshots.shipping_amount_idr`). Never the gerai's cost (`provider_charged_shipping_idr`). |
+| `insurance_idr` integer NOT NULL ≥ 0 | Returned insurance, 0 when none. |
+| `total_idr` integer NOT NULL | CHECK `total_idr = shipping_charge_idr + insurance_idr`. |
+| `collection_mode` text NOT NULL | `NON_COD` \| `COD_SHIPPING_ONLY` \| `COD`, copied from the draft (`is_cod`, `cod_shipping_only`). |
+| `courier_collection_idr` integer NULL | `provider_cod_amount_idr` for COD modes; NULL for `NON_COD` (CHECK pairs mode and nullability). Shown as "Ditagih kurir ke penerima", never added to `total_idr`. |
+| `declared_value_idr` integer NOT NULL ≥ 0 | Information line only. |
+
+**Grants and RLS.** `GRANT SELECT, INSERT` to `geraicuan_app` only (no UPDATE/DELETE: immutability, BILL-4). RLS policy on `tenant_id = current tenant` for both commands, same helper as `shipment_parties`.
+
+**Issuance.** One statement: `INSERT … SELECT … FROM shipments JOIN provider_order_snapshots … WHERE cnote_no IS NOT NULL ON CONFLICT (shipment_id) DO NOTHING`, then `SELECT` the row. Concurrent requests therefore return the same invoice; a shipment without a resi yields no row and the action returns `NOT_ISSUED`. No provider call is made.
+
+**Reprint.** Renders `document` and the money columns only; nothing is re-read from `tenants`, `contacts` or `shipment_drafts`. Reprints are not persisted in v3.1 (`// lazy:` ceiling — add `invoice_print_events` if the owner needs reprint audit).
+
+## DATA-13 — Mengantar provider field register (PR-84, T-223)
+- Owner: Engineering owner
+- Updated: 2026-09-26, from a read-only comparison with `~/Projects/adsbookcms` / `~/Projects/zvarashop` (same AdsBookCMS code line) and this repository's sanitized captures. No live call was made for this register.
+
+Evidence: **L** observed live and captured in `tests/fixtures`; **D** documented by Mengantar/support; **A** assumed (stub or hand-written fixture). An **A** field is never sent to Mengantar in production (PR-84).
+
+| Area | Field | GeraiCUAN today | Evidence | Action |
+|---|---|---|---|---|
+| Estimate | `price` → ongkir; `unsupported` hides service | used | L | keep |
+| Estimate | `unsupported_cod` | COD offered only when the key is `false`; the key is absent on JNE, JNECargo, SiCepat, SiCepatCargo, Ninja captures | L | done T-223 (`tests/mengantar-estimate.integration.test.ts`): COD allowed unless `unsupported_cod === true` or `coverage_cod === false`; service hidden on `unsupportedOrigin*`/`unsupportedPickup === true` (seen only as `false` in captures) |
+| Estimate | `codFee` | always 0 in captures; fee is 3.33% of `COD_AMOUNT` | L | keep the 3.33% rule (DATA-3 v3) |
+| Order request | wrapper and keys | bare array of snake_case (`receiver_*`, `destination_id`, `is_cod`, `cod_amount` …) — **all 14 tried shapes refused** `400 "Undefined error"` | L (refused) | T-153: one owner-approved non-COD probe of the AdsBookCMS shape `{courier, pickup:{type, address_id}, orders:[{customerName, customerPhone, customerAddress, customerAddressDataId, parcelContent, weight, quantity, goodsValue, destinationMark, deliveryInstruction}]}` (A there too; stub-tested only) |
+| Order request | pickup type / date / slot | stored only (0054) | stored orders: `TYPE` PICKUP 99/100, DROP 1/100; `pickupDate` — L (read side) | send only after T-153 proves the key |
+| Order request | sender (masking) | `sender_*` | stored `SHIPPER_NAME/PHONE` — L (read side); app form "Dropshipper" switch | send only after T-153 |
+| Order request | hazardous, landmark | `is_hazardous`, `receiver_landmark` | stored keys `isDangerousGoods`, `destinationMark`/`RECEIVER_ADDR2` — L (read side) | rename after T-153 |
+| Order request | COD amount | shipping-only "COD Ongkir" | stored `COD_AMOUNT == GOODS_AMOUNT` 100/100 — L | revisit COD Ongkir semantics after T-153 |
+| Order request | insurance | not sent (null) | unknown | none until documented |
+| Order response | identity | reads `order_id`/`id` | A; stored records use `_id`, `ORDER_ID`, `batch` — L | done T-223 (`tests/order-batch.integration.test.ts`): `_id` → `ORDER_ID` → `order_id`/`id`; `batch`/`batch_id` → `provider_order_snapshots.provider_batch_id` (0056); confirm on first accepted response (T-153) |
+| Order response | `cnote_no`, `isPaid` | read; unpaid → `AWAITING_UPSTREAM_PAYMENT`, non-boolean fails closed | D | keep |
+| Pay unpaid | `batch_id` | sends the order id | **bug** (batch ≠ order id — L) | done T-223 (`tests/unpaid-recovery.integration.test.ts`): sends `provider_batch_id`; NULL (pre-0056 rows) refused before claim with `PAY_UNPAID_BATCH_ID_MISSING` |
+| Concurrency | `409` on JT/Ninja/SiCepat | advisory lock for those three | D | done T-223 (`tests/order-batch.integration.test.ts`): every courier serialized per account; 409 retried ≤ 3 attempts (500/1000 ms), a final 409 → `SUBMISSION_UNKNOWN` `ORDER_PROVIDER_CONFLICT` |
+| Status | `status` plain string (RTS, DELIVERED, DELIVERY PROBLEM, PENDING PICKUP); unknown refused | mapped | L | keep; capture an in-transit value when seen |
+| Status | Mengantar app "Status Parcel" vocabulary (analysis §9.3: Error, Unpaid Order, Menunggu Penjemputan, Origin gateway, Close by system, Proses gateway, Proses masuk, On delivery, Terkirim (Pending/Completed), Shipment breach, Tertahan, Kendala transportasi, Pengiriman Terkendala, Return Origin, Canceled, Gagal Kirim, Masalah pengiriman, Paket Hilang) | mapped in a separate `PROVIDER_DELIVERY_STATUS_UNVERIFIED_MAP`: trouble → `PROBLEM`, movement and "Terkirim (Pending)" → `IN_TRANSIT`, only "Terkirim (Completed)" → `DELIVERED`, Unpaid Order / Menunggu Penjemputan → no state; same transition graph; anything else stays `UNRECOGNISED` | **UNVERIFIED** — app display text only, never seen in an API `status` | done T-231 (`tests/provider-delivery-vocabulary.integration.test.ts`); move a value to the verified map when captured live |
+| Status | "Tanpa update 48 jam / 4 hari" | Histori filters `STALE_48H` / `STALE_4D` over ISSUED/IN_TRANSIT/PROBLEM: latest observation's `last_history_at`, else its `observed_at`, else issuance `resolved_at`; Tenant Admin only (observations are admin-only under RLS, T-146) | L (inputs) | done T-231 (`tests/shipment-queue.integration.test.ts`) |
+| Status | `lastHistory {date "DD-MM-YYYY HH:mm", desc, code}`, `pod_code` | not stored | L | done T-223 (`tests/provider-settlement-repository.integration.test.ts`, `tests/mengantar-settlement.integration.test.ts`): `last_history_desc`, `last_history_at` (WIB → timestamptz), `pod_code` (0056); unreadable → NULL |
+| Order request | pickup vehicle (app "Volume": Motor/Mobil/Truk) | stored only (`shipment_drafts.pickup_vehicle`, 0057, DATA-15) | app UI only (analysis §9.2); API key unknown | send only after T-153 proves the key (D-19) |
+| Pickup time | `POST /time` (form-urlencoded, `MM-DD-YYYY`, ≥ 90 min, 09–18) | none | D (AdsBookCMS stub only) | after T-153 |
+
+Not ported: AdsBookCMS's JSON-flag status parser (contradicts L evidence), `x-client-source`, cargo filtering. Their tracking sync likely fails on the plain-string `status` — reported to the owner, not fixed here.
+
+## DATA-15 — Pickup vehicle (PR-90, D-19, T-232, migration 0057)
+- Owner: Engineering owner
+- Status: Built 2026-09-26.
+
+`shipment_drafts.pickup_vehicle text NULL` — `MOTOR` | `MOBIL` | `TRUK` (CHECK `shipment_drafts_pickup_vehicle_known`), and NULL unless `handover_type = 'PICKUP'` (CHECK `shipment_drafts_pickup_vehicle_pickup_only`). Optional: a pickup without a chosen vehicle stores NULL; a drop-off never stores one. Written once at draft insert and part of the replay comparison (another vehicle is another submission); never UPDATEd, so no column grant was added (the 0008 table-level INSERT/SELECT covers it). Shown in the Buat kiriman form, saved view, summary rail and Detail kiriman "Penyerahan" through `handoverSummary`. Not sent to Mengantar (`mengantar-order.ts` does not read it) until T-153 verifies the key (DATA-13). Every pre-0057 row is NULL and satisfies both CHECKs (validated; `scripts/verify-migration-upgrade.mjs`).

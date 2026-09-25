@@ -1,6 +1,5 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-
 import { cn } from "cn"
 
 const alertVariants = cva(
@@ -27,9 +26,7 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      // Spec 10 §7: only an urgent failure interrupts a screen reader; an informational
-      // note is a polite status. A caller's explicit `role` still wins (spread below).
-      role={variant === "destructive" ? "alert" : "status"}
+      role="alert"
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />
@@ -57,11 +54,7 @@ function AlertDescription({
     <div
       data-slot="alert-description"
       className={cn(
-        // `max-w-2xl` is the cap the design system already puts on description
-        // prose. Uncapped, alert text ran to 938px on the wide platform and
-        // detail surfaces — the same readability question, and the alerts were
-        // simply the last place nothing capped.
-        "max-w-2xl text-sm text-balance text-muted-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+        "text-sm text-balance text-muted-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
         className
       )}
       {...props}

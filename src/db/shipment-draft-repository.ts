@@ -74,6 +74,10 @@ async function inspectExistingSubmission(
       pickupAddressId: shipmentDrafts.pickupAddressId,
       recipientAddressLandmark: shipmentDrafts.recipientAddressLandmark,
       shippingInstruction: shipmentDrafts.shippingInstruction,
+      handoverType: shipmentDrafts.handoverType,
+      pickupDate: shipmentDrafts.pickupDate,
+      pickupSlot: shipmentDrafts.pickupSlot,
+      pickupVehicle: shipmentDrafts.pickupVehicle,
     })
     .from(shipmentDrafts)
     .where(
@@ -112,6 +116,12 @@ async function inspectExistingSubmission(
       draft.isHazardous === input.isHazardous &&
       draft.recipientAddressLandmark === input.recipientAddressLandmark &&
       draft.shippingInstruction === input.shippingInstruction &&
+      // T-211: a replay with another handover or pickup schedule is another shipment.
+      draft.handoverType === (input.handoverType ?? null) &&
+      draft.pickupDate === (input.pickupDate ?? null) &&
+      draft.pickupSlot === (input.pickupSlot ?? null) &&
+      // T-232: and so is one with another pickup vehicle.
+      draft.pickupVehicle === (input.handoverType === "PICKUP" ? input.pickupVehicle ?? null : null) &&
       draft.packageContent === input.packageContent &&
       draft.packageHeightCm === input.packageHeightCm &&
       draft.packageLengthCm === input.packageLengthCm &&
@@ -220,6 +230,12 @@ export async function createShipmentDraft(
     // destination area. NULL only where the outlet has no pickup point at all.
     pickupAddressId: resolvedPickup?.pickupAddressId ?? null,
     originAreaId: resolvedPickup?.originAreaId ?? null,
+    // T-211 / PR-70: stored and shown only; the order payload does not read these.
+    handoverType: input.handoverType ?? null,
+    pickupDate: input.handoverType === "PICKUP" ? input.pickupDate ?? null : null,
+    pickupSlot: input.handoverType === "PICKUP" ? input.pickupSlot ?? null : null,
+    // T-232 / PR-90: stored and shown only; mengantar-order.ts does not read it.
+    pickupVehicle: input.handoverType === "PICKUP" ? input.pickupVehicle ?? null : null,
     shipmentId: shipment.id,
     tenantId: context.tenantId,
   });
@@ -247,6 +263,69 @@ export async function createShipmentDraft(
 
   return shipment.id;
 }
+
+/**
+ * T-211: one draft as the Buat kiriman flow shows it after "Simpan & cek tarif" — the saved
+ * sections (read-only), the rail and the issuance step. Tenant-scoped; null when absent.
+ */
+export async function loadShipmentFlowDraft(
+  tx: TenantTransaction,
+  context: TenantContext,
+  shipmentId: string,
+) {
+  const [draft] = await tx
+    .select({
+      codShippingOnly: shipmentDrafts.codShippingOnly,
+      declaredValueIdr: shipmentDrafts.declaredValueIdr,
+      destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
+      handoverType: shipmentDrafts.handoverType,
+      id: shipments.id,
+      isCod: shipmentDrafts.isCod,
+      isHazardous: shipmentDrafts.isHazardous,
+      outletId: shipments.outletId,
+      packageContent: shipmentDrafts.packageContent,
+      packageHeightCm: shipmentDrafts.packageHeightCm,
+      packageLengthCm: shipmentDrafts.packageLengthCm,
+      packageQuantity: shipmentDrafts.packageQuantity,
+      packageWeightGrams: shipmentDrafts.packageWeightGrams,
+      packageWidthCm: shipmentDrafts.packageWidthCm,
+      pickupAddressId: shipmentDrafts.pickupAddressId,
+      pickupDate: shipmentDrafts.pickupDate,
+      pickupSlot: shipmentDrafts.pickupSlot,
+      pickupVehicle: shipmentDrafts.pickupVehicle,
+      publicReference: shipments.publicReference,
+      recipientAddressLandmark: shipmentDrafts.recipientAddressLandmark,
+      shippingInstruction: shipmentDrafts.shippingInstruction,
+      status: shipments.status,
+    })
+    .from(shipments)
+    .innerJoin(
+      shipmentDrafts,
+      and(
+        eq(shipmentDrafts.shipmentId, shipments.id),
+        eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .where(and(eq(shipments.id, shipmentId), eq(shipments.tenantId, context.tenantId)))
+    .limit(1);
+  if (!draft) return null;
+  const parties = await tx
+    .select({
+      address: shipmentParties.address,
+      name: shipmentParties.name,
+      phone: shipmentParties.phone,
+      role: shipmentParties.role,
+    })
+    .from(shipmentParties)
+    .where(and(eq(shipmentParties.shipmentId, shipmentId), eq(shipmentParties.tenantId, context.tenantId)));
+  const party = (role: "SENDER" | "RECIPIENT") => {
+    const found = parties.find((candidate) => candidate.role === role);
+    return found ? { address: found.address, name: found.name, phone: found.phone } : null;
+  };
+  return { ...draft, recipient: party("RECIPIENT"), sender: party("SENDER") };
+}
+
+export type ShipmentFlowDraft = NonNullable<Awaited<ReturnType<typeof loadShipmentFlowDraft>>>;
 
 export type ShipmentDraftDestinationForVerification = {
   outletId: string;

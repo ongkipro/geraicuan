@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-17
+Updated: 2026-09-26
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -30,6 +30,14 @@ covers the whole worktree and further Phase 10 tasks will change it again.
 security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
 
+
+## Current — Phase 18/19 (2026-09-26)
+
+- Product: free SaaS for gerai ekspedisi with three cores — kirim, cetak resi (masked label), invoice (spec 02 §v3.1, D-14).
+- Phase 18: UI v3 rebuilt from zero (ADR-0001). T-209 committed; T-210 foundation and screens T-211–T-218 in progress (uncommitted); T-219 screening/review open.
+- Phase 19: T-220 docs and T-221 invoice data/action done (tests re-run by the coordinator); T-223 Mengantar precision in progress; T-222, T-224, T-225, T-226 open.
+- Provider: `POST /order` still blocked (T-153); the AdsBookCMS-shape probe is deferred by the owner (D-16).
+- The review attestations below are historical (pre-v3).
 ## COD money and the thermal label — T-175, T-176, T-177, T-178, T-91, T-150, T-151, T-174 (2026-09-17)
 
 The owner narrowed the product's purpose — "GeraiCUAN is for creating orders with our thermal label and for shipment reports" — and asked that COD be exact and never lose money. Everything here was derived from the owner's own Mengantar account rather than from documentation, as counts only.

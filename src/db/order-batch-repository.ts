@@ -78,6 +78,8 @@ export type PreparedProviderBatch = ProviderBatchScope & {
 export type ProviderOrderResult = {
   shipmentId: string;
   providerOrderId: string;
+  /** Mengantar `batch` — what `pay-unpaid` takes as `batch_id` (DATA-13). */
+  providerBatchId?: string | null;
   isPaid: boolean;
   cnoteNo: string | null;
 };
@@ -126,10 +128,6 @@ export function providerCourierFromService(providerService: string): string {
     throw new OrderBatchUnavailableError();
   }
   return mengantarCourierOfService(providerService) ?? providerService.trim();
-}
-
-export function requiresProviderAccountSerialization(courier: string): boolean {
-  return ["JT", "Ninja", "SiCepat"].includes(providerCourierFromService(courier));
 }
 
 /** Draft-owned operational columns both order loaders read (PR-47). */
@@ -967,6 +965,7 @@ export async function completeProviderOrder(
     .set({
       status,
       providerOrderId,
+      providerBatchId: result.providerBatchId?.trim() || null,
       isPaid: result.isPaid,
       cnoteNo,
       safeResponseCode: "ORDER_ACCEPTED",

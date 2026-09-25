@@ -79,15 +79,18 @@ describe("shipment lifecycle presentation copy", () => {
     }
   });
 
-  // T-209 (ADR-0001): UI v3 rebuild in progress — the pages this reads were removed; re-enable in T-219.
-  it.skip("keeps one lifecycle vocabulary on every surface that names a status", () => {
+  it("keeps one lifecycle vocabulary on every surface that names a status", () => {
     // The platform monitoring filter, the RTS KPI cards and the reconciliation
     // panel each carried their own map, so one stored value read "Antre retur"
     // to a tenant and "RTS (Antrean)" to a super admin.
+    //
+    // T-212 (UI v3): every v3 shipment badge renders through the one
+    // `ShipmentStatusBadge` (spec 10 v3.1 §4.12), and the Retur tiles name
+    // their states from the presentation. The platform and reconciliation
+    // surfaces are rebuilt in T-213/T-218; T-219 adds them back here.
     for (const file of [
-      "src/app/platform/_components/monitoring-view.tsx",
+      "src/components/app/status-badge.tsx",
       "src/app/app/pengiriman/rts/page.tsx",
-      "src/app/app/pengiriman/[shipmentId]/reconciliation-panel.tsx",
     ]) {
       const source = readFileSync(join(process.cwd(), file), "utf8");
       expect(source, file).toContain("SHIPMENT_STATUS_PRESENTATION");
@@ -147,18 +150,21 @@ describe("shipment lifecycle presentation copy", () => {
     // T-162 added NEEDS_ATTENTION (spec 19 QUE-ATTENTION), the PR-52 panel
     // entry. It is offered in the select too, or choosing it from the panel
     // would leave the select showing nothing.
-    expect(values.slice(0, 5)).toEqual([
+    // T-231 added the Tenant Admin-only "Tanpa update" views (the page drops
+    // them for an operator).
+    expect(values.slice(0, 7)).toEqual([
       "ALL",
       "ACTION_REQUIRED",
       "NEEDS_ATTENTION",
       "READY_TO_PROGRESS",
       "ISSUED_TODAY",
+      "STALE_48H",
+      "STALE_4D",
     ]);
-    expect(values.slice(5)).toEqual([...shipmentStatuses]);
+    expect(values.slice(7)).toEqual([...shipmentStatuses]);
   });
 
-  // T-209 (ADR-0001): UI v3 rebuild in progress — the pages this reads were removed; re-enable in T-219.
-  it.skip("renders the return queue from the shared presentation, not a second copy", () => {
+  it("renders the return queue from the shared presentation, not a second copy", () => {
     const page = readFileSync(
       join(process.cwd(), "src/app/app/pengiriman/rts/page.tsx"),
       "utf8",

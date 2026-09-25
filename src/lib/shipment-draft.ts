@@ -2,6 +2,7 @@ import "server-only";
 
 import { characterClassError, normalizeFieldText, partyNameClass } from "@/lib/field-character-classes";
 import { isPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
+import { checkPickupSchedule, isHandoverType, isPickupVehicle, type HandoverType, type PickupVehicle } from "@/lib/shipment-draft-logic";
 
 const MAX_ADDRESS_LENGTH = 500;
 const MAX_AREA_ID_LENGTH = 160;
@@ -99,12 +100,23 @@ export type ShipmentDraftInput = {
   senderName: string;
   senderPhone: string;
   shippingInstruction: string | null;
+  /**
+   * T-211 / PR-70: how the parcel reaches the courier, and for pickup the WIB date and
+   * one-hour slot start ("09:00"). Stored and shown only — not sent to Mengantar until
+   * T-153 verifies the order contract. Absent (null) on drafts that predate it.
+   */
+  handoverType?: HandoverType | null;
+  pickupDate?: string | null;
+  pickupSlot?: string | null;
+  /** T-232 / PR-90: optional pickup vehicle; always null unless the handover is PICKUP. */
+  pickupVehicle?: PickupVehicle | null;
 };
 
 export type ShipmentDraftField =
   | "declaredValue"
   | "destinationAreaId"
   | "destinationAreaLabel"
+  | "handoverType"
   | "outletId"
   | "packageContent"
   | "packageHeightCm"
@@ -114,6 +126,9 @@ export type ShipmentDraftField =
   | "packageWidthCm"
   | "paymentType"
   | "pickupAddressId"
+  | "pickupDate"
+  | "pickupSlot"
+  | "pickupVehicle"
   | "recipientAddress"
   | "recipientAddressLandmark"
   | "recipientName"
@@ -183,7 +198,7 @@ function readRupiah(value: string) {
   return Number(value.replace(/[.\s]/g, ""));
 }
 
-export function validateShipmentDraft(formData: FormData): ShipmentDraftValidation {
+export function validateShipmentDraft(formData: FormData, now: Date = new Date()): ShipmentDraftValidation {
   const raw = {
     declaredValue: readText(formData, "declaredValue"),
     destinationAreaId: readText(formData, "destinationAreaId"),
@@ -378,6 +393,40 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
     errors.declaredValue = "Nilai barang untuk COD Ongkir harus lebih dari Rp0.";
   }
 
+  // T-211 / PR-70: optional for callers that predate it (absent = not recorded); when given,
+  // a pickup needs a date inside the window and a slot still ≥ 90 minutes ahead.
+  const handoverValue = readText(formData, "handoverType");
+  let handoverType: HandoverType | null = null;
+  let pickupDate: string | null = null;
+  let pickupSlot: string | null = null;
+  let pickupVehicle: PickupVehicle | null = null;
+  if (handoverValue !== "") {
+    if (!isHandoverType(handoverValue)) {
+      errors.handoverType = "Pilih tipe penyerahan paket: Penjemputan terjadwal atau Drop di outlet.";
+    } else {
+      handoverType = handoverValue;
+      if (handoverType === "PICKUP") {
+        const date = readText(formData, "pickupDate");
+        const slot = readText(formData, "pickupSlot");
+        const scheduleError = checkPickupSchedule(date, slot, now);
+        if (scheduleError === "date") {
+          errors.pickupDate = "Pilih tanggal penjemputan (hari ini sampai 6 hari ke depan).";
+        } else if (scheduleError === "slot") {
+          errors.pickupSlot = "Pilih jam penjemputan 09.00–18.00 WIB, paling cepat 90 menit dari sekarang.";
+        } else {
+          pickupDate = date;
+          pickupSlot = slot;
+        }
+        // T-232: optional; absent stores NULL. A value for a drop-off is ignored, like its schedule.
+        const vehicle = readText(formData, "pickupVehicle");
+        if (vehicle !== "") {
+          if (isPickupVehicle(vehicle)) pickupVehicle = vehicle;
+          else errors.pickupVehicle = "Pilih kendaraan penjemputan: Motor, Mobil, atau Truk.";
+        }
+      }
+    }
+  }
+
   if (!isPaymentMethod(paymentType)) {
     errors.paymentType = "Pilih metode pembayaran: Non-COD, COD, atau COD Ongkir.";
   }
@@ -399,6 +448,7 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
       // Form validation never contacts the provider, so the area starts
       // unverified; the caller flips it after re-checking with Mengantar.
       destinationAreaVerified: false,
+      handoverType,
       isCod: paymentType !== "NON_COD",
       isHazardous,
       outletId: raw.outletId,
@@ -410,6 +460,9 @@ export function validateShipmentDraft(formData: FormData): ShipmentDraftValidati
       packageWidthCm: dimensions.packageWidthCm,
       paymentMethod: paymentType,
       pickupAddressId,
+      pickupDate,
+      pickupSlot,
+      pickupVehicle,
       recipientAddress: raw.recipientAddress,
       recipientAddressLandmark,
       recipientName: raw.recipientName,

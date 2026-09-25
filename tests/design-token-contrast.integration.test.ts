@@ -504,7 +504,8 @@ describe("design token contrast", () => {
     for (const [sidebar, shared] of [
       ["--sidebar-primary", "--primary"],
       ["--sidebar-primary-foreground", "--primary-foreground"],
-      ["--sidebar-accent", "--accent"],
+      // v3.2 (D-18): the current item is a white pill (card), not the accent tint.
+      ["--sidebar-accent", "--card"],
       ["--sidebar-accent-foreground", "--accent-foreground"],
       ["--sidebar-ring", "--ring"],
     ] as const) {
@@ -743,7 +744,8 @@ describe("design token contrast", () => {
     for (const [sidebar, shared] of [
       ["--sidebar-primary", "--primary"],
       ["--sidebar-primary-foreground", "--primary-foreground"],
-      ["--sidebar-accent", "--accent"],
+      // v3.2 (D-18): the current item is a white pill (card), not the accent tint.
+      ["--sidebar-accent", "--card"],
       ["--sidebar-accent-foreground", "--accent-foreground"],
       ["--sidebar-ring", "--ring"],
     ] as const) {
@@ -762,7 +764,10 @@ describe("design token contrast", () => {
   it("defines the sunken CMS ground and one resting elevation in both schemes", () => {
     const css = readFileSync("src/app/globals.css", "utf8");
 
-    expect(css).toMatch(/\[data-slot="sidebar-inset"\]\s*\{[^}]*background:\s*var\(--surface-sunken\)/);
+    // T-228 (spec 10 v3.2 §2.1, D-18): the CMS ground is `--background`, Mengantar's #F2F4F8;
+    // `--muted` is the neutral badge/skeleton fill, no longer the ground.
+    expect(css).toMatch(/\[data-slot="sidebar-inset"\]\s*\{[^}]*background:\s*var\(--background\)/);
+    expect(token("--background")).toEqual(parse("#f2f4f8"));
     // `:root, .dark {` at the top is the alias block; the dark palette is the standalone
     // `.dark {` rule further down.
     const darkIndex = css.indexOf("\n.dark {");

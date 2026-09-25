@@ -60,7 +60,14 @@ export type ProviderRefundInvoice = ProviderInvoiceReference & {
   referenceTokens: string[];
 };
 
-export type ProviderOrderStatus = { cnoteNo: string; status: string };
+export type ProviderOrderStatus = {
+  cnoteNo: string;
+  status: string;
+  /** DATA-13 `lastHistory` / `pod_code`; optional so older callers need not name them. */
+  lastHistoryDesc?: string | null;
+  lastHistoryAt?: Date | null;
+  podCode?: string | null;
+};
 
 export type ProviderSettlementSnapshot = {
   invoiceCount: number;
@@ -231,6 +238,61 @@ function pageCount(value: unknown) {
   return value;
 }
 
+const WIB_TIMESTAMP = /^(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2})(?::(\d{2}))?$/;
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+const MAX_HISTORY_DESC_LENGTH = 500;
+const SAFE_POD_CODE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$/;
+
+/**
+ * Mengantar `lastHistory.date`, "DD-MM-YYYY HH:mm" in Asia/Jakarta (UTC+7, no
+ * DST). Anything else, including an impossible calendar date, is null — this
+ * is evidence, and a guessed time is worse than none.
+ */
+export function parseMengantarWibTimestamp(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const match = WIB_TIMESTAMP.exec(value.trim());
+  if (!match) return null;
+  const [day, month, year, hour, minute] = match.slice(1, 6).map(Number) as [number, number, number, number, number];
+  const second = Number(match[6] ?? 0);
+  const utc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const calendar = new Date(utc);
+  if (
+    calendar.getUTCFullYear() !== year
+    || calendar.getUTCMonth() !== month - 1
+    || calendar.getUTCDate() !== day
+    || calendar.getUTCHours() !== hour
+    || calendar.getUTCMinutes() !== minute
+    || calendar.getUTCSeconds() !== second
+  ) {
+    return null;
+  }
+  return new Date(utc - WIB_OFFSET_MS);
+}
+
+function optionalHistoryDesc(value: unknown) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, MAX_HISTORY_DESC_LENGTH) : null;
+}
+
+function optionalPodCode(value: unknown) {
+  const text = typeof value === "number" && Number.isSafeInteger(value) ? String(value)
+    : typeof value === "string" ? value.trim() : "";
+  return SAFE_POD_CODE.test(text) ? text : null;
+}
+
+/** Never throws: a missing or malformed `lastHistory`/`pod_code` must not fail the pull. */
+function orderHistoryEvidence(order: Record<string, unknown>) {
+  const history = order.lastHistory && typeof order.lastHistory === "object" && !Array.isArray(order.lastHistory)
+    ? order.lastHistory as Record<string, unknown>
+    : {};
+  return {
+    lastHistoryDesc: optionalHistoryDesc(history.desc),
+    lastHistoryAt: parseMengantarWibTimestamp(history.date),
+    podCode: optionalPodCode(order.pod_code),
+  };
+}
+
 export function normalizeMengantarOrderPage(payload: unknown) {
   const body = record(payload);
   if (body.success !== true || !Array.isArray(body.data)) throw new MengantarSettlementError();
@@ -240,7 +302,11 @@ export function normalizeMengantarOrderPage(payload: unknown) {
     const order = record(raw);
     if (order.isDeleted === true) continue;
     if (typeof order.cnote_no !== "string" || !order.cnote_no.trim()) continue;
-    orders.push({ cnoteNo: identifier(order.cnote_no), status: status(order.status) });
+    orders.push({
+      cnoteNo: identifier(order.cnote_no),
+      status: status(order.status),
+      ...orderHistoryEvidence(order),
+    });
   }
   return { count, orders, pageLength: body.data.length };
 }

@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { OrderConfirmation } from "@/db/order-batch-repository";
+import { UnpaidRecoveryUnavailableError } from "@/db/unpaid-recovery-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import {
@@ -263,8 +264,9 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
         status: "COMPLETED",
       },
     ]);
+    // T-223 (DATA-13): pay-unpaid takes the stored Mengantar `batch`, never the order id.
     expect(requests).toEqual([
-      { batch_id: "SANITIZED-ORDER-UNPAID", courier: "JNE" },
+      { batch_id: "SANITIZED-BATCH-UNPAID", courier: "JNE" },
     ]);
 
     const [snapshot] = await adminDb
@@ -368,6 +370,49 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
       })
       .from(schema.providerUnpaidRecoveries);
     expect(persisted?.status).toBe("COMPLETED");
+  });
+
+  it("T-223: stores the provider batch apart from the order id at acceptance", async () => {
+    await createAwaitingBatch(20, adminA, tenantA, outletA);
+    const [snapshot] = await adminDb
+      .select({
+        providerOrderId: schema.providerOrderSnapshots.providerOrderId,
+        providerBatchId: schema.providerOrderSnapshots.providerBatchId,
+      })
+      .from(schema.providerOrderSnapshots);
+    expect(snapshot).toEqual({
+      providerOrderId: "SANITIZED-ORDER-UNPAID",
+      providerBatchId: "SANITIZED-BATCH-UNPAID",
+    });
+  });
+
+  it("T-223: refuses a legacy row without a stored batch before claiming or paying", async () => {
+    const { batchId } = await createAwaitingBatch(21, adminA, tenantA, outletA);
+    await adminPool.query("UPDATE provider_order_snapshots SET provider_batch_id = NULL");
+    let payCalls = 0;
+    const transport: MengantarPayUnpaidTransport = {
+      async payUnpaid() {
+        payCalls += 1;
+        return recoveryFixture.issued.response;
+      },
+    };
+
+    await expect(orchestrateFixtureBackedMengantarUnpaidRecovery(
+      recoveryInput(batchId, adminA, tenantA, transport),
+    )).rejects.toMatchObject({ safeCode: "PAY_UNPAID_BATCH_ID_MISSING" });
+    await expect(orchestrateFixtureBackedMengantarUnpaidRecovery(
+      recoveryInput(batchId, adminA, tenantA, transport),
+    )).rejects.toBeInstanceOf(UnpaidRecoveryUnavailableError);
+    expect(payCalls).toBe(0);
+    const recoveries = await adminDb
+      .select({ status: schema.providerUnpaidRecoveries.status })
+      .from(schema.providerUnpaidRecoveries);
+    // Nothing was sent, so the recovery stays queued rather than unknown.
+    expect(recoveries).toEqual([{ status: "PAYMENT_QUEUED" }]);
+    const [snapshot] = await adminDb
+      .select({ status: schema.providerOrderSnapshots.status })
+      .from(schema.providerOrderSnapshots);
+    expect(snapshot?.status).toBe("AWAITING_UPSTREAM_PAYMENT");
   });
 
   it("recovers only the known unpaid order from a partially unknown batch", async () => {

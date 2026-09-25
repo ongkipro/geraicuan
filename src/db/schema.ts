@@ -3,6 +3,7 @@ import {
   boolean,
   bigint,
   check,
+  date,
   foreignKey,
   index,
   jsonb,
@@ -11,6 +12,7 @@ import {
   pgTable,
   text,
   primaryKey,
+  smallint,
   timestamp,
   unique,
   uniqueIndex,
@@ -715,6 +717,16 @@ export const shipmentDrafts = pgTable(
     // outlet's default pair at estimate and submission time.
     pickupAddressId: text("pickup_address_id"),
     originAreaId: text("origin_area_id"),
+    // T-211 / PR-70 (migration 0054): how the parcel reaches the courier and, for a pickup,
+    // the WIB date and one-hour slot start. Stored and shown only; not sent to Mengantar
+    // until T-153 verifies the order contract. NULL on every draft written before it.
+    handoverType: text("handover_type"),
+    pickupDate: date("pickup_date", { mode: "string" }),
+    pickupSlot: text("pickup_slot"),
+    // T-232 / PR-90 / D-19 (migration 0057): the vehicle a scheduled pickup needs (Mengantar's
+    // app "Volume": Motor/Mobil/Truk). Optional, PICKUP only; stored and shown, never sent
+    // to Mengantar until T-153 verifies the key. NULL on every draft written before it.
+    pickupVehicle: text("pickup_vehicle"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -782,6 +794,27 @@ export const shipmentDrafts = pgTable(
       "shipment_drafts_origin_area_id_valid",
       sql`origin_area_id IS NULL
         OR char_length(btrim(origin_area_id)) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "shipment_drafts_handover_type_known",
+      sql`handover_type IS NULL OR handover_type IN ('PICKUP', 'DROP_OFF')`,
+    ),
+    check(
+      "shipment_drafts_pickup_slot_valid",
+      sql`pickup_slot IS NULL OR pickup_slot ~ '^(09|1[0-7]):00$'`,
+    ),
+    check(
+      "shipment_drafts_pickup_schedule_complete",
+      sql`(handover_type = 'PICKUP' AND pickup_date IS NOT NULL AND pickup_slot IS NOT NULL)
+        OR (handover_type IS DISTINCT FROM 'PICKUP' AND pickup_date IS NULL AND pickup_slot IS NULL)`,
+    ),
+    check(
+      "shipment_drafts_pickup_vehicle_known",
+      sql`pickup_vehicle IS NULL OR pickup_vehicle IN ('MOTOR', 'MOBIL', 'TRUK')`,
+    ),
+    check(
+      "shipment_drafts_pickup_vehicle_pickup_only",
+      sql`pickup_vehicle IS NULL OR handover_type = 'PICKUP'`,
     ),
   ],
 );
@@ -1210,6 +1243,10 @@ export const providerOrderSnapshots = pgTable(
       .notNull()
       .default("SUBMISSION_QUEUED"),
     providerOrderId: text("provider_order_id"),
+    // T-223 / DATA-13: Mengantar `batch`, the id `pay-unpaid` expects as
+    // `batch_id`. It is not the order id. NULL on rows accepted before 0056
+    // and whenever the response carried none; unpaid recovery fails closed then.
+    providerBatchId: text("provider_batch_id"),
     isPaid: boolean("is_paid"),
     cnoteNo: text("cnote_no"),
     safeResponseCode: text("safe_response_code"),
@@ -1464,6 +1501,81 @@ export const printEvents = pgTable(
         AND awb_snapshot IS NULL
         AND char_length(btrim(reason_code)) BETWEEN 1 AND 40
       )`,
+    ),
+  ],
+);
+
+export const invoiceCollectionModes = ["NON_COD", "COD_SHIPPING_ONLY", "COD"] as const;
+
+/**
+ * T-221 / DATA-14 (migration 0055): the immutable nota for one issued shipment.
+ * Insert-only (no UPDATE/DELETE grant), at most one per shipment, numbered
+ * `INV-` + the shipment's public reference. `document` is the rendered snapshot
+ * a reprint shows unchanged; the money columns are the charge. It is not
+ * payment evidence.
+ */
+export const shipmentInvoices = pgTable(
+  "shipment_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    providerOrderSnapshotId: uuid("provider_order_snapshot_id").notNull(),
+    invoiceNumber: text("invoice_number").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    issuedByUserId: text("issued_by_user_id").notNull(),
+    templateVersion: smallint("template_version").notNull().default(1),
+    document: jsonb("document").notNull(),
+    shippingChargeIdr: integer("shipping_charge_idr").notNull(),
+    insuranceIdr: integer("insurance_idr").notNull(),
+    totalIdr: integer("total_idr").notNull(),
+    collectionMode: text("collection_mode", { enum: invoiceCollectionModes }).notNull(),
+    courierCollectionIdr: integer("courier_collection_idr"),
+    declaredValueIdr: integer("declared_value_idr").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "shipment_invoices_shipment_tenant_fkey",
+      columns: [table.shipmentId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.tenantId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "shipment_invoices_snapshot_tenant_fkey",
+      columns: [table.providerOrderSnapshotId, table.tenantId],
+      foreignColumns: [providerOrderSnapshots.id, providerOrderSnapshots.tenantId],
+    }).onDelete("restrict"),
+    unique("shipment_invoices_shipment_key").on(table.shipmentId),
+    unique("shipment_invoices_tenant_number_key").on(table.tenantId, table.invoiceNumber),
+    index("shipment_invoices_tenant_issued_idx").on(table.tenantId, table.issuedAt),
+    check(
+      "shipment_invoices_number_format",
+      sql`invoice_number ~ '^INV-[A-Z0-9]{2,5}-[0-9]{5,}$'`,
+    ),
+    check(
+      "shipment_invoices_issuer_not_blank",
+      sql`char_length(btrim(issued_by_user_id)) > 0`,
+    ),
+    check("shipment_invoices_template_version_positive", sql`template_version >= 1`),
+    check(
+      "shipment_invoices_document_object",
+      sql`jsonb_typeof(document) = 'object'`,
+    ),
+    check(
+      "shipment_invoices_money_nonnegative",
+      sql`shipping_charge_idr >= 0 AND insurance_idr >= 0 AND declared_value_idr >= 0`,
+    ),
+    check(
+      "shipment_invoices_total_is_sum",
+      sql`total_idr = shipping_charge_idr + insurance_idr`,
+    ),
+    check(
+      "shipment_invoices_collection_mode_valid",
+      sql`collection_mode IN ('NON_COD', 'COD_SHIPPING_ONLY', 'COD')`,
+    ),
+    check(
+      "shipment_invoices_courier_collection_pair",
+      sql`(collection_mode = 'NON_COD' AND courier_collection_idr IS NULL)
+        OR (collection_mode <> 'NON_COD' AND courier_collection_idr IS NOT NULL AND courier_collection_idr > 0)`,
     ),
   ],
 );
@@ -2001,6 +2113,12 @@ export const providerOrderStatusObservations = pgTable(
     fromStatus: text("from_status", { enum: shipmentStatuses }),
     mappedStatus: text("mapped_status", { enum: shipmentStatuses }),
     transitionOutcome: text("transition_outcome").$type<ProviderDeliveryTransitionOutcome>(),
+    // T-223 / DATA-13: Mengantar `lastHistory.desc`, `lastHistory.date` (WIB,
+    // "DD-MM-YYYY HH:mm") and `pod_code`. NULL when absent or unreadable, and
+    // on rows recorded before migration 0056.
+    lastHistoryDesc: text("last_history_desc"),
+    lastHistoryAt: timestamp("last_history_at", { withTimezone: true }),
+    podCode: text("pod_code"),
     observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

@@ -10,7 +10,6 @@ import {
   deriveProviderAccountKey,
   markProviderBatchUnknown,
   prepareProviderBatches,
-  requiresProviderAccountSerialization,
   type OrderConfirmation,
   type PreparedProviderBatch,
   type ProviderBatchScope,
@@ -108,6 +107,8 @@ export type FixtureOrderOrchestrationInput = {
   ) => Promise<void>;
   resolveTransport: MengantarOrderTransportLookup;
   telemetrySink?: ShipmentTelemetrySink;
+  /** Backoff between HTTP 409 retries; injectable so tests do not wait. */
+  sleep?: (ms: number) => Promise<void>;
 };
 
 export type FixtureOrderOrchestrationResult = {
@@ -140,6 +141,54 @@ export class MengantarOrderTransportUnavailableError extends Error {
     super("Mengantar order transport is unavailable.");
   }
 }
+
+/**
+ * HTTP 409 from `POST /order`: another order creation is in progress on the
+ * same Mengantar account ("Sedang ada proses pembuatan order…"). The provider
+ * refused the request, so it is safe to retry (DATA-13, T-223).
+ */
+export class MengantarOrderConflictError extends Error {
+  constructor() {
+    super("Mengantar is creating another order on this account.");
+  }
+}
+
+export const ORDER_CONFLICT_MAX_ATTEMPTS = 3;
+const ORDER_CONFLICT_BACKOFF_MS = 500;
+
+/** The one place an HTTP transport turns a `POST /order` response into a body. */
+export async function readMengantarOrderHttpResponse(response: Response): Promise<unknown> {
+  if (response.status === 409) throw new MengantarOrderConflictError();
+  if (!response.ok) {
+    throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_HTTP_STATUS");
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
+  }
+}
+
+async function submitWithConflictRetry(
+  submit: () => Promise<unknown>,
+  sleep: (ms: number) => Promise<void>,
+) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await submit();
+    } catch (error) {
+      if (!(error instanceof MengantarOrderConflictError)) throw error;
+      // A final 409 still means nothing was created, but the batch is already
+      // claimed, so it takes the existing SUBMISSION_UNKNOWN path (never accepted).
+      if (attempt >= ORDER_CONFLICT_MAX_ATTEMPTS) {
+        throw new MengantarOrderSubmissionUnknownError("ORDER_PROVIDER_CONFLICT");
+      }
+      await sleep(ORDER_CONFLICT_BACKOFF_MS * 2 ** (attempt - 1));
+    }
+  }
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 type ValidatedTransportBinding = {
   providerAccountKey: string;
@@ -256,8 +305,12 @@ export function buildMengantarOrderPayload(
 }
 
 type ProviderResponseItem = {
+  _id?: unknown;
+  ORDER_ID?: unknown;
   id?: unknown;
   order_id?: unknown;
+  batch?: unknown;
+  batch_id?: unknown;
   isPaid?: unknown;
   cnote_no?: unknown;
 };
@@ -302,12 +355,31 @@ function normalizeResponseItem(value: unknown): NormalizedProviderResponseItem {
         item.cnote_no,
         "ORDER_RESPONSE_CNOTE_UNSAFE",
       );
-  const providerOrderId = optionalIdentity(item.order_id);
+  // DATA-13: stored Mengantar records carry `_id` and `ORDER_ID` (L); the
+  // `order_id`/`id` pair is the older assumed shape, kept as a fallback.
+  const mongoId = optionalIdentity(item._id);
+  const orderCode = optionalIdentity(item.ORDER_ID);
+  const legacyId = optionalIdentity(item.order_id);
   const alternateId = optionalIdentity(item.id);
-  if (!providerOrderId || (alternateId && alternateId !== providerOrderId)) {
+  const providerOrderId = mongoId ?? orderCode ?? legacyId ?? alternateId;
+  if (
+    !providerOrderId
+    || (legacyId && alternateId && alternateId !== legacyId)
+    || (mongoId && alternateId && alternateId !== mongoId && alternateId !== legacyId)
+  ) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_IDENTITY_AMBIGUOUS");
   }
-  return { providerOrderId, isPaid: item.isPaid, cnoteNo };
+  const batch = optionalIdentity(item.batch);
+  const batchId = optionalIdentity(item.batch_id);
+  if (batch && batchId && batch !== batchId) {
+    throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_IDENTITY_AMBIGUOUS");
+  }
+  return {
+    providerOrderId,
+    providerBatchId: batch ?? batchId,
+    isPaid: item.isPaid,
+    cnoteNo,
+  };
 }
 
 export function normalizeMengantarOrderResponse(
@@ -427,14 +499,17 @@ async function submitPreparedBatch(
 
   try {
     for (const { order, payload } of payloads) {
-      const submit = () => transport.submit(payload);
-      const response = requiresProviderAccountSerialization(batch.courier)
-        ? await withProviderAccountSerialization(
-            input.lockPool,
-            batch.providerAccountKey,
-            submit,
-          )
-        : await submit();
+      // DATA-13: Mengantar answers 409 to concurrent creation on one account for
+      // every courier, not only the dynamic-AWB ones, so every submission is
+      // serialized per account and a 409 is retried inside the lock.
+      const response = await withProviderAccountSerialization(
+        input.lockPool,
+        batch.providerAccountKey,
+        () => submitWithConflictRetry(
+          () => transport.submit(payload),
+          input.sleep ?? defaultSleep,
+        ),
+      );
       const [result] = normalizeMengantarOrderResponse(response, [order]);
       await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>
         completeProviderOrder(tx, context, batch.id, result!),
@@ -585,7 +660,7 @@ export async function orchestrateFixtureBackedMengantarOrders(
       queueResult: result.payloadRejectionCode
         ? "not_applicable"
         : result.submitted
-          ? requiresProviderAccountSerialization(batch.courier) ? "serialized" : "queued"
+          ? "serialized"
           : "reused",
     }, input.telemetrySink);
   }

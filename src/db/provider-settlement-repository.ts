@@ -17,6 +17,7 @@ import { BASIS_POINTS, MENGANTAR_COD_FEE_BASIS_POINTS } from "@/lib/mengantar-co
 import {
   IDR_UNITS,
   parseIdrUnits,
+  type ProviderOrderStatus,
   type ProviderSettlementSnapshot,
 } from "@/lib/mengantar-settlement";
 import {
@@ -137,7 +138,7 @@ async function matchTenantOrders(
 /** Distinct provider values a pull could not place; capped so one broken page cannot flood a message. */
 const MAX_REPORTED_UNRECOGNISED = 5;
 
-type ObservedOrder = { cnoteNo: string; status: string } & MatchedOrder;
+type ObservedOrder = ProviderOrderStatus & MatchedOrder;
 
 export type ProviderDeliveryTransitionResult = {
   appliedCount: number;
@@ -327,6 +328,9 @@ export async function recordProviderSettlementPull(
         fromStatus: decision?.fromStatus ?? null,
         mappedStatus: decision?.mappedStatus ?? null,
         transitionOutcome: decision?.outcome ?? null,
+        lastHistoryDesc: row.lastHistoryDesc ?? null,
+        lastHistoryAt: row.lastHistoryAt ?? null,
+        podCode: row.podCode ?? null,
       };
     }));
   }

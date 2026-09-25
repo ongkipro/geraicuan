@@ -595,7 +595,7 @@ const TENANT_SCOPED_TABLES = [
   "memberships", "outlets", "outlet_pickup_points", "contacts", "contact_addresses", "shipments",
   "shipment_drafts", "shipment_parties", "shipment_estimate_snapshots", "shipment_estimate_services",
   "shipment_cod_totals", "provider_batches", "provider_order_snapshots", "provider_unpaid_recoveries",
-  "print_events", "shipment_rts_events", "provider_settlement_pulls", "provider_settlement_items",
+  "shipment_invoices", "print_events", "shipment_rts_events", "provider_settlement_pulls", "provider_settlement_items",
   "provider_order_status_observations", "ledger_entries", "reconciliation_runs", "mengantar_connections",
   "managed_secret_payloads", "shipment_rate_limits", "tenant_shipment_counters", "audit_events",
 ];
@@ -657,6 +657,7 @@ async function purgeOperationalRows(tenantIds, scope) {
     "DELETE FROM reconciliation_runs WHERE tenant_id = ANY($1::uuid[]) AND ($2 OR id = ANY($3::uuid[]))",
     [tenantIds, all, runs],
   );
+  await deleteByShipment("shipment_invoices");
   await deleteByShipment("print_events");
   for (const table of ["provider_order_status_observations", "provider_settlement_items"]) {
     await query(

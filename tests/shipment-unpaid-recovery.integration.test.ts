@@ -222,9 +222,9 @@ beforeAll(async () => {
       id, tenant_id, batch_id, shipment_id, estimate_snapshot_id,
       estimate_service_id, position, provider_service, destination_area_id, destination_area_label, currency,
       shipping_amount_idr, insurance_amount_idr, is_cod, status,
-      provider_order_id, is_paid, safe_response_code, resolved_at
+      provider_order_id, provider_batch_id, is_paid, safe_response_code, resolved_at
     ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE', 'fixture-destination', 'Fixture destination', 'IDR', 8000, 500,
-      false, 'AWAITING_UPSTREAM_PAYMENT', 'SANITIZED-ORDER-UNPAID', false,
+      false, 'AWAITING_UPSTREAM_PAYMENT', 'SANITIZED-ORDER-UNPAID', 'SANITIZED-BATCH-UNPAID', false,
       'ORDER_AWAITING_PAYMENT', now())`,
     [
       providerOrderSnapshotId,
@@ -463,7 +463,7 @@ describe("T23 Tenant Admin unpaid recovery", () => {
     );
     expect(fixtureRaw).not.toMatch(/\b(?:\+?62|08)\d{7,}\b/);
     expect(JSON.stringify(first)).not.toMatch(
-      /SANITIZED-ORDER-UNPAID|fixture-pickup|Pengirim|Penerima|https?:/i,
+      /SANITIZED-(?:ORDER|BATCH)-UNPAID|fixture-pickup|Pengirim|Penerima|https?:/i,
     );
   });
 });

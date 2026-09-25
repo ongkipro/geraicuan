@@ -4,7 +4,7 @@
     "response": {
       "success": true,
       "data": {
-        "batch_id": "SANITIZED-ORDER-UNPAID",
+        "batch_id": "SANITIZED-BATCH-UNPAID",
         "courier": "JNE",
         "cnote_no": ["SANITIZED-CNOTE-RECOVERED-0001"]
       }
@@ -14,7 +14,7 @@
     "response": {
       "success": true,
       "data": {
-        "batch_id": "SANITIZED-ORDER-UNPAID",
+        "batch_id": "SANITIZED-BATCH-UNPAID",
         "courier": "JNE",
         "cnote_no": [
           "SANITIZED-CNOTE-AMBIGUOUS-0001",

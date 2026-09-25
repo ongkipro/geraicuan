@@ -394,7 +394,7 @@ Recorded 2026-09-13 under T-87. Provenance: Paduka Ongki instructed the work to 
 - Every metric ID has one integration test asserting its formula on a deterministic fixture, including boundaries: denominator 0, previous 0, `.5` rounding, adjustment reversal, and each severity threshold edge.
 - A surface test asserts that two surfaces showing the same metric ID render the same value for the same scope and period.
 - Changing a formula updates this document, its test, and the drift status in the same change.
-- A rendered number names its metric ID in one attribute, `data-metric-id` (T-199 retired the second spelling `data-metric`); tests and browser audits select on that attribute. `tests/cms-ui-audit-inventory.integration.test.ts` fails if `data-metric=` reappears under `src/`, `tests/` or `scripts/ui-audit/`.
+- v3 (2026-09-26): metric IDs are keys in code, not rendered attributes; pages render no `data-metric-id`. `tests/system-map-inventory.integration.test.ts` fails if the retired spelling `data-metric=` reappears under `src/` or `tests/` (spec 18 §10).
 
 
 ### T-111 refinement — 2026-09-14

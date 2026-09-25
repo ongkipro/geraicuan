@@ -235,6 +235,11 @@ describe("store setup is the only caller allowed to reach a pending tenant", () 
     "src/app/app/layout.tsx",
     "src/app/app/page.tsx",
     "src/app/app/pengaturan/actions.ts",
+    // T-211: renders only the PR-60 read-only notice for a pending gerai and returns
+    // before loading anything; its actions (listed below) still refuse it.
+    "src/app/app/pengiriman/baru/page.tsx",
+    // T-217: the settings pages share one guard and STORE_SETUP from here.
+    "src/app/app/pengaturan/_components/settings-data.ts",
     "src/app/app/pengaturan/koneksi/page.tsx",
     "src/app/app/pengaturan/outlet/page.tsx",
     "src/app/app/pengaturan/page.tsx",

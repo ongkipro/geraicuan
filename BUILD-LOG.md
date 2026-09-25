@@ -4857,3 +4857,23 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Gotcha.** Parallel agents sharing one scratch folder and one test database: give each agent its own log path, and treat a DB-backed failure seen only under concurrency as contention until it reproduces alone.
 - **Gotcha.** `git mv` stages; this repository's rule is to stage nothing unless asked — follow any `git mv`/`git rm --cached` with `git restore --staged`.
 
+
+## 2026-09-26 — Phase 19 opened: free aggregator SaaS, invoicing, Mengantar register
+
+- **Ledger.** Stale run `RUN-20260925T160629Z-e0841844` (T-207, superseded) closed FAIL with a note; Phase 18 integration + Phase 19 run under `RUN-20260925T171233Z-4f232968`.
+- **Docs (T-220).** Spec 02 §v3.1 (PR-76–PR-84), spec 05 DATA-13 (provider field register) and DATA-14 (`shipment_invoices`), spec 17 UX-v3.9/3.10, spec 10 §13–§15. Invoice boundary adopted from GeraiOS spec 11 (nota, not a receipt; one per shipment; immutable; reprint = snapshot).
+- **Mengantar comparison (read-only).** `~/Projects/adsbookcms` and `zvarashop` are the same code line. Neither has a live-accepted `POST /order`; GeraiCUAN has the stronger live read-side evidence. Found in GeraiCUAN: estimate hides COD when `unsupported_cod` is absent (too strict), response identity keys unverified, pay-unpaid sends the order id as `batch_id`. Found in AdsBookCMS: its status parser expects JSON flags while live `status` is a plain string. Fixes queued as T-223; the request-shape probe needs owner approval (T-153).
+- **Input noted, not applied.** `~/Documents/work/notes/mengantar-app-ui-analysis.md` deltas D1–D12 recorded in spec 10 §13 pending the owner.
+
+## 2026-09-26 — T-221 invoice data, T-223 Mengantar precision (offline)
+
+- **T-221.** Migration 0055 `shipment_invoices` (insert-only, forced RLS, one per shipment, `INV-<ref>`), repository + `issueShipmentInvoice` action. Coordinator re-run: invoice + isolation posture 18/18. Caught during build: a COD row with NULL courier amount passed the CHECK (NULL comparison) — fixed with `IS NOT NULL`.
+- **T-223.** Migration 0056: `provider_order_snapshots.provider_batch_id`, status observations keep `lastHistory` desc/time (WIB→UTC)/`pod_code`. COD now offered unless `unsupported_cod === true` or `coverage_cod === false` (JNE/SiCepat/Ninja captures lack the key); `unsupportedOrigin*`/`unsupportedPickup` hide a service; all couriers serialized per account; 409 retried ×3 then `SUBMISSION_UNKNOWN`; pay-unpaid sends the stored batch and refuses legacy NULL rows before claiming. The unpaid fixture had locked the old batch = order id bug; corrected. Coordinator re-run: 11 files / 137 passed. No provider call.
+- **Gotcha.** A fixture can encode a bug as truth: `mengantar-pay-unpaid.sanitized.json` asserted `batch_id` = order id although live stored orders keep `batch` separate. Check hand-written fixtures against live captures before trusting them.
+
+## 2026-09-26 — Phase 18 screens complete, Phase 19 invoicing/precision/look, full suite green
+
+- **Screens (T-210–T-218)** rebuilt from zero by parallel agents on disjoint folders, each re-verified by the coordinator (test re-run, browser spot checks). **Phase 19:** invoice UI + two-step print modal (T-222/T-230), status vocabulary + stale filters (T-231), pickup vehicle (T-232, migration 0057), Mengantar look v3.2 (T-228), system map v3 (T-224). Details and open points per task in `TASKS.md`.
+- **Coordinator fixes found in review:** Histori search `cari` (number/resi only, no PII in URLs); shell 8 px overflow at 1024 (`SidebarInset min-w-0`); `DataCard` title 18/700; stale clock reset by repeated pulls; doubled courier name on invoices; skeleton invisible on the new canvas; danger card border; Dialog/Sheet "Tutup"; Checkbox indeterminate icon; invoice pages mark Cetak resi current.
+- **Checks.** tsc 0; lint 0; full suite 113 files / 1,305 passed / 0 skipped on the disposable DB (55461); `verify-migration-upgrade` through 0057.
+- **Gotcha.** Parallel agents sharing one test database: a DB test's `TRUNCATE … CASCADE` wipes the demo users other agents are browsing with, and concurrent suites deadlock or lose rows mid-test (seen as `deadlock detected` and a missing `users` row). Re-run a failing file alone before treating it as a defect, and reseed after any DB test run.

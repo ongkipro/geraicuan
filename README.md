@@ -1,7 +1,11 @@
 # GeraiCUAN
 
-Tenant shipping operations and Super Admin platform monitoring are implemented with
-Next.js App Router, PostgreSQL, Drizzle, and Better Auth.
+Free SaaS for Indonesian *gerai ekspedisi*: create a Mengantar order, print the
+gerai's own label that masks the Mengantar airway bill, and hand the customer an
+invoice (nota). Built with Next.js App Router, PostgreSQL (RLS), Drizzle, Better
+Auth and shadcn/ui. One-page architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md);
+specifications: [`docs/spec/README.md`](docs/spec/README.md); work queue:
+[`TASKS.md`](TASKS.md).
 
 ## Local development
 
@@ -110,28 +114,11 @@ open the browser after a suite run and the CMS looks empty. Re-seed first:
 pnpm db:seed-local
 ```
 
-### Browser-based UI audit
+### Browser evidence
 
-`pnpm test:ui-audit` drives the dev server through headless Chrome (CDP) and
-checks contrast, keyboard focus rings, headings, layout, sticky columns,
-loading skeletons, and every route/scenario/viewport combination the
-repository declares (66 route pairs, 300+ scenario pairs). It needs the dev
-server already running (the "Local development" block above) and
-`POSTGRES_PASSWORD` exported; it starts its own headless Chrome if one is not
-already reachable on `CDP_PORT` (default `9411`), and points at
-`UI_AUDIT_ORIGIN` (default `http://localhost:3000`, matching `pnpm dev`'s
-default port):
-
-```bash
-pnpm test:ui-audit
-```
-
-`pnpm test:ui-audit:mutations` re-runs the guard/probe mutation suites
-under `scripts/ui-audit/` that prove the audit's guards actually bind to the
-defects they claim to catch, not just to incidental spellings in the current
-source. It also needs the dev server running. See
-`scripts/ui-audit/README.md` for what each script does and why the coverage
-looks the way it does.
+The scripted UI audit (`scripts/ui-audit`) was removed with the pre-v3 UI (T-209).
+Browser-visible changes are screened side by side with the owner's HTML
+reference at 1440 and 390 px (spec 10 §11) and recorded in `TASKS.md`.
 
 `pnpm build` needs a production-shaped configuration, because `next build`
 loads the auth and database modules and they fail closed without it — the runtime

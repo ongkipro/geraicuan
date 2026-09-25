@@ -226,11 +226,13 @@ export function tenantCmsNavigation(
     }))
     .filter((group) => group.items.length > 0);
 
-  // /app/anggota (member management) is reached from Pengaturan, not its own
-  // menu entry, so it resolves the Pengaturan destination as current.
+  // /app/anggota (member management) is reached from Pengaturan and the invoice
+  // (nota) from Cetak resi; neither has its own menu entry.
   const navigationPath = pathname === "/app/anggota" || pathname.startsWith("/app/anggota/")
     ? "/app/pengaturan"
-    : contactNavigationPath(pathname, search);
+    : pathname === "/app/invoice" || pathname.startsWith("/app/invoice/")
+      ? "/app/label"
+      : contactNavigationPath(pathname, search);
   const matchedDefinition = navigationGroups
     .flatMap((group) => group.items)
     .sort((a, b) => b.href.length - a.href.length)

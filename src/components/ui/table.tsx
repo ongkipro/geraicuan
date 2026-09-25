@@ -1,31 +1,20 @@
+"use client"
+
 import * as React from "react"
-
 import { cn } from "cn"
-import { TableScrollRegion } from "@/components/ui/table-scroll-region"
-import styles from "./table.module.css"
 
-function Table({
-  className,
-  containerClassName,
-  containerProps,
-  ...props
-}: React.ComponentProps<"table"> & {
-  containerClassName?: string
-  containerProps?: Omit<React.ComponentProps<"div">, "className">
-}) {
-  const Container = containerProps?.role === "region" ? TableScrollRegion : "div"
+function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <Container
+    <div
       data-slot="table-container"
-      className={cn("relative w-full overflow-x-auto", containerClassName)}
-      {...containerProps}
+      className="relative w-full overflow-x-auto"
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", styles.table, className)}
+        className={cn("w-full caption-bottom text-sm tabular-nums", className)}
         {...props}
       />
-    </Container>
+    </div>
   )
 }
 
@@ -33,7 +22,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("bg-muted [&_tr]:border-b [&_tr]:border-b-border", className)}
+      className={cn("[&_tr]:border-b", className)}
       {...props}
     />
   )
@@ -54,8 +43,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        // Opaque for the same reason every row fill is: a pinned cell inherits it.
-        "border-t bg-muted font-medium [&>tr]:last:border-b-0",
+        "border-t bg-table-stripe font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -68,11 +56,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        // Zebra striping is the cheapest way to keep a wide row readable; hover and
-        // selection stay stronger than the stripe so they still read as state.
-        // Every one of these fills is opaque because a pinned first column takes
-        // `bg-inherit` from this row and would otherwise be see-through.
-        "border-b bg-card transition-colors hover:bg-accent has-aria-expanded:bg-accent data-[state=selected]:bg-accent",
+        "border-b transition-colors hover:bg-table-stripe has-aria-expanded:bg-table-stripe data-[state=selected]:bg-table-stripe",
         className
       )}
       {...props}
@@ -98,7 +82,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-4 py-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        "h-12 px-4 py-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -113,7 +97,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      className={cn("mt-4 text-xs text-muted-foreground", className)}
       {...props}
     />
   )

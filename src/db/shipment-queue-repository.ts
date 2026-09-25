@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 
 import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
 import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
@@ -18,7 +18,12 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { PersistedEstimateService } from "@/db/estimate-repository";
 import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 import type { AnalyticsRange } from "@/lib/analytics-range";
-import { SHIPMENT_QUEUE_SUMMARY_ENTRIES } from "@/lib/shipment-queue";
+import {
+  isStaleShipmentFilter,
+  SHIPMENT_QUEUE_SUMMARY_ENTRIES,
+  STALE_SHIPMENT_FILTERS,
+  STALE_SHIPMENT_STATUSES,
+} from "@/lib/shipment-queue";
 import type {
   ShipmentQueueStatusFilter,
   ShipmentQueueSummary,
@@ -138,10 +143,68 @@ function createdWithin(range: AnalyticsRange | undefined) {
     : undefined;
 }
 
+/**
+ * Histori search (spec 17 UX-v3.6): shipment number or resi only — never a party
+ * name or phone, because the term travels in the URL (spec 10 §11). The caller
+ * validates the term; LIKE wildcards are escaped here.
+ */
+function searchPredicate(search: string | undefined) {
+  if (!search) return undefined;
+  const pattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+  return or(ilike(shipments.publicReference, pattern), ilike(providerOrderSnapshots.cnoteNo, pattern));
+}
+
+/**
+ * T-231 / PR-89 "Tanpa update …": the last provider news is the latest
+ * observation's `last_history_at` (Mengantar's own event time) or, when that is
+ * unreadable, the pull time that observed it; a shipment never observed falls
+ * back to its issuance time (`provider_order_snapshots.resolved_at`).
+ * Without `last_history_at`, the clock is the first pull that saw the current
+ * provider status (after the last different one), so repeated pulls of an
+ * unchanged status do not reset it.
+ * The subquery is tenant-filtered in SQL, and RLS limits it to a Tenant Admin,
+ * which is why the caller must be one.
+ */
+function stalePredicate(hours: number) {
+  return and(
+    inArray(shipments.status, [...STALE_SHIPMENT_STATUSES]),
+    sql`COALESCE(
+      (SELECT COALESCE(
+          latest.last_history_at,
+          (SELECT min(same.observed_at)
+            FROM provider_order_status_observations same
+            WHERE same.tenant_id = latest.tenant_id
+              AND same.shipment_id = latest.shipment_id
+              AND same.provider_status = latest.provider_status
+              AND same.observed_at > COALESCE(
+                (SELECT max(other.observed_at)
+                  FROM provider_order_status_observations other
+                  WHERE other.tenant_id = latest.tenant_id
+                    AND other.shipment_id = latest.shipment_id
+                    AND other.provider_status <> latest.provider_status),
+                '-infinity'::timestamptz)))
+        FROM provider_order_status_observations latest
+        WHERE latest.tenant_id = ${shipments.tenantId}
+          AND latest.shipment_id = ${shipments.id}
+        ORDER BY latest.observed_at DESC, latest.id DESC
+        LIMIT 1),
+      ${providerOrderSnapshots.resolvedAt}
+    ) < statement_timestamp() - make_interval(hours => ${hours}::int)`,
+  );
+}
+
+export class StaleShipmentFilterDeniedError extends Error {
+  constructor() {
+    super("Stale shipment filters are Tenant Admin only.");
+    this.name = "StaleShipmentFilterDeniedError";
+  }
+}
+
 function shipmentFilter(
   context: TenantContext,
   status: ShipmentQueueStatusFilter,
   range: AnalyticsRange | undefined,
+  search?: string,
 ) {
   let statusPredicate;
   switch (status) {
@@ -165,6 +228,10 @@ function shipmentFilter(
     case "ISSUED_TODAY":
       statusPredicate = issuedTodayPredicate(context);
       break;
+    case "STALE_48H":
+    case "STALE_4D":
+      statusPredicate = stalePredicate(STALE_SHIPMENT_FILTERS[status].hours);
+      break;
     default:
       statusPredicate = eq(shipments.status, status);
   }
@@ -173,6 +240,7 @@ function shipmentFilter(
     eq(shipments.tenantId, context.tenantId),
     createdWithin(range),
     statusPredicate,
+    searchPredicate(search),
   );
 }
 
@@ -196,12 +264,19 @@ export async function loadShipmentQueuePage(
     pageSize: number;
     /** PR-53 created-basis window; omitted means the tenant's whole lifetime. */
     range?: AnalyticsRange;
+    /** Validated number/resi fragment; also narrows the panel counts (PR-52). */
+    search?: string;
     status: ShipmentQueueStatusFilter;
   },
 ): Promise<ShipmentQueuePage> {
   validatePagination(input.page, input.pageSize);
+  // An operator cannot read the observations (RLS), so the filter would fall
+  // back to issuance time for every row and report a cohort it cannot evidence.
+  if (isStaleShipmentFilter(input.status) && context.role !== "TENANT_ADMIN") {
+    throw new StaleShipmentFilterDeniedError();
+  }
 
-  const where = shipmentFilter(context, input.status, input.range);
+  const where = shipmentFilter(context, input.status, input.range, input.search);
 
   // PR-52: the panel counts come from the same tenant-scoped pass as the list
   // and over the same cohort (the same joins), so an entry's number always
@@ -235,7 +310,7 @@ export async function loadShipmentQueuePage(
         eq(shipmentParties.role, "RECIPIENT"),
       ),
     )
-    .where(and(eq(shipments.tenantId, context.tenantId), createdWithin(input.range)))
+    .where(and(eq(shipments.tenantId, context.tenantId), createdWithin(input.range), searchPredicate(input.search)))
     .groupBy(shipments.status);
 
   const countByStatus = new Map(summaryRows.map((row) => [row.status, row.count]));

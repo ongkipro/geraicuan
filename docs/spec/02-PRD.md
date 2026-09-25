@@ -3,8 +3,49 @@
 ## Document Control
 - Status: Accepted product direction; latest execution and completion evidence remain in `TASKS.md`
 - Accountable owner: Paduka Ongki
-- Updated: 2026-09-25 (§v3 masking-first product and UI rebuild)
-- Source: User product direction; Mengantar Public API docs retrieved 2026-08-28 and reviewed for location authority on 2026-09-01
+- Updated: 2026-09-26 (§v3.1 free aggregator SaaS, invoicing, system map, sign-in polish)
+- Source: User product direction; Mengantar Public API docs retrieved 2026-08-28 and reviewed for location authority on 2026-09-01; GeraiOS spec 11 (invoice boundary, v0.4) as reference
+
+## v3.1 — Free SaaS for gerai expedition aggregators (accepted 2026-09-26)
+
+**Owner direction (2026-09-26):** "sistem kita terfokus untuk saas gerai agregator expedisi, cetak resi, invoice (belum dibangun) … pelajari dari doc geraios … menyempurnakan sistem mengantar jadi sebuah sistem agregator gerai expedisi … sistem ini gratis … buat sistem map page/page … sempurnakan ui ux login dan register pakai shadcn ui minimalis"; and "pastikan semua sistem bekerja presisi dengan Mengantar".
+
+**Positioning.** GeraiCUAN is a **free** multi-tenant SaaS for *gerai ekspedisi* — counters that accept parcels from walk-in customers and ship them through many couriers via one Mengantar account. It has three cores and nothing else:
+
+1. **Kirim** — create a Mengantar order and obtain the resi (PR-68–PR-72).
+2. **Cetak resi** — print the gerai's own label that masks the Mengantar airway bill (PR-71).
+3. **Invoice (nota)** — hand the customer a charge document for the shipment (PR-76–PR-80, new).
+
+Tracking, returns, contacts and reports exist only to support those three. There is no subscription, plan, payment gateway or usage billing for tenants: the product is free and PR-81 keeps it that way on every screen.
+
+**Invoice boundary (adopted from GeraiOS spec 11, BILL-1/3/4).** The invoice is a *nota* of the shipping charge and collection instruction for one issued shipment. It is **not** a payment receipt, tax invoice or proof that anyone paid. The customer pays the gerai by hand outside the application; GeraiCUAN stores no payment method, paid/unpaid status, tender, change or refund. Mengantar stays authoritative for its own charges, COD and settlement.
+
+**Requirements (EARS)**
+
+| ID | Requirement |
+|---|---|
+| PR-76 | When a shipment has an issued resi (`cnote_no` present) and an operator of its tenant asks for its invoice, the system shall issue **at most one** invoice for that shipment, numbered `INV-<shipment public reference>`, and return the existing invoice on every later or concurrent request. It shall refuse for any shipment without an issued resi. |
+| PR-77 | The system shall snapshot every rendered business field at issuance — gerai name/WhatsApp/address, resi, courier service, sender and recipient summary, item summary, weight, shipping charge, insurance, collection mode, intended courier COD amount, declared goods value, issuer and issue time — and a reprint shall render that snapshot unchanged even after the gerai profile, contacts or shipment change. Issued invoices shall be immutable (no UPDATE/DELETE grant). |
+| PR-78 | The invoice shall show one **Total ongkir** (the confirmed provider `price` of the chosen service plus returned insurance), and show the courier COD instruction and the declared goods value in separate labelled lines so goods value is never presented as a shipping charge. It shall never show paid/unpaid, payment method, QR, bank destination, refund or a tax label. |
+| PR-79 | Where an operator chooses **Cetak resi + invoice**, the system shall issue the invoice if absent and open one print view with the masked label followed by the invoice; the operator shall also be able to reprint either document alone. A failed print dialog shall not issue a second invoice or order. |
+| PR-80 | The invoice shall print on 80 mm thermal roll (default) and A4, selected per print, with the resi in mono and money in sans `tabular-nums` (spec 10). |
+| PR-81 | No screen, email or document shall offer a plan, price, upgrade, trial or payment for using GeraiCUAN. |
+| PR-82 | `docs/spec/18-SYSTEM-MAP.md` shall list every page route (URL, role, job, data it reads, actions it calls, states) and every route handler of the v3 build, and a test shall fail when a `page.tsx` exists without a map row or a row has no page. |
+| PR-83 | Masuk, Daftar, Lupa/Atur ulang kata sandi and Verifikasi email shall use one minimal shadcn card layout (spec 10 §4.14): brand, one heading, fields at 44 px, one filled primary, visible labels, inline errors, and a password visibility toggle; no marketing copy beside the form on mobile. |
+| PR-84 | Every Mengantar request/response field GeraiCUAN sends or reads shall be listed in the provider field register (spec 05 §DATA-13) with its evidence level (observed, documented, assumed); an assumed field shall not be sent to Mengantar in production. |
+
+| PR-85 | The tenant UI shall follow the Mengantar-app look measured in `~/Documents/work/notes/mengantar-app-ui-analysis.md` (spec 10 v3.2), implemented with shadcn/ui primitives, without dropping below the 40+ floor (PR-75). |
+| PR-86 | Where a Tenant Admin opens **Pengaturan → Informasi label**, the system shall let them choose, per label size, which fields print — sender address, sender phone, recipient name, recipient phone, recipient address detail (off = province and city only), and a "confirm with sender before return" warning — with a live preview, and every later label print shall apply the saved choice. The Mengantar pickup identity shall never be printable (PR-71). |
+| PR-87 | When an operator prints from Cetak resi, the system shall use a two-step modal: (1) format — thermal 10×15 or 10×10; (2) what to print — labels, invoices, or both — for the chosen shipments. |
+| PR-88 | The detail kiriman page shall follow the Mengantar order-detail order: identity strip with copy, route header (pengirim — kurir — penerima), tracking timeline, parcel detail with *Jumlah bersih* for COD, recipient, sender. |
+| PR-89 | The system shall map every Mengantar parcel status in the analysis §9.3 vocabulary to a GeraiCUAN status or a documented "unmapped → Perlu perhatian" rule, and offer "tanpa update 48 jam / 4 hari" filters computed from the last provider observation. Values not yet seen live stay flagged as unverified (DATA-13). |
+| PR-90 | The system shall store and show a pickup vehicle (Motor/Mobil/Truk) for scheduled pickups and shall not send it to Mengantar until T-153 verifies the key (D-19). |
+
+**Non-goals (v3.1)** Payment collection or cashier; tax invoice (faktur pajak); per-tenant customer price lists or markup (the invoice uses Mengantar's confirmed `price`; see Open decision below); invoice correction/replacement (blocked, as GeraiOS BILL-4 gate); emailing or WhatsApp-sending the invoice.
+
+**Open decision (owner).** Aggregator counters often add their own fees (packing, kardus, admin). v3.1 invoices the provider `price` only. If wanted, a later requirement can add up to three gerai-defined extra lines snapshotted on the invoice; nothing is built until the owner decides.
+
+**Success metrics** Every issued shipment can print resi + invoice in one action; zero duplicate invoice numbers; zero invoices on unissued shipments; the system-map test green.
 
 ## v3 — Masking-first product and UI rebuilt from zero (accepted 2026-09-25)
 
@@ -36,6 +77,8 @@
 **Success metrics** A new shipment issued from an empty form in ≤ 3 minutes by an operator; zero labels printed with the Mengantar pickup name as sender; owner acceptance of each screen against its reference.
 
 ## Product Decision
+> Pre-v3 baseline, kept as history. Where it conflicts with §v3.1 and §v3 (no bulk import, no Keuangan/Analitik pages, invoicing added), those sections win.
+
 GeraiCUAN is a free multi-tenant SaaS CMS for Indonesian shipping outlets. The only public product surface is a sales page; all operational workflows are inside authenticated CMS Admin. Any number of isolated tenants may use the platform; each tenant operates its own outlets and private Mengantar connection, while the platform Super Admin monitors the service. The MVP creates single or bulk shipments, uses an outlet default pickup point, obtains Mengantar AWBs, prints labels, and maintains an operational ledger.
 
 ## Scope

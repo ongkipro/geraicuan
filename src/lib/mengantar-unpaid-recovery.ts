@@ -3,7 +3,6 @@ import "server-only";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
 
-import { requiresProviderAccountSerialization } from "@/db/order-batch-repository";
 import type { ProviderBatchScope } from "@/db/order-batch-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -14,6 +13,7 @@ import {
   markUnpaidRecoveryUnknown,
   prepareUnpaidRecoveries,
   UnpaidRecoveryDeniedError,
+  UnpaidRecoveryUnavailableError,
 } from "@/db/unpaid-recovery-repository";
 import {
   normalizeMengantarProviderIdentifier,
@@ -72,6 +72,16 @@ export class MengantarUnpaidRecoveryUnknownError extends Error {
     super("Mengantar unpaid recovery outcome is unknown.");
     this.safeCode = safeCode;
   }
+}
+
+/**
+ * DATA-13: `pay-unpaid` takes the Mengantar `batch`, which is not the order id.
+ * A row accepted before T-223 has no stored batch, so nothing is sent for it:
+ * sending the order id instead was the bug. Subclasses the repository's
+ * unavailable error so every caller already maps it to a safe refusal.
+ */
+export class MengantarUnpaidRecoveryBatchIdMissingError extends UnpaidRecoveryUnavailableError {
+  readonly safeCode = "PAY_UNPAID_BATCH_ID_MISSING";
 }
 
 export class MengantarUnpaidRecoveryTransportUnavailableError extends Error {
@@ -244,8 +254,16 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
     },
   );
 
+  // Checked for the whole batch before anything is claimed or sent.
+  const payable = preparedWithBinding.prepared.recoveries.map((recovery) => {
+    if (recovery.status === "PAYMENT_QUEUED" && !recovery.providerBatchId) {
+      throw new MengantarUnpaidRecoveryBatchIdMissingError();
+    }
+    return recovery;
+  });
+
   const results: FixtureUnpaidRecoveryResult["recoveries"] = [];
-  for (const recovery of preparedWithBinding.prepared.recoveries) {
+  for (const recovery of payable) {
     if (recovery.status !== "PAYMENT_QUEUED") {
       results.push({
         id: recovery.id,
@@ -272,23 +290,19 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
     }
 
     try {
+      const providerBatchId = recovery.providerBatchId!;
       const request = Object.freeze({
-        batch_id: recovery.providerOrderId,
+        batch_id: providerBatchId,
         courier: preparedWithBinding.prepared.scope.courier,
       });
-      const submit = () => preparedWithBinding.binding.transport.payUnpaid(request);
-      const response = requiresProviderAccountSerialization(
-        preparedWithBinding.prepared.scope.courier,
-      )
-        ? await withProviderAccountSerialization(
-            input.lockPool,
-            preparedWithBinding.prepared.scope.providerAccountKey,
-            submit,
-          )
-        : await submit();
+      const response = await withProviderAccountSerialization(
+        input.lockPool,
+        preparedWithBinding.prepared.scope.providerAccountKey,
+        () => preparedWithBinding.binding.transport.payUnpaid(request),
+      );
       const normalized = normalizeMengantarPayUnpaidResponse(
         response,
-        recovery.providerOrderId,
+        providerBatchId,
         preparedWithBinding.prepared.scope.courier,
       );
       await withTenantContextForRecovery(input, (tx, context) =>
