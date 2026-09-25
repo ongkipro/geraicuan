@@ -77,7 +77,6 @@ export function ShipmentReportView({
             <Link href={exportHref} prefetch={false}><Download aria-hidden="true" />Ekspor CSV</Link>
           </Button>
         ) : null}
-        description="Rincian kiriman, biaya Mengantar, dan estimasi pencairan COD."
         eyebrow="Laporan"
         title="Laporan pengiriman"
       />

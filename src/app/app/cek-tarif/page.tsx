@@ -49,7 +49,6 @@ export default async function RateCheckPage() {
     <>
       <PageHeader
         actions={<Button asChild variant="outline"><Link href="/app/pengiriman/baru"><PackagePlus aria-hidden="true" />Buat kiriman</Link></Button>}
-        description="Bandingkan ongkir kurir Mengantar sebelum membuat kiriman."
         eyebrow="Cek"
         title="Cek tarif"
       />

@@ -15,7 +15,6 @@ export default function ShipmentHistoryLoading() {
           </Link>
         </Button>
       }
-      description="Kelola draf, penerbitan resi, dan tindak lanjut kiriman."
       label="Memuat histori kiriman"
       tiles={6}
       title="Histori kiriman"

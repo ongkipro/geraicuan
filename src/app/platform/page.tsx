@@ -244,7 +244,6 @@ export default async function PlatformOverviewPage({ searchParams }: PageProps<"
   return (
     <>
       <PageHeader
-        description="Kesehatan pengajuan ke Mengantar, antrean, dan aktivitas seluruh tenant."
         eyebrow="Platform"
         title="Ringkasan"
       />

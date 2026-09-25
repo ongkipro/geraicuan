@@ -48,6 +48,7 @@ export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: 
   return (
     <span className="inline-flex min-h-11 items-center gap-3 md:min-h-6">
       <Checkbox
+        className="relative after:absolute after:-inset-3.5 after:content-['']"
         aria-label={visibleLabel ? undefined : `Pilih resi ${awb}`}
         checked={selected.has(number)}
         id={id}
@@ -63,6 +64,7 @@ export function SelectPageCheckbox({ visibleLabel = false }: { visibleLabel?: bo
   const count = numbers.filter((number) => selected.has(number)).length;
   const box = (
     <Checkbox
+      className="relative after:absolute after:-inset-3.5 after:content-['']"
       aria-label={visibleLabel ? undefined : "Pilih semua resi di halaman ini"}
       checked={count === 0 ? false : count === numbers.length ? true : "indeterminate"}
       id={visibleLabel ? "pilih-semua" : undefined}

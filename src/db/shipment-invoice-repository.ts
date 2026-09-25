@@ -1,5 +1,6 @@
 import "server-only";
 
+
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import {
@@ -16,6 +17,8 @@ import {
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { formatDistrictCity } from "@/lib/label-format";
+import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
+import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { geraiAddress, parseProductRows } from "@/lib/shipment-draft-logic";
 
 /**
@@ -65,12 +68,10 @@ const MAX_INVOICE_ITEMS = 20;
 
 /** "JNE REG" under a "JNE" heading reads twice; the same rule as the label sheet. */
 export function courierServiceName(courier: string, service: string) {
-  const serviceKey = service.trim().toUpperCase();
-  const courierKey = courier.trim().toUpperCase();
-  // "lion" + "lion" or "SiCepat" + "SiCepat REG": the service already names the courier.
-  return serviceKey === courierKey || serviceKey.startsWith(`${courierKey} `)
-    ? service
-    : `${courier} ${service}`;
+  // "lion" → "Lion Parcel", "jne REG" → "JNE Reg"; a bare variant gets its courier's name.
+  const shown = serviceDisplayName(service);
+  const courierName = courierDisplayName(courier);
+  return shown.toUpperCase().includes(courierName.toUpperCase()) ? shown : `${courierName} ${shown}`;
 }
 
 /**
@@ -255,7 +256,7 @@ export async function issueShipmentInvoice(
     recipient: { name: recipient.name, city: formatDistrictCity(recipient.areaLabel) },
     items: invoiceItems(source.packageContent, source.packageQuantity),
     weightGrams: source.weightGrams,
-    deliveryEstimate: source.deliveryEstimate,
+    deliveryEstimate: deliveryEstimateLabel(source.deliveryEstimate),
   };
 
   // The resi is re-read from the snapshot in the statement itself, so the
@@ -273,9 +274,12 @@ export async function issueShipmentInvoice(
       'INV-' || s.public_reference,
       ${context.userId},
       jsonb_set(${JSON.stringify(document)}::jsonb, '{resi}', to_jsonb(btrim(pos.cnote_no))),
-      pos.shipping_amount_idr,
-      coalesce(pos.insurance_amount_idr, 0),
-      pos.shipping_amount_idr + coalesce(pos.insurance_amount_idr, 0),
+      -- COD Ongkir: the recipient pays the courier the charge the gerai set, which is
+      -- the shipping the customer is charged; the list price would contradict it.
+      CASE WHEN d.cod_shipping_only THEN pos.provider_cod_amount_idr ELSE pos.shipping_amount_idr END,
+      CASE WHEN d.cod_shipping_only THEN 0 ELSE coalesce(pos.insurance_amount_idr, 0) END,
+      CASE WHEN d.cod_shipping_only THEN pos.provider_cod_amount_idr
+        ELSE pos.shipping_amount_idr + coalesce(pos.insurance_amount_idr, 0) END,
       CASE
         WHEN NOT pos.is_cod THEN 'NON_COD'
         WHEN d.cod_shipping_only THEN 'COD_SHIPPING_ONLY'

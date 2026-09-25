@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { HelpHint } from "@/components/app/help-hint";
+import { CourierLogo } from "@/components/app/courier-logo";
 import { KpiCard } from "@/components/app/kpi-card";
 import { formatIdr } from "@/components/app/money";
 import { ShipmentStatusBadge } from "@/components/app/status-badge";
@@ -33,9 +34,8 @@ const inCardTable = cn(
   // Below xl (phone, and the two-column rows at 1024) the columns tighten and wrap (as the reference does) so the card needs no side scroll.
   "max-xl:[&_td]:px-1.5 max-xl:[&_td]:whitespace-normal max-xl:[&_th]:px-1.5 max-xl:[&_th]:whitespace-normal",
 );
-const numeric = "text-right tabular-nums";
+const numeric = "text-right tabular-nums whitespace-nowrap";
 /** "Rp 1.250" with a breakable space, so a phone-width column may put the figure under "Rp" (reference). */
-const wrappableIdr = (amount: number) => formatIdr(amount).replace(/\u00a0/g, " ");
 /** The reference's plain arrow link ("Lihat semua kiriman →"). */
 export const arrowLink = "inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-primary underline-offset-4 hover:underline md:min-h-6 [&_svg]:size-4";
 
@@ -85,7 +85,7 @@ export function KpiRow({ comparison, summary }: { comparison: string; summary: T
     { current: current.issuedCount, icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount },
   ];
   return (
-    <section aria-label="Ringkasan periode" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <section aria-label="Ringkasan periode" className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
       {kpis.map((kpi) => (
         <KpiCard comparison={comparison} delta={kpiDelta(kpi.current, kpi.previous)} icon={kpi.icon} key={kpi.label} label={kpi.label} value={kpi.current} />
       ))}
@@ -209,16 +209,18 @@ export function CourierRecapTable({ recap }: { recap: TenantDashboardCourierReca
     <Table className={inCardTable}>
       <TableCaption className="sr-only">Rekap per kurir: kiriman, terkirim dan retur{showCost ? ", serta biaya kirim" : ""}.</TableCaption>
       <TableHeader>
-        <TableRow><TableHead>Kurir</TableHead><TableHead className={numeric}>Kiriman</TableHead><TableHead className={numeric}>Terkirim</TableHead><TableHead className={numeric}>Retur</TableHead>{showCost ? <TableHead className={numeric}>Biaya kirim</TableHead> : null}</TableRow>
+        <TableRow><TableHead>Kurir</TableHead><TableHead className={numeric}>Kiriman</TableHead><TableHead className={cn(numeric, "max-sm:hidden")}>Terkirim</TableHead><TableHead className={cn(numeric, "max-sm:hidden")}>Retur</TableHead>{showCost ? <TableHead className={numeric}>Biaya kirim</TableHead> : null}</TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.courier}>
-            <TableCell className="font-medium">{courierDisplayName(row.courier)}</TableCell>
+            <TableCell className="font-medium">
+              <span className="flex items-center gap-2"><CourierLogo className="h-5 w-auto" courier={row.courier} decorative />{courierDisplayName(row.courier)}</span>
+            </TableCell>
             <TableCell className={numeric}>{count.format(row.shipmentCount)}</TableCell>
-            <TableCell className={numeric}>{count.format(row.deliveredCount)}</TableCell>
-            <TableCell className={numeric}>{count.format(row.returnedCount)}</TableCell>
-            {showCost ? <TableCell className={cn(numeric, "font-medium")}>{wrappableIdr(row.shippingCostIdr ?? 0)}</TableCell> : null}
+            <TableCell className={cn(numeric, "max-sm:hidden")}>{count.format(row.deliveredCount)}</TableCell>
+            <TableCell className={cn(numeric, "max-sm:hidden")}>{count.format(row.returnedCount)}</TableCell>
+            {showCost ? <TableCell className={cn(numeric, "font-medium")}>{formatIdr(row.shippingCostIdr ?? 0)}</TableCell> : null}
           </TableRow>
         ))}
       </TableBody>
@@ -226,9 +228,9 @@ export function CourierRecapTable({ recap }: { recap: TenantDashboardCourierReca
         <TableRow>
           <TableCell>Total</TableCell>
           <TableCell className={numeric}>{count.format(totals.shipmentCount)}</TableCell>
-          <TableCell className={numeric}>{count.format(totals.deliveredCount)}</TableCell>
-          <TableCell className={numeric}>{count.format(totals.returnedCount)}</TableCell>
-          {showCost ? <TableCell className={cn(numeric, "text-primary")} data-slot="courier-cost-total">{wrappableIdr(totals.shippingCostIdr ?? 0)}</TableCell> : null}
+          <TableCell className={cn(numeric, "max-sm:hidden")}>{count.format(totals.deliveredCount)}</TableCell>
+          <TableCell className={cn(numeric, "max-sm:hidden")}>{count.format(totals.returnedCount)}</TableCell>
+          {showCost ? <TableCell className={cn(numeric, "text-primary")} data-slot="courier-cost-total">{formatIdr(totals.shippingCostIdr ?? 0)}</TableCell> : null}
         </TableRow>
       </TableFooter>
     </Table>

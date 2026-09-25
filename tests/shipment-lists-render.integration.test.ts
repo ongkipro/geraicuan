@@ -116,7 +116,6 @@ describe("list markup", () => {
   it("keeps one filled primary in the Histori loading state", () => {
     const html = renderToStaticMarkup(createElement(ListSkeleton, {
       actions: createElement("a", { className: "bg-primary", href: "/app/pengiriman/baru" }, "Buat kiriman"),
-      description: "Kelola draf, penerbitan resi, dan tindak lanjut kiriman.",
       label: "Memuat histori kiriman",
       tiles: 6,
       title: "Histori kiriman",

@@ -14,14 +14,12 @@ function CardSkeleton({ rows }: { rows: number }) {
 /** The final shape of a platform page while its reads run (spec 10 §6). */
 export function PlatformSkeleton({
   cards,
-  description,
   filter = true,
   label,
   tiles = 0,
   title,
 }: {
   cards: number[];
-  description: string;
   filter?: boolean;
   label: string;
   tiles?: number;
@@ -29,7 +27,7 @@ export function PlatformSkeleton({
 }) {
   return (
     <div aria-busy="true" aria-label={label} className="flex flex-col gap-6" role="status">
-      <PageHeader description={description} eyebrow="Platform" title={title} />
+      <PageHeader title={title} />
       {filter ? (
         <div className="grid gap-2">
           <div className="flex flex-wrap gap-3"><Skeleton className="h-11 w-56 md:h-10" /><Skeleton className="h-11 w-28 md:h-10" /></div>

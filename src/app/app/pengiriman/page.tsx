@@ -108,7 +108,6 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
             </Link>
           </Button>
         }
-        description="Kelola draf, penerbitan resi, dan tindak lanjut kiriman."
         eyebrow="Pengiriman"
         title="Histori kiriman"
       />

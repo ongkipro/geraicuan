@@ -149,7 +149,7 @@ export default async function RegistrationQueuePage() {
 
   return (
     <>
-      <PageHeader description="Tinjau gerai yang mendaftar sendiri sebelum dapat mengirim." eyebrow="Platform" title="Pendaftaran" />
+      <PageHeader eyebrow="Platform" title="Pendaftaran" />
       <section aria-labelledby="menunggu-persetujuan" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold" id="menunggu-persetujuan">Menunggu persetujuan</h2>

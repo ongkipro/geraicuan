@@ -69,7 +69,7 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
 
   return (
     <>
-      <PageHeader description="Label tersedia setelah nomor resi resmi terbit dari Mengantar." eyebrow="Pengiriman" title="Cetak resi" />
+      <PageHeader eyebrow="Pengiriman" title="Cetak resi" />
 
       <AdjustedFilterAlert issues={rangeIssueMessages(range)} />
 

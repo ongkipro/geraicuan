@@ -51,7 +51,6 @@ export default async function NewContactPage({ searchParams }: { searchParams: N
             <ArrowLeft aria-hidden="true" className="size-4" />Kembali ke daftar {label.toLowerCase()}
           </Link>
         )}
-        description="Simpan sekali, lalu pilih saat membuat draf kiriman."
         eyebrow="Data"
         title={`${label} baru`}
       />

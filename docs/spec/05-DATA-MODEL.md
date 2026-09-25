@@ -213,8 +213,8 @@ Party phones are stored in one canonical Indonesian form (`0` + NSN), so `+62…
 | `issued_at` timestamptz NOT NULL default now(); `issued_by_user_id` NOT NULL | Issuer identity for audit. |
 | `template_version` smallint NOT NULL default 1 | Rendering version; a reprint uses the stored version. |
 | `document` jsonb NOT NULL | The rendered snapshot: `gerai {name, whatsapp, address}`, `resi`, `courierService`, `sender {name, phone, city}` (the label sender after masking, PR-71), `recipient {name, city}` (no full address or phone — privacy minimum), `items [{name, quantity}]` (≤ 20), `weightGrams`, `deliveryEstimate`. CHECK `jsonb_typeof(document) = 'object'`. |
-| `shipping_charge_idr` integer NOT NULL ≥ 0 | The confirmed provider `price` (`provider_order_snapshots.shipping_amount_idr`). Never the gerai's cost (`provider_charged_shipping_idr`). |
-| `insurance_idr` integer NOT NULL ≥ 0 | Returned insurance, 0 when none. |
+| `shipping_charge_idr` integer NOT NULL ≥ 0 | The confirmed provider `price` (`provider_order_snapshots.shipping_amount_idr`); for `COD_SHIPPING_ONLY` the charge the courier collects (`provider_cod_amount_idr`), which is what the customer is charged for shipping (audit 2026-09-26: the list price contradicted the collection line). Never the gerai's cost (`provider_charged_shipping_idr`). |
+| `insurance_idr` integer NOT NULL ≥ 0 | Returned insurance, 0 when none and for `COD_SHIPPING_ONLY`. |
 | `total_idr` integer NOT NULL | CHECK `total_idr = shipping_charge_idr + insurance_idr`. |
 | `collection_mode` text NOT NULL | `NON_COD` \| `COD_SHIPPING_ONLY` \| `COD`, copied from the draft (`is_cod`, `cod_shipping_only`). |
 | `courier_collection_idr` integer NULL | `provider_cod_amount_idr` for COD modes; NULL for `NON_COD` (CHECK pairs mode and nullability). Shown as "Ditagih kurir ke penerima", never added to `total_idr`. |

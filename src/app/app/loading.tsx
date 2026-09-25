@@ -15,7 +15,7 @@ function CardSkeleton({ rows }: { rows: number }) {
 export default function DashboardLoading() {
   return (
     <div aria-busy="true" aria-label="Memuat dasbor" className="flex flex-col gap-6" role="status">
-      <PageHeader description="Ringkasan operasional pengiriman, status paket, dan kinerja ekspedisi." eyebrow="Utama" title="Dasbor" />
+      <PageHeader eyebrow="Utama" title="Dasbor" />
       <div className="grid gap-2">
         <div className="flex flex-wrap gap-3"><Skeleton className="h-11 w-60 md:h-10" /><Skeleton className="h-11 w-44 md:h-10" /><Skeleton className="h-11 w-28 md:h-10" /></div>
         <Skeleton className="h-4 w-80 max-w-full" />

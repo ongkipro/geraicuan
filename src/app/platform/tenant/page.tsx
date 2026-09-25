@@ -59,7 +59,6 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
     <>
       <PageHeader
         actions={<CreateTenant initialAttemptId={randomUUID()} />}
-        description="Status, penggunaan, dan kesiapan outlet setiap tenant."
         eyebrow="Platform"
         title="Tenant"
       />
@@ -110,7 +109,7 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                     const issues = submissionIssues(row);
                     return (
                       <TableRow key={row.tenantId}>
-                        <TableCell className="min-w-52 whitespace-normal">
+                        <TableCell className="min-w-44 whitespace-normal">
                           <StackCell
                             primary={<Link className="font-semibold text-primary hover:underline" href={href(row.tenantId)} prefetch={false}>{row.name}</Link>}
                             secondary={<>ID <span className="font-mono">{formatShortId(row.tenantId)}</span></>}
@@ -120,12 +119,12 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                         <TableCell className="text-right tabular-nums">
                           <StackCell primary={<span className="font-semibold">{formatCount(row.shipments)}</span>} secondary={`${formatCount(row.issued)} resi terbit`} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-normal">
                           <StackCell primary={`${formatCount(row.batches)} pengajuan`} secondary={issues ? <span className="font-medium text-danger">{issues}</span> : undefined} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{row.outletConfigured}/{row.outletTotal}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCount(row.members)}</TableCell>
-                        <TableCell className="text-muted-foreground">{row.lastActivityAt ? formatWib(row.lastActivityAt) : "—"}</TableCell>
+                        <TableCell className="min-w-28 whitespace-normal text-muted-foreground">{row.lastActivityAt ? formatWib(row.lastActivityAt) : "—"}</TableCell>
                       </TableRow>
                     );
                   })}

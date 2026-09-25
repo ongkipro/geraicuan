@@ -85,7 +85,6 @@ export default async function RtsPage({ searchParams }: { searchParams: Promise<
             </Link>
           </Button>
         }
-        description="Pantau retur, tindak lanjuti kendala kurir, dan cek barang yang kembali ke outlet."
         eyebrow="Pengiriman"
         title="Retur (RTS)"
       />

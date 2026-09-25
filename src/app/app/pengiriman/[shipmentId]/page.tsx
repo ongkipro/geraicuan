@@ -109,9 +109,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
 
   const header = (
     <PageHeader
-      actions={<span className="flex"><ShipmentStatusBadge status={detail.status} /></span>}
       back={<BackToQueue href={backHref} />}
-      description="Status, tindakan berikutnya, pihak, paket, dan biaya satu kiriman."
       eyebrow="Pengiriman"
       title={<>Kiriman <span className="font-mono">{detail.publicReference}</span></>}
     />

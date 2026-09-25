@@ -75,7 +75,6 @@ export function PrintHistoryView({
   return (
     <>
       <PageHeader
-        description="Siapa mencetak resi apa, kapan, dan hasilnya."
         eyebrow="Laporan"
         title="Riwayat cetak resi"
       />

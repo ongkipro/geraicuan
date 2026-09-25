@@ -75,7 +75,7 @@ describe("dashboard tables", () => {
     const admin = renderToStaticMarkup(createElement(CourierRecapTable, { recap: { generatedAt: new Date(), rows: recapRows, shippingCostVisible: true } }));
     expect(admin).toContain("Biaya kirim");
     expect(admin).toContain('data-slot="courier-cost-total"');
-    expect(admin).toMatch(/Rp 207\.000/);
+    expect(admin).toMatch(/Rp\s207\.000/ /* money keeps its non-breaking space (audit 2026-09-26) */);
     expect(admin.indexOf("J&amp;T")).toBeLessThan(admin.indexOf("JNE"));
     expect(admin).not.toContain(">SAP<");
     const operator = renderToStaticMarkup(createElement(CourierRecapTable, {

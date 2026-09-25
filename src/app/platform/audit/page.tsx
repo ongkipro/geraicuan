@@ -41,7 +41,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
 
   return (
     <>
-      <PageHeader description="Tindakan Super Admin, pendaftaran, dan perubahan tenant. Tidak dapat diubah." eyebrow="Platform" title="Audit" />
+      <PageHeader eyebrow="Platform" title="Audit" />
       <FilterBar clearHref={changed ? "/platform/audit" : undefined} label="Filter audit" summary={`${range.periodLabel} · ${range.timezoneLabel}`}>
         <DateRangePicker endDate={filters.range.lastIncludedDate} label={range.presetLabel} presetId={filters.range.presetId} startDate={filters.range.startDate} />
         <FilterSelect

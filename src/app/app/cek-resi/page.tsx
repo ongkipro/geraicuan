@@ -62,7 +62,6 @@ export default async function TrackingLookupPage() {
   return (
     <>
       <PageHeader
-        description="Lacak status terakhir kiriman dengan nomor kiriman atau nomor resi kurir."
         eyebrow="Cek"
         title="Cek resi"
       />

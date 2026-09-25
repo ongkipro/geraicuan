@@ -77,7 +77,6 @@ export default async function MembersPage() {
     <SettingsFrame
       header={(
         <PageHeader
-          description="Siapa saja yang dapat membuat kiriman, mencetak resi, dan mengatur gerai."
           eyebrow="Pengelolaan"
           title="Anggota & akses"
         />

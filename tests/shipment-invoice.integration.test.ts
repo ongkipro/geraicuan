@@ -277,7 +277,7 @@ describe("shipment invoice issuance", () => {
         recipient: { name: "Penerima Sintetis", city: "Menteng, Jakarta Pusat" },
         items: [{ name: "Kain batik", quantity: 2 }, { name: "Daster", quantity: 1 }],
         weightGrams: 1250,
-        deliveryEstimate: "1-2 hari",
+        deliveryEstimate: "1–2 hari",
       },
     });
     // Privacy minimum: the recipient's street address and phone are not on the nota.
@@ -300,7 +300,8 @@ describe("shipment invoice issuance", () => {
     });
     expect(shippingOnly).toMatchObject({
       ok: true,
-      invoice: { collectionMode: "COD_SHIPPING_ONLY", courierCollectionIdr: 8277, totalIdr: 8000 },
+      // COD Ongkir: the charge the courier collects is the shipping charge on the nota (audit 2026-09-26).
+      invoice: { collectionMode: "COD_SHIPPING_ONLY", courierCollectionIdr: 8277, shippingChargeIdr: 8277, insuranceIdr: 0, totalIdr: 8277 },
     });
   });
 
@@ -464,10 +465,9 @@ describe("issueShipmentInvoice action", () => {
 });
 
 describe("invoice courier/service line", () => {
-  it("names the courier once when the service already carries it", () => {
+  it("prints the courier's display name once", () => {
+    expect(courierServiceName("lion", "lion")).toBe("Lion Parcel");
+    expect(courierServiceName("SiCepat", "SiCepat")).toBe("SiCepat");
     expect(courierServiceName("JNE", "REG")).toBe("JNE REG");
-    expect(courierServiceName("lion", "lion")).toBe("lion");
-    expect(courierServiceName("SiCepat", "SiCepat REG")).toBe("SiCepat REG");
-    expect(courierServiceName("jne", "JNE YES")).toBe("JNE YES");
   });
 });

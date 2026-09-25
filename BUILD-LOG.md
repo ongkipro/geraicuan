@@ -4877,3 +4877,11 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Coordinator fixes found in review:** Histori search `cari` (number/resi only, no PII in URLs); shell 8 px overflow at 1024 (`SidebarInset min-w-0`); `DataCard` title 18/700; stale clock reset by repeated pulls; doubled courier name on invoices; skeleton invisible on the new canvas; danger card border; Dialog/Sheet "Tutup"; Checkbox indeterminate icon; invoice pages mark Cetak resi current.
 - **Checks.** tsc 0; lint 0; full suite 113 files / 1,305 passed / 0 skipped on the disposable DB (55461); `verify-migration-upgrade` through 0057.
 - **Gotcha.** Parallel agents sharing one test database: a DB test's `TRUNCATE … CASCADE` wipes the demo users other agents are browsing with, and concurrent suites deadlock or lose rows mid-test (seen as `deadlock detected` and a missing `users` row). Re-run a failing file alone before treating it as a defect, and reseed after any DB test run.
+
+## 2026-09-26 — Page-by-page audit, round 1
+
+- **Method.** Every tenant and platform route at 1440 and 390 with the scripted measure (overflow, text floor, contrast, control heights, primaries) plus a visual pass per screenshot; state checks in the browser (partial selection, invoice issue).
+- **Fixed.** Dasbor phone layout (2-column KPIs, money no longer wraps, courier logos, recap subtitle says it counts shipments sent to Mengantar); generic header description lines removed (spec 10 D5) except the pending-approval notice; duplicate status badge on detail; `icon-sm` buttons 36 → 40 px; Cetak resi checkbox hit area 44 px; tenant table clipping.
+- **Invoice defect found and fixed.** For COD Ongkir the nota showed the list price as "Total ongkir" (Rp 31.500) next to the courier collection (Rp 27.000). The nota now charges the courier collection for that mode (DATA-14 updated), prints the courier display name ("Lion Parcel", not "lion") and a normalised estimate. Invoices issued before this fix keep their snapshot (immutable).
+- **Checks.** tsc 0; lint 0; full suite 113 files / 1,305 passed.
+- **New task.** T-233: the gerai WhatsApp printed on label and nota has no edit path.

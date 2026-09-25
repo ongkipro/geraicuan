@@ -301,7 +301,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </DashboardCard>
         {recap ? (
           <DashboardCard
-            description={`${recap.ok && recap.value.shippingCostVisible ? "Volume dan biaya kirim" : "Volume kiriman"} per kurir · ${period.periodLabel}`}
+            description={`Kiriman yang sudah dikirim ke Mengantar${recap.ok && recap.value.shippingCostVisible ? ", dengan biaya kirim" : ""} · ${period.periodLabel}`}
             id="rekap-kurir"
             title="Rekap per kurir"
           >

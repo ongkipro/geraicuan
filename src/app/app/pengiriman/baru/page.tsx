@@ -36,7 +36,6 @@ import { MobileActionBar, SummaryRail } from "./summary-rail";
 export const metadata: Metadata = { robots: { index: false }, title: "Buat kiriman" };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DESCRIPTION = "Isi data kiriman, cek tarif ongkir, lalu pilih layanan dan terbitkan resi di halaman ini.";
 
 const retrievedAtFormat = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",
@@ -67,7 +66,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
   }
   if (principal.scope !== "tenant") redirect("/login/tenant");
 
-  const header = <PageHeader description={DESCRIPTION} eyebrow="Pengiriman" title="Buat kiriman" />;
+  const header = <PageHeader title="Buat kiriman" />;
 
   // PR-60: a gerai awaiting approval sees the page, read-only; every action refuses it anyway.
   if (principal.tenantStatus !== "ACTIVE") {

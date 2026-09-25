@@ -16,20 +16,18 @@ import { cn } from "@/lib/utils";
  */
 export function ListSkeleton({
   actions,
-  description,
   label,
   tiles,
   title,
 }: {
   actions?: ReactNode;
-  description: string;
   label: string;
   tiles: number;
   title: string;
 }) {
   return (
     <>
-      <PageHeader actions={actions} description={description} eyebrow="Pengiriman" title={title} />
+      <PageHeader actions={actions} title={title} />
       <div aria-busy="true" aria-label={label} className="flex flex-col gap-6" role="status">
         <div className="grid gap-2">
           <div className="flex gap-3">

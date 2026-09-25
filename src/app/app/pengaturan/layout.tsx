@@ -16,7 +16,6 @@ export default async function SettingsLayout({ children }: { children: ReactNode
     <SettingsFrame
       header={(
         <PageHeader
-          description="Identitas gerai, awalan nomor kiriman, titik pickup, outlet, dan koneksi Mengantar."
           eyebrow="Pengelolaan"
           title="Pengaturan"
         />
