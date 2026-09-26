@@ -63,8 +63,14 @@ export function ContactFormSkeleton({ detail = false, title }: { detail?: boolea
   );
 }
 
-/** T-246: the detail page's final shape — white surface, bordered KPI cards, flat sections. */
+/** T-246/T-250: the detail page's final shape — white surface, bordered KPI cards, then the two columns. */
 function ContactDetailSkeleton({ title }: { title: string }) {
+  const section = (rows: number, key?: number) => (
+    <div className="grid gap-4 border-t pt-6" key={key}>
+      <Skeleton className="h-5 w-32" />
+      <Rows count={rows} />
+    </div>
+  );
   return (
     <div aria-busy="true" aria-label={`Memuat ${title.toLowerCase()}`} className="flex flex-col gap-6 [main:has(&)]:bg-card!" role="status">
       <HeaderSkeleton back title={title} />
@@ -76,12 +82,17 @@ function ContactDetailSkeleton({ title }: { title: string }) {
           </Card>
         ))}
       </div>
-      {[2, 3, 4].map((rows, index) => (
-        <div className="grid gap-4 border-t pt-6" key={index}>
-          <Skeleton className="h-5 w-32" />
-          <Rows count={rows} />
+      <div className="@container/detail">
+        <div className="flex flex-col gap-6 @4xl/detail:grid @4xl/detail:grid-cols-[minmax(0,1fr)_340px] @4xl/detail:items-start @4xl/detail:gap-x-12" data-slot="contact-detail-columns">
+          <div className="flex min-w-0 flex-col gap-6 @max-4xl/detail:contents" data-column="main">
+            <div className="@max-4xl/detail:order-3">{section(5)}</div>
+            <div className="@max-4xl/detail:order-2">{section(2)}</div>
+          </div>
+          <div className="flex min-w-0 flex-col gap-6 @max-4xl/detail:contents" data-column="side">
+            <div className="@max-4xl/detail:order-1">{section(4)}</div>
+          </div>
         </div>
-      ))}
+      </div>
     </div>
   );
 }

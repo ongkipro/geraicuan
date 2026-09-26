@@ -7,7 +7,7 @@ import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CharacterClassInput } from "@/components/ui/character-class-input";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
 
 const FORM_ID = "gerai-contact-form";
 
@@ -34,19 +34,15 @@ export function GeraiIdentityCard({ name, whatsapp }: { name: string; whatsapp: 
 
   return (
     <DataCard
-      description="Hubungi admin platform bila nama gerai perlu diubah."
       footer={(
         <Button className="ml-auto" disabled={pending} form={FORM_ID} type="submit">
-          {pending ? "Menyimpan…" : "Simpan"}
+          {pending ? "Menyimpan…" : "Simpan WhatsApp"}
         </Button>
       )}
       title="Identitas gerai"
     >
-      <dl className="grid gap-1">
-        <dt className="text-sm text-muted-foreground">Nama gerai</dt>
-        <dd className="text-base font-semibold wrap-anywhere">{name}</dd>
-      </dl>
-      <form action={formAction} className="flex flex-col gap-4" id={FORM_ID}>
+      {/* noValidate: an empty or malformed number gets the server's inline message, not a browser bubble. */}
+      <form action={formAction} className="flex flex-col gap-4" id={FORM_ID} noValidate>
         {state.error ? (
           <Alert className="outline-none" ref={resultRef} role="alert" tabIndex={-1} variant="destructive">
             <AlertTitle>WhatsApp gerai belum tersimpan</AlertTitle>
@@ -55,31 +51,43 @@ export function GeraiIdentityCard({ name, whatsapp }: { name: string; whatsapp: 
         ) : state.savedWhatsapp ? (
           <Alert className="outline-none" ref={resultRef} role="status" tabIndex={-1}>
             <AlertTitle>WhatsApp gerai disimpan</AlertTitle>
-            <AlertDescription>Dipakai untuk invoice dan kiriman berikutnya.</AlertDescription>
+            <AlertDescription>Dipakai di invoice dan kiriman berikutnya.</AlertDescription>
           </Alert>
         ) : null}
-        <Field data-invalid={Boolean(state.error)}>
-          <FieldLabel htmlFor="gerai-whatsapp">Nomor WhatsApp gerai</FieldLabel>
-          <CharacterClassInput
-            aria-describedby="gerai-whatsapp-help"
-            aria-invalid={Boolean(state.error)}
-            autoComplete="tel"
-            characterClass="PHONE"
-            className="sm:max-w-xs"
-            id="gerai-whatsapp"
-            inputMode="tel"
-            maxLength={20}
-            name="whatsapp"
-            onChange={(event) => setValue(event.target.value)}
-            placeholder="0812 3456 7890"
-            required
-            type="tel"
-            value={value}
-          />
-          <FieldDescription id="gerai-whatsapp-help">
-            Tercetak di invoice dan terisi sebagai pengirim label (Alamat gerai). Invoice dan kiriman yang sudah dibuat tidak berubah.
-          </FieldDescription>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Read-only value in the same field frame as the locked Awalan (bg-muted, 40px). */}
+          <Field>
+            <FieldTitle>Nama gerai</FieldTitle>
+            <p
+              className="flex min-h-10 items-center rounded-lg border bg-muted px-3 py-2 text-sm font-medium wrap-anywhere max-md:min-h-11"
+              data-readonly=""
+            >
+              {name}
+            </p>
+            <FieldDescription>Hubungi admin platform bila nama gerai perlu diubah.</FieldDescription>
+          </Field>
+          <Field data-invalid={Boolean(state.error)}>
+            <FieldLabel htmlFor="gerai-whatsapp">Nomor WhatsApp gerai</FieldLabel>
+            <CharacterClassInput
+              aria-describedby="gerai-whatsapp-help"
+              aria-invalid={Boolean(state.error)}
+              autoComplete="tel"
+              characterClass="PHONE"
+              id="gerai-whatsapp"
+              inputMode="tel"
+              maxLength={20}
+              name="whatsapp"
+              onChange={(event) => setValue(event.target.value)}
+              placeholder="0812 3456 7890"
+              required
+              type="tel"
+              value={value}
+            />
+            <FieldDescription id="gerai-whatsapp-help">
+              Tercetak di invoice dan menjadi nomor pengirim di label bila kiriman memakai Alamat gerai. Invoice dan kiriman yang sudah dibuat tidak berubah.
+            </FieldDescription>
+          </Field>
+        </div>
       </form>
     </DataCard>
   );

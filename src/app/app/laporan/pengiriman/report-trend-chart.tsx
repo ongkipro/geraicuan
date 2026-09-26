@@ -22,7 +22,8 @@ const shortLabel = (label: string) => label.replace(/ \d{4}$/, "");
 
 /**
  * T-235 "Tren harian": shipments created per WIB bucket, COD solid and Non-COD dashed (spec 19 M-3:
- * a series never depends on colour alone), or the COD value per bucket. Axes start at zero.
+ * a series never depends on colour alone), or the COD value per bucket. Axes start at zero; ticks and
+ * tooltip values are id-ID (T-254: the count tooltip no longer follows the browser locale).
  */
 export function ReportTrendChart({ data, mode }: { data: ReportTrendPoint[]; mode: "count" | "value" }) {
   const common = (
@@ -48,7 +49,21 @@ export function ReportTrendChart({ data, mode }: { data: ReportTrendPoint[]; mod
       <LineChart accessibilityLayer data={data} margin={{ bottom: 0, left: 0, right: 8, top: 8 }}>
         {common}
         <YAxis allowDecimals={false} axisLine={false} domain={[0, "auto"]} tickFormatter={(value: number) => count.format(value)} tickLine={false} width={32} />
-        <ChartTooltip content={<ChartTooltipContent />} />
+        <ChartTooltip
+          content={(
+            <ChartTooltipContent
+              formatter={(value, name, item) => (
+                <>
+                  <span aria-hidden="true" className="size-2.5 shrink-0 self-center rounded-xs" style={{ background: item.color }} />
+                  <span className="flex flex-1 items-center justify-between gap-4">
+                    <span className="text-muted-foreground">{countConfig[name as keyof typeof countConfig]?.label ?? name}</span>
+                    <span className="font-medium tabular-nums">{count.format(Number(value))}</span>
+                  </span>
+                </>
+              )}
+            />
+          )}
+        />
         <Line activeDot={{ r: 4 }} dataKey="cod" dot={false} isAnimationActive={false} stroke="var(--color-cod)" strokeWidth={2} type="linear" />
         <Line activeDot={{ r: 4 }} dataKey="nonCod" dot={false} isAnimationActive={false} stroke="var(--color-nonCod)" strokeDasharray="5 4" strokeWidth={2} type="linear" />
       </LineChart>

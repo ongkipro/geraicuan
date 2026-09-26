@@ -84,6 +84,8 @@ function PickupRow({ busy, outletId, point, onlyPoint, defaultAction, removeActi
 }) {
   const [confirming, setConfirming] = useState(false);
   const [seenToken, setSeenToken] = useState(removeToken);
+  // The server refuses removing the main point while others remain; say so instead of offering it.
+  const blocked = point.isDefault && !onlyPoint;
   // The confirmation stays open (showing progress) until the server answers, then closes.
   if (removeToken !== seenToken) {
     setSeenToken(removeToken);
@@ -117,26 +119,32 @@ function PickupRow({ busy, outletId, point, onlyPoint, defaultAction, removeActi
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Hapus titik pickup {point.pickupAddressLabel}?</AlertDialogTitle>
+              <AlertDialogTitle>{blocked ? `Titik utama ${point.pickupAddressLabel} belum dapat dihapus` : `Hapus titik pickup ${point.pickupAddressLabel}?`}</AlertDialogTitle>
               <AlertDialogDescription>
                 {onlyPoint
-                  ? "Ini titik pickup terakhir: outlet ini tidak dapat membuat kiriman sampai titik baru ditambahkan."
-                  : point.isDefault
-                    ? "Ini titik utama. Jadikan titik lain utama dulu; penghapusan titik utama ditolak selama titik lain masih ada."
-                    : "Titik ini tidak lagi dapat dipilih saat membuat kiriman. Alamatnya tetap ada di akun Mengantar dan dapat ditambahkan lagi."}
+                  ? "Ini titik pickup terakhir. Outlet ini tidak dapat membuat kiriman sampai titik baru ditambahkan."
+                  : blocked
+                    ? "Ini titik utama. Jadikan titik lain sebagai utama dulu, lalu hapus titik ini."
+                    : "Titik ini tidak dapat dipilih lagi saat membuat kiriman. Alamatnya tetap ada di akun Mengantar dan dapat ditambahkan lagi."}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <form action={removeAction}>
-              <input name="outletId" type="hidden" value={outletId} />
-              <input name="pickupAddressId" type="hidden" value={point.pickupAddressId} />
-              <input name="confirmation" type="hidden" value="remove-pickup-point" />
+            {blocked ? (
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={removePending}>Batal</AlertDialogCancel>
-                <Button disabled={removePending} type="submit" variant="destructive">
-                  {removePending ? "Menghapus…" : "Hapus titik pickup"}
-                </Button>
+                <AlertDialogCancel>Tutup</AlertDialogCancel>
               </AlertDialogFooter>
-            </form>
+            ) : (
+              <form action={removeAction}>
+                <input name="outletId" type="hidden" value={outletId} />
+                <input name="pickupAddressId" type="hidden" value={point.pickupAddressId} />
+                <input name="confirmation" type="hidden" value="remove-pickup-point" />
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={removePending}>Batal</AlertDialogCancel>
+                  <Button disabled={removePending} type="submit" variant="destructive">
+                    {removePending ? "Menghapus…" : "Hapus titik pickup"}
+                  </Button>
+                </AlertDialogFooter>
+              </form>
+            )}
           </AlertDialogContent>
         </AlertDialog>
       </div>
@@ -185,7 +193,7 @@ function PickupOptionPicker({ disabled, error, onSelect, optionsFixture, outletI
           <Button
             aria-describedby={describedBy}
             aria-invalid={Boolean(error)}
-            className="h-auto min-h-10 w-full justify-between gap-3 border-input py-2 text-left font-normal whitespace-normal text-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground max-md:min-h-11"
+            className="h-auto min-h-10 w-full justify-between gap-3 border-input py-1.5 text-left font-normal whitespace-normal text-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground max-md:min-h-11"
             disabled={disabled}
             id="pickup-address"
             role="combobox"
@@ -269,10 +277,10 @@ export function PickupPoints({ connectionSource, optionsFixture, outletId, outle
 
   return (
     <>
-      <DataCard count={points.length} description={`Lokasi kurir mengambil paket outlet ${outletName}.`} title="Daftar titik pickup">
+      <DataCard count={points.length} description={`Tempat kurir mengambil paket untuk outlet ${outletName}.`} title="Daftar titik pickup">
         {points.length === 0 ? (
           <EmptyState
-            description="Outlet ini belum dapat membuat kiriman. Tambahkan minimal satu alamat pickup di bawah."
+            description="Outlet ini belum dapat membuat kiriman. Tambahkan minimal satu titik pickup di bawah."
             icon={MapPin}
             title="Belum ada titik pickup"
           />
@@ -298,13 +306,13 @@ export function PickupPoints({ connectionSource, optionsFixture, outletId, outle
       </DataCard>
 
       <DataCard
-        description="Pilih dari daftar pickup akun Mengantar; area asal terisi otomatis."
+        description="Pilih alamat dari akun Mengantar; area asal terisi otomatis."
         footer={(
           <div className="ml-auto flex flex-col items-end gap-1">
             <Button disabled={busy || !selection} form={ADD_FORM_ID} type="submit" variant="outline">
               {addPending ? "Menambahkan…" : "Tambah titik pickup"}
             </Button>
-            {!selection && !busy ? <p className="text-xs text-muted-foreground">Pilih alamat pickup dulu.</p> : null}
+            {!selection && !busy ? <p className="text-sm text-muted-foreground">Pilih alamat pickup dulu.</p> : null}
           </div>
         )}
         title="Tambah titik pickup"
@@ -318,12 +326,12 @@ export function PickupPoints({ connectionSource, optionsFixture, outletId, outle
             optionsFixture={optionsFixture}
             outletId={outletId}
             selection={selection}
-            sourceHelp={connectionSource === "private" ? "Dari akun Mengantar milik outlet." : "Dari koneksi bawaan GeraiCUAN."}
+            sourceHelp={connectionSource === "private" ? "Daftar diambil dari akun Mengantar milik outlet." : "Daftar diambil dari koneksi bawaan GeraiCUAN."}
           />
           <Field>
-            <FieldLabel htmlFor="pickup-origin">Area asal (otomatis)</FieldLabel>
+            <FieldLabel htmlFor="pickup-origin">Area asal</FieldLabel>
             <output aria-live="polite" className="min-h-6 text-sm wrap-anywhere" htmlFor="pickup-address" id="pickup-origin">
-              {selection?.originLabel ?? <span className="text-muted-foreground">Terisi setelah alamat dipilih</span>}
+              {selection?.originLabel ?? <span className="text-muted-foreground">Terisi otomatis setelah alamat dipilih</span>}
             </output>
           </Field>
           <ActionResult failureTitle="Titik pickup belum ditambahkan" state={addState} successTitle="Titik pickup ditambahkan" />

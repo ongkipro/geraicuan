@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function MembersLoading() {
   return (
-    <SettingsFrame header={<PageHeader eyebrow="Pengelolaan" title="Anggota & akses" />}>
+    <SettingsFrame header={<PageHeader title="Pengaturan" />}>
       <div aria-busy="true" className="flex flex-col gap-6">
         <p className="sr-only" role="status">Memuat anggota…</p>
         <div aria-hidden="true" className="grid gap-4 sm:grid-cols-3">

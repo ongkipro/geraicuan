@@ -4,18 +4,21 @@ import { describe, expect, it } from "vitest";
 
 import { paginateRows, printHistoryHref, printSequenceLabel } from "@/app/app/laporan/cetak-resi/print-history-logic";
 import { PrintHistoryView, type PrintHistoryViewProps } from "@/app/app/laporan/cetak-resi/print-history-view";
+import { reportStatusGroups } from "@/app/app/laporan/pengiriman/analytics-sections";
 import {
   activeFilterCount,
   courierPerformancePoints,
   reportAnalyticsView,
   reportCarry,
   reportExportHref,
+  reportTrendTotals,
 } from "@/app/app/laporan/pengiriman/report-logic";
 import { ShipmentReportView, type ShipmentReportViewProps } from "@/app/app/laporan/pengiriman/report-view";
 import { pageWindow } from "@/app/app/laporan/_components/report-pagination";
 import type { ShipmentReportRow } from "@/db/shipment-report-repository";
 import type { PrintHistoryRow } from "@/db/label-print-repository";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
+import { shipmentStatuses } from "@/lib/domain-enums";
 import { parseAreaRegion } from "@/lib/label-format";
 import { formatRate, groupRegions, groupRoutes, lowVolumeNote, returnRate, UNKNOWN_REGION_LABEL } from "@/lib/shipment-report-analytics";
 
@@ -159,6 +162,30 @@ describe("Laporan pengiriman analytics logic (T-235)", () => {
     expect(formatRate(returnRate({ deliveredCount: 0, returnedCount: 0 }))).toBe("—");
   });
 
+  it("groups every status into exactly one Ringkasan outcome bucket, in lifecycle order (T-254)", () => {
+    const totals = shipmentStatuses.map((status, index) => ({ shipmentCount: index + 1, status }));
+    const groups = reportStatusGroups(totals);
+    expect(groups.map((group) => group.label)).toEqual(["Terkirim", "Retur", "Gagal", "Masih berjalan"]);
+    const placed = groups.flatMap((group) => group.statuses.map((row) => row.status));
+    expect([...placed].sort()).toEqual([...shipmentStatuses].sort());
+    expect(groups.map((group) => group.statuses.map((row) => row.status))).toEqual([
+      ["DELIVERED"],
+      ["RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED"],
+      ["FAILED", "CANCELLED"],
+      shipmentStatuses.filter((status) => !["DELIVERED", "RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED", "FAILED", "CANCELLED"].includes(status)),
+    ]);
+    for (const group of groups) expect(group.count).toBe(group.statuses.reduce((sum, row) => sum + row.count, 0));
+    expect(groups.reduce((sum, group) => sum + group.count, 0)).toBe(totals.reduce((sum, row) => sum + row.shipmentCount, 0));
+    // A zero status is left out of its group; an empty group has count 0.
+    expect(reportStatusGroups([{ shipmentCount: 3, status: "DELIVERED" }]).map((group) => [group.key, group.count, group.statuses.length]))
+      .toEqual([["delivered", 3, 1], ["returned", 0, 0], ["failed", 0, 0], ["in-progress", 0, 0]]);
+  });
+
+  it("totals the trend legend over every bucket (T-254)", () => {
+    expect(reportTrendTotals(analytics.trend)).toEqual({ cod: 3, codValue: 666_480, nonCod: 1 });
+    expect(reportTrendTotals([])).toEqual({ cod: 0, codValue: 0, nonCod: 0 });
+  });
+
   it("fills every day of the range so a quiet day is a zero, not a gap", () => {
     expect(analytics.trend.map((point) => [point.cod, point.nonCod])).toEqual([[0, 0], [0, 0], [2, 1], [0, 0], [0, 0], [1, 0]]);
     expect(analytics.granularity).toBe("harian");
@@ -188,13 +215,31 @@ describe("Laporan pengiriman view", () => {
 
   it("renders the T-235 KPI strip, trend, status distribution, wilayah and routes", () => {
     const html = render(createElement(ShipmentReportView, reportProps()));
-    for (const title of ["Ringkasan", "Total kiriman", "Terkirim", "Retur", "Masih berjalan", "Nilai COD", "Estimasi cair", "Tren harian", "Distribusi status", "Wilayah tujuan", "Rute teratas"]) {
+    for (const title of ["Ringkasan", "Total kiriman", "Terkirim", "Retur", "Gagal", "Masih berjalan", "Nilai COD", "Estimasi cair", "Tren harian", "Distribusi status", "Wilayah tujuan", "Rute teratas"]) {
       expect(html, title).toContain(title);
     }
     // Terkirim 4 of 27; Retur 2 of 6 finished (4 + 2).
     expect(html).toContain("14,8% dari 27 kiriman");
     expect(html).toContain("33,3% dari 6 selesai");
     expect(html).toMatch(/Rp\s666\.480/);
+    // T-251: two panels, no decorative icon chips; each figure is a <dd> after its <dt> label.
+    const summary = html.slice(html.indexOf('aria-label="Ringkasan laporan"'), html.indexOf("Tren harian"));
+    expect(summary).toContain('aria-label="Volume kiriman"');
+    expect(summary).toContain('aria-label="Uang COD"');
+    expect(summary).not.toContain("size-10");
+    expect(summary).not.toContain("<a ");
+    expect(summary).not.toMatch(/pendapatan/i);
+    for (const [label, value] of [["Total kiriman", "27"], ["Terkirim", "4"], ["Retur", "2"], ["Gagal", "1"], ["Masih berjalan", "20"]]) {
+      expect(summary, label).toMatch(new RegExp(`${label}</dt><dd[^>]*>${value}</dd>`));
+    }
+    expect(summary).toMatch(/Nilai COD<\/dt><dd[^>]*>Rp\s666\.480<\/dd><dd[^>]*>Ditagih kurir dari 3 kiriman COD<\/dd>/);
+    expect(summary).toMatch(/Estimasi cair<span[^>]*data-slot="badge"[^>]*>Estimasi<\/span><\/dt><dd[^>]*>Rp\s201\.762<\/dd><dd[^>]*>Perkiraan, bukan dana diterima<\/dd>/);
+    // The composition bar: Terkirim, Retur, Gagal, Masih berjalan, summing to the total (widths to 100%).
+    const segments = [...summary.matchAll(/data-count="(\d+)" data-segment="([a-z-]+)" style="width:([\d.]+)%"/g)];
+    expect(segments.map((match) => [match[2], Number(match[1])])).toEqual([["delivered", 4], ["returned", 2], ["failed", 1], ["in-progress", 20]]);
+    expect(segments.reduce((sum, match) => sum + Number(match[1]), 0)).toBe(27);
+    expect(segments.reduce((sum, match) => sum + Number(match[3]), 0)).toBeCloseTo(100, 6);
+    expect(summary).toContain("berjumlah 27 kiriman");
     // Tabs are real tabs: a labelled tablist, keyboard-reachable triggers.
     expect(html).toContain('role="tablist"');
     expect(html).toContain('aria-label="Tampilan tren"');
@@ -202,13 +247,30 @@ describe("Laporan pengiriman view", () => {
     expect(html).toContain('aria-label="Kelompok wilayah"');
     expect(html).toContain("Per kota");
     // Trend data table: every day of the range, newest first.
-    expect(tableHeaders(html, "Data tren")).toEqual(["Tanggal", "COD", "Non-COD", "Nilai COD"]);
+    expect(tableHeaders(html, "Data tren")).toEqual(["Tanggal (WIB)", "COD", "Non-COD", "Nilai COD"]);
     expect(html).toContain("Lihat tabel data tren");
-    // Status distribution replaces the old table, keeping badge, count and share.
+    // T-254: the legend carries each series' period total (RPT-SHP-TREND-TOTALS): COD 2 + 1, Non-COD 1.
+    const legends = [...html.matchAll(/<dl aria-label="Total periode ini"[^>]*>([\s\S]*?)<\/dl>/g)].map(([, body]) =>
+      [...body.matchAll(/<dt[^>]*>([\s\S]*?)<\/dt><dd[^>]*>([\s\S]*?)<\/dd>/g)].map(([, dt, dd]) => [dt.replace(/<[^>]+>/g, ""), dd]));
+    // Only the active tab renders on the server; the Nilai COD legend (Rp 666.480) mounts on its tab.
+    expect(legends).toEqual([[["COD", "3 kiriman"], ["Non-COD", "1 kiriman"]]]);
+    // Status distribution (T-254): the lifecycle counts grouped into the Ringkasan buckets. The
+    // fixture's ISSUED and DRAFT are both "Masih berjalan"; each status keeps its badge, count and
+    // share of the 45-shipment cohort (1 / 45 = 2,2%), in lifecycle order inside the group.
     expect(html).not.toContain("Total per status");
-    expect(html).toContain('aria-label="Distribusi status"');
-    expect(html).toMatch(/data-status="ISSUED"[\s\S]*?50,0%/);
-    // Wilayah: top 10 visible, the rest behind the disclosure, unknown named.
+    const distribution = html.slice(html.indexOf('<ul aria-label="Distribusi status"'), html.indexOf('<p class="sr-only">', html.indexOf('<ul aria-label="Distribusi status"')));
+    expect([...distribution.matchAll(/data-outcome="([a-z-]+)"/g)].map((match) => match[1])).toEqual(["in-progress"]);
+    expect(distribution).toMatch(/Masih berjalan[\s\S]*?<span class="font-semibold">2<\/span><span[^>]*> · 4,4%<\/span>/);
+    expect([...distribution.matchAll(/data-status="([A-Z_]+)"[\s\S]*?data-slot="badge"[\s\S]*?<span class="font-semibold">(\d+)<\/span><span[^>]*> · ([\d,]+%)/g)].map((match) => match.slice(1)))
+      .toEqual([["DRAFT", "1", "2,2%"], ["ISSUED", "1", "2,2%"]]);
+    expect(distribution).toContain("<details");
+    // Wilayah: top 10 visible, the rest behind the disclosure, unknown named. T-254: the volume bar
+    // sits in the table (no separate chart), and below md each wilayah is a record, not a squeezed table.
+    const wilayah = html.slice(html.indexOf(">Wilayah tujuan<"), html.indexOf(">Rute teratas<"));
+    expect(wilayah).toContain('data-slot="table"');
+    expect(wilayah).not.toMatch(/recharts|data-slot="chart"/);
+    expect(html).toMatch(/<ul aria-label="Kiriman per provinsi" class="[^"]*md:hidden"/);
+    expect(html).toMatch(/<ul aria-label="Rute teratas" class="[^"]*md:hidden"/);
     expect(tableHeaders(html, "Kiriman per provinsi")).toEqual(["Wilayah", "Kiriman", "Terkirim", "Retur", "% retur"]);
     expect(html).toContain("Tampilkan semua (14 provinsi)");
     expect(html).toContain(UNKNOWN_REGION_LABEL);
@@ -251,7 +313,7 @@ describe("Laporan pengiriman view", () => {
     // Route Gudang Jakarta Barat → Kota Makassar has 5.
     expect(section("Rute teratas")).toMatch(/Kota Makassar[\s\S]*?Volume rendah \(n = 5\)/);
     // The note is muted text, not a badge or alert.
-    expect(html).toMatch(/<span class="block text-xs text-muted-foreground" data-low-volume="">Volume rendah/);
+    expect(html).toMatch(/<span class="block text-xs whitespace-nowrap text-muted-foreground" data-low-volume="">Volume rendah/);
   });
 
   it("keeps the totals and the list when the analytics read failed", () => {

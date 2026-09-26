@@ -31,6 +31,7 @@ const { contactCategoryLabel, parseContactCategory } = await import("@/lib/conta
 const { ContactDirectoryList, contactAreaLine } = await import("@/app/app/kontak/contact-directory-list");
 const { ContactCreateForm } = await import("@/app/app/kontak/baru/contact-create-form");
 const { ContactArchiveZone, ContactAddressesCard, ContactDataSection } = await import("@/app/app/kontak/[contactId]/contact-detail-cards");
+const { ContactFormSkeleton } = await import("@/app/app/kontak/contact-skeletons");
 const { trackingTimeline } = await import("@/app/app/cek-resi/tracking-result-model");
 const { TrackingLookup, TrackingResultCard } = await import("@/app/app/cek-resi/tracking-lookup");
 const { RateCheck, RateResults, rateView } = await import("@/app/app/cek-tarif/rate-check");
@@ -155,6 +156,7 @@ describe("Kontak baru and detail", () => {
     // T-241: "Jadikan utama" only on an address that is not already primary.
     expect(one).not.toContain("Jadikan utama");
     const two = render(createElement(ContactAddressesCard, { ...props, addresses: [address, { ...address, id: "y", isPrimary: false, label: "Kantor" }] }));
+    expect(two).toContain('<ul class="grid gap-3 @lg/section:grid-cols-2" id="alamat">');
     expect(two).toContain('aria-label="Jadikan Kantor alamat utama"');
     expect(two).not.toContain('aria-label="Jadikan Rumah alamat utama"');
     expect(one).toContain("Tambah alamat");
@@ -187,12 +189,34 @@ describe("Kontak baru and detail", () => {
     expect(data.match(/type="submit"/g)).toHaveLength(1);
     expect(data).toContain("Simpan data kontak");
     for (const name of ["contactName", "contactPhone", "category", "roleSender", "roleRecipient"]) expect(data).toContain(`name="${name}"`);
+    // T-250: the form sits in the 340px side column — fields stacked (two columns only when the
+    // section is ≥ 576px), Peran as two compact 44px checkbox rows (no option cards; the effect
+    // stays as each checkbox's description), and the one save full width.
+    expect(data).toContain("@container/section");
+    expect(data).toContain("grid gap-x-4 @xl/section:grid-cols-2");
+    expect(data).not.toMatch(/md:grid-cols-2|xl:grid-cols-3/);
+    expect(data.match(/data-compact="true"/g)).toHaveLength(2);
+    expect(data).not.toContain("has-checked:bg-accent");
+    expect(data).toMatch(/<label class="[^"]*\bmin-h-11\b[^"]*" data-compact="true"><input aria-describedby="roleSender-effect"/);
+    expect(data).toMatch(/<span class="sr-only" id="roleSender-effect">/);
+    expect(data).toMatch(/<button[^>]*class="[^"]*\bw-full\b[^"]*"[^>]*type="submit"[^>]*>(?:(?!<\/button>)[\s\S])*Simpan data kontak/);
+    // The loading skeleton takes the same two-column shape.
+    const skeleton = render(createElement(ContactFormSkeleton, { detail: true, title: "Detail penerima" }));
+    expect(skeleton).toContain('data-slot="contact-detail-columns"');
+    expect(skeleton.indexOf('data-column="main"')).toBeLessThan(skeleton.indexOf('data-column="side"'));
+    expect(skeleton.match(/@max-4xl\/detail:order-\d/g)).toEqual(["@max-4xl/detail:order-3", "@max-4xl/detail:order-2", "@max-4xl/detail:order-1"]);
+    // The create form keeps the option cards.
+    const create = render(createElement(ContactCreateForm, { canManageSettings: true, outlets: [], role: "pengirim" }));
+    expect(create).toContain("has-checked:bg-accent");
+    expect(create).not.toContain("data-compact");
     const addresses = render(createElement(ContactAddressesCard, {
       addresses: [{ address: "Jl. A", destinationAreaId: "a", destinationAreaLabel: "Dago", id: "x", isPrimary: true, label: "Rumah" }],
       archived: false, canManageSettings: true, contact: detailContact, outlets: [], outletsUnavailable: false,
     }));
     expect(addresses).not.toContain('data-slot="card"');
     expect(addresses).toMatch(/<li class="[^"]*\bborder\b[^"]*\bbg-card\b/);
+    // T-250: one address fills the column; two or more go 2-up once the section is ≥ 512px.
+    expect(addresses).toContain('<ul class="grid gap-3" id="alamat">');
   });
 });
 

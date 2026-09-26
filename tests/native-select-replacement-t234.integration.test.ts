@@ -69,6 +69,7 @@ describe("Buat kiriman pickup schedule posts pickupDate and pickupSlot unchanged
       name: "Outlet Uji",
       pickupPoints: [{ isDefault: true, originAreaLabel: "Coblong, Kota Bandung", pickupAddressId: "P-1", pickupAddressLabel: "Gudang, Jl. Dago 1, Coblong" }],
     }],
+    steps: [],
     submissionId: "00000000-0000-4000-8000-000000000235",
   }));
   const controls = namedControls(html);
@@ -141,7 +142,7 @@ describe("Undang anggota role cards", () => {
     ]);
     expect(html).toContain("Peran awal</legend>");
     expect(html).toContain("Buat kiriman dan cetak resi.");
-    expect(html).toContain("Juga laporan, pengaturan, dan anggota.");
+    expect(html).toContain("Semua akses Operator, ditambah laporan, pengaturan, dan anggota.");
     expect(html).not.toContain('role="combobox"');
   });
 });

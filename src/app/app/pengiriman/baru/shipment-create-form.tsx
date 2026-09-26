@@ -54,8 +54,21 @@ import {
 } from "@/lib/shipment-draft-logic";
 import { cn } from "@/lib/utils";
 
-import { InsetBlock, Required, SectionCard, SubBlockTitle } from "./flow-parts";
-import { MobileActionBar, SummaryRail } from "./summary-rail";
+import {
+  FLOW_SECTIONS,
+  FlowStepper,
+  flowSectionStates,
+  InsetBlock,
+  Required,
+  requiredFieldsMissing,
+  saveGuard,
+  SectionCard,
+  SectionStatus,
+  spineSegments,
+  SubBlockTitle,
+  type FlowStep,
+} from "./flow-parts";
+import { FillChecklist, MobileActionBar, RailColumn, SummaryRail, type RailData } from "./summary-rail";
 
 export type FlowPickupPoint = { isDefault: boolean; originAreaLabel: string; pickupAddressId: string; pickupAddressLabel: string };
 export type FlowOutlet = { id: string; name: string; pickupPoints: FlowPickupPoint[] };
@@ -150,9 +163,12 @@ export function ShipmentCreateForm({
   gerai,
   nowIso,
   outlets,
+  steps,
   submissionId,
 }: {
   gerai: { name: string; phone: string | null };
+  /** The top-bar steps; step 1 gains the live "n/4 bagian lengkap" (T-249). */
+  steps: FlowStep[];
   /** The server's clock, so the pickup dates and slots render the same on server and client. */
   nowIso: string;
   outlets: FlowOutlet[];
@@ -235,12 +251,78 @@ export function ShipmentCreateForm({
                 : field.startsWith("sender") && !masking ? "sender-block"
                   : field;
 
+  // T-249: section progress from the same required fields the form marks with *, nothing new.
+  const missing = requiredFieldsMissing({
+    destinationChosen: destination.mode !== "empty",
+    declaredValue,
+    handoverType,
+    pickupDate,
+    pickupReady: Boolean(pickup && outlet),
+    pickupSlot: effectiveSlot,
+    products: rows,
+    recipient,
+    sender,
+  });
+  const [focusedSection, setFocusedSection] = useState<number | null>(null);
+  const states = flowSectionStates(missing.map((fields) => fields.length), focusedSection, true);
+  const connectors = spineSegments(states);
+  const completeCount = missing.filter((fields) => fields.length === 0).length;
+  const progressLabel = `${completeCount}/${missing.length} bagian lengkap`;
+  const guard = saveGuard(missing.map((fields) => fields.length));
+  const checklist = FLOW_SECTIONS.map((candidate, index) => ({ ...candidate, missing: missing[index]?.length ?? 0, state: states[index] }));
+  const railData: RailData = {
+    destination: destinationLabel,
+    moneyRows: [
+      { amountIdr: parseRupiahOrNull(declaredValue), label: cod ? "Nilai barang" : "Nilai barang (asuransi)" },
+      { amountIdr: null, label: "Ongkir" },
+      ...(cod ? [{ amountIdr: null, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` }] : []),
+    ],
+    origin: pickup?.originAreaLabel ?? null,
+    rows: [
+      {
+        label: "Tipe penyerahan",
+        tone: "accent",
+        value: handoverType === "PICKUP"
+          ? `Pickup · ${effectiveSlot ? effectiveSlot.replace(":", ".") : "—"}${pickupVehicle ? ` · ${PICKUP_VEHICLE_LABELS[pickupVehicle]}` : ""}`
+          : "Drop di outlet",
+      },
+      { label: "Ekspedisi", value: "—" },
+      { label: "Pengirim di label", value: sender.name ? `${sender.name}${sender.phone ? ` (${sender.phone})` : ""}` : "—" },
+      { label: "Berat & jumlah", value: `${weightGrams ? gramsToKilogramLabel(Number(weightGrams)) : "— kg"} (${composed.packageQuantity || "—"} barang)` },
+      { label: "Metode bayar", tone: "accent", value: PAYMENT_METHOD_LABELS[paymentMethod] },
+    ],
+    source: "Estimasi",
+    total: { amountIdr: null, label: cod ? "Total tagihan COD" : "Ongkir", note: "Tarif muncul setelah data disimpan" },
+  };
+  const section = (index: number) => ({
+    aside: <SectionStatus missing={missing[index]?.length ?? 0} state={states[index]} />,
+    connector: connectors[index],
+    id: FLOW_SECTIONS[index].id,
+    number: index + 1,
+    state: states[index],
+    title: FLOW_SECTIONS[index].title,
+  });
+
   return (
+    <>
+    <FlowStepper steps={steps.map((step, index) => (index === 0 && step.state === "current" ? { ...step, progress: progressLabel } : step))} />
     <form
       aria-busy={pending}
       className="flex flex-col gap-6 pb-32 lg:pb-0"
       id="form-kiriman"
       noValidate
+      onBlur={(event) => {
+        // Focus left the form — unless it moved into a portalled Select/Popover of one of its sections.
+        const next = event.relatedTarget as HTMLElement | null;
+        if (!next || (!event.currentTarget.contains(next) && !next.closest("[data-slot$='-content']"))) setFocusedSection(null);
+      }}
+      onFocus={(event) => {
+        const target = event.target as HTMLElement;
+        if (!event.currentTarget.contains(target)) return; // a portalled Select/Popover keeps its section
+        const id = target.closest("[data-flow-section]")?.getAttribute("data-flow-section");
+        const index = FLOW_SECTIONS.findIndex((candidate) => candidate.id === id);
+        setFocusedSection(index >= 0 && index < missing.length ? index : null);
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
@@ -289,7 +371,7 @@ export function ShipmentCreateForm({
         <div className="flex w-full min-w-0 flex-1 flex-col gap-6">
           {errorEntries.length > 0 ? (
             <div
-              className="flex flex-col gap-2 rounded-xl border border-destructive bg-card p-4 text-destructive outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="flex flex-col gap-2 rounded-xl border border-destructive bg-card p-4 text-destructive outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:ml-12"
               id="shipment-draft-errors"
               ref={summaryRef}
               role="alert"
@@ -316,7 +398,7 @@ export function ShipmentCreateForm({
           ) : null}
 
           {/* 1 — Penyerahan & asal */}
-          <SectionCard id="section-handover" number={1} title="Penyerahan paket & asal">
+          <SectionCard {...section(0)}>
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-2 text-sm font-medium">Tipe penyerahan paket<Required /></legend>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -485,7 +567,7 @@ export function ShipmentCreateForm({
           </SectionCard>
 
           {/* 2 — Pengirim (masking) & penerima */}
-          <SectionCard id="section-parties" number={2} title="Pengirim & penerima">
+          <SectionCard {...section(1)}>
             <InsetBlock className="gap-3.5">
               <div className="flex flex-col justify-between gap-2 border-b pb-2.5 sm:flex-row sm:items-center" id="sender-block" tabIndex={-1}>
                 <div className="flex flex-wrap items-center gap-2">
@@ -652,7 +734,7 @@ export function ShipmentCreateForm({
           </SectionCard>
 
           {/* 3 — Pembayaran */}
-          <SectionCard id="section-payment" number={3} title="Pembayaran">
+          <SectionCard {...section(2)}>
             <fieldset className="flex flex-col gap-2" id="payment-method" tabIndex={-1}>
               <legend className="mb-2 text-sm font-medium">Metode pembayaran<Required /></legend>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -719,7 +801,7 @@ export function ShipmentCreateForm({
           </SectionCard>
 
           {/* 4 — Produk & paket */}
-          <SectionCard id="section-package" number={4} title="Produk & paket">
+          <SectionCard {...section(3)}>
             <ul aria-label="Daftar produk" className="flex flex-col gap-3">
               {rows.map((row, index) => {
                 const first = index === 0;
@@ -876,7 +958,7 @@ export function ShipmentCreateForm({
           </SectionCard>
 
           {/* 5 — Layanan: empty until the draft is saved and priced */}
-          <SectionCard id="section-service" number={5} title="Pilih layanan ekspedisi">
+          <SectionCard {...section(4)}>
             <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed px-4 py-10 text-center">
               <Truck aria-hidden="true" className="size-6 text-muted-foreground" />
               <p className="text-sm font-semibold">Tarif muncul setelah data disimpan</p>
@@ -885,38 +967,24 @@ export function ShipmentCreateForm({
           </SectionCard>
         </div>
 
-        <div className="hidden w-90 shrink-0 lg:sticky lg:top-24 lg:block">
+        <RailColumn>
           <SummaryRail
             actions={(
-              <Button className="w-full" disabled={pending} size="lg" type="submit">
-                {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-                {pending ? "Menyimpan draf…" : "Simpan & cek tarif"}
-              </Button>
+              <>
+                <Button aria-describedby="save-guard" className="w-full" disabled={pending} size="lg" type="submit">
+                  {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+                  {pending ? "Menyimpan draf…" : "Simpan & cek tarif"}
+                </Button>
+                <p className="line-clamp-2 text-center text-xs text-muted-foreground" id="save-guard">
+                  {guard.text}
+                  {guard.hidden ? <span className="sr-only"> ({guard.hidden})</span> : null}
+                </p>
+              </>
             )}
-            destination={destinationLabel}
-            moneyRows={[
-              { amountIdr: parseRupiahOrNull(declaredValue), label: cod ? "Nilai barang" : "Nilai barang (asuransi)" },
-              { amountIdr: null, label: "Ongkir" },
-              ...(cod ? [{ amountIdr: null, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` }] : []),
-            ]}
-            origin={pickup ? { detail: `${sender.name || "—"}${sender.phone ? ` (${sender.phone})` : ""}`, title: pickup.originAreaLabel } : null}
-            rows={[
-              {
-                label: "Tipe penyerahan",
-                tone: "accent",
-                value: handoverType === "PICKUP"
-                  ? `Pickup · ${effectiveSlot ? effectiveSlot.replace(":", ".") : "—"}${pickupVehicle ? ` · ${PICKUP_VEHICLE_LABELS[pickupVehicle]}` : ""}`
-                  : "Drop di outlet",
-              },
-              { label: "Ekspedisi", value: "—" },
-              { label: "Pengirim di label", value: sender.name || "—" },
-              { label: "Berat & jumlah", value: `${weightGrams ? gramsToKilogramLabel(Number(weightGrams)) : "— kg"} (${composed.packageQuantity || "—"} barang)` },
-              { label: "Metode bayar", tone: "accent", value: PAYMENT_METHOD_LABELS[paymentMethod] },
-            ]}
-            source="Estimasi"
-            total={{ amountIdr: null, label: cod ? "Total tagihan COD" : "Ongkir", note: "Tarif muncul setelah data disimpan" }}
+            progress={<FillChecklist items={checklist} />}
+            {...railData}
           />
-        </div>
+        </RailColumn>
       </div>
 
       <MobileActionBar
@@ -926,9 +994,12 @@ export function ShipmentCreateForm({
           </Button>
         )}
         caption={`${PAYMENT_METHOD_LABELS[paymentMethod]} · ${destinationLabel ?? "tujuan belum dipilih"}`}
+        progress={progressLabel}
+        summary={railData}
         total={null}
       />
     </form>
+    </>
   );
 }
 

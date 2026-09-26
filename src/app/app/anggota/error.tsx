@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 
 export default function MembersError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <SettingsFrame header={<PageHeader eyebrow="Pengelolaan" title="Anggota & akses" />}>
+    <SettingsFrame header={<PageHeader title="Pengaturan" />}>
       <DataCard>
         <div role="alert">
           <EmptyState

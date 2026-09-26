@@ -52,10 +52,10 @@ export type DetailAddress = {
 /** Contacts hold at most 20 active addresses (`hasActiveContactAddressMutationTarget`). */
 export const MAX_ACTIVE_ADDRESSES = 20;
 
-function SaveButton({ idle }: { idle: string }) {
+function SaveButton({ className, idle }: { className?: string; idle: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button disabled={pending} type="submit" variant="outline">
+    <Button className={className} disabled={pending} type="submit" variant="outline">
       {pending ? <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : null}
       {pending ? "Menyimpan…" : idle}
     </Button>
@@ -106,7 +106,8 @@ export function ContactDataSection({ contact }: { contact: DetailContact }) {
           ref={summaryRef}
           title="Periksa data kontak"
         />
-        <div className="grid gap-x-4 md:grid-cols-2 xl:grid-cols-3">
+        {/* T-250: stacked in the 340px side column; two columns when the section is ≥ 576px (single-column layout). */}
+        <div className="grid gap-x-4 @xl/section:grid-cols-2">
           <Field className="gap-2" data-invalid={Boolean(errors.contactName)}>
             <FieldLabel htmlFor="contactName">Nama lengkap</FieldLabel>
             <CharacterClassInput
@@ -137,7 +138,7 @@ export function ContactDataSection({ contact }: { contact: DetailContact }) {
             />
             <FieldMessage error={errors.contactPhone} id="contactPhone-error" />
           </Field>
-          <div className="md:col-span-2 xl:col-span-1">
+          <div className="@xl/section:col-span-2">
             <CategorySelect defaultValue={values ? values.category : contact.category} error={errors.category} key={values ? `v-${values.category}` : `s-${contact.category}`} />
           </div>
         </div>
@@ -148,11 +149,12 @@ export function ContactDataSection({ contact }: { contact: DetailContact }) {
             penerima: values ? values.roleRecipient === "on" : contact.isRecipient,
             pengirim: values ? values.roleSender === "on" : contact.isSender,
           }}
+          compact
           error={errors.roles}
           key={values ? `${values.roleSender}-${values.roleRecipient}` : "stored"}
         />
         <Outcome state={state} />
-        <div className="flex justify-end"><SaveButton idle="Simpan data kontak" /></div>
+        <SaveButton className="w-full" idle="Simpan data kontak" />
       </form>
     </ContactSection>
   );
@@ -348,7 +350,8 @@ export function ContactAddressesCard({
       {addresses.length === 0 ? (
         <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Belum ada alamat untuk kontak ini.</p>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2" id="alamat">
+        // T-250: a 2-up grid only when there are two or more and the section is ≥ 512px wide.
+        <ul className={addresses.length >= 2 ? "grid gap-3 @lg/section:grid-cols-2" : "grid gap-3"} id="alamat">
           {addresses.map((address) => (
             <li className="grid content-start gap-2 rounded-xl border bg-card p-4 data-[primary=true]:border-primary/40" data-primary={address.isPrimary} key={address.id}>
               <div className="flex flex-wrap items-center justify-between gap-2">

@@ -112,7 +112,7 @@ export function MemberAccessDialog({
           />
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {changed
-              ? `${name} menjadi ${ROLE_LABEL[selectedRole]}. Izin baru berlaku pada permintaan berikutnya dan dicatat di jejak audit.`
+              ? `${name} menjadi ${ROLE_LABEL[selectedRole]}. Akses baru berlaku saat halaman berikutnya dibuka dan dicatat di jejak audit.`
               : "Pilih peran lain untuk mengubah akses."}
           </p>
           <ActionMessage state={roleState} />

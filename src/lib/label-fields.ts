@@ -51,11 +51,11 @@ export const LABEL_FIELD_COPY: Record<LabelFieldKey, { label: string; descriptio
   },
   returnWarning: {
     label: "Peringatan sebelum retur",
-    description: "Baris bawah label meminta kurir konfirmasi ke pengirim sebelum retur; waktu terbit tidak dicetak.",
+    description: "Menggantikan waktu terbit di baris paling bawah: kurir diminta menghubungi pengirim sebelum retur.",
   },
   courierLogo: {
     label: "Logo kurir",
-    description: "Logo hitam kurir menggantikan namanya di kiri atas; layanan tetap tercetak di sebelahnya.",
+    description: "Logo kurir hitam-putih menggantikan nama kurir di kiri atas; nama layanan tetap tercetak.",
   },
   geraiLogo: {
     label: "Logo gerai",

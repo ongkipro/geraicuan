@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
  * T-246 (owner 2026-09-26): the contact detail page is one white surface; below the KPI cards
  * each region is a flat section — title 18/700 (+ count badge), optional one-line description,
  * action at the right — separated from the one above by a hairline, with no card chrome.
+ * T-250: a section is an inline-size container (`/section`) so its content lays out for the
+ * column it sits in (340px side column, main column, or the single column below 896px).
  */
 export function ContactSection({
   action,
@@ -23,7 +25,7 @@ export function ContactSection({
   title: string;
 }) {
   return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4 border-t pt-6" data-slot="contact-section">
+    <section aria-labelledby={id} className="@container/section flex min-w-0 flex-col gap-4 border-t pt-6" data-slot="contact-section">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <div className="flex items-center gap-2">

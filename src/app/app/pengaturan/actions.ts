@@ -210,7 +210,7 @@ export async function savePrivateMengantarCredential(
   const outletId = formString(formData, "outletId");
   if (!UUID_PATTERN.test(outletId)) {
     return credentialFailureState(
-      "Kredensial Mengantar belum disimpan.",
+      "API key belum tersimpan.",
       { outletId: "Outlet tidak valid." },
     );
   }
@@ -245,27 +245,27 @@ export async function savePrivateMengantarCredential(
   } catch (error) {
     if (error instanceof ManagedMengantarSecretInvalidError) {
       return credentialFailureState(
-        "Periksa kembali kredensial yang ditandai.",
+        "Periksa API key yang ditandai.",
         { apiKey: "API key wajib diisi dan tidak boleh melebihi 512 karakter." },
       );
     }
     if (error instanceof ManagedMengantarSecretRateLimitedError) {
       return credentialFailureState(
-        "Terlalu banyak percobaan perubahan kredensial. Coba lagi beberapa menit lagi.",
+        "Terlalu banyak percobaan mengganti API key. Coba lagi beberapa menit lagi.",
       );
     }
     if (
       error instanceof ManagedMengantarSecretDeniedError
       || error instanceof ManagedMengantarSecretUnavailableError
     ) {
-      return credentialFailureState("Kredensial Mengantar belum dapat disimpan.");
+      return credentialFailureState("API key belum dapat disimpan.");
     }
-    return credentialFailureState("Kredensial Mengantar belum dapat disimpan. Coba lagi.");
+    return credentialFailureState("API key belum dapat disimpan. Coba lagi.");
   }
 
   revalidateOutletConfigurationPaths();
   return {
-    message: "Kredensial privat Mengantar tersimpan dengan aman.",
+    message: "Outlet ini memakai akun Mengantar sendiri. API key tidak ditampilkan lagi.",
     resultToken: randomUUID(),
     success: true,
   };
@@ -321,12 +321,12 @@ export async function switchMengantarToPlatformDefault(
     }
     if (error instanceof MengantarPlatformCredentialsRefusedError) {
       return credentialFailureState(
-        "Gerai ini mengirim dengan akun Mengantar sendiri, jadi default platform tidak tersedia. Koneksi privat tetap dipertahankan.",
+        "Gerai ini wajib memakai akun Mengantar sendiri, jadi koneksi bawaan GeraiCUAN tidak tersedia. API key outlet tetap dipakai.",
       );
     }
     if (error instanceof MengantarConfigurationError) {
       return credentialFailureState(
-        "Default platform belum lengkap. Koneksi privat tetap dipertahankan.",
+        "Koneksi bawaan GeraiCUAN belum siap. Outlet tetap memakai akun Mengantar sendiri.",
       );
     }
     if (
@@ -341,7 +341,7 @@ export async function switchMengantarToPlatformDefault(
 
   revalidateOutletConfigurationPaths();
   return {
-    message: "Outlet sekarang memakai default platform Mengantar.",
+    message: "Outlet ini sekarang memakai koneksi bawaan GeraiCUAN.",
     resultToken: randomUUID(),
     success: true,
   };
@@ -527,7 +527,7 @@ export async function saveShipmentPrefix(
   const attemptId = formData.get("attemptId");
   const prefix = typeof rawPrefix === "string" ? normalizeShipmentPrefixInput(rawPrefix) : null;
   if (!prefix) {
-    return { error: "Awalan harus 2–3 huruf besar atau angka tanpa spasi, mis. PHI atau A29.", resultToken: randomUUID() };
+    return { error: "Awalan harus 2–3 huruf atau angka tanpa spasi, misalnya PHI atau A29.", resultToken: randomUUID() };
   }
   if (typeof attemptId !== "string" || !UUID_PATTERN.test(attemptId) || formData.get("confirmation") !== "locked") {
     return { error: "Konfirmasi penguncian awalan diperlukan. Muat ulang halaman lalu coba lagi.", resultToken: randomUUID() };
@@ -540,7 +540,7 @@ export async function saveShipmentPrefix(
       return { error: "Awalan sudah terkunci dan tidak dapat diubah. Hubungi admin platform bila ada kesalahan.", resultToken: randomUUID() };
     }
     if (error instanceof ShipmentPrefixInvalidError) {
-      return { error: "Awalan harus 2–3 huruf besar atau angka tanpa spasi, mis. PHI atau A29.", resultToken: randomUUID() };
+      return { error: "Awalan harus 2–3 huruf atau angka tanpa spasi, misalnya PHI atau A29.", resultToken: randomUUID() };
     }
     if (error instanceof ShipmentPrefixDeniedError || error instanceof TenantContextDeniedError) {
       return { error: "Hanya pemilik gerai yang dapat mengatur awalan nomor kiriman.", resultToken: randomUUID() };

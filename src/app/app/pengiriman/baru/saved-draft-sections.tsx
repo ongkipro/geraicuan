@@ -35,7 +35,7 @@ export function handoverSummary(draft: Pick<ShipmentFlowDraft, "handoverType" | 
 
 /**
  * T-211: after "Simpan & cek tarif" sections 1–4 show what was saved, read-only, in the same
- * numbered cards; the draft itself is never edited here (a new shipment starts a new form).
+ * numbered cards (T-249: complete on the spine, 4 → 5 still open); the draft itself is never edited here (a new shipment starts a new form).
  */
 export function SavedDraftSections({
   draft,
@@ -50,7 +50,7 @@ export function SavedDraftSections({
     : null;
   return (
     <>
-      <SectionCard aside={<SavedBadge />} id="section-handover" number={1} title="Penyerahan paket & asal">
+      <SectionCard aside={<SavedBadge />} connector="done" id="section-handover" number={1} state="complete" title="Penyerahan paket & asal">
         <DetailRows
           rows={[
             ["Tipe penyerahan", handoverSummary(draft)],
@@ -64,7 +64,7 @@ export function SavedDraftSections({
         ) : null}
       </SectionCard>
 
-      <SectionCard aside={<SavedBadge />} id="section-parties" number={2} title="Pengirim & penerima">
+      <SectionCard aside={<SavedBadge />} connector="done" id="section-parties" number={2} state="complete" title="Pengirim & penerima">
         <DetailRows
           rows={[
             ["Pengirim di label", draft.sender ? `${draft.sender.name} · ${draft.sender.phone}` : "—"],
@@ -77,7 +77,7 @@ export function SavedDraftSections({
         />
       </SectionCard>
 
-      <SectionCard aside={<SavedBadge />} id="section-payment" number={3} title="Pembayaran">
+      <SectionCard aside={<SavedBadge />} connector="done" id="section-payment" number={3} state="complete" title="Pembayaran">
         <DetailRows
           rows={[
             ["Metode pembayaran", PAYMENT_METHOD_LABELS[method]],
@@ -86,7 +86,7 @@ export function SavedDraftSections({
         />
       </SectionCard>
 
-      <SectionCard aside={<SavedBadge />} id="section-package" number={4} title="Produk & paket">
+      <SectionCard aside={<SavedBadge />} connector="todo" id="section-package" number={4} state="complete" title="Produk & paket">
         <DetailRows
           rows={[
             ["Isi paket", draft.packageContent],

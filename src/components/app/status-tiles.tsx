@@ -1,6 +1,4 @@
 import {
-  ArrowUpRight,
-  Check,
   CircleCheck,
   Clock,
   Layers,
@@ -22,29 +20,33 @@ export type StatusTile = {
   key: string;
   label: string;
   selected: boolean;
-  /** Pastel tint by meaning; defaults to the shipment status tone when `key` is a status, else neutral. */
+  /** Icon and composition colour by meaning; defaults to the shipment status tone when `key` is a status, else neutral. */
   tone?: StatusTone;
 };
 
 const number = new Intl.NumberFormat("id-ID");
 
-/** Spec 10 v3.2 §2.1: one pastel tint per meaning, only on tiles; the ink/bar colour of the same meaning. */
-const TONE: Record<StatusTone, { tint: string; ink: string; bar: string; icon: LucideIcon }> = {
-  danger: { bar: "bg-danger", icon: TriangleAlert, ink: "text-danger", tint: "bg-tile-danger" },
-  info: { bar: "bg-info", icon: Truck, ink: "text-info", tint: "bg-tile-info" },
-  neutral: { bar: "bg-primary", icon: Layers, ink: "text-primary", tint: "bg-tile" },
-  success: { bar: "bg-ok", icon: CircleCheck, ink: "text-ok", tint: "bg-tile-ok" },
-  warning: { bar: "bg-warn", icon: Clock, ink: "text-warn", tint: "bg-tile-warn" },
+/** Spec 10 v3.2 §2.1: the ink (icon) and bar colour of each meaning. */
+const TONE: Record<StatusTone, { ink: string; bar: string; icon: LucideIcon }> = {
+  danger: { bar: "bg-danger", icon: TriangleAlert, ink: "text-danger" },
+  info: { bar: "bg-info", icon: Truck, ink: "text-info" },
+  neutral: { bar: "bg-muted-foreground", icon: Layers, ink: "text-primary" },
+  success: { bar: "bg-ok", icon: CircleCheck, ink: "text-ok" },
+  warning: { bar: "bg-warn", icon: Clock, ink: "text-warn" },
 };
 
 /**
- * Columns follow the tile count, so a page never restyles the grid: six tiles only from `xl`
- * (at 1024px six columns left 68px for a label), five and four fill one row.
+ * Spec 10 §4.6 stat strip (T-248). Breakpoints are container queries on the strip, so the
+ * sidebar's width is already paid: one row from a 56rem strip (1280px viewport and up) for five
+ * and six tiles, from 36rem for four; below that three columns (two for four tiles) in rows. A
+ * row with one cell short gets its last cell stretched, so the 1px dividers never frame a hole.
+ * The five- and six-tile row is a flex row whose cells start at their content width and share
+ * the rest equally: equal cells left 103px for "Dalam perjalanan" at 1280px and wrapped it.
  */
-const COLUMNS: Record<number, string> = {
-  4: "md:grid-cols-4",
-  5: "md:grid-cols-3 xl:grid-cols-5",
-  6: "md:grid-cols-3 xl:grid-cols-6",
+export const STATUS_TILE_LAYOUT: Record<number, { grid: string; last: string }> = {
+  4: { grid: "grid-cols-2 @xl:grid-cols-4", last: "" },
+  5: { grid: "grid-cols-3 @4xl:flex", last: "col-span-2 @4xl:col-span-1" },
+  6: { grid: "grid-cols-3 @4xl:flex", last: "" },
 };
 
 /**
@@ -57,63 +59,111 @@ export function tileShare(count: number, total: number) {
 }
 
 /**
- * Spec 10 v3.2 §4.6 queue filters (owner 2026-09-26: "lebih menarik dan dinamis, presisi"):
- * one white card of up to six pastel tiles (two columns on a phone). Each tile: a tone icon
- * chip (the §4.12 status icon) and, on hover, an arrow; the label, never truncated; the count;
- * its share of `total` as a thin bar and "x% · hint". Tiles in a row share their row tracks
- * (subgrid), so a label that wraps keeps every count on one line. The selected tile gets a
- * 2px primary ring and a check. T-247 (review L9): `total` is the page's explicit base
- * (spec 19 QUE-SHARE / RTS-SHARE / LBL-SHARE), never inferred from the largest count.
+ * Spec 10 v3.2 §4.6 queue filters as a compact stat strip (T-248, owner 2026-09-26: "rapikan
+ * lagi biar kecil2"). One card of equal segments split by 1px dividers; each segment is its
+ * filter link: the §4.12 status icon (16px, tone ink) + label (13/500 muted, never truncated),
+ * then the count (20/600) and its share of `total` in muted 13px. The first tile is the page's
+ * "all" filter and carries no share. The hint is screen-reader text. One stacked composition
+ * bar along the bottom edge shows the other tiles' shares of `total` (zero takes no width), with
+ * a screen-reader breakdown that also names the part of `total` no tile covers. Selected: 2px
+ * primary bottom indicator, primary text, aria-current. T-247 (review L9): `total` is the page's
+ * explicit base (spec 19 QUE-SHARE / RTS-SHARE / LBL-SHARE), never inferred from the largest count.
  */
 export function StatusTiles({ label, tiles, total }: { label: string; tiles: StatusTile[]; total: number }) {
+  const layout = STATUS_TILE_LAYOUT[tiles.length] ?? STATUS_TILE_LAYOUT[6];
+  const segments = compositionSegments(tiles, total);
+  const active = tiles.slice(1).find((tile) => tile.selected)?.key;
+  const breakdown = segments.map((segment) =>
+    `${segment.label} ${number.format(segment.count)} (${tileShare(segment.count, total)}%${segment.key === active ? ", dipilih" : ""})`);
   return (
-    <nav aria-label={label} className="rounded-2xl bg-card p-4 shadow-card">
-      <ul className={cn("grid grid-cols-2 gap-3", COLUMNS[tiles.length] ?? COLUMNS[6])}>
-        {tiles.map((tile) => {
-          const toneKey = tile.tone ?? shipmentStatusTone(tile.key) ?? "neutral";
-          const tone = TONE[toneKey];
-          const Icon = tile.icon ?? shipmentStatusIcon(tile.key) ?? tone.icon;
-          const percent = tileShare(tile.count, total);
+    <nav aria-label={label} className="@container overflow-hidden rounded-2xl bg-card shadow-card">
+      <ul className={cn("grid gap-px bg-border", layout.grid)}>
+        {tiles.map((tile, index) => {
+          const toneKey = toneOf(tile);
+          const Icon = tile.icon ?? shipmentStatusIcon(tile.key) ?? TONE[toneKey].icon;
           return (
-            <li className="row-span-5 grid min-w-0 grid-rows-subgrid gap-y-2" key={tile.key}>
+            <li className={cn("flex min-w-0 bg-card @4xl:flex-auto", index === tiles.length - 1 && layout.last)} key={tile.key}>
               <Link
                 aria-current={tile.selected ? "true" : undefined}
                 className={cn(
-                  "group/tile relative row-span-5 grid min-w-0 grid-rows-subgrid gap-y-2 rounded-xl p-4 outline-none transition-[box-shadow,transform] duration-150",
-                  "hover:-translate-y-0.5 hover:shadow-card focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-                  tone.tint,
-                  tile.selected && "ring-2 ring-primary",
+                  "relative flex min-h-16 w-full min-w-0 flex-col justify-between gap-1 px-3 py-2.5 outline-none transition-colors @xl:px-4 @xl:py-3",
+                  "hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset",
+                  tile.selected && "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
                 )}
                 data-tone={toneKey}
                 href={tile.href}
               >
-                <span className="flex items-center justify-between">
-                  <span aria-hidden="true" className={cn("flex size-9 items-center justify-center rounded-lg bg-card/80", tone.ink)}>
-                    <Icon className="size-5" />
-                  </span>
-                  {tile.selected ? (
-                    <Check aria-hidden="true" className="size-5 text-primary" />
-                  ) : (
-                    <ArrowUpRight
-                      aria-hidden="true"
-                      className="size-5 text-muted-foreground opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100"
-                    />
-                  )}
+                <span className={cn("text-xs font-medium text-balance", tile.selected ? "text-primary" : "text-muted-foreground")}>
+                  <Icon aria-hidden="true" className={cn("mr-1.5 inline size-4 align-[-3px]", TONE[toneKey].ink)} />
+                  {tile.label}
                 </span>
-                <span className="text-sm font-medium text-balance text-foreground">{tile.label}</span>
-                <span className="text-3xl leading-none font-bold tabular-nums text-foreground">{number.format(tile.count)}</span>
-                <span className="mt-1 flex items-center gap-2">
-                  <span aria-hidden="true" className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/10">
-                    <span className={cn("block h-full rounded-full", tone.bar)} style={{ width: `${Math.min(100, percent)}%` }} />
+                <span className="flex items-baseline gap-1.5 whitespace-nowrap pt-0.5">
+                  <span className={cn("text-xl leading-none font-semibold tabular-nums", tile.selected ? "text-primary" : "text-foreground")}>
+                    {number.format(tile.count)}
                   </span>
-                  <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">{percent}%</span>
+                  {index > 0 ? <span className="text-xs tabular-nums text-muted-foreground">{tileShare(tile.count, total)}%</span> : null}
                 </span>
-                <span className="text-xs text-muted-foreground">{tile.hint}</span>
+                {tile.hint ? <span className="sr-only">, {tile.hint}</span> : null}
               </Link>
             </li>
           );
         })}
       </ul>
+      {/* The bar and its legend repeat the sentence below for sight; the active status stays full tone. */}
+      <div aria-hidden="true" data-slot="tile-composition">
+        <span className="flex h-2 items-end gap-0.5">
+          {segments.map((segment) => (
+            <span
+              className={cn(
+                "block h-1.5 transition-opacity",
+                segment.bar,
+                active && (segment.key === active ? "h-2" : "opacity-35"),
+              )}
+              data-active={segment.key === active ? "" : undefined}
+              data-count={segment.count}
+              data-segment={segment.key}
+              key={segment.key}
+              style={{ width: `${(segment.count / total) * 100}%` }}
+            />
+          ))}
+        </span>
+        {segments.length > 0 ? (
+          <span className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-xs text-muted-foreground @xl:px-4">
+            {segments.map((segment) => (
+              <span className={cn("flex items-center gap-1.5", segment.key === active && "font-medium text-foreground")} key={segment.key}>
+                <span className={cn("size-2 shrink-0 rounded-full", segment.bar, active && segment.key !== active && "opacity-35")} />
+                {segment.label} ({number.format(segment.count)})
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </div>
+      {breakdown.length > 0 ? (
+        <p className="sr-only">
+          Komposisi dari {number.format(total)}: {breakdown.join(", ")}.
+        </p>
+      ) : null}
     </nav>
   );
+}
+
+/**
+ * The composition bar's segments: every status tile with a count, then "Lainnya", the part of
+ * `total` no tile names (spec 19 QUE-OTHER / RTS-OTHER / LBL-OTHER = base − Σ status tiles).
+ * The callers' tiles are disjoint buckets of their base, so the remainder is never negative; an
+ * overlapping caller would get no remainder rather than a negative one.
+ */
+export function compositionSegments(tiles: StatusTile[], total: number) {
+  const parts = tiles.slice(1).filter((tile) => tile.count > 0).map((tile) => ({
+    bar: TONE[toneOf(tile)].bar,
+    count: tile.count,
+    key: tile.key,
+    label: tile.label,
+  }));
+  const other = Math.max(0, total - parts.reduce((sum, part) => sum + part.count, 0));
+  return other > 0 ? [...parts, { bar: "bg-input", count: other, key: "OTHER", label: "Lainnya" }] : parts;
+}
+
+function toneOf(tile: StatusTile): StatusTone {
+  return tile.tone ?? shipmentStatusTone(tile.key) ?? "neutral";
 }

@@ -2,7 +2,7 @@ import { CircleAlert, Download, FileSpreadsheet, SearchX } from "lucide-react";
 import Link from "next/link";
 
 import { AdvancedFilters } from "@/app/app/laporan/pengiriman/advanced-filters";
-import { LowVolumeNote, RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
+import { LowVolumeNote, RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, SectionHelp, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
 import { CourierPerformanceChart, type CourierPerformancePoint } from "@/app/app/laporan/pengiriman/courier-performance-chart";
 import { REPORT_PATH, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
 import { FilterSelect } from "@/app/app/laporan/_components/filter-select";
@@ -12,7 +12,6 @@ import { DataCard } from "@/components/app/data-card";
 import { DateRangePicker } from "@/components/app/date-range-picker";
 import { EmptyState } from "@/components/app/empty-state";
 import { FilterBar } from "@/components/app/filter-bar";
-import { HelpHint } from "@/components/app/help-hint";
 import { Money } from "@/components/app/money";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
@@ -141,13 +140,15 @@ export function ShipmentReportView({
           ) : (
             <>
               <section aria-labelledby="ringkasan-laporan" className="grid gap-3">
+                {/* T-254: the card header's anatomy on the ground — 18/700 title, "?" at the right. */}
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold" id="ringkasan-laporan">Ringkasan</h2>
+                  <h2 className="text-lg leading-snug font-bold" id="ringkasan-laporan">Ringkasan</h2>
                   <ReportKpiHelp />
                 </div>
                 <ReportKpiStrip kpis={analytics.kpis} />
               </section>
-              <div className="grid min-w-0 gap-6 xl:grid-cols-5">
+              {/* Trend beside the grouped status distribution; both cards fill the row, so neither leaves a hole. */}
+              <div className="grid min-w-0 gap-6 xl:grid-cols-5 [&>div>[data-slot=card]]:h-full">
                 <div className="min-w-0 xl:col-span-3"><ReportTrendCard granularity={analytics.granularity} trend={analytics.trend} /></div>
                 <div className="min-w-0 xl:col-span-2"><StatusDistribution total={count} totals={data.totals.byLifecycle} /></div>
               </div>
@@ -155,11 +156,12 @@ export function ShipmentReportView({
           )}
           <CourierTotals totals={data.totals.byCourier} />
           <CourierPerformance points={performance} />
+          {/* T-254: full width — the wilayah table (10 rows) beside a five-route table left a 500 px hole. */}
           {analytics === null ? null : (
-            <div className="grid min-w-0 gap-6 xl:grid-cols-5">
-              <div className="min-w-0 xl:col-span-3"><RegionCard regions={analytics.regions} /></div>
-              <div className="min-w-0 xl:col-span-2"><RoutesCard routes={analytics.routes} /></div>
-            </div>
+            <>
+              <RegionCard regions={analytics.regions} />
+              <RoutesCard routes={analytics.routes} />
+            </>
           )}
           <ShipmentRows carry={carry} count={count} data={data} />
         </>
@@ -172,11 +174,11 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
   return (
     <DataCard
       action={(
-        <HelpHint label="Penjelasan total per kurir">
+        <SectionHelp label="Penjelasan total per kurir">
           <p>Ongkir dan biaya COD adalah tagihan Mengantar per kiriman.</p>
           <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dan biaya COD. Jumlah pasti mengikuti pencairan Mengantar.</p>
           <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman yang selesai (terkirim + retur).</p>
-        </HelpHint>
+        </SectionHelp>
       )}
       title="Total per kurir"
     >
@@ -227,7 +229,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
                 </span>
                 <LowVolumeNote shipmentCount={total.shipmentCount} />
               </TableCell>
-              <TableCell className="px-2 text-right">{number.format(total.shipmentCount)}</TableCell>
+              <TableCell className="px-2 text-right font-semibold">{number.format(total.shipmentCount)}</TableCell>
               <TableCell className="px-2 text-right tabular-nums">{formatRate(deliveredRate(total))}</TableCell>
               <TableCell className="px-2 text-right tabular-nums">{formatRate(returnRate(total))}</TableCell>
               <TableCell className="px-2 text-right"><Money amount={total.shippingCostIdr} /></TableCell>
@@ -246,10 +248,10 @@ function CourierPerformance({ points }: { points: CourierPerformancePoint[] | nu
   return (
     <DataCard
       action={(
-        <HelpHint label="Penjelasan performa kurir">
+        <SectionHelp label="Penjelasan performa kurir">
           <p>Tingkat penerbitan = resi terbit dibagi pengajuan yang sudah dijawab Mengantar.</p>
           <p>Dihitung pada waktu jawaban Mengantar. Kurir dengan kurang dari 10 jawaban diurutkan terakhir.</p>
-        </HelpHint>
+        </SectionHelp>
       )}
       title="Performa kurir"
     >

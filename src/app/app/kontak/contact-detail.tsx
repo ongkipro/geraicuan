@@ -73,8 +73,8 @@ export type ContactDetailProps = {
  * penerima-detail.html): back link → header (name, kategori, status, "N alamat terdaftar";
  * WhatsApp line and wilayah of the primary address; WhatsApp, Salin nomor and the one primary
  * "Buat kiriman dari kontak ini") → four KPI cards from GeraiCUAN's own shipments (spec 19 CON-SHP-*;
- * no Mengantar score, D-30) → Alamat · Kontak · Peran → Riwayat kiriman (Semua/COD/Non-COD, 10 per
- * page) → danger zone (Tenant Admin; `archiveContact` refuses anyone else).
+ * no Mengantar score, D-30) → T-250 two columns: Riwayat kiriman (Semua/COD/Non-COD, 10 per page)
+ * and Alamat | Data kontak and the danger zone (Tenant Admin; `archiveContact` refuses anyone else).
  * `<n>` is the per-tenant contact number; name and phone never enter the URL (spec 10 §11).
  */
 export async function ContactDetail({ params, role, searchParams }: ContactDetailProps & { role: ContactRole }) {
@@ -207,31 +207,55 @@ export async function ContactDetail({ params, role, searchParams }: ContactDetai
         />
       </section>
 
-      <ContactAddressesCard
-        addresses={activeAddresses}
-        archived={archived}
-        canManageSettings={isAdmin}
-        contact={identity}
-        outlets={detail.outlets}
-        outletsUnavailable={detail.outletsUnavailable}
-      />
-
-      {archived ? (
-        <ContactSection id="data-kontak" title="Data kontak">
-          <dl className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
-            <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Nama lengkap</dt><dd className="font-semibold wrap-anywhere">{contact.name}</dd></div>
-            <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Nomor telepon</dt><dd className="font-semibold tabular-nums">{contact.phone}</dd></div>
-            <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Peran / kategori</dt><dd className="font-semibold">{category ?? "Tanpa kategori"}</dd></div>
-            <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Diperbarui</dt><dd>{formatWibDateTime(contact.updatedAt)}</dd></div>
-          </dl>
-        </ContactSection>
-      ) : (
-        <ContactDataSection contact={identity} />
-      )}
-
-      <ContactHistoryCard contactNumber={contact.contactNumber} history={detail.shipments} payment={history.payment} role={role} />
-
-      {!archived && isAdmin ? <ContactArchiveZone contact={identity} role={role} /> : null}
+      {/*
+        T-250 (owner 2026-09-26, "bisa kau buat 2 colum"): below the KPI row, two columns once the
+        content column is ≥ 896px (a container query, so a collapsed sidebar counts): the main
+        column holds what an operator comes for (Riwayat kiriman, then Alamat); the side column
+        (340px, sticky under the top bar when the viewport is tall enough) holds the Data kontak
+        form and, last, Zona hati-hati. The DOM follows that desktop reading order; below 896px
+        the column wrappers dissolve (`contents`) and `order` stacks Data kontak · Alamat ·
+        Riwayat kiriman · Zona hati-hati.
+      */}
+      <div className="@container/detail">
+        <div className="flex flex-col gap-6 @4xl/detail:grid @4xl/detail:grid-cols-[minmax(0,1fr)_340px] @4xl/detail:items-start @4xl/detail:gap-x-12" data-slot="contact-detail-columns">
+          <div className="flex min-w-0 flex-col gap-6 @max-4xl/detail:contents" data-column="main">
+            <div className="min-w-0 @max-4xl/detail:order-3">
+              <ContactHistoryCard contactNumber={contact.contactNumber} history={detail.shipments} payment={history.payment} role={role} />
+            </div>
+            <div className="min-w-0 @max-4xl/detail:order-2">
+              <ContactAddressesCard
+                addresses={activeAddresses}
+                archived={archived}
+                canManageSettings={isAdmin}
+                contact={identity}
+                outlets={detail.outlets}
+                outletsUnavailable={detail.outletsUnavailable}
+              />
+            </div>
+          </div>
+          <div className="flex min-w-0 flex-col gap-6 @max-4xl/detail:contents [@media(min-height:56rem)]:sticky [@media(min-height:56rem)]:top-24" data-column="side">
+            <div className="min-w-0 @max-4xl/detail:order-1">
+              {archived ? (
+                <ContactSection id="data-kontak" title="Data kontak">
+                  <dl className="grid gap-4 text-sm @lg/section:grid-cols-2">
+                    <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Nama lengkap</dt><dd className="font-semibold wrap-anywhere">{contact.name}</dd></div>
+                    <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Nomor telepon</dt><dd className="font-semibold tabular-nums">{contact.phone}</dd></div>
+                    <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Peran / kategori</dt><dd className="font-semibold">{category ?? "Tanpa kategori"}</dd></div>
+                    <div className="grid gap-0.5"><dt className="text-xs text-muted-foreground">Diperbarui</dt><dd>{formatWibDateTime(contact.updatedAt)}</dd></div>
+                  </dl>
+                </ContactSection>
+              ) : (
+                <ContactDataSection contact={identity} />
+              )}
+            </div>
+            {!archived && isAdmin ? (
+              <div className="min-w-0 @max-4xl/detail:order-4">
+                <ContactArchiveZone contact={identity} role={role} />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -290,11 +314,10 @@ function ContactHistoryCard({ contactNumber, history, payment, role }: {
               <TableCaption className="sr-only">Riwayat kiriman</TableCaption>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-0">Resi &amp; ekspedisi</TableHead>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>{counterpart} &amp; kota tujuan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="pr-0 text-right">Pembayaran</TableHead>
+                  <TableHead className="pl-0 whitespace-normal">Resi, ekspedisi &amp; tanggal</TableHead>
+                  <TableHead className="px-3 whitespace-normal">{counterpart} &amp; kota tujuan</TableHead>
+                  <TableHead className="px-3">Status</TableHead>
+                  <TableHead className="pr-0 pl-3 text-right">Pembayaran</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -303,27 +326,25 @@ function ContactHistoryCard({ contactNumber, history, payment, role }: {
                   const pay = presentShipmentPayment(row);
                   return (
                     <TableRow key={row.shipmentId}>
-                      <TableCell className="py-3 pl-0 align-top">
+                      {/* T-250: the date sits under the resi so four columns fit the narrower main column. */}
+                      <TableCell className="py-3 pr-3 pl-0 align-top whitespace-normal">
                         <Link className="font-mono font-semibold text-primary underline-offset-4 hover:underline" href={shipmentDetailHref(row.publicReference)}>{row.publicReference}</Link>
-                        <span className="mt-1 flex items-center gap-2">
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                           {row.providerService ? <CourierLogo className="h-5" courier={row.providerService} /> : null}
                           {row.awb
                             ? <span className="font-mono text-xs break-all text-muted-foreground">{row.awb}</span>
                             : <span className="text-xs text-muted-foreground">Belum ada resi</span>}
                         </span>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <time className="block tabular-nums" dateTime={row.createdAt.toISOString()}>
-                          <span className="block text-sm">{date.date}</span>
-                          <span className="block text-xs text-muted-foreground">{date.time}</span>
+                        <time className="mt-1 block text-xs text-muted-foreground tabular-nums" dateTime={row.createdAt.toISOString()}>
+                          <span className="whitespace-nowrap">{date.date}</span> · <span className="whitespace-nowrap">{date.time}</span>
                         </time>
                       </TableCell>
-                      <TableCell className="max-w-64 align-top whitespace-normal">
+                      <TableCell className="px-3 align-top whitespace-normal">
                         <span className="block font-semibold wrap-anywhere">{row.counterpartName}</span>
                         <span className="block text-xs wrap-anywhere text-muted-foreground">{cityText(row.destinationAreaLabel)}</span>
                       </TableCell>
-                      <TableCell className="align-top"><ShipmentStatusBadge status={row.status} /></TableCell>
-                      <TableCell className="pr-0 text-right align-top">
+                      <TableCell className="px-3 align-top"><ShipmentStatusBadge status={row.status} /></TableCell>
+                      <TableCell className="pr-0 pl-3 text-right align-top">
                         <span className="block text-xs font-medium">{pay.label}</span>
                         <Money amount={pay.amountIdr} className="text-sm font-semibold" />
                       </TableCell>

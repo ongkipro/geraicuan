@@ -4,6 +4,7 @@ import { CircleAlert, RotateCw } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/app/page-header";
+import { STATUS_TILE_LAYOUT } from "@/components/app/status-tiles";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,7 @@ export function ListSkeleton({
   tiles: number;
   title: string;
 }) {
+  const layout = STATUS_TILE_LAYOUT[tiles] ?? STATUS_TILE_LAYOUT[6];
   return (
     <>
       <PageHeader actions={actions} title={title} />
@@ -36,8 +38,17 @@ export function ListSkeleton({
           </div>
           <Skeleton className="h-4 w-80 max-w-full" />
         </div>
-        <div className={cn("grid grid-cols-2 gap-3", tiles === 3 ? "md:grid-cols-3" : tiles === 5 ? "md:grid-cols-3 lg:grid-cols-5" : "md:grid-cols-3 lg:grid-cols-6")}>
-          {Array.from({ length: tiles }, (_, index) => <Skeleton className="h-28 rounded-xl" key={index} />)}
+        {/* The StatusTiles stat strip (spec 10 §4.6), so the loaded strip does not shift the page. */}
+        <div className="@container overflow-hidden rounded-2xl bg-card shadow-card">
+          <div className={cn("grid gap-px bg-border", layout.grid)}>
+            {Array.from({ length: tiles }, (_, index) => (
+              <div className={cn("grid min-h-16 content-center gap-2 bg-card px-4 py-3", index === tiles - 1 && layout.last)} key={index}>
+                <Skeleton className="h-4 w-24 max-w-full" />
+                <Skeleton className="h-6 w-14" />
+              </div>
+            ))}
+          </div>
+          <div className="h-1.5 bg-foreground/10" />
         </div>
         <Card className="gap-0 py-0">
           <div className="flex flex-wrap items-center gap-3 border-b p-4">

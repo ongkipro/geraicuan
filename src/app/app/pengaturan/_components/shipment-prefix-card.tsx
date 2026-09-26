@@ -23,7 +23,7 @@ import { DEFAULT_SHIPMENT_PREFIX, normalizeShipmentPrefixInput } from "@/lib/shi
 
 const FORM_ID = "shipment-prefix-form";
 const TITLE = "Awalan nomor kiriman";
-const DESCRIPTION = "Tampil di depan setiap nomor kiriman, di layar, ekspor, dan label resi.";
+const DESCRIPTION = "Tampil di depan setiap nomor kiriman: di layar, file ekspor, dan label.";
 
 /**
  * The one-time prefix lock. Only the dialog's confirm button carries `confirmation=locked`, so
@@ -128,18 +128,18 @@ export function ShipmentPrefixCard({
             value={value}
           />
           <FieldDescription id="shipment-prefix-help">
-            2–3 huruf besar atau angka, mis. PHI, A29. Pratinjau:{" "}
+            2–3 huruf atau angka, misalnya PHI atau A29. Contoh nomor:{" "}
             <span className="font-mono font-semibold text-foreground">{normalized ?? "—"}-10013</span>
           </FieldDescription>
-          {value !== "" && !normalized ? <FieldError>Gunakan 2–3 huruf besar atau angka tanpa spasi.</FieldError> : null}
+          {value !== "" && !normalized ? <FieldError>Isi 2–3 huruf atau angka, tanpa spasi.</FieldError> : null}
         </Field>
         <AlertDialog onOpenChange={setConfirming} open={confirming}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Kunci awalan {normalized}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Semua nomor kiriman gerai ini, termasuk yang sudah ada, akan tampil sebagai {normalized}-nomor.
-                Setelah disimpan, awalan tidak dapat diubah lagi dari Pengaturan.
+                Semua nomor kiriman gerai ini, termasuk yang sudah ada, akan tampil seperti {normalized}-10013.
+                Setelah dikunci, awalan tidak dapat diubah lagi dari Pengaturan.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

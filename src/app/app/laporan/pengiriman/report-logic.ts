@@ -82,6 +82,17 @@ export type ReportAnalyticsView = {
 };
 
 /**
+ * Spec 19 RPT-SHP-TREND-TOTALS (T-254): the period totals written in the trend legend. Every bucket
+ * of the range is drawn, so COD + Non-COD = RPT-SHP-ROWS and the value = RPT-SHP-COD-VALUE-TOTAL.
+ */
+export function reportTrendTotals(trend: readonly ReportTrendPoint[]) {
+  return trend.reduce(
+    (sum, point) => ({ cod: sum.cod + point.cod, codValue: sum.codValue + point.codValue, nonCod: sum.nonCod + point.nonCod }),
+    { cod: 0, codValue: 0, nonCod: 0 },
+  );
+}
+
+/**
  * T-235: the analytics read shaped for the view. Every bucket of the range is present (a day with no
  * shipment is a zero, not a gap in the line), and the wilayah and routes are folded from the
  * outlet × area rows by the one parser.

@@ -64,7 +64,7 @@ export function GeraiLogoCard({ geraiName, logoSrc, updatedAtLabel }: {
 
   return (
     <DataCard
-      description="Tercetak hitam-putih di label termal dan di bagian atas invoice. Identitas pickup Mengantar tetap tidak tercetak."
+      description="Tercetak hitam-putih di label dan di bagian atas invoice."
       title="Logo gerai"
     >
       <div aria-live="polite" className="empty:hidden" ref={resultRef} tabIndex={-1}>
@@ -94,7 +94,7 @@ export function GeraiLogoCard({ geraiName, logoSrc, updatedAtLabel }: {
                 <span aria-hidden="true" className="text-2xl font-bold text-muted-foreground">{initials(geraiName)}</span>
               )}
             </div>
-            <figcaption className="text-xs text-muted-foreground">{logoSrc ? "Diunggah" : "Belum ada logo"}</figcaption>
+            <figcaption className="text-xs text-muted-foreground">{logoSrc ? "Asli" : "Belum ada logo"}</figcaption>
           </figure>
           {logoSrc ? (
             <figure className="grid justify-items-center gap-1.5">
@@ -102,14 +102,14 @@ export function GeraiLogoCard({ geraiName, logoSrc, updatedAtLabel }: {
                 {/* eslint-disable-next-line @next/next/no-img-element -- as the thermal head prints it */}
                 <img alt="" className="max-h-full max-w-full object-contain grayscale contrast-125" src={logoSrc} />
               </div>
-              <figcaption className="text-xs text-muted-foreground">Di label termal</figcaption>
+              <figcaption className="text-xs text-muted-foreground">Hasil cetak label</figcaption>
             </figure>
           ) : null}
         </div>
 
         <div className="grid min-w-0 flex-1 gap-3">
           <p className="text-sm text-muted-foreground">
-            PNG, JPEG, atau WebP · maksimal 200 KB · maksimal 1000 × 1000 piksel. SVG tidak diterima.
+            PNG, JPEG, atau WebP, maksimal 200 KB dan 1000 × 1000 piksel. SVG tidak diterima.
             {updatedAtLabel ? <> Diperbarui {updatedAtLabel}.</> : null}
           </p>
           <div className="flex flex-wrap items-center gap-3">
@@ -168,7 +168,7 @@ export function GeraiLogoCard({ geraiName, logoSrc, updatedAtLabel }: {
               </AlertDialog>
             ) : null}
             <Button asChild className="px-0" variant="link">
-              <Link href="/app/pengaturan/label">Lihat di pratinjau label</Link>
+              <Link href="/app/pengaturan/label">Lihat pratinjau label</Link>
             </Button>
           </div>
         </div>

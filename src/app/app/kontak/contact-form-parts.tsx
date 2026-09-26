@@ -35,13 +35,17 @@ export const ErrorSummary = forwardRef<HTMLDivElement, { errors: Record<string, 
 
 /**
  * The Peran option cards (ref kontak-baru.html): a checkbox per role with what holding it does;
- * a ticked card takes the accent fill and primary border.
+ * a ticked card takes the accent fill and primary border. `compact` (T-250, the contact detail's
+ * 340px side column) renders the same checkboxes as two plain 44px rows without card chrome; the
+ * effect line stays as each checkbox's description for assistive technology only.
  */
 export function RoleOptions({
+  compact = false,
   defaults,
   error,
   onSenderChange,
 }: {
+  compact?: boolean;
   defaults: Record<ContactRole, boolean>;
   error?: string;
   onSenderChange?: (checked: boolean) => void;
@@ -49,17 +53,20 @@ export function RoleOptions({
   return (
     <fieldset aria-describedby={error ? "roles-error" : undefined} aria-invalid={Boolean(error)} className="grid gap-2 outline-none" id="roles" tabIndex={-1}>
       <legend className="sr-only">Peran kontak</legend>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={compact ? "grid gap-1 @xl/section:grid-cols-2 @xl/section:gap-3" : "grid gap-3 sm:grid-cols-2"}>
         {CONTACT_ROLES.map((role) => {
           const name = role === "pengirim" ? "roleSender" : "roleRecipient";
           return (
             <label
-              className="flex cursor-pointer items-start gap-3 rounded-lg border p-4 has-checked:border-primary has-checked:bg-accent has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
+              className={compact
+                ? "flex min-h-11 cursor-pointer items-center gap-3 rounded-md has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
+                : "flex cursor-pointer items-start gap-3 rounded-lg border p-4 has-checked:border-primary has-checked:bg-accent has-focus-visible:ring-3 has-focus-visible:ring-ring/50"}
+              data-compact={compact || undefined}
               key={role}
             >
               <input
                 aria-describedby={`${name}-effect`}
-                className="mt-0.5 size-4 shrink-0 accent-primary"
+                className={compact ? "size-4 shrink-0 accent-primary" : "mt-0.5 size-4 shrink-0 accent-primary"}
                 defaultChecked={defaults[role]}
                 name={name}
                 onChange={role === "pengirim" && onSenderChange ? (event) => onSenderChange(event.target.checked) : undefined}
@@ -67,7 +74,7 @@ export function RoleOptions({
               />
               <span className="grid gap-1">
                 <span className="text-sm font-semibold">Sebagai {contactRoleLabel(role).toLowerCase()}</span>
-                <span className="text-xs text-muted-foreground" id={`${name}-effect`}>{CONTACT_ROLE_EFFECTS[role]}</span>
+                <span className={compact ? "sr-only" : "text-xs text-muted-foreground"} id={`${name}-effect`}>{CONTACT_ROLE_EFFECTS[role]}</span>
               </span>
             </label>
           );

@@ -186,7 +186,8 @@ describe("Mengantar look (v3.2)", () => {
     expect(html).not.toMatch(/class="[^"]*\bborder\b/);
   });
 
-  it("tints status tiles by meaning, from the tone or the shipment status key", async () => {
+  // T-248 (owner 2026-09-26 "rapikan lagi biar kecil2"): the tiles are one compact stat strip.
+  it("tones each strip segment by meaning and marks the selected one with an indicator", async () => {
     const { StatusTiles } = await import("@/components/app/status-tiles");
     const html = renderToStaticMarkup(createElement(StatusTiles, {
       label: "Ringkasan",
@@ -198,28 +199,129 @@ describe("Mengantar look (v3.2)", () => {
       ],
     }));
     expect([...html.matchAll(/data-tone="(\w+)"/g)].map((match) => match[1])).toEqual(["neutral", "warning", "danger"]);
-    expect(html).toContain("bg-tile-warn");
-    expect(html.match(/ring-2 ring-primary/g)).toHaveLength(1);
+    expect(html).toContain("text-warn");
+    expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+    expect(html.match(/after:bg-primary/g)).toHaveLength(1);
+    expect(html).toContain("focus-visible:ring-3");
+    // No pastel tile cards and no per-tile proportion bar any more: one bar, below the segments.
+    expect(html).not.toMatch(/bg-tile/);
+    expect(html.match(/<a [^>]*>[\s\S]*?<\/a>/g)!.join("")).not.toContain("rounded-full");
   });
 
-  // T-246: at 1024px six columns left a 68px label ("Dalam …", "Perlu p…"), and Dibatalkan
-  // wore the "Semua" stack icon. Labels wrap on shared row tracks; icons follow spec 10 §4.12.
-  it("never truncates a tile label, sizes columns by tile count and uses the status icon", async () => {
+  it("lays the strip out by tile count, never truncates a label and keeps counts on one line", async () => {
     const { StatusTiles } = await import("@/components/app/status-tiles");
     const tile = (key: string, label: string) => ({ count: 1, href: `/${key}`, key, label, selected: false });
-    const six = renderToStaticMarkup(createElement(StatusTiles, {
-      label: "Ringkasan",
-      total: 6,
-      tiles: ["ALL", "ISSUED", "IN_TRANSIT", "DELIVERED", "CANCELLED", "PROBLEM"].map((key) => tile(key, key)),
-    }));
+    const render = (keys: string[]) => renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: keys.map((key) => tile(key, key)), total: keys.length }));
+    const cells = (html: string) => [...html.matchAll(/<li class="([^"]*)"/g)].map((match) => match[1]);
+    const six = render(["ALL", "ISSUED", "IN_TRANSIT", "DELIVERED", "CANCELLED", "PROBLEM"]);
     expect(six).not.toContain("truncate");
-    expect(six).toContain("xl:grid-cols-6");
-    expect(six).not.toMatch(/\blg:grid-cols-6\b/);
-    expect(six).toContain("grid-rows-subgrid");
+    // Three columns below a 56rem strip, one content-sized row from it (equal cells wrapped
+    // "Dalam perjalanan" at 1280px).
+    expect(six).toContain("gap-px bg-border grid-cols-3 @4xl:flex");
+    expect(cells(six)).toHaveLength(6);
+    expect(cells(six).every((cls) => cls.includes("@4xl:flex-auto") && !cls.includes("col-span-2"))).toBe(true);
+    expect(six.match(/whitespace-nowrap/g)).toHaveLength(6);
     expect(six).toContain("lucide-ban");
     expect(six).toContain("lucide-package-check");
-    const four = renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: ["A", "B", "C", "D"].map((key) => tile(key, key)), total: 4 }));
-    expect(four).toContain("md:grid-cols-4");
+    // Five: 3 + 2 below the one-row width, so the last cell spans the hole.
+    const five = cells(render(["A", "B", "C", "D", "E"]));
+    expect(five.at(-1)).toContain("col-span-2 @4xl:col-span-1");
+    expect(five.slice(0, -1).some((cls) => cls.includes("col-span-2"))).toBe(false);
+    // Four: 2 × 2 on a phone, one row from 36rem.
+    expect(render(["A", "B", "C", "D"])).toContain("gap-px bg-border grid-cols-2 @xl:grid-cols-4");
+  });
+
+  it("draws one composition bar of the status tiles' shares with a text breakdown", async () => {
+    const { StatusTiles } = await import("@/components/app/status-tiles");
+    const tile = (key: string, count: number, label = key) => ({ count, href: `/${key}`, key, label, selected: false });
+    // The owner's Histori numbers: 134 in all, five status tiles, 45 in no tile (drafts, RTS, …).
+    const html = renderToStaticMarkup(createElement(StatusTiles, {
+      label: "Histori",
+      total: 134,
+      tiles: [
+        tile("QUE-ALL", 134, "Semua kiriman"),
+        { ...tile("ISSUED", 28, "Resi terbit") },
+        tile("IN_TRANSIT", 0, "Dalam perjalanan"),
+        tile("DELIVERED", 45, "Terkirim"),
+        tile("CANCELLED", 0, "Dibatalkan"),
+        { ...tile("QUE-ATTENTION", 16, "Perlu perhatian"), tone: "danger" as const },
+      ],
+    }));
+    const segments = [...html.matchAll(/data-count="(\d+)" data-segment="([^"]+)"[^>]*style="width:([\d.]+)%"/g)]
+      .map(([, count, key, width]) => ({ count: Number(count), key, width: Number(width) }));
+    // One segment per non-zero status tile, never the "all" tile, then "Lainnya" (QUE-OTHER):
+    // the 45 in no tile. Widths are count / total and fill the bar exactly.
+    expect(segments.map((segment) => segment.key)).toEqual(["ISSUED", "DELIVERED", "QUE-ATTENTION", "OTHER"]);
+    for (const segment of segments) expect(segment.width).toBeCloseTo((segment.count / 134) * 100, 6);
+    expect(segments.map((segment) => segment.count)).toEqual([28, 45, 16, 45]);
+    expect(segments.reduce((sum, segment) => sum + segment.width, 0)).toBeCloseTo(100, 9);
+    // Visible legend: a dot and "label (n)" per segment, "Lainnya (45)" last.
+    const legend = [...html.matchAll(/rounded-full[^"]*"><\/span>([^<]+) \((\d+)\)/g)].map((match) => `${match[1]} (${match[2]})`);
+    expect(legend).toEqual(["Resi terbit (28)", "Terkirim (45)", "Perlu perhatian (16)", "Lainnya (45)"]);
+    // Nothing selected beyond "all": every segment at full tone.
+    expect(html).not.toContain("opacity-35");
+    expect(html).toContain('data-slot="tile-composition"');
+    expect(html).toMatch(/aria-hidden="true"[^>]*data-slot="tile-composition"/);
+    expect(html).toContain('<p class="sr-only">Komposisi dari 134: Resi terbit 28 (21%), Terkirim 45 (34%), Perlu perhatian 16 (12%), Lainnya 45 (34%).</p>');
+
+    // An empty base draws an empty bar and no breakdown.
+    const empty = renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: [tile("ALL", 0), tile("A", 0)], total: 0 }));
+    expect(empty).not.toContain("data-segment");
+    expect(empty).not.toContain("Komposisi");
+  });
+
+  // T-248 (owner: "bar bawahnya active juga kamu bedakan"): the active status stays full tone.
+  it("dims every other bar segment while a status is the active filter and says which one", async () => {
+    const { StatusTiles } = await import("@/components/app/status-tiles");
+    const tile = (key: string, count: number, selected = false) => ({ count, href: `/${key}`, key, label: key, selected });
+    const html = renderToStaticMarkup(createElement(StatusTiles, {
+      label: "R",
+      total: 10,
+      tiles: [tile("ALL", 10), tile("A", 2), tile("B", 3, true), tile("C", 1)],
+    }));
+    const bar = [...html.matchAll(/<span class="([^"]*)"(?: data-active="")? data-count="\d+" data-segment="(\w+)"/g)]
+      .map(([whole, cls, key]) => ({ active: whole.includes("data-active"), dim: cls.includes("opacity-35"), key, tall: /\bh-2\b/.test(cls) }));
+    expect(bar).toEqual([
+      { active: false, dim: true, key: "A", tall: false },
+      { active: true, dim: false, key: "B", tall: true },
+      { active: false, dim: true, key: "C", tall: false },
+      { active: false, dim: true, key: "OTHER", tall: false },
+    ]);
+    expect(html).toContain("Komposisi dari 10: A 2 (20%), B 3 (30%, dipilih), C 1 (10%), Lainnya 4 (40%).");
+  });
+
+  // Spec 19 QUE-OTHER / RTS-OTHER / LBL-OTHER: base − Σ status tiles, never negative.
+  it("fills the bar with each caller's disjoint buckets and never a negative remainder", async () => {
+    const { compositionSegments } = await import("@/components/app/status-tiles");
+    const { labelTileShareBase } = await import("@/app/app/label/label-query");
+    const { SHIPMENT_QUEUE_SUMMARY_ENTRIES } = await import("@/lib/shipment-queue");
+    const tile = (key: string, count: number) => ({ count, href: `/${key}`, key, label: key, selected: false });
+    const widths = (segments: { count: number }[], total: number) => segments.reduce((sum, segment) => sum + (segment.count / total) * 100, 0);
+
+    // Histori: the status tiles are disjoint status sets, so QUE-OTHER = QUE-ALL − Σ is the rest.
+    const sets = SHIPMENT_QUEUE_SUMMARY_ENTRIES.slice(1).flatMap((entry) => entry.statuses ?? []);
+    expect(SHIPMENT_QUEUE_SUMMARY_ENTRIES[0].statuses).toBeNull();
+    expect(new Set(sets).size).toBe(sets.length);
+    const histori = compositionSegments([tile("QUE-ALL", 134), tile("I", 28), tile("T", 0), tile("D", 45), tile("C", 0), tile("X", 16)], 134);
+    expect(histori.at(-1)).toMatchObject({ count: 45, key: "OTHER", label: "Lainnya" });
+    expect(widths(histori, 134)).toBeCloseTo(100, 9);
+
+    // Retur: RTS-ALL is the sum of its four status buckets (rts-repository), so RTS-OTHER = 0.
+    const retur = compositionSegments([tile("ALL", 24), tile("RTS_QUEUED", 7), tile("RTS_IN_TRANSIT", 6), tile("RTS_RECEIVED", 5), tile("PROBLEM", 6)], 24);
+    expect(retur.map((segment) => segment.key)).not.toContain("OTHER");
+    expect(widths(retur, 24)).toBeCloseTo(100, 9);
+
+    // Cetak resi: base LBL-ALL + LBL-CANCELLED; LBL-ALL = LBL-UNPRINTED + LBL-PRINTED, so LBL-OTHER = 0.
+    const summary = { "LBL-ALL": 3, "LBL-CANCELLED": 1, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 };
+    const base = labelTileShareBase(summary);
+    const cetak = compositionSegments([tile("LBL-ALL", 3), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 2), tile("LBL-CANCELLED", 1)], base);
+    expect(cetak.map((segment) => segment.key)).toEqual(["LBL-UNPRINTED", "LBL-PRINTED", "LBL-CANCELLED"]);
+    expect(widths(cetak, base)).toBeCloseTo(100, 9);
+
+    // An overlapping caller gets no remainder, never a negative one.
+    const overlap = compositionSegments([tile("ALL", 5), tile("A", 4), tile("B", 3)], 5);
+    expect(overlap.map((segment) => segment.key)).toEqual(["A", "B"]);
+    expect(overlap.every((segment) => segment.count >= 0)).toBe(true);
   });
 
   // T-247 (review L9): the share is of the page's stated base (spec 19 *-SHARE), never the
@@ -230,7 +332,8 @@ describe("Mengantar look (v3.2)", () => {
     const shares = (html: string) => [...html.matchAll(/>(\d+)%</g)].map((match) => Number(match[1]));
     const tile = (key: string, count: number) => ({ count, href: `/${key}`, key, label: key, selected: false });
     // Two of ten shipments, three of ten: 20 % and 30 %, not 67 % and 100 % of the larger tile.
-    expect(shares(renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: [tile("A", 2), tile("B", 3)], total: 10 }))))
+    // The first tile is the "all" filter and shows no share of its own.
+    expect(shares(renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: [tile("ALL", 10), tile("A", 2), tile("B", 3)], total: 10 }))))
       .toEqual([20, 30]);
     expect(tileShare(5, 0)).toBe(0);
 
@@ -240,7 +343,7 @@ describe("Mengantar look (v3.2)", () => {
     expect(base).toBe(4);
     const label = [tile("LBL-ALL", 1), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 0), tile("LBL-CANCELLED", 3)];
     const rendered = shares(renderToStaticMarkup(createElement(StatusTiles, { label: "Cetak", tiles: label, total: base })));
-    expect(rendered).toEqual([25, 25, 0, 75]);
+    expect(rendered).toEqual([25, 0, 75]);
     expect(Math.max(...rendered)).toBeLessThanOrEqual(100);
 
     // Each displayed share has its metric ID, and each page states its base.

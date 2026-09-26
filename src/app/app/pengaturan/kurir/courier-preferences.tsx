@@ -6,6 +6,7 @@ import { saveCourierPreferences, type CourierPreferencesActionState } from "@/ap
 import { CourierLogo } from "@/components/app/courier-logo";
 import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
@@ -39,11 +40,11 @@ export function CourierPreferences({ disabled }: { disabled: readonly string[] }
 
   return (
     <DataCard
-      count={activeCount}
+      action={<Badge className="tabular-nums" variant="secondary">{activeCount} dari {SELECTABLE_COURIERS.length} aktif</Badge>}
       description="Kurir yang dimatikan tidak muncul di Cek tarif dan Buat kiriman. Kiriman yang sudah dibuat tidak berubah."
       footer={(
         <Button className="ml-auto" disabled={pending || activeCount === 0} form={FORM_ID} type="submit">
-          {pending ? "Menyimpan…" : "Simpan"}
+          {pending ? "Menyimpan…" : "Simpan pilihan kurir"}
         </Button>
       )}
       title="Mitra kurir"
@@ -62,12 +63,12 @@ export function CourierPreferences({ disabled }: { disabled: readonly string[] }
       ) : state.saved ? (
         <Alert className="outline-none" ref={resultRef} role="status" tabIndex={-1}>
           <AlertTitle>Pilihan kurir disimpan</AlertTitle>
-          <AlertDescription>Cek tarif dan Buat kiriman berikutnya hanya menawarkan kurir yang aktif.</AlertDescription>
+          <AlertDescription>Cek tarif dan Buat kiriman kini hanya menawarkan kurir yang aktif.</AlertDescription>
         </Alert>
       ) : activeCount === 0 ? (
         <Alert role="status" variant="destructive">
           <AlertTitle>Aktifkan minimal satu kurir</AlertTitle>
-          <AlertDescription>Tanpa kurir aktif, Cek tarif dan Buat kiriman tidak dapat menawarkan layanan.</AlertDescription>
+          <AlertDescription>Tanpa kurir aktif, Cek tarif dan Buat kiriman tidak punya layanan untuk ditawarkan.</AlertDescription>
         </Alert>
       ) : null}
       <ul aria-label="Kurir Mengantar" className="grid gap-3 sm:grid-cols-2">
@@ -75,7 +76,9 @@ export function CourierPreferences({ disabled }: { disabled: readonly string[] }
           const id = `kurir-${courier}`;
           const on = !off.has(courier);
           return (
-            <li className="rounded-xl bg-tile p-4 has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring" data-on={on} key={courier}>
+            // The switch's ::after covers the whole row (relative li, static switch): the logo, name
+            // and state line all toggle it, a ≥ 44px target on touch, one tab stop.
+            <li className="relative rounded-xl bg-tile p-4 transition-colors hover:bg-muted motion-reduce:transition-none has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring" data-on={on} data-row-target="" key={courier}>
               <Field className="has-[>[data-slot=field-content]]:items-center" orientation="horizontal">
                 <FieldContent className="flex-row items-center gap-3">
                   <span className="flex h-8 w-16 shrink-0 items-center justify-center">
@@ -88,7 +91,7 @@ export function CourierPreferences({ disabled }: { disabled: readonly string[] }
                 </FieldContent>
                 <Switch
                   checked={on}
-                  className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']"
+                  className="static cursor-pointer after:inset-0 after:rounded-xl after:content-['']"
                   id={id}
                   onCheckedChange={(next) => toggle(courier, next)}
                 />

@@ -8,10 +8,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BUSINESS_CATEGORIES, LABEL_NOTE_MAX, type BusinessCategory } from "@/lib/gerai-settings";
 
 const FORM_ID = "gerai-brand-form";
+/** Radix items cannot carry ""; this item clears the category (the form still posts ""). */
+const NO_CATEGORY = "__kosong__";
+const CATEGORY_PLACEHOLDER = "Pilih kategori usaha";
+const OPTIONAL = <span className="font-normal text-muted-foreground">(opsional)</span>;
 
 export type GeraiProfileValues = {
   businessCategory: BusinessCategory | null;
@@ -26,7 +30,7 @@ export type GeraiProfileValues = {
  */
 export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
   const [state, formAction, pending] = useActionState<GeraiProfileActionState, FormData>(saveGeraiProfile, {});
-  const [category, setCategory] = useState(initial.businessCategory ?? "");
+  const [category, setCategory] = useState<BusinessCategory | "">(initial.businessCategory ?? "");
   const [note, setNote] = useState(initial.labelNote ?? "");
   const [email, setEmail] = useState(initial.csEmail ?? "");
   const [website, setWebsite] = useState(initial.website ?? "");
@@ -39,10 +43,10 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
 
   return (
     <DataCard
-      description="Catatan resi tercetak di label; kategori, email, dan situs melengkapi profil gerai."
+      description="Catatan resi tercetak di label; isian lain melengkapi profil gerai."
       footer={(
         <Button className="ml-auto" disabled={pending} form={FORM_ID} type="submit">
-          {pending ? "Menyimpan…" : "Simpan"}
+          {pending ? "Menyimpan…" : "Simpan brand gerai"}
         </Button>
       )}
       title="Brand gerai"
@@ -56,12 +60,12 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
         ) : state.saved ? (
           <Alert className="outline-none" ref={resultRef} role="status" tabIndex={-1}>
             <AlertTitle>Brand gerai disimpan</AlertTitle>
-            <AlertDescription>Label berikutnya memakai catatan resi ini.</AlertDescription>
+            <AlertDescription>Label yang dicetak berikutnya memakai catatan resi ini.</AlertDescription>
           </Alert>
         ) : null}
 
         <Field data-invalid={Boolean(errors.labelNote)}>
-          <FieldLabel htmlFor="gerai-label-note">Catatan resi</FieldLabel>
+          <FieldLabel htmlFor="gerai-label-note">Catatan resi {OPTIONAL}</FieldLabel>
           <Input
             aria-describedby="gerai-label-note-help"
             aria-invalid={Boolean(errors.labelNote)}
@@ -73,33 +77,43 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
             value={note}
           />
           <FieldDescription className="flex justify-between gap-3" id="gerai-label-note-help">
-            <span>Satu baris di bawah nama pengirim pada label. Atur tampil/tidaknya di Informasi label.</span>
+            <span>Satu baris di bawah nama pengirim. Tampil atau tidaknya diatur di Informasi label.</span>
             <span className="shrink-0 tabular-nums">{note.length}/{LABEL_NOTE_MAX}</span>
           </FieldDescription>
           {errors.labelNote ? <FieldError>{errors.labelNote}</FieldError> : null}
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* Full row, like Catatan resi above: the 2-column grid below pairs the two contact fields. */}
         <Field data-invalid={Boolean(errors.businessCategory)}>
-          <FieldLabel htmlFor="gerai-category">Kategori usaha</FieldLabel>
+          <FieldLabel htmlFor="gerai-category">Kategori usaha {OPTIONAL}</FieldLabel>
           <input name="businessCategory" type="hidden" value={category} />
-          <Select onValueChange={(value) => setCategory(value as BusinessCategory)} value={category || undefined}>
+          {/* Empty is Radix's own "" value, so the trigger carries data-placeholder (muted) in the
+              server HTML and after hydration alike; a chosen label is a child (T-236). */}
+          <Select
+            onValueChange={(value) => setCategory(value === NO_CATEGORY ? "" : value as BusinessCategory)}
+            value={category}
+          >
             <SelectTrigger aria-invalid={Boolean(errors.businessCategory)} className="w-full" id="gerai-category">
-              <SelectValue placeholder="Pilih kategori" />
+              <SelectValue placeholder={CATEGORY_PLACEHOLDER}>{category ? BUSINESS_CATEGORIES[category] : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {(Object.entries(BUSINESS_CATEGORIES) as [BusinessCategory, string][]).map(([value, label]) => (
                 <SelectItem key={value} value={value}>{label}</SelectItem>
               ))}
+              {category ? (
+                <>
+                  <SelectSeparator />
+                  <SelectItem className="text-muted-foreground" value={NO_CATEGORY}>Kosongkan kategori</SelectItem>
+                </>
+              ) : null}
             </SelectContent>
           </Select>
           {errors.businessCategory ? <FieldError>{errors.businessCategory}</FieldError> : null}
         </Field>
-        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={Boolean(errors.csEmail)}>
-            <FieldLabel htmlFor="gerai-cs-email">Email CS <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel>
+            <FieldLabel htmlFor="gerai-cs-email">Email CS {OPTIONAL}</FieldLabel>
             <Input
               aria-invalid={Boolean(errors.csEmail)}
               autoComplete="email"
@@ -115,7 +129,7 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
             {errors.csEmail ? <FieldError>{errors.csEmail}</FieldError> : null}
           </Field>
           <Field data-invalid={Boolean(errors.website)}>
-            <FieldLabel htmlFor="gerai-website">Website <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel>
+            <FieldLabel htmlFor="gerai-website">Situs web {OPTIONAL}</FieldLabel>
             <Input
               aria-describedby="gerai-website-help"
               aria-invalid={Boolean(errors.website)}
@@ -129,7 +143,7 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
               type="url"
               value={website}
             />
-            <FieldDescription id="gerai-website-help">Hanya alamat https.</FieldDescription>
+            <FieldDescription id="gerai-website-help">https:// ditambahkan otomatis bila tidak diketik.</FieldDescription>
             {errors.website ? <FieldError>{errors.website}</FieldError> : null}
           </Field>
         </div>

@@ -8,7 +8,7 @@ export type MemberRole = keyof typeof ROLE_LABEL;
 
 const ROLE_DESCRIPTION: Record<MemberRole, string> = {
   OPERATOR: "Buat kiriman dan cetak resi.",
-  TENANT_ADMIN: "Juga laporan, pengaturan, dan anggota.",
+  TENANT_ADMIN: "Semua akses Operator, ditambah laporan, pengaturan, dan anggota.",
 };
 
 /**

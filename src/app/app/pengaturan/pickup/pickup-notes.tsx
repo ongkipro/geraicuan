@@ -24,10 +24,10 @@ import { PICKUP_NOTE_LIMITS, type PickupNotes } from "@/lib/gerai-settings";
 export const INTERNAL_NOTE_LABEL = "Catatan internal, tidak dikirim ke Mengantar";
 
 const ROWS: { key: keyof PickupNotes; label: string }[] = [
-  { key: "picName", label: "PIC" },
+  { key: "picName", label: "Nama PIC" },
   { key: "picPhone", label: "WhatsApp PIC" },
-  { key: "schedule", label: "Jadwal rutin" },
-  { key: "accessNote", label: "Instruksi akses driver" },
+  { key: "schedule", label: "Jadwal penjemputan" },
+  { key: "accessNote", label: "Petunjuk untuk kurir" },
 ];
 
 /**
@@ -77,7 +77,7 @@ export function PickupNotesBlock({ busy, notes, outletId, pickupAddressId, picku
           ))}
         </dl>
       ) : (
-        <p className="text-sm text-muted-foreground">Belum ada PIC, jadwal, atau instruksi akses.</p>
+        <p className="text-sm text-muted-foreground">Belum ada PIC, jadwal, atau petunjuk untuk kurir.</p>
       )}
       {state.success && !open ? <p className="text-xs text-muted-foreground" role="status">{state.message}</p> : null}
       <Dialog onOpenChange={setOpen} open={open}>
@@ -101,7 +101,7 @@ export function PickupNotesBlock({ busy, notes, outletId, pickupAddressId, picku
             <div className="grid gap-4 sm:grid-cols-2">
               <Field data-invalid={Boolean(errors.picName)}>
                 <FieldLabel htmlFor={`pic-name-${pickupAddressId}`}>Nama PIC</FieldLabel>
-                <Input {...bind("picName")} id={`pic-name-${pickupAddressId}`} maxLength={PICKUP_NOTE_LIMITS.picName} />
+                <Input aria-invalid={Boolean(errors.picName)} {...bind("picName")} id={`pic-name-${pickupAddressId}`} maxLength={PICKUP_NOTE_LIMITS.picName} />
                 {errors.picName ? <FieldError>{errors.picName}</FieldError> : null}
               </Field>
               <Field data-invalid={Boolean(errors.picPhone)}>
@@ -113,7 +113,6 @@ export function PickupNotesBlock({ busy, notes, outletId, pickupAddressId, picku
                   id={`pic-phone-${pickupAddressId}`}
                   inputMode="tel"
                   maxLength={PICKUP_NOTE_LIMITS.picPhone}
-                 
                   placeholder="0812 3456 7890"
                   type="tel"
                 />
@@ -121,23 +120,23 @@ export function PickupNotesBlock({ busy, notes, outletId, pickupAddressId, picku
               </Field>
             </div>
             <Field data-invalid={Boolean(errors.schedule)}>
-              <FieldLabel htmlFor={`pic-schedule-${pickupAddressId}`}>Jadwal rutin penjemputan</FieldLabel>
+              <FieldLabel htmlFor={`pic-schedule-${pickupAddressId}`}>Jadwal penjemputan</FieldLabel>
               <Input
+                aria-invalid={Boolean(errors.schedule)}
                 {...bind("schedule")}
                 id={`pic-schedule-${pickupAddressId}`}
                 maxLength={PICKUP_NOTE_LIMITS.schedule}
-               
                 placeholder="Contoh: Senin–Sabtu 11.30 dan 17.00 WIB"
               />
               {errors.schedule ? <FieldError>{errors.schedule}</FieldError> : null}
             </Field>
             <Field data-invalid={Boolean(errors.accessNote)}>
-              <FieldLabel htmlFor={`pic-access-${pickupAddressId}`}>Instruksi akses driver</FieldLabel>
+              <FieldLabel htmlFor={`pic-access-${pickupAddressId}`}>Petunjuk untuk kurir</FieldLabel>
               <Textarea
+                aria-invalid={Boolean(errors.accessNote)}
                 {...bind("accessNote")}
                 id={`pic-access-${pickupAddressId}`}
                 maxLength={PICKUP_NOTE_LIMITS.accessNote}
-               
                 placeholder="Contoh: Masuk lewat pintu samping, hubungi PIC sebelum tiba."
                 rows={3}
               />

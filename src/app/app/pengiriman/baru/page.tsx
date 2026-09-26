@@ -29,11 +29,11 @@ import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { shipmentDetailHref, shipmentLabelHref } from "@/lib/shipment-number";
 
 import { EstimateLoader } from "./estimate-loader";
-import { FlowStepper, SectionCard, type FlowStep } from "./flow-parts";
+import { FLOW_SECTIONS, FlowStepper, SectionCard, type FlowStep } from "./flow-parts";
 import { IssuanceStage } from "./issuance-stage";
 import { handoverSummary, SavedDraftSections } from "./saved-draft-sections";
 import { ShipmentCreateForm, type FlowOutlet } from "./shipment-create-form";
-import { MobileActionBar, SummaryRail } from "./summary-rail";
+import { FillChecklist, MobileActionBar, RailColumn, SummaryRail, type RailData } from "./summary-rail";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Buat kiriman" };
 
@@ -47,6 +47,9 @@ const retrievedAtFormat = new Intl.DateTimeFormat("id-ID", {
   timeZone: "Asia/Jakarta",
   year: "numeric",
 });
+
+/** T-249: after the save, sections 1–4 are complete and section 5 is the current one. */
+const savedChecklist = FLOW_SECTIONS.map((section, index) => ({ ...section, missing: 0, state: index < 4 ? "complete" as const : "current" as const }));
 
 function steps(stage: "fill" | "estimate" | "issue" | "done"): FlowStep[] {
   const order = ["fill", "estimate", "issue"] as const;
@@ -147,8 +150,8 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
     return (
       <>
         {header}
-        <FlowStepper steps={steps("fill")} />
-        <ShipmentCreateForm gerai={data.gerai} nowIso={new Date().toISOString()} outlets={data.outlets} submissionId={randomUUID()} />
+        {/* The form renders the stepper itself: step 1 carries its live "n/4 bagian lengkap" (T-249). */}
+        <ShipmentCreateForm gerai={data.gerai} nowIso={new Date().toISOString()} outlets={data.outlets} steps={steps("fill")} submissionId={randomUUID()} />
       </>
     );
   }
@@ -200,13 +203,13 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
   );
   const paymentMethod = paymentMethodOf(draft.isCod, draft.codShippingOnly);
   const packageLabel = `${gramsToKilogramLabel(draft.packageWeightGrams)} · ${draft.packageQuantity} barang`;
-  const origin = { detail: draft.sender ? `${draft.sender.name} (${draft.sender.phone})` : undefined, title: point?.originAreaLabel ?? outletName };
   const rail = {
     destination: draft.destinationAreaLabel,
     handover: handoverSummary(draft).replace(/^Penjemputan terjadwal · /, "Pickup · "),
-    origin,
+    origin: point?.originAreaLabel ?? outletName,
     packageLabel,
-    sender: draft.sender?.name ?? "—",
+    // T-249: the route shows areas only; the sender's name and phone are this row.
+    sender: draft.sender ? `${draft.sender.name} (${draft.sender.phone})` : "—",
   };
   const draftNumber = (
     <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -222,10 +225,10 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
       <>
         {header}
         <FlowStepper steps={steps("issue")} />
-        {draftNumber}
         <IssuanceStage
           destinationContext={`Tujuan: ${draft.destinationAreaLabel.split(",").slice(0, 2).join(",")} · Berat: ${gramsToKilogramLabel(draft.packageWeightGrams)}`}
           draftHref={detailHref}
+          lead={draftNumber}
           provider={{
             codFormulaRetired: data.codFormulaRetired,
             declaredValueIdr: draft.declaredValueIdr,
@@ -240,6 +243,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
             shipmentId: draft.id,
             snapshotId: data.snapshot.snapshotId,
           }}
+          progress={<FillChecklist items={savedChecklist} />}
           rail={{ ...rail, freshness: `Tarif Mengantar ${retrievedAtFormat.format(data.snapshot.retrievedAt)} WIB` }}
           sections={sections}
         />
@@ -248,19 +252,31 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
   }
 
   // Step 2 — load the estimate once.
+  const estimateRail: RailData = {
+    destination: rail.destination,
+    moneyRows: [{ amountIdr: null, label: "Ongkir" }],
+    origin: rail.origin,
+    rows: [
+      { label: "Tipe penyerahan", tone: "accent", value: rail.handover },
+      { label: "Pengirim di label", value: rail.sender },
+      { label: "Berat & jumlah", value: rail.packageLabel },
+    ],
+    source: "Estimasi",
+    total: { amountIdr: null, label: "Total", note: "Menunggu tarif Mengantar" },
+  };
   return (
     <>
       {header}
       <FlowStepper steps={steps("estimate")} />
-      {draftNumber}
       <div className="flex flex-col items-start gap-6 pb-32 lg:flex-row lg:pb-0">
         <div className="flex w-full min-w-0 flex-1 flex-col gap-6">
+          {draftNumber}
           {sections}
-          <SectionCard emphasis id="section-service" number={5} title="Pilih layanan ekspedisi">
+          <SectionCard emphasis id="section-service" number={5} state="current" title="Pilih layanan ekspedisi">
             <EstimateLoader autoLoad={draft.status === "DRAFT"} shipmentId={draft.id} />
           </SectionCard>
         </div>
-        <div className="hidden w-90 shrink-0 lg:sticky lg:top-24 lg:block">
+        <RailColumn>
           <SummaryRail
             actions={(
               <>
@@ -269,22 +285,15 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
                 <Button asChild className="w-full" variant="outline"><Link href={detailHref}>Simpan draf</Link></Button>
               </>
             )}
-            destination={rail.destination}
-            moneyRows={[{ amountIdr: null, label: "Ongkir" }]}
-            origin={rail.origin}
-            rows={[
-              { label: "Tipe penyerahan", tone: "accent", value: rail.handover },
-              { label: "Pengirim di label", value: rail.sender },
-              { label: "Berat & jumlah", value: rail.packageLabel },
-            ]}
-            source="Estimasi"
-            total={{ amountIdr: null, label: "Total", note: "Menunggu tarif Mengantar" }}
+            progress={<FillChecklist items={savedChecklist} />}
+            {...estimateRail}
           />
-        </div>
+        </RailColumn>
       </div>
       <MobileActionBar
         actions={<Button asChild size="lg" variant="outline"><Link href={detailHref}>Simpan draf</Link></Button>}
         caption="Menunggu tarif Mengantar"
+        summary={estimateRail}
         total={null}
       />
     </>

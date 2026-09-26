@@ -5007,3 +5007,146 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Gotchas.** (1) Neither the pull nor the webhook can match an unpaid order (AWB-only matching, unpaid ⇒ `cnote_no IS NULL`), so M1's transition is pinned at the decision level and the reachability is an open item. (2) `[[:cntrl:]]` in PostgreSQL's CHECK matches C1 characters in this UTF-8/en_US database — U+0085 refused a pull. (3) `tenant_logo_versions` → `tenants` is RESTRICT: a test that deletes its tenants must delete versions first (`gerai-brand-t243` does). (4) `tests/shipment-status-copy` flags any `CANCELLED: "prose"` map, even of refusal codes — the invoice refusal copy is a switch.
 - **Checks run.** Focused files on the iso DB under `flock`, all green. Mutations (each reverted, each failed its guard): M1 TS transition (3 tests), M1 recovery gate, L1 courier refusal, L2 WHERE clause, L3 snapshot column / version insert / sheet source / route `sha`, L4, L5, L7 allow-list, L9 label base / explicit total, L10, L11, A3 print-zoom reset — 16/16 killed. Full suite (iso DB): first run 125/126 files, 1 failure (`shipment-status-copy`, the refusal map above); after the fix 126 files / 1,532 passed. `verify-migration-upgrade.mjs` passed through 0068 on temp DB `t247_upgrade` (created, dropped). `tsc --noEmit` 0; `npx eslint .` 0. Dev DB (55461): `drizzle-kit migrate` applied 0068 (69 migrations). Own headless Chrome (CDP 9460, own profile) as the demo Tenant Admin: `/app`, `/app/pengiriman`, `/app/label`, `/app/invoice/10178` HTTP 200, no console errors, pre-0068 invoice without logo, tile shares ≤ 100 %.
 - **Open.** M1 reachability (match unpaid orders by provider order id after T-237a captures its form); webhook ordering by send time until Mengantar documents a body event time (L6); L8 documented only.
+
+## 2026-09-26 — T-248 Status tiles as a compact stat strip
+
+- **Changed.**
+  - `src/components/app/status-tiles.tsx`: the stat strip, the full-width composition bar with the Lainnya remainder (`compositionSegments`), active dimming and the legend. `STATUS_TILE_LAYOUT` is shared with the skeleton.
+  - `src/app/app/pengiriman/_list/list-states.tsx`: the skeleton strip.
+  - `src/app/app/label/loading.tsx`: 4 cells.
+  - `docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md` §4.6.
+  - `docs/spec/19-METRICS-ANALYTICS-CONTRACT.md`: the SHARE display column and QUE-/RTS-/LBL-OTHER.
+  - `tests/app-foundation-render.integration.test.ts`.
+  - Callers, counts, queries and hrefs are unchanged.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: `app-foundation-render`, `shipment-lists-render` and `mengantar-tracking-t238`, 3 files / 58 passed.
+  - Four mutations, each reverted and each failing its test: the bar including the "all" tile; the "all" tile showing a share; active dimming removed; the Lainnya segment removed.
+  - `tsc --noEmit` 0 and `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9470) against the dev app on 3127, as Tenant Admin. Strip size by width:
+
+  | Page | 1440 | 1280 | 1024 | 720 | 390 |
+  |---|---|---|---|---|---|
+  | Histori | 1105×116 | 945×116 | 689×189 (3×2) | 673×189 | 358×243 (3×2) |
+  | Retur | 1105×116 | 945×116 | 689×189 | 673×189 | 358×263 |
+  | Cetak resi | 1105×116 | 945×116 | 689×116 | 673×116 | 358×181 (2×2) |
+
+  - Horizontal overflow is 0 px at every width, and the smallest text is 13 px.
+  - Labels stay on one line from 720 px up.
+  - Histori's bar is 230 + 369 + 131 + 369 px plus 3 gaps = 1105 px, the full width, ending in Lainnya 45.
+  - The sr sentence reads "Resi terbit 28 (21%), Terkirim 45 (34%, dipilih), Perlu perhatian 16 (12%), Lainnya 45 (34%)".
+  - Retur and Cetak resi need no remainder.
+  - With `?status=DELIVERED`, the other segments dim. Tab focus shows the 3px ring.
+- **Open.**
+  - Phone cells run 88–107 px where labels wrap (target ~64 px).
+  - The strip is 116 px with the legend.
+  - The skeleton strip was not rendered in a browser.
+
+## 2026-09-26 — T-254 Laporan pengiriman UI/UX tidy
+
+- **Changed.**
+  - `src/app/app/laporan/pengiriman/`: `analytics-sections.tsx` (`SectionHelp`, `reportStatusGroups`, grouped Distribusi status, trend legend totals, in-table wilayah bars, record lists below md, route line), `report-view.tsx` (grid, Ringkasan header, help alignment), `report-logic.ts` (`reportTrendTotals`), `report-trend-chart.tsx` (id-ID count tooltip), `courier-performance-chart.tsx` (row height), `loading.tsx`; `region-bar-chart.tsx` deleted.
+  - `src/components/ui/tabs.tsx`: 40/44 px triggers (only this page uses Tabs).
+  - Tests: `report-pages-render`, `shipment-report`. Specs: 10 §2.3 and §4.6c, 17 report row, 18 route row, 19 RPT-SHP-LIFECYCLE-GROUP, RPT-SHP-TREND-TOTALS and the M-3 wilayah row.
+  - No query or formula changed.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: `report-pages-render`, `shipment-report`, `dashboard-outcome-parity`, `host-routing`, `metric-scope-parity`, `system-map-inventory`, `cms-shell`, `dashboard-audit-scenario`, 8 files / 162 passed.
+  - Two mutations, both reverted, each failing both files (5 tests): RTS_QUEUED placed in Masih berjalan, and Non-COD summed from the COD series.
+  - `tsc --noEmit` 0 and `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9530) against dev app 3127, as Tenant Admin, `/app/laporan/pengiriman` (30 hari).
+  - Before → after at 1440: Tren 452 / Distribusi 685 → both 460 (same row); Wilayah 1246 beside Rute 718 → both full width. Page 5533 → 5397 px (1024 7185 → 6395, 720 7236 → 6687, 390 7757 → 7014).
+  - 0 px horizontal overflow at 1440/1024/720/390; no text under 13 px; controls under 40 px 4 → 0.
+  - The Nilai COD tab legend is Rp 15.703.490, the same as the Uang COD panel. The count tooltip at 25 Sep reads COD 7 / Non-COD 9, matching the data table.
+  - `kurir=JNE&rentang=7-hari` renders Terkirim 1 and Masih berjalan 5 and 0 COD in the legend. The Jan 2025 range shows the filtered-empty card.
+  - Operator: redirected to `/app`.
+  - Screenshots: session scratchpad `laporan2/` (`before-*`, `after-*`, `after-expanded-*`, `after-filtered-*`, `after-empty-*`).
+- **Gotcha.** Radix renders only the active tab on the server, so the Nilai COD legend cannot be asserted in `renderToStaticMarkup`; it was checked in the browser.
+
+## 2026-09-26 — T-253 Pengaturan second pass
+
+- **Changed.**
+  - `src/components/ui/select.tsx`: `SelectContent` defaults `position="popper"`, `align="start"`, `max-w-(--radix-select-content-available-width)`; `SelectItem` `max-md:min-h-11`.
+  - `src/app/app/pengaturan/_components/gerai-profile-card.tsx` (Kategori placeholder on Radix `""`, "Kosongkan kategori", full row), `gerai-identity-card.tsx` (read-only name frame, 2 columns, `noValidate`), `outlet-select.tsx` (`title`); Situs web helper now says https:// is added automatically (the server already does).
+  - `kurir/courier-preferences.tsx`, `label/label-info-editor.tsx` (row-sized switch `::after`), `pickup/pickup-points.tsx` (trigger `py-1.5`, hint text-sm), `pickup/pickup-notes.tsx` (`aria-invalid`), `koneksi/connection-form.tsx` (key save in the card footer).
+  - Tests: `settings-screens-t217`. Specs: 10 §4.10, 17 T-253.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: settings-screens-t217, native-select-replacement-t234, app-foundation-render, contact-lookup-screens, dashboard-v3, gerai-brand-t243, label-info-settings, outlet-settings-actions, cms-shell, tenant-approval-gate, system-map-inventory — 11 files / 214 passed.
+  - Mutation: five fixes reverted one by one in a single run → 6 tests failed; restored, green again.
+  - `tsc --noEmit` 0, `npx eslint .` 0, `git diff --check` clean.
+- **Browser.** Own headless Chrome (CDP 9520), dev app 3127, Tenant Admin; seven settings pages at 1440/720/390 (0 px overflow; comboboxes 40/44 px); every Select app-wide opened at 1440 and 390; Kategori empty/pick/typeahead/clear; switch-row taps; four invalid submits refused inline; three dialogs trap, close on Escape and return focus. No save, no Mengantar call. Screenshots: session scratchpad `pengaturan2/`.
+- **Gotcha.** A Radix Select shows its placeholder (and sets `data-placeholder` on the trigger, SSR included) only for value `""`/undefined; a sentinel item value (T-252's "__kosong__") renders as a chosen, checked value. Keep the sentinel only as the value of a "clear" item and map it back to `""` in `onValueChange`.
+- **Open.** Anggota KPI cards stack at 390; "(Anda)" wraps at 1440.
+
+## 2026-09-26 — T-252 Pengaturan UI/UX and copy pass
+
+- **Changed.**
+  - `src/app/app/pengaturan/_components/`: `settings-nav.tsx` (scrolling pill row below 1024px, sticky rail), `settings-frame.tsx` (comment), `gerai-identity-card.tsx`, `gerai-logo-card.tsx`, `gerai-profile-card.tsx` (Select value in server HTML, "Tidak diisi"), `outlet-select.tsx` (same), `shipment-prefix-card.tsx`, `settings-logic.ts` (member note copy).
+  - `src/app/app/pengaturan/`: `page.tsx`, `actions.ts` (message text only), `label/label-info-editor.tsx`, `pickup/pickup-points.tsx`, `pickup/pickup-notes.tsx`, `outlet/page.tsx`, `kurir/courier-preferences.tsx`, `koneksi/connection-form.tsx` (shared `OptionCard`).
+  - `src/app/app/anggota/`: `page.tsx` (`KpiCard`, H1), `loading.tsx`, `error.tsx`, `_components/role-choice.tsx`, `_components/member-access-dialog.tsx`; `src/lib/label-fields.ts` (two descriptions).
+  - Tests: `settings-screens-t217`, `native-select-replacement-t234`. Specs: 10 §4.10, 17 T-252.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: settings-screens-t217, native-select-replacement-t234, gerai-brand-t243, label-info-settings, outlet-settings-actions, cms-shell, tenant-approval-gate, system-map-inventory, dashboard-v3, shipment-invoice, contact-lookup-screens — 11 files / 202 passed.
+  - Mutation: both Selects back to bare `<SelectValue />` → 2 new tests failed; reverted, green again.
+  - `tsc --noEmit` 0, `npx eslint .` 0, `git diff --check` clean.
+- **Browser.** Own headless Chrome (CDP 9510) against dev app 3127; Tenant Admin and Operator; 1440 and 390 (admin also 720).
+  - 0 px document overflow everywhere; settings content top at 390: 515 → 227 px (menu 348 → 60 px).
+  - Operator: all seven settings URLs land on `/app`.
+  - Interactions (nothing saved): Kategori usaha pick and clear; Koneksi draft switch shows the blank API key field; main pickup point Hapus → explanation + "Tutup", focus back on "Hapus"; label size switch updates the preview.
+  - Screenshots: session scratchpad `pengaturan/before`, `pengaturan/after`.
+- **Open.** Outlet select with 2+ outlets only render-tested (demo has one outlet); the shell sidebar hides Pengaturan below the fold at 1440 × 900.
+
+## 2026-09-26 — T-251 Laporan pengiriman summary as two panels
+
+- **Changed.**
+  - `src/app/app/laporan/pengiriman/analytics-sections.tsx`: `ReportKpiStrip` with the Volume stat strip, the composition bar and the Uang COD panel; `reportOutcomeComposition`; help text.
+  - `tests/shipment-report.integration.test.ts` and `tests/report-pages-render.integration.test.ts`.
+  - Spec 10 §4.6b and §4.7, the spec 17 report row, and spec 19 RPT-SHP-FAILED and RPT-SHP-OUTCOME-COMPOSITION.
+  - No query, formula or metric value changed.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: `report-pages-render`, `shipment-report` and `dashboard-v3`, 3 files / 42 passed.
+  - Two mutations, each reverted and each failing its test: the Gagal predicate without CANCELLED; the Gagal segment zeroed in the view.
+  - `tsc --noEmit` 0 and `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9500) against the dev app on 3127, as Tenant Admin, `/app/laporan/pengiriman` (30 hari):
+  - Composition: 45 + 18 + 6 + 65 = 134.
+  - Summary height before → after: 1440 361 → 128 (side by side); 1280 → 213 (stacked); 1024 746 → 213; 720 714 → 213; 390 722 → 317.
+  - 0 px horizontal overflow at every width, and the smallest text is 13 px.
+  - The zero-shipment filter shows the filtered-empty card, unchanged.
+- **Gotcha.** A container query cannot style its own container: `@5xl/summary:grid-cols-3` on the `@container/summary` element never applied, while `col-span-2` on its child did, which left the money panel half-width on a second row. The grid now sits one element inside the container.
+
+## 2026-09-26 — T-250 Contact detail in two columns
+
+- **Changed.**
+  - `src/app/app/kontak/contact-detail.tsx`: two columns below the KPI row from a 896px content column (`@container/detail`): Riwayat kiriman and Alamat | Data kontak and Zona hati-hati (sticky side, 340px); one column below with `order` (Data kontak · Alamat · Riwayat kiriman · Zona hati-hati). History table down to four columns, date under the resi.
+  - `src/app/app/kontak/contact-section.tsx` (`@container/section`), `[contactId]/contact-detail-cards.tsx` (stacked fields, full-width save, 1-vs-2 address grid), `contact-form-parts.tsx` (`RoleOptions compact`), `contact-skeletons.tsx` (two-column skeleton).
+  - `tests/contact-numbers-t241.integration.test.ts`, `tests/contact-lookup-screens.integration.test.ts`.
+  - Spec 17 contact detail row + "Detail layout" bullet, spec 10 §4.11a, spec 18 detail row.
+  - Server actions, URL state and role visibility are unchanged.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: `contact-lookup-screens`, `contact-numbers-t241`, `contact-actions`, `contact-directory`, `system-map-inventory`, 5 files / 70 passed.
+  - Two mutations, each reverted and each failing its test: the side column's `order-1` → `order-5`; the compact role effect text made visible.
+  - `tsc --noEmit` 0 and `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9490) against the dev app on 3127, Tenant Admin and Operator; `/app/kontak/penerima/3`, `/app/kontak/pengirim/3`, `/app/kontak/pengirim/2` at 1440/1280/1024/720/390:
+  - 0 px document and table overflow at every width; no text under 13 px; controls 40 px desktop / 44 px at 720 and 390.
+  - Columns: 1440 main 732 + side 340; 1280 572 + 340; 1024 one column with the full sidebar, 516 + 340 with it collapsed; 720 and 390 one column in the specified order.
+  - Side column sticky at 96px after a 1200px scroll at 1440 × 900 (bottom 864px).
+  - Zona hati-hati only for the Tenant Admin; one submit in Data kontak. No form submitted, no data changed.
+- **Open.** No dev contact with two or more addresses (2-up grid covered only by the render test); the skeleton was not rendered in a browser.
+- **Gotcha.** With the full sidebar a viewport `lg` breakpoint puts two columns into a 704px content column at 1024 (main ~316px); the container query on the page content avoids that and follows the sidebar's collapsed state.
+
+## 2026-09-26 — T-249 Buat kiriman section progress and one-screen summary rail
+
+- **What changed.** `src/app/app/pengiriman/baru/`: `flow-parts.tsx` (section states, marker, header status, spine, required-field presence, guard text), `summary-rail.tsx` (client; `RailColumn`, three-region `SummaryRail`, `FillChecklist`, `MobileActionBar` with progress and a "Rincian" Sheet), `shipment-create-form.tsx` (renders the stepper with step-1 progress, tracks the focused section, feeds the rail), `page.tsx`, `issuance-stage.tsx`, `saved-draft-sections.tsx` (states on saved sections; the draft-number line moved into the form column so the rail can rise beside the H1). No action, validation, estimate, issuance or destination-picker change.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: `shipment-create-flow-t211` (5 new T-249 tests: required-field presence, states and spine, marker/status per state, empty-form render with 1/4 progress + five checklist links + guard, bounded rail regions), `native-select-replacement-t234`, `tenant-approval-gate`, `cms-shell`, `shipment-lists-render`, `app-foundation-render`, `shipment-detail-t213`: 7 files / 141 passed.
+  - `tsc --noEmit` 0 and `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9480) on the dev app 3127, Tenant Admin, dev audit header `contacts-area-results` for the area lookup (no Mengantar call; "Simpan & cek tarif" never pressed).
+  - States walked empty → sections 1–2 complete → all four complete at 1440 and 390: sections `complete,current,pending,pending,locked` → `complete,complete,current,pending,locked` → all complete + locked; top bar, rail row and bottom bar read 1/4 → 2/4 → 4/4; spine segments `done` only between complete sections. Tab from section 2 into 3 and 4 moves "current" with focus.
+  - Rail footer bottom (window height): empty 1440×900 717 (900), 1366×768 717 (768), 1280×720 704 (720, body scrolls); filled COD 725 / 725 / 704, 688 at page end. Rail top 96 at scroll 0 and when sticky.
+  - 390×844: no horizontal overflow (also 720); Sheet opens from "Rincian" with the full summary, Escape returns focus to "Rincian"; last card ends 20px above the bar (bar 105px, page padding 128px).
+- **Gotcha.** A rail that simply grew (the first checklist design) pushed "Simpan & cek tarif" below a 900px window before scrolling, because the rail starts 160px down; rising it beside the H1 (`-mt-16`, top 96) makes the initial and sticky positions equal, so one `max-height` bounds both.
+- **Open.** Estimate and issuance stages not rendered in a browser (no reachable ESTIMATED dev draft without a provider-verified save).
+
+## 2026-09-26 — T-254 follow-up: status bucket map flagged as a second label map
+- **Symptom.** `tests/shipment-status-copy` › "has no second status-to-label map" failed on all 14 statuses in `src/app/app/laporan/pengiriman/analytics-sections.tsx`; T-254's focused run did not include that suite.
+- **Cause.** `OUTCOME_OF_STATUS` maps each status to an outcome bucket with lowercase string literals (`DRAFT: "in-progress"`), which the guard reads as prose labels.
+- **Fix.** The bucket values are named `OutcomeKey` constants; the `Record<ShipmentStatus, OutcomeKey>` keeps its exhaustiveness check. No label, count or metric changed.
+- **Evidence.** `tsc --noEmit` 0; `npx eslint .` 0; `git diff --check` clean; full integration suite on the isolated DB (BETTER_AUTH_URL 127.0.0.1:3110, migrations applied) 126 files / 1,553 passed.

@@ -31,14 +31,14 @@ function OutletRow({ outlet }: { outlet: SafeOutletReadiness }) {
       ) : null}
       <dl className="divide-y text-sm">
         <div className={ROW}>
-          <dt className="text-muted-foreground">Lokasi pengiriman</dt>
+          <dt className="text-muted-foreground">Titik pickup utama</dt>
           <dd className="grid gap-0.5 sm:col-span-2">
             {outlet.defaultPickupAddressLabel ? (
               <span className="flex items-start gap-2 font-medium wrap-anywhere">
                 <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 {outlet.defaultPickupAddressLabel}
               </span>
-            ) : <span className="text-muted-foreground">Belum ada titik pickup utama</span>}
+            ) : <span className="text-muted-foreground">Belum ada</span>}
             <span className="text-muted-foreground wrap-anywhere">
               Area asal: {outlet.defaultOriginAreaLabel ?? "terisi dari titik pickup utama"}
             </span>
@@ -53,11 +53,11 @@ function OutletRow({ outlet }: { outlet: SafeOutletReadiness }) {
           <dd className="tabular-nums sm:col-span-2">{outlet.updatedAtLabel}</dd>
         </div>
       </dl>
-      <div className="flex flex-wrap justify-end gap-3">
-        <Button asChild size="sm" variant="outline">
+      <div className="flex flex-wrap justify-end gap-3 max-sm:*:flex-1">
+        <Button asChild variant="outline">
           <Link href={`/app/pengaturan/pickup${query}`}>Kelola titik pickup</Link>
         </Button>
-        <Button asChild size="sm" variant="outline">
+        <Button asChild variant="outline">
           <Link href={`/app/pengaturan/koneksi${query}`}>Kelola koneksi</Link>
         </Button>
       </div>
@@ -81,7 +81,9 @@ export default async function OutletSettingsPage() {
   return (
     <DataCard
       count={safe.length}
-      description={safe.length > 0 ? `${ready} siap dipakai · ${safe.length - ready} perlu dilengkapi` : undefined}
+      description={safe.length > 0
+        ? [`${ready} siap dipakai`, safe.length > ready ? `${safe.length - ready} perlu dilengkapi` : null].filter(Boolean).join(" · ")
+        : undefined}
       title="Daftar outlet"
     >
       {safe.length === 0 ? (

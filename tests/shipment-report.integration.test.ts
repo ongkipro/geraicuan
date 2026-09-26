@@ -2,7 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { reportOutcomeComposition, reportStatusGroups } from "@/app/app/laporan/pengiriman/analytics-sections";
+import { reportAnalyticsView, reportTrendTotals } from "@/app/app/laporan/pengiriman/report-logic";
 import { AnalyticsExportLimitError } from "@/db/analytics-repository";
+import { RTS_STATUSES } from "@/db/rts-repository";
 import * as schema from "@/db/schema";
 import { loadShipmentQueuePage } from "@/db/shipment-queue-repository";
 import {
@@ -545,6 +548,46 @@ describe("shipment report analytics (T-235)", () => {
     expect(returnRate(report.totals.byCourier.find((row) => row.courier === "SICEPAT")!)).toBe(100);
   });
 
+  // T-251: the Ringkasan composition bar splits RPT-SHP-ROWS into Terkirim / Retur / Gagal /
+  // Masih berjalan. Bind every bucket to an independent count per status (RPT-SHP-LIFECYCLE-COUNT),
+  // with a FAILED and a CANCELLED shipment added so Gagal is not trivially zero.
+  it("splits the total into disjoint outcome buckets that sum exactly (RPT-SHP-OUTCOME-COMPOSITION)", async () => {
+    const extra: Fixture[] = [
+      { createdAt: "2026-09-07T03:00:00Z", sequence: 7, status: "FAILED" },
+      { createdAt: "2026-09-08T03:00:00Z", sequence: 8, status: "CANCELLED" },
+    ];
+    for (const fixture of extra) await seed(fixture);
+    try {
+      const [analytics, report] = [await readAnalytics(), await readReport()];
+      const byStatus = new Map(report.totals.byLifecycle.map((row) => [row.status as string, row.shipmentCount]));
+      const countOf = (statuses: readonly string[]) => statuses.reduce((sum, status) => sum + (byStatus.get(status) ?? 0), 0);
+      const outcomeStatuses: string[] = ["DELIVERED", ...RTS_STATUSES, "FAILED", "CANCELLED"];
+      const others = [...byStatus.keys()].filter((status) => !outcomeStatuses.includes(status));
+
+      expect(analytics.kpis).toMatchObject({
+        deliveredCount: countOf(["DELIVERED"]),
+        failedCount: countOf(["FAILED", "CANCELLED"]),
+        inProgressCount: countOf(others),
+        returnedCount: countOf(RTS_STATUSES),
+        shipmentCount: report.totals.shipmentCount,
+      });
+      const parts = reportOutcomeComposition(analytics.kpis);
+      expect(parts.map((part) => [part.label, part.count])).toEqual([["Terkirim", 1], ["Retur", 1], ["Gagal", 2], ["Masih berjalan", 2]]);
+      expect(parts.reduce((sum, part) => sum + part.count, 0)).toBe(6);
+      expect(analytics.kpis.shipmentCount).toBe(6);
+      // T-254 RPT-SHP-LIFECYCLE-GROUP: Distribusi status folds the per-status counts into the same
+      // buckets; each group equals the Ringkasan figure read by the analytics predicates.
+      expect(reportStatusGroups(report.totals.byLifecycle).map((group) => [group.label, group.count]))
+        .toEqual(parts.map((part) => [part.label, part.count]));
+    } finally {
+      const ids = extra.map((fixture) => uuid("5521", fixture.sequence));
+      for (const table of ["shipment_parties", "shipment_drafts"]) {
+        await admin.query(`DELETE FROM ${table} WHERE shipment_id = ANY($1::uuid[])`, [ids]);
+      }
+      await admin.query("DELETE FROM shipments WHERE id = ANY($1::uuid[])", [ids]);
+    }
+  });
+
   it("buckets the trend per WIB day on the draft's COD flag and sums the COD value", async () => {
     const analytics = await readAnalytics();
     expect(analytics.trend).toEqual([
@@ -554,6 +597,11 @@ describe("shipment report analytics (T-235)", () => {
       { codCount: 0, codValueIdr: 0, key: "2026-09-05", nonCodCount: 1 },
     ]);
     expect(analytics.trend.reduce((sum, row) => sum + row.codCount + row.nonCodCount, 0)).toBe(4);
+    // T-254 RPT-SHP-TREND-TOTALS: the legend totals over the filled buckets equal the cohort and Nilai COD.
+    const totals = reportTrendTotals(reportAnalyticsView(range, analytics).trend);
+    expect(totals.cod + totals.nonCod).toBe(analytics.kpis.shipmentCount);
+    expect(totals.codValue).toBe(analytics.kpis.codValueIdr);
+    expect(totals).toEqual({ cod: 1, codValue: 222_160, nonCod: 3 });
   });
 
   it("folds destination labels into provinces and cities, casing-blind, unknown last, summing to the cohort", async () => {

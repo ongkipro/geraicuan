@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { validateShipmentDraft } from "@/lib/shipment-draft";
 import {
@@ -20,6 +20,20 @@ import {
 /**
  * T-211 (Buat kiriman, PR-68–PR-72): pure rules and key markup. No database, no provider call.
  */
+
+// The form's Server Actions are stubs here: its markup is rendered, nothing is saved (T-249).
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/app/pengiriman/baru",
+  useRouter: () => ({ push: () => undefined, refresh: () => undefined }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock("@/app/app/actions", () => ({
+  saveShipmentDraft: async () => ({}),
+  searchRecipientShipmentContacts: async () => ({}),
+  searchSenderShipmentContacts: async () => ({}),
+  selectShipmentContact: async () => ({}),
+}));
+vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: async () => ({}) }));
 
 // 26 Sep 2026, 10.00 WIB (03.00 UTC).
 const TEN_AM_WIB = new Date("2026-09-26T03:00:00.000Z");
@@ -238,7 +252,7 @@ describe("Buat kiriman markup", () => {
       ],
     }));
     expect(stepper.match(/aria-current="step"/g)).toHaveLength(1);
-    const section = renderToStaticMarkup(createElement(SectionCard, { id: "s5", number: 5, title: "Pilih layanan ekspedisi" } as Parameters<typeof SectionCard>[0], "x"));
+    const section = renderToStaticMarkup(createElement(SectionCard, { id: "s5", number: 5, state: "current", title: "Pilih layanan ekspedisi" } as Parameters<typeof SectionCard>[0], "x"));
     expect(section).toContain('aria-labelledby="s5"');
     expect(section.match(/<h2/g)).toHaveLength(1);
     const rail = renderToStaticMarkup(createElement(SummaryRail, {
@@ -253,5 +267,128 @@ describe("Buat kiriman markup", () => {
     expect(rail).toContain("Tarif resmi");
     expect(rail).toMatch(/Rp\s209\.476/);
     expect(rail.match(/data-variant="default"/g)).toHaveLength(1);
+  });
+});
+
+describe("T-249 section progress: states, sub-progress, rail checklist, bounded rail", async () => {
+  const flow = await import("@/app/app/pengiriman/baru/flow-parts");
+  const rail = await import("@/app/app/pengiriman/baru/summary-rail");
+  const { ShipmentCreateForm } = await import("@/app/app/pengiriman/baru/shipment-create-form");
+
+  const party = { address: "Jalan Contoh 2", name: "Budi", phone: "081234567891" };
+  const filled = {
+    declaredValue: "150000",
+    destinationChosen: true,
+    handoverType: "PICKUP" as const,
+    pickupDate: "2026-09-27",
+    pickupReady: true,
+    pickupSlot: "09:00",
+    products: [{ name: "Kemeja", quantity: "1", weightKg: "0,7" }],
+    recipient: party,
+    sender: { address: "Kota Surabaya", name: "Gerai 88", phone: "081234567890" },
+  };
+
+  it("counts only the empty required (*) fields per section, by label", () => {
+    expect(flow.requiredFieldsMissing(filled)).toEqual([[], [], [], []]);
+    const empty = flow.requiredFieldsMissing({
+      ...filled,
+      declaredValue: " ",
+      destinationChosen: false,
+      products: [{ name: "Kemeja", quantity: "1", weightKg: "" }, { name: "", quantity: "", weightKg: "" }],
+      recipient: { address: "", name: "Budi", phone: "" },
+    });
+    expect(empty[1]).toEqual(["Nomor telepon", "Alamat lengkap penerima", "Kecamatan tujuan"]);
+    expect(empty[2]).toEqual(["Nilai barang"]);
+    expect(empty[3]).toEqual(["Berat (kg) 1", "Nama produk 2", "Jumlah 2", "Berat (kg) 2"]);
+    // Drop di outlet needs no pickup date or slot.
+    expect(flow.requiredFieldsMissing({ ...filled, handoverType: "DROP_OFF", pickupDate: "", pickupSlot: "" })[0]).toEqual([]);
+    expect(flow.requiredFieldsMissing({ ...filled, pickupReady: false, pickupSlot: "" })[0]).toEqual(["Titik pickup", "Jam penjemputan"]);
+  });
+
+  it("marks complete / current (first incomplete, or the focused one) / pending / locked", () => {
+    expect(flow.flowSectionStates([0, 4, 1, 2], null, true)).toEqual(["complete", "current", "pending", "pending", "locked"]);
+    expect(flow.flowSectionStates([0, 4, 1, 2], 3, true)).toEqual(["complete", "pending", "pending", "current", "locked"]);
+    expect(flow.flowSectionStates([0, 0, 0, 0], null, true)).toEqual(["complete", "complete", "complete", "complete", "locked"]);
+    expect(flow.spineSegments(["complete", "complete", "current", "pending", "locked"])).toEqual(["done", "todo", "todo", "todo", undefined]);
+    expect(flow.saveGuard([0, 4, 1, 2]).text).toBe("Belum lengkap: Pengirim & penerima, Pembayaran +1 lainnya.");
+    expect(flow.saveGuard([0, 0, 1, 0]).text).toBe("Belum lengkap: Pembayaran.");
+    expect(flow.saveGuard([0, 0, 0, 0]).text).toMatch(/^Semua bagian lengkap/);
+  });
+
+  it("draws each state's marker and header status", () => {
+    const card = (state: "complete" | "current" | "locked" | "pending", missing: number) => renderToStaticMarkup(createElement(
+      flow.SectionCard,
+      { aside: createElement(flow.SectionStatus, { missing, state }), connector: "done", id: "s", number: 3, state, title: "Pembayaran" } as Parameters<typeof flow.SectionCard>[0],
+      "x",
+    ));
+    const complete = card("complete", 0);
+    expect(complete).toContain('data-state="complete"');
+    expect(complete).toContain("lucide-check");
+    expect(complete).toContain("Lengkap");
+    expect(complete).toContain('data-connector="done"');
+    expect(card("current", 1)).toMatch(/data-state="current"[^>]*>3</);
+    expect(card("pending", 2)).toContain("2 isian belum diisi");
+    const locked = card("locked", 0);
+    expect(locked).toContain("lucide-lock");
+    expect(locked).toContain("Terbuka setelah cek tarif");
+  });
+
+  it("renders the empty form: 1/4 in the top bar, rail checklist of five in-page links, guard naming the gaps", () => {
+    const html = renderToStaticMarkup(createElement(ShipmentCreateForm, {
+      gerai: { name: "Gerai Uji", phone: "081234567890" },
+      nowIso: "2026-09-26T03:00:00.000Z",
+      outlets: [{
+        id: "00000000-0000-4000-8000-000000000249",
+        name: "Outlet Uji",
+        pickupPoints: [{ isDefault: true, originAreaLabel: "Coblong, Kota Bandung", pickupAddressId: "P-1", pickupAddressLabel: "Gudang, Jl. Dago 1" }],
+      }],
+      steps: [
+        { detail: "a", label: "Isi data", state: "current" },
+        { detail: "b", label: "Cek tarif", state: "pending" },
+        { detail: "c", label: "Terbitkan resi", state: "pending" },
+      ],
+      submissionId: "00000000-0000-4000-8000-000000000250",
+    }));
+    expect([...html.matchAll(/data-flow-section="[^"]+" data-state="(\w+)"/g)].map((match) => match[1]))
+      .toEqual(["complete", "current", "pending", "pending", "locked"]);
+    expect(html).toMatch(/data-slot="step-progress"[^>]*>1\/4 bagian lengkap</);
+    expect(html).toMatch(/data-slot="mobile-progress"[^>]*>1\/4 bagian lengkap</);
+    const checklist = /data-slot="fill-checklist"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    expect([...checklist.matchAll(/href="#([^"]+)"/g)].map((match) => match[1]))
+      .toEqual(["section-handover", "section-parties", "section-payment", "section-package", "section-service"]);
+    expect(checklist.match(/aria-current="step"/g)).toHaveLength(1);
+    expect(checklist).toMatch(/1<\/span>\/4<\/span> lengkap|>1\/4<\/span> lengkap/);
+    expect(html).toContain("Belum lengkap: Pengirim &amp; penerima, Pembayaran +1 lainnya.");
+    // The rail's primary sits in the pinned footer, with its guard.
+    const footer = /data-rail-region="footer"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? "";
+    expect(footer).toContain("Simpan &amp; cek tarif");
+    expect(footer).toContain('id="save-guard"');
+  });
+
+  it("bounds the rail: header with the progress row, scrollable body, footer with the total and the primary", () => {
+    const markup = renderToStaticMarkup(createElement(rail.RailColumn, null, createElement(rail.SummaryRail, {
+      actions: createElement("button", { type: "submit" }, "Simpan & cek tarif"),
+      destination: "Dago, Coblong, Kota Bandung",
+      moneyRows: [{ amountIdr: 150_000, label: "Nilai barang" }],
+      origin: "Tanah Abang, Kota Jakarta Pusat",
+      progress: createElement(rail.FillChecklist, {
+        items: flow.FLOW_SECTIONS.map((section, index) => ({ ...section, missing: 0, state: index < 4 ? "complete" as const : "current" as const })),
+      }),
+      rows: [{ label: "Pengirim di label", value: "Gerai 88 (081234567890)" }],
+      source: "Estimasi",
+      total: { amountIdr: 32_500, label: "Ongkir", note: "n" },
+    })));
+    expect(markup).toContain("lg:max-h-[calc(100svh-7rem)]");
+    const regions = [...markup.matchAll(/data-rail-region="(\w+)"/g)].map((match) => match[1]);
+    expect(regions).toEqual(["header", "body", "footer"]);
+    const header = markup.slice(markup.indexOf('data-rail-region="header"'), markup.indexOf('data-rail-region="body"'));
+    expect(header.match(/<a /g)).toHaveLength(5);
+    expect(header).toContain(">4/4</span> lengkap");
+    const body = markup.slice(markup.indexOf('data-rail-region="body"'), markup.indexOf('data-rail-region="footer"'));
+    expect(markup).toMatch(/<div[^>]*class="[^"]*min-h-0[^"]*overflow-y-auto[^"]*"[^>]*data-rail-region="body"/);
+    expect(body).toContain('title="Tanah Abang, Kota Jakarta Pusat"');
+    const footer = markup.slice(markup.indexOf('data-rail-region="footer"'));
+    expect(footer).toMatch(/Rp\s32\.500/);
+    expect(footer).toContain("Simpan &amp; cek tarif");
   });
 });

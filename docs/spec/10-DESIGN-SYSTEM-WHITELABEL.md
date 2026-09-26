@@ -116,13 +116,13 @@ Browser sweep (T-228, 19 routes × 1440/1024/390): smallest visible text 13px, l
 | Section gap | 24px between regions; 16px between fields |
 | Card | **no border, radius 16px (`rounded-2xl`), `shadow-card`**, padding 24px (16px below 768px) |
 | Inner tile | `--tile` or a pastel tint, no border, radius 10px (`rounded-xl`), padding 16px |
-| Controls | Button/input/select 40px desktop, 44px touch; radius 8px; input padding-x 12px; button padding-x 16px, 15px/500 |
+| Controls | Button/input/select 40px desktop, 44px touch; radius 8px; input padding-x 12px; button padding-x 16px, 15px/500. Tabs triggers the same 40/44px (T-254; the shadcn default was 30px) |
 | Large primary (flow submit) | 48px, 15px/700 |
 | Badge | 24px, radius full, padding-x 10px, 13px/500, icon 14px + word |
 | Table | header row 44px, body rows ≥ 48px, cell padding 12–16px |
 | Sidebar | 256px, transparent on the canvas, no right rule; item 44px, 15px/500 navy, icon 20px in a 40×40 box; current item = white pill + `shadow-card`, primary text 600, icon box primary with a white icon (radius 8), 4px primary bar at the right edge |
 | Top bar | 64px, full width above the sidebar, solid `--primary`, white text, `shadow-resting` |
-| Elevation | `shadow-card` on cards and status-tile groups; `shadow-resting` on the top bar and sticky bars; `shadow-md` on popovers and menus; dialogs `shadow-lg` |
+| Elevation | `shadow-card` on cards and the status strip; `shadow-resting` on the top bar and sticky bars; `shadow-md` on popovers and menus; dialogs `shadow-lg` |
 
 ### 2.4 Ergonomic rationale (from GeraiOS `UI_UX_ANATOMY.md`)
 Operators are 40+ (presbyopia), sit 60–90 cm from a 14–24" screen past scales, printers and parcels, under shop lighting with glare, and one misread digit in a resi, phone or COD amount ships a parcel wrongly or loses money. Hence: nothing functional below 13px; resi, phone and money bold and large where they are the point of the screen (resi on detail/label 18–20px mono bold, totals 24px bold); controls 40–44px; generous gaps so nothing overlaps at 125–200% browser zoom.
@@ -131,7 +131,7 @@ Operators are 40+ (presbyopia), sit 60–90 cm from a 14–24" screen past scale
 
 - **Top bar** (full width, 64px, sticky, solid `--primary`, white text): sidebar trigger (below 1024px; hamburger on the phone, panel icon beside the rail) · brand (white "GC" square with primary text + "GeraiCUAN", the wordmark from 768px) · a white 30% rule · gerai name + role badge + "N outlet terdaftar" (the role badge and line from 640px) · white "Cari halaman…" field with ⌘K (a white search icon below 640px) · date · time WIB at 85% white (from 768px).
 - **Sidebar** (below the top bar, on the canvas, no panel or rule): flat groups with uppercase 13px labels (groups and order unchanged, below); each item an icon in a 40×40 box + label 15/500 navy; the current item is a white pill with `shadow-card`, primary label 600, its icon box filled primary with a white icon, and a 4px primary bar at the right edge; account row in the footer (avatar initial, name, email, menu: Anggota & akses, Keluar) above a `--border` rule. Desktop ≥ 1024 full; 768–1023 icon rail with tooltips (the 40px icon box alone); < 768 a Sheet opened from the top bar.
-- **Focused layout** (D11; `/app/pengiriman/baru`): no sidebar; the top bar holds the brand, the 3-step stepper centred (white on primary: current = white chip, done = check, pending = outlined; below 768px only the current step keeps its label) and a close ✕ (44px, "Tutup, kembali ke Histori kiriman") to `/app/pengiriman`; the content column (max 1120px) is centred; the summary rail stays sticky.
+- **Focused layout** (D11; `/app/pengiriman/baru`): no sidebar; the top bar holds the brand, the 3-step stepper centred (white on primary: current = white chip, done = check, pending = outlined; below 768px only the current step keeps its label) and a close ✕ (44px, "Tutup, kembali ke Histori kiriman") to `/app/pengiriman`; the content column (max 1120px) is centred; the summary rail stays sticky and never outgrows the window (§4.8, T-249). Step 1 shows its sub-progress "n/4 bagian lengkap" under its label from 768px (the bottom bar carries it below).
 - **Menu (tenant):** Dasbor · PENGIRIMAN: Buat kiriman, Histori kiriman, Retur (RTS), Cetak resi · DATA: Pengirim, Penerima · CEK: Cek resi, Cek tarif · LAPORAN: Laporan pengiriman, Riwayat cetak resi (Tenant Admin) · PENGELOLAAN: Pengaturan (Tenant Admin). **Platform:** Ringkasan, Tenant, Pendaftaran, Audit.
 
 ## 4. Anatomy
@@ -151,20 +151,99 @@ Inside one card: toolbar row (search, status tabs or facet, secondary actions) �
 ### 4.5 Record card (mobile list row)
 Line 1 identity link (16/600) + status badge right · line 2 who/where (15px) · line 3 courier · resi (13px muted, resi mono) · line 4 value left (15/600) + time right (13px muted). After 10 rows: "Tampilkan N lainnya".
 
-### 4.6 Status tiles (queue filters)
-One white card holding up to 6 borderless pastel tiles in one row (2 columns on phone; radius 10): label 15/500 · count 26/700 · one short line 13px muted. Tint by meaning (`--tile` neutral, `--tile-info`, `--tile-ok`, `--tile-warn`, `--tile-danger`), from the tile's `tone` or its shipment-status key via the §4.12 mapping; the icon chip is the §4.12 status icon (Dibatalkan `Ban`, Terkirim `PackageCheck`). Selected: 2px `--primary` ring + check. **Columns follow the tile count inside `StatusTiles` (T-246), never a page override:** 6 tiles → 2 / 3 from `md` / 6 from `xl`; 5 → 2 / 3 / 5 from `xl`; 4 → 2 / 4 from `md`. A label is never truncated: it wraps, and the tiles of one row share their row tracks (CSS subgrid) so every count stays on one line (at 1024 px six columns had left 68 px and cut "Dalam perjalanan" to "Dalam …").
+### 4.6 Status tiles (queue filters) — stat strip
+T-248 (owner 2026-09-26: "jadikan bento aja", then "rapikan lagi biar kecil2"): the pastel tile cards became one compact **stat strip**: 72 px segments plus the composition bar and its legend, about 116 px tall on desktop (the T-246 tiles were about 150 px). `StatusTiles` is shared by Histori (6 tiles), Retur (5) and Cetak resi (4).
+
+- **Container.** One white card (radius 16, `shadow-card`, no padding). Its segments are separated by 1 px `--border` dividers, vertical and horizontal (the grid's `gap-px` over `bg-border`).
+- **Segment.** Each segment is its filter link, with the same href as the page's status filter, and its count is that filter's row count (PR-52).
+  - Line 1: the §4.12 status icon (16 px, tone ink) inline with the label, 13/500 muted, never truncated. Dibatalkan uses `Ban` and Terkirim `PackageCheck`.
+  - Line 2: the count, 20/600 tabular, on one line, followed by its share in muted 13 px.
+  - The first tile is the page's "all" filter (Semua kiriman / Semua retur / Semua resi) and shows no share.
+  - The hint is screen-reader text only.
+  - There is no per-segment bar, and no pastel tint (the `--tile-*` tints stay for Cek tarif / Cek resi).
+  - Segment layout: padding 12×10 in the phone grid and 16×12 from a 36rem strip; minimum height 64 px.
+- **States.** Hover uses `--accent`. Focus draws a 3 px inset ring. Selected: 2 px `--primary` bottom indicator, primary label and count, `aria-current`.
+- **Composition bar.** One stacked bar (6 px) runs under the segments and always fills the full width.
+  - It has one segment per non-"all" tile with a count above 0, then **Lainnya**: the part of `total` no tile names (spec 19 QUE-OTHER / RTS-OTHER / LBL-OTHER = base − Σ status tiles, never negative).
+  - Width = count ÷ `total`, the page's spec 19 QUE-SHARE / RTS-SHARE / LBL-SHARE base. On Histori, Lainnya is drafts, Siap dilanjutkan, RTS and so on; on Retur and Cetak resi it is 0 by construction.
+  - Colours are by tone: ok, info, warn, danger, muted ink for neutral, and `--input` grey for Lainnya. Segments are split by 2 px of card.
+  - Full-tone segments meet the 3:1 non-text floor on the card (the tone inks ≥ 4.5, `--input` 3.36).
+- **Active filter.** While a status segment is selected (owner 2026-09-26: "bar bawahnya active juga kamu bedakan"), its bar segment stays full tone and grows to 8 px. Every other segment, and its legend dot, dims to 35 % opacity. The dimmed segments fall below 3:1 on purpose, as context; the legend text and the sentence below carry their values. With "Semua" selected, every segment is full tone.
+- **Legend.** One 13 px muted line under the bar: a dot and "label (n)" per segment, ending with "Lainnya (n)". The active label is 500 ink. The line wraps on a phone.
+- **Accessibility.** The bar and legend are `aria-hidden`. A screen-reader sentence repeats them: "Komposisi dari N: <label> n (x%), <active label> n (x%, dipilih), …, Lainnya n (x%)." A zero base draws nothing and no sentence.
+- **Height.** The strip is about 116 px tall at desktop with the legend: 72 px segments, the 8 px bar row and a 36 px legend line.
+- **Layout.** It follows the tile count inside `StatusTiles`, never a page override. The breakpoints are container queries on the strip, so the sidebar is already paid for.
+  - Six and five tiles: 3 columns in rows, then one row from a 56rem strip (1280 px viewport). In that row, cells start at their content width and share the rest equally. Equal cells left 103 px for "Dalam perjalanan" at 1280 px and wrapped it.
+  - Four tiles: 2 × 2, then one row from a 36rem strip (720 px viewport).
+  - When a row is one cell short (five tiles in three columns), the last cell spans two, so no divider frames a hole.
+  - Labels wrap only below the one-row width.
+- **Loading.** `ListSkeleton` draws the same strip.
+
+### 4.6b Report summary (Laporan pengiriman "Ringkasan")
+T-251 (owner 2026-09-26: "ini card sepertinya perlu di rapikan juga"): the six §4.7 KPI cards (two rows, about 360 px at 1440) became two panels, 128 px at 1440. `ReportKpiStrip` in `src/app/app/laporan/pengiriman/analytics-sections.tsx`.
+
+- **Panels.** Both use the §4.6 container: a white card (radius 16, `shadow-card`, no padding) whose cells are split by 1 px `--border` dividers. No icon chips.
+  - **Volume** — Total kiriman, Terkirim, Retur, Gagal and Masih berjalan.
+  - **Uang COD** — Nilai COD and Estimasi cair.
+- **Placement.** The panels sit side by side (2/3 and 1/3) once the summary is at least 64rem wide, which is a 1440 px viewport. Below that they stack. At 1280 px the volume panel would get only 632 px and wrap its labels, so the switch is a container query on the summary, not `lg`.
+- **Volume cell.**
+  - Line 1: the label, 13/500 muted. An outcome label starts with an 8 px dot in its bar colour, and that dot is the bar's legend.
+  - Line 2: the count, 20/600 tabular.
+  - Line 3 (Terkirim and Retur only): the rate with its base, 13 px muted — "x% dari N kiriman" for Terkirim, "x% dari N selesai" for Retur.
+  - These are report figures, not filters, so a cell has no link, hover or selected state.
+  - Cells form one content-sized row from a 36rem panel. Narrower, they form 3 columns, and the last cell spans two.
+- **Composition bar.** One 6 px stacked bar along the volume panel's bottom edge, split by 2 px of card. Segments run Terkirim (`ok`), Retur (`warn`), Gagal (`danger`) and Masih berjalan (`primary`), the Dasbor's outcome dot colours. Each width is count ÷ Total kiriman.
+  - The four buckets are disjoint and sum to the total exactly (spec 19 RPT-SHP-OUTCOME-COMPOSITION), so there is no Lainnya segment.
+  - A zero bucket takes no width.
+- **Money cell.**
+  - In a narrow panel (under 28rem, which is the 1440 side-by-side layout and phones), the label and the amount share one line, amount at the right, with the caption under them.
+  - From a 28rem panel, label, amount and caption stack.
+  - Estimasi cair carries a secondary "Estimasi" badge (§4.11), and its caption is "Perkiraan, bukan dana diterima". Nilai COD's caption is "Ditagih kurir dari N kiriman COD".
+  - Nothing names COD principal as revenue.
+  - There is no estimasi-vs-potongan bar: nilai COD − estimasi cair is not a defined cohort metric (spec 19 defines the identity only per row).
+- **Accessibility.** Every figure is a `<dd>` after its `<dt>` label. Each panel is a labelled group ("Volume kiriman", "Uang COD"). The bar is `aria-hidden`. An sr-only sentence says that the four outcomes sum to the total. The "?" help on "Ringkasan" explains Retur's base, Gagal (gagal + dibatalkan) and Masih berjalan.
+- **Height** (T-251, dev data):
+
+  | Viewport | Layout | Height |
+  |---|---|---|
+  | 1440 | side by side | 128 px |
+  | 1280, 1024, 720 | stacked | 97 + 24 gap + 92 = 213 px |
+  | 390 | stacked | 317 px |
+
+### 4.6c Report sections (Laporan pengiriman, T-254)
+Owner 2026-09-26: "app/laporan/pengiriman -> rapikan ui ux". Order: filter row → Ringkasan (§4.6b) → trend → breakdowns → list.
+
+- **Section header.** Every section uses the §4.3 anatomy: title 18/700, "?" help at the right, no description line (§1.5). Ringkasan sits on the ground with the same title size. The 40 px "?" is pulled into the title's line box (`SectionHelp`, `-my-2`), so it centres on the title and adds no space under it.
+- **Grid.** From `xl`, Tren harian (3/5) and Distribusi status (2/5) share a row and both cards take the row's height. Total per kurir, Performa kurir, Wilayah tujuan, Rute teratas and Daftar kiriman are full width. The wilayah table beside a five-route table left a ~530 px hole at 1440 (T-235 layout).
+- **Tren harian.** The legend carries each series' period total ("COD 86 kiriman", "Non-COD 48 kiriman"; on the value tab "Nilai COD Rp …"), as a `<dl>`. Line swatches: solid for COD, dashed for Non-COD. The tooltip formats counts in id-ID. The data-table disclosure heads its date column "Tanggal (WIB)".
+- **Distribusi status.** Four rows instead of up to fourteen: the Ringkasan buckets in the same order and dot colours, each with "n · x%" and an 8 px share bar (share of the total, in the bucket colour). A bucket with more than one status is a native `<details>` whose summary is the row (44/40 px). Open, it lists the statuses in lifecycle order with badge and "n · x%", behind a 2 px left rule. A single-status bucket has no disclosure.
+- **Tables in report cards.** `table-fixed`. Numeric columns are 96 px wide (80 px below `lg`), right-aligned and tabular, so the wilayah and route tables line up. Below `md` they become record lists: name and count on line 1, then a 13 px muted line with the other figures. The wilayah volume bar (8 px, `--chart-1`, from zero, relative to the largest known wilayah) sits under the name and replaces T-235's separate bar chart. "Wilayah tidak dikenal" has no bar. The "Tampilkan semua" remainder scrolls inside a 384 px box with its header pinned (from `md`).
+- **Performa kurir.** Rows 36 px, bars 20 px (were 44 / 24).
+- **States.** Each card keeps its own empty line or alert, as in spec 17. `loading.tsx` draws the final shape: the Ringkasan panels, the 3/5 + 2/5 row, then full-width cards.
 
 ### 4.7 KPI card
-White borderless card: label 15px muted + icon 20px primary in a 40px `--accent` circle chip at the right → value 30/700 navy → delta pill (neutral; arrow + "Naik/Turun n (x%)") + "vs periode sebelumnya" 13px.
+Used by the Dasbor, contact detail and platform pages; Laporan pengiriman uses §4.6b instead (T-251). White borderless card: label 15px muted + icon 20px primary in a 40px `--accent` circle chip at the right → value 30/700 navy → delta pill (neutral; arrow + "Naik/Turun n (x%)") + "vs periode sebelumnya" 13px.
 
 ### 4.8 Flow (Buat kiriman) — see spec 17 §UX-v3.6
 Focused layout (§3, D11). Two columns from 1024px: form + sticky summary rail (360px) inside the centred 1120px column. Stepper in the top bar (3 steps). Numbered section cards (white, borderless, radius 16, `shadow-card`) (number chip 24px, title 16/600, status badge right). Option cards (payment, handover, size): 1px `--input`; selected `--accent` + `--primary` border + radio. Mobile: rail hidden, sticky bottom bar (total + primary).
+
+T-249 (owner 2026-09-26: "sentuhan visual untuk step by step nya biar jelas"; rail: "biar dinamis 1 layar … soalnya penting"):
+- **Section states.** Each of the five sections is complete, current, pending or locked. Complete = every required (*) field of the section filled, the same fields the form already marks, nothing new is validated (`requiredFieldsMissing`); current = the section holding focus, else the first incomplete one; section 5 is locked until an estimate exists; after the save sections 1–4 are complete and 5 current.
+- **Marker.** One marker per state, shared by card, spine and rail row: complete = `--ok` circle with a check; current = `--primary` circle with the number; pending = `--input` outline with the number; locked = dashed `--input` on `--muted` with a lock. Colour/check change ≤ 150 ms, none under `prefers-reduced-motion`.
+- **Spine (≥ 1024px).** The cards sit right of a 32px gutter; the marker is on the header's centre line and a 2px segment runs to the next marker, `--ok` when both ends are complete, `--border` otherwise. Below 1024px there is no spine; the marker (28px) sits inline before the title.
+- **Header status (right).** "Lengkap" (ok badge with check), "n isian belum diisi" (13px muted), or for locked section 5 "Terbuka setelah cek tarif" with a lock; saved sections keep "Tersimpan". The H2 carries the number and state for screen readers.
+- **Summary rail, bounded.** The column rises beside the H1 (top 96px before and after sticking) and is at most `100svh − 7rem` tall, a flex column of three regions:
+  - header: title, source badge (Estimasi / Tarif resmi), freshness, and the "Langkah pengisian" row — five 40px in-page links with the same markers (current on `--accent`, `aria-current="step"`, accessible name "Bagian n: title — state") and "n/4 lengkap" (announced); a link scrolls to its section and focuses its first control;
+  - body (scrolls on its own, `min-height: 0`): route in two one-line rows (Asal area · Tujuan area, truncated with `title`; the sender's name and phone are the "Pengirim di label" row), the shipment rows, "Rincian komponen biaya"; fades at the top/bottom edge only while content is hidden there; a tab stop with a name only while it scrolls;
+  - pinned footer: the total line, the primary action and its guard. The Buat kiriman guard names the incomplete sections, two at most then "+n lainnya", clamped to two lines.
+  - Measured (T-249): footer bottom ≤ window height at 1440×900, 1366×768 and 1280×720, empty and fully filled COD.
+- **Below 1024px.** The bottom bar shows "n/4 bagian lengkap" (announced), the caption and the total, then "Rincian" (outline) and the primary; "Rincian" opens the whole summary in a bottom `Sheet` (title, badge, route, rows, costs, total, "Tutup"); Escape or Tutup returns focus to "Rincian". The page keeps 128px of bottom padding, taller than the bar (≈ 105px at 390).
 
 ### 4.9 Detail
 Two columns from 1024px: main + right rail (status, next action, timeline). Below 1024px the rail comes first. Back link above the H1: 13px/600 `--primary` with a 16px arrow, 24px tall from `md` and 44px on touch (T-246: one anatomy on shipment, label, invoice and contact pages). Resi and shipment number in the identity strip 18px mono bold (§2.4). Paired outline actions in the rail wrap instead of shrinking below their label.
 
 ### 4.10 Settings
-Left sub-menu (Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir, Koneksi Mengantar, Anggota & akses) + content column (max 760px) of cards. Mitra kurir rows reuse the colour courier logos (`public/couriers/*.svg`) with one `Switch` each (T-243), as borderless inner tiles with the switch centred on the row; a courier switched off shows its logo grayscale at 50 % beside "Tidak ditawarkan" (T-246). Pickup notes and contact addresses are inner tiles too — no bordered or dashed box inside a card.
+Left sub-menu (Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir, Koneksi Mengantar, Anggota & akses) + content column (max 760px) of cards. **T-252:** from 1024px the sub-menu is a 256px rail, sticky at `top-24`, items 40px; below 1024px it is one horizontally scrolling row of 44px pills in the same card (no visible scrollbar, the current pill scrolled into view, a card-coloured fade on whichever edge still hides pills), so content starts ~60px below it instead of below seven stacked rows. Every settings page, Anggota & akses included, has the H1 "Pengaturan" (the current sidebar item); the document title names the page ("Anggota & akses · Pengaturan"). Each card's save names what it saves ("Simpan WhatsApp", "Simpan brand gerai", "Simpan informasi label", "Simpan pilihan kurir"); one filled primary per card. Optional fields carry "(opsional)" in the label. Every settings dropdown is a shadcn Select whose `SelectValue` renders the chosen label as children (visible in the server HTML, T-236); an optional Select starts on its muted placeholder (Radix's empty value, so `data-placeholder` is in the server HTML — **T-253**: Kategori usaha "Pilih kategori usaha") and, once set, offers a muted "Kosongkan kategori" item below a separator that returns it to the placeholder. **T-253 shared Select:** the list opens as a popper below the trigger, start-aligned, at least the trigger's width and at most the available viewport width/height (scrolls), items 40px (44px below md) with a check on the chosen one; triggers are exactly 40/44px. Settings forms keep one field per row except paired short fields in a 2-column grid (Nama gerai | WhatsApp, Email CS | Situs web). A read-only value (Nama gerai, a locked Awalan) sits in a `bg-muted` bordered 40px frame under its label. A switch row (Mitra kurir, Informasi label) is itself the hit target: the switch's `::after` fills the positioned row, so label, description and logo toggle it (≥ 44px on touch, one tab stop, the switch keeps its 32 × 18px look). A card's save sits in its footer, including Koneksi Mengantar's "Simpan/Ganti API key". Choices between modes (Koneksi Mengantar, label size, member role) use the shared `OptionCard`. Mitra kurir rows reuse the colour courier logos (`public/couriers/*.svg`) with one `Switch` each (T-243), as borderless inner tiles with the switch centred on the row; a courier switched off shows its logo grayscale at 50 % beside "Tidak ditawarkan" (T-246). Pickup notes and contact addresses are inner tiles too — no bordered or dashed box inside a card.
 
 ### 4.11 Component appearance rules
 - Primary buttons are solid and reserved for the next safe action; secondary actions outline/ghost; dangerous actions use destructive wording that names the shipment/object and consequence, behind an AlertDialog.
@@ -174,7 +253,7 @@ Left sub-menu (Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir,
 - Screen styling never rescales the printed thermal label.
 
 ### 4.11a Contact detail surface (T-246, owner 2026-09-26: "bg white untuk halaman kecuali card atas biar gak rancu")
-The one page-level exception to §1.4: on `/app/kontak/<peran>/<n>` the content area is white (`bg-card`, set by the page's own wrapper through `main:has()`, not by the shell). Only the four KPI cards keep card chrome, with a 1px `--border` added so they still read as cards on white. Every region below is a flat section: title 18/700 + count badge, optional one-line description, action right, and a hairline `--border` above it (24px either side). Addresses are white items with a 1px border (the primary one `--primary` at 40 %), two columns from `md`. Name, phone, kategori and roles are one "Data kontak" form with one save. Zona hati-hati is a quiet section with a destructive-outline "Arsipkan kontak" behind the AlertDialog (Tenant Admin only).
+The one page-level exception to §1.4: on `/app/kontak/<peran>/<n>` the content area is white (`bg-card`, set by the page's own wrapper through `main:has()`, not by the shell). Only the four KPI cards keep card chrome, with a 1px `--border` added so they still read as cards on white. Every region below is a flat section: title 18/700 + count badge, optional one-line description, action right, and a hairline `--border` above it (24px either side). Addresses are white items with a 1px border (the primary one `--primary` at 40 %), two columns from `md`. Name, phone, kategori and roles are one "Data kontak" form with one save. Zona hati-hati is a quiet section with a destructive-outline "Arsipkan kontak" behind the AlertDialog (Tenant Admin only). **T-250 (owner 2026-09-26):** below the KPI row the sections sit in two columns once the content column is ≥ 896px (`@4xl` container query): main `minmax(0,1fr)` (Riwayat kiriman, Alamat) and a 340px side column (Data kontak, Zona hati-hati), 48px whitespace apart with no vertical rule; the side column is sticky at `top-24` when the viewport is ≥ 896px tall. Each section is its own `@container/section`, so addresses go 2-up only with two or more and ≥ 512px, and the Data kontak fields stack in the side column (two columns from 576px). In the side column Peran is two compact 44px checkbox rows, not option cards, and the save button is full width. Below 896px: one column, Data kontak · Alamat · Riwayat kiriman · Zona hati-hati.
 
 ### 4.12 Shipment status presentation (one mapping, `src/lib/shipment-queue.ts` → `StatusBadge`)
 | Status | Label | Tone | Icon (lucide) |
@@ -223,7 +302,8 @@ Below 768px: record cards (§4.5).
 | Destination area picker | searching, no match, selected + verified, provider error | Combobox semantics; verified check only after server validation |
 | Product rows | empty, editing, invalid, complete | Quantity and weight per row; totals announced after edits |
 | Payment selector | Non-COD default, COD, COD Ongkir, unavailable for route | Fee and amounts shown as separate labelled lines; unsupported COD explained |
-| Quote/summary rail | estimate, final (Tarif resmi), changed, unavailable | Shows source and freshness; total re-announced on change |
+| Quote/summary rail | estimate, final (Tarif resmi), changed, unavailable; body scrolled (fade hints) | Shows source and freshness; total re-announced on change; never taller than the window — header and pinned footer (total, primary, guard) stay visible, only the body scrolls; below 1024px the same content opens in a bottom Sheet from "Rincian" (T-249) |
+| Section progress (Buat kiriman) | complete, current, pending, locked | Marker + header status per section, spine ≥ 1024px, rail row of five in-page links with `aria-current="step"` on the current one; counts from the form's required fields only (T-249) |
 | Status badge | every status in §4.12 | Text + icon; programmatic name |
 | Confirmation dialog | submit, print/reprint, archive, suspend, role change | Focus moves in; Escape closes only non-submitting dialogs; focus returns to the trigger; names the object |
 | Timeline | loading, populated, no events | Chronological list; every time with WIB |
@@ -274,7 +354,7 @@ Input: `~/Documents/work/notes/mengantar-app-ui-analysis.md` (measured study of 
 | D9 primary-outline secondary buttons | Applied (field-like triggers such as the date range keep `--input`) | `Button` `outline` |
 | D10 Load More | Not adopted (pagination kept) | — |
 | D11 focused Buat kiriman | Applied | `AppShell` focused route, `FlowStepper` |
-| D12 pastel status tiles without border | Applied | `StatusTiles`, `KpiCard`, `--tile-*` |
+| D12 pastel status tiles without border | Applied, then replaced for the queue filters by the §4.6 stat strip (T-248) | `KpiCard`, `--tile-*` |
 
 Functional facts from the study used elsewhere: Mengantar's own order form has a **Dropshipper** switch (sender masking is a native provider concept → PR-71/PR-84), a *Rincian pembayaran* box (normal fee, special fee, estimated amount received) and pickup rows Tipe · Alamat · Waktu · Volume (→ PR-70).
 

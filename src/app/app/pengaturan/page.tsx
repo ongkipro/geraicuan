@@ -76,7 +76,7 @@ export default async function ProfileSettingsPage({
         suggestedPrefix={suggestShipmentPrefix(shipmentPrefix.tenantName)}
       />
 
-      <DataCard description="Tetap untuk semua gerai; dasar setiap tanggal, jam, dan nominal." title="Format tanggal dan angka">
+      <DataCard description="Berlaku sama untuk semua gerai dan tidak dapat diubah." title="Format tanggal dan angka">
         <dl className="grid divide-y text-sm">
           <div className={FACT_ROW}>
             <dt className="text-muted-foreground">Bahasa dan format</dt>

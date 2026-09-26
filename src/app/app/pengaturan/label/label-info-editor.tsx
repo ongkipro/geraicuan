@@ -96,10 +96,10 @@ export function LabelInfoEditor({
 
   return (
     <DataCard
-      description="Pilih yang tercetak di label termal, per ukuran. Identitas pickup Mengantar tidak pernah tercetak."
+      description="Pilih informasi yang tercetak di label, untuk tiap ukuran."
       footer={(
         <Button className="ml-auto" disabled={pending} form={FORM_ID} type="submit">
-          {pending ? "Menyimpan…" : "Simpan"}
+          {pending ? "Menyimpan…" : "Simpan informasi label"}
         </Button>
       )}
       title="Informasi label"
@@ -122,12 +122,12 @@ export function LabelInfoEditor({
         ) : state.saved ? (
           <Alert className="outline-none" ref={resultRef} role="status" tabIndex={-1}>
             <AlertTitle>Informasi label disimpan</AlertTitle>
-            <AlertDescription>Setiap cetak label berikutnya memakai pilihan ini.</AlertDescription>
+            <AlertDescription>Label yang dicetak berikutnya memakai pilihan ini.</AlertDescription>
           </Alert>
         ) : null}
 
         <fieldset className="grid gap-3 sm:grid-cols-2">
-          <legend className="sr-only">Ukuran yang diatur dan dipratinjau</legend>
+          <legend className="mb-3 text-sm font-medium">Ukuran yang diatur</legend>
           {SIZE_OPTIONS.map((option) => (
             <OptionCard
               checked={size === option.size}
@@ -156,19 +156,21 @@ export function LabelInfoEditor({
                 const id = `label-field-${key}`;
                 const unavailable = missing[key];
                 return (
-                  <li className="py-3 first:pt-0 last:pb-0" key={key}>
+                  // The switch's ::after covers the whole row (relative li, static switch), so the
+                  // label and description toggle it too: a ≥ 44px target on touch, one tab stop.
+                  <li className="relative py-3 first:pt-0 last:pb-0" data-row-target="" key={key}>
                     <Field data-disabled={unavailable ? true : undefined} orientation="horizontal">
                       <FieldContent>
                         <FieldLabel htmlFor={id}>{LABEL_FIELD_COPY[key].label}</FieldLabel>
                         <FieldDescription>
                           {unavailable ? (
-                            <>{unavailable} <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/app/pengaturan">{key === "geraiLogo" ? "Unggah di Profil gerai" : "Isi di Profil gerai"}</Link></>
+                            <>{unavailable} <Link className="relative z-10 font-medium text-primary underline-offset-4 hover:underline" href="/app/pengaturan">{key === "geraiLogo" ? "Unggah di Profil gerai" : "Isi di Profil gerai"}</Link></>
                           ) : LABEL_FIELD_COPY[key].description}
                         </FieldDescription>
                       </FieldContent>
                       <Switch
                         checked={unavailable ? false : fields[size][key]}
-                        className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']"
+                        className="static cursor-pointer after:inset-0 after:content-['']"
                         disabled={Boolean(unavailable)}
                         id={id}
                         onCheckedChange={(on) => toggle(key, on)}
@@ -194,7 +196,7 @@ export function LabelInfoEditor({
                   </label>
                 ))}
               </RadioGroup>
-              <FieldDescription>Terpilih lebih dulu di halaman label dan di cetak massal.</FieldDescription>
+              <FieldDescription>Langsung terpilih saat mencetak label, satuan maupun massal.</FieldDescription>
             </Field>
           </div>
 

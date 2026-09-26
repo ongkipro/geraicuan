@@ -4,7 +4,7 @@ export default function LabelIndexLoading() {
   return (
     <ListSkeleton
       label="Memuat daftar resi"
-      tiles={3}
+      tiles={4}
       title="Cetak resi"
     />
   );

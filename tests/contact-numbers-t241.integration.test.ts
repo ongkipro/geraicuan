@@ -359,6 +359,26 @@ describe("shipment attribution (T-241, CON-SHP-*)", () => {
     expect(html).toContain("Penerima Snapshot");
     // Operators see no archive zone (server rule stays in archiveContact).
     expect(html).not.toContain("Zona hati-hati");
+    // T-250: two columns below the KPI row — main (Riwayat kiriman, then Alamat) before side
+    // (Data kontak, then Zona hati-hati for a Tenant Admin); below 896px `order` stacks
+    // Data kontak · Alamat · Riwayat kiriman · Zona hati-hati.
+    const columns = (page: string) => {
+      const main = page.indexOf('data-column="main"');
+      const side = page.indexOf('data-column="side"');
+      const at = (id: string) => page.indexOf(`id="${id}"`);
+      return { at, main, side };
+    };
+    const operatorColumns = columns(html);
+    expect(html).toContain('data-slot="contact-detail-columns"');
+    expect(html).toContain("@4xl/detail:grid-cols-[minmax(0,1fr)_340px]");
+    expect(operatorColumns.main).toBeGreaterThan(html.indexOf("Kiriman 30 hari terakhir"));
+    expect(operatorColumns.main).toBeLessThan(operatorColumns.at("riwayat-kiriman"));
+    expect(operatorColumns.at("riwayat-kiriman")).toBeLessThan(operatorColumns.at("alamat-kontak"));
+    expect(operatorColumns.at("alamat-kontak")).toBeLessThan(operatorColumns.side);
+    expect(operatorColumns.side).toBeLessThan(operatorColumns.at("data-kontak"));
+    expect(html.slice(operatorColumns.side)).toMatch(/^data-column="side"[^>]*>\s*<div class="[^"]*@max-4xl\/detail:order-1"/);
+    expect(html.match(/@max-4xl\/detail:order-\d/g)).toEqual(["@max-4xl/detail:order-3", "@max-4xl/detail:order-2", "@max-4xl/detail:order-1"]);
+    expect(html.match(/Simpan data kontak/g)).toHaveLength(1);
     for (const href of html.match(/href="[^"]*"/g) ?? []) {
       expect(href).not.toContain(contactOne);
       expect(href).not.toMatch(/Gerai|0812241/);
@@ -366,6 +386,10 @@ describe("shipment attribution (T-241, CON-SHP-*)", () => {
     state.principal = { role: "TENANT_ADMIN", scope: "tenant", tenantId: tenantA, userId: adminA };
     const adminHtml = renderToStaticMarkup(await ContactDetail({ params: Promise.resolve({ nomor: "1" }), role: "pengirim", searchParams: Promise.resolve({}) }) as ReactElement);
     expect(adminHtml).toContain("Zona hati-hati");
+    const adminColumns = columns(adminHtml);
+    expect(adminColumns.at("data-kontak")).toBeLessThan(adminColumns.at("zona-hati-hati"));
+    expect(adminColumns.side).toBeLessThan(adminColumns.at("zona-hati-hati"));
+    expect(adminHtml.match(/@max-4xl\/detail:order-\d/g)).toEqual(["@max-4xl/detail:order-3", "@max-4xl/detail:order-2", "@max-4xl/detail:order-1", "@max-4xl/detail:order-4"]);
   });
 
   it("sends a contact to the role it holds, and reads another tenant's or a malformed number as not found", async () => {

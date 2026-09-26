@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { SettingsNav } from "./settings-nav";
 
 /**
- * Spec 10 §4.10 settings layout: the page header, then the sub-menu card (256px from 1024px,
- * full width above the content below it) beside a content column of cards capped near 760px.
+ * Spec 10 §4.10 settings layout: the page header, then the sub-menu card (a sticky 256px rail from
+ * 1024px, one scrolling row of pills above the content below it) beside a content column of
+ * cards capped near 760px.
  */
 export function SettingsFrame({ children, header }: { children: ReactNode; header: ReactNode }) {
   return (

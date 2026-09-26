@@ -14,11 +14,11 @@ import {
 } from "@/app/app/pengaturan/_components/settings-logic";
 import { DataCard } from "@/components/app/data-card";
 import { EmptyState } from "@/components/app/empty-state";
+import { KpiCard } from "@/components/app/kpi-card";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { listTenantMembers, type TenantMember } from "@/db/member-governance-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -26,7 +26,7 @@ import { withTenantContext } from "@/db/tenant-context";
 import { InviteMemberCard } from "./_components/invite-member-card";
 import { MemberAccessDialog } from "./_components/member-access-dialog";
 
-export const metadata: Metadata = { title: "Anggota & akses", robots: { index: false } };
+export const metadata: Metadata = { title: "Anggota & akses · Pengaturan", robots: { index: false } };
 
 /** Development browser-audit fixture: the viewer plus a long list with suspended members. */
 function auditMembers(viewerUserId: string, scenario: "members-inactive" | "members-populated" | "members-single-admin"): TenantMember[] {
@@ -50,16 +50,6 @@ function auditMembers(viewerUserId: string, scenario: "members-inactive" | "memb
   })];
 }
 
-function SummaryTile({ hint, label, value }: { hint: string; label: string; value: number }) {
-  return (
-    <Card className="gap-1 px-(--card-spacing)">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
-      <p className="text-3xl font-bold tabular-nums">{value} orang</p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
-    </Card>
-  );
-}
-
 export default async function MembersPage() {
   // Member governance is not store setup: a gerai awaiting approval does not manage members yet.
   const principal = await requireTenantAdmin({});
@@ -76,10 +66,7 @@ export default async function MembersPage() {
   return (
     <SettingsFrame
       header={(
-        <PageHeader
-          eyebrow="Pengelolaan"
-          title="Anggota & akses"
-        />
+<PageHeader title="Pengaturan" />
       )}
     >
       {summary.activeAdmins === 1 ? (
@@ -91,18 +78,18 @@ export default async function MembersPage() {
       ) : null}
 
       <section aria-label="Ringkasan akses" className="grid gap-4 sm:grid-cols-3">
-        <SummaryTile
-          hint={summary.inactive === 0 ? "Semua akun aktif" : `${summary.active} aktif · ${summary.inactive} nonaktif`}
+        <KpiCard
           label="Total anggota"
-          value={summary.total}
+          note={summary.inactive === 0 ? "Semua akun aktif" : `${summary.active} aktif · ${summary.inactive} nonaktif`}
+          value={`${summary.total} orang`}
         />
-        <SummaryTile hint="Akses penuh & pengaturan" label="Pemilik gerai" value={summary.activeAdmins} />
-        <SummaryTile hint="Buat kiriman & cetak resi" label="Operator" value={summary.activeOperators} />
+        <KpiCard label="Pemilik gerai aktif" note="Akses penuh, termasuk pengaturan" value={`${summary.activeAdmins} orang`} />
+        <KpiCard label="Operator aktif" note="Buat kiriman dan cetak resi" value={`${summary.activeOperators} orang`} />
       </section>
 
       <DataCard
         action={summary.activeAdmins === 1 ? (
-          <Badge className="max-sm:hidden" variant="secondary"><LockKeyhole aria-hidden="true" data-icon="inline-start" />Admin terakhir dilindungi</Badge>
+          <Badge className="max-sm:hidden" variant="secondary"><LockKeyhole aria-hidden="true" data-icon="inline-start" />Pemilik gerai terakhir dilindungi</Badge>
         ) : undefined}
         count={summary.total}
         flush

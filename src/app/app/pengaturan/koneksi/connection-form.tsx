@@ -10,6 +10,7 @@ import {
 } from "@/app/app/pengaturan/actions";
 import type { SafeOutletReadiness } from "@/app/app/pengaturan/outlet-settings-types";
 import { DataCard } from "@/components/app/data-card";
+import { OptionCard } from "@/components/app/option-card";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -25,15 +26,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { cn } from "@/lib/utils";
 
 type Mode = "platform_default" | "private";
 
+const KEY_FORM_ID = "mengantar-key-form";
+
+/** "Digunakan" follows the persisted source, never the draft choice. */
+const MODES: { description: string; title: string; value: Mode }[] = [
+  {
+    description: "Dikelola GeraiCUAN, tanpa API key. Tarif dan pencairan COD mengikuti akun GeraiCUAN.",
+    title: "Koneksi bawaan GeraiCUAN",
+    value: "platform_default",
+  },
+  {
+    description: "Memakai API key dari akun Mengantar milik outlet. Pencairan COD masuk ke akun itu.",
+    title: "Akun Mengantar sendiri",
+    value: "private",
+  },
+];
+
 const ISSUE_COPY = {
   authentication: {
-    title: "Autentikasi Mengantar gagal",
-    body: "Mengantar menolak autentikasi terakhir. Periksa akun di Mengantar, lalu masukkan API key pengganti.",
+    title: "API key ditolak Mengantar",
+    body: "Mengantar menolak API key terakhir. Periksa akun Mengantar Anda, lalu masukkan API key baru.",
   },
   provider_unavailable: {
     title: "Mengantar belum dapat dijangkau",
@@ -73,34 +88,6 @@ function Result({ failureTitle, state, successTitle }: {
   );
 }
 
-function OptionCard({ checked, description, id, inUse, title, value }: {
-  checked: boolean;
-  description: string;
-  id: string;
-  inUse: boolean;
-  title: string;
-  value: Mode;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors",
-        checked ? "border-primary bg-accent/40" : "border-input",
-      )}
-      htmlFor={id}
-    >
-      <RadioGroupItem className="mt-0.5" id={id} value={value} />
-      <span className="grid min-w-0 flex-1 gap-1">
-        <span className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-bold">{title}</span>
-          {inUse ? <StatusBadge label="Digunakan" tone="success" /> : null}
-        </span>
-        <span className="text-xs text-muted-foreground">{description}</span>
-      </span>
-    </label>
-  );
-}
-
 /**
  * Platform default versus the outlet's own Mengantar account. The API key field is always blank
  * and a stored key is never sent to the browser; "Digunakan" follows the persisted source, not
@@ -133,6 +120,7 @@ export function ConnectionForm({ outlet }: { outlet: SafeOutletReadiness }) {
       action={saveAction}
       aria-busy={savePending}
       className="flex flex-col gap-4"
+      id={KEY_FORM_ID}
       key={saveState.resultToken ?? "credential"}
       noValidate
     >
@@ -158,20 +146,23 @@ export function ConnectionForm({ outlet }: { outlet: SafeOutletReadiness }) {
         <FieldDescription id="mengantar-api-key-help">
           {outlet.connectionSource === "private"
             ? `API key tersimpan${outlet.connectionUpdatedAtLabel ? ` sejak ${outlet.connectionUpdatedAtLabel}` : ""} dan tidak ditampilkan.`
-            : "Tidak ditampilkan kembali setelah disimpan."}
+            : "Salin dari akun Mengantar Anda. Tidak ditampilkan lagi setelah disimpan."}
         </FieldDescription>
         <FieldError id="mengantar-api-key-error">{apiKeyError}</FieldError>
       </Field>
       <Result failureTitle="API key belum tersimpan" state={saveState} successTitle="API key tersimpan" />
-      <Button className="self-end max-sm:w-full" disabled={busy} type="submit" variant="outline">
-        {savePending ? "Menyimpan…" : outlet.connectionSource === "private" ? "Ganti API key" : "Simpan API key"}
-      </Button>
     </form>
   );
 
   return (
     <DataCard
-      description={`Sumber koneksi yang dipakai outlet ${outlet.name} untuk tarif, resi, dan status.`}
+      description={`Akun Mengantar yang dipakai outlet ${outlet.name} untuk cek tarif, terbit resi, dan status kiriman.`}
+      // The key's save sits in the card footer, as every other settings save does.
+      footer={privateOnly || mode === "private" ? (
+        <Button className="ml-auto" disabled={busy} form={KEY_FORM_ID} type="submit">
+          {savePending ? "Menyimpan…" : outlet.connectionSource === "private" ? "Ganti API key" : "Simpan API key"}
+        </Button>
+      ) : undefined}
       title="Koneksi Mengantar"
     >
       {issue ? (
@@ -197,44 +188,37 @@ export function ConnectionForm({ outlet }: { outlet: SafeOutletReadiness }) {
         </>
       ) : (
         <>
-          <RadioGroup
-            aria-label={`Sumber koneksi Mengantar untuk ${outlet.name}`}
-            className="gap-4"
-            disabled={busy}
-            onValueChange={(value) => setMode(value as Mode)}
-            value={mode}
-          >
-            <OptionCard
-              checked={mode === "platform_default"}
-              description="Dikelola GeraiCUAN, tanpa API key. Tarif dan pencairan COD mengikuti akun GeraiCUAN."
-              id="connection-platform"
-              inUse={outlet.connectionSource === "platform_default"}
-              title="Koneksi bawaan GeraiCUAN"
-              value="platform_default"
-            />
-            <OptionCard
-              checked={mode === "private"}
-              description="Pakai API key dari akun Mengantar milik outlet. Pencairan COD masuk ke akun itu."
-              id="connection-private"
-              inUse={outlet.connectionSource === "private"}
-              title="Akun Mengantar sendiri"
-              value="private"
-            />
-          </RadioGroup>
+          <fieldset className="grid gap-3">
+            <legend className="sr-only">Sumber koneksi Mengantar untuk {outlet.name}</legend>
+            {MODES.map((option) => (
+              <OptionCard
+                checked={mode === option.value}
+                description={option.description}
+                disabled={busy}
+                key={option.value}
+                name="connection-mode"
+                onSelect={() => setMode(option.value)}
+                value={option.value}
+              >
+                {option.title}
+                {outlet.connectionSource === option.value ? <StatusBadge label="Digunakan" tone="success" /> : null}
+              </OptionCard>
+            ))}
+          </fieldset>
           {mode === "platform_default" && outlet.connectionSource === "private" ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
-                API key outlet dihapus setelah server memastikan koneksi bawaan lengkap.
+                API key outlet dihapus setelah koneksi bawaan GeraiCUAN dipastikan siap.
               </p>
               <AlertDialog onOpenChange={setConfirming} open={confirming}>
                 <AlertDialogTrigger asChild>
                   <Button className="self-start max-sm:w-full" disabled={busy} variant="outline">
-                    Gunakan koneksi bawaan
+                    Pakai koneksi bawaan
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Ganti {outlet.name} ke koneksi bawaan GeraiCUAN?</AlertDialogTitle>
+                    <AlertDialogTitle>Alihkan {outlet.name} ke koneksi bawaan GeraiCUAN?</AlertDialogTitle>
                     <AlertDialogDescription>
                       API key Mengantar milik outlet ini dihapus. Kiriman baru memakai akun GeraiCUAN; untuk kembali ke akun sendiri, API key harus dimasukkan lagi.
                     </AlertDialogDescription>
@@ -245,7 +229,7 @@ export function ConnectionForm({ outlet }: { outlet: SafeOutletReadiness }) {
                     <AlertDialogFooter>
                       <AlertDialogCancel disabled={switchPending}>Batal</AlertDialogCancel>
                       <Button disabled={switchPending} type="submit" variant="destructive">
-                        {switchPending ? "Mengalihkan…" : "Hapus API key & gunakan bawaan"}
+                        {switchPending ? "Mengalihkan…" : "Hapus API key dan pakai koneksi bawaan"}
                       </Button>
                     </AlertDialogFooter>
                   </form>

@@ -70,7 +70,7 @@ export function memberAccess(member: MemberLike, viewerUserId: string, activeAdm
     return { isCurrentUser, isLastActiveAdmin, manageable: false, note: "Undang ulang untuk mengaktifkan" } as const;
   }
   if (isLastActiveAdmin) {
-    return { isCurrentUser, isLastActiveAdmin, manageable: false, note: "Admin terakhir dilindungi" } as const;
+    return { isCurrentUser, isLastActiveAdmin, manageable: false, note: "Pemilik gerai terakhir dilindungi" } as const;
   }
   if (isCurrentUser) {
     return { isCurrentUser, isLastActiveAdmin, manageable: false, note: "Diubah oleh pemilik gerai lain" } as const;

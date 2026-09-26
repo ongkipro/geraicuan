@@ -20,7 +20,7 @@ import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 
 import { EstimateRefreshButton } from "./estimate-loader";
 import { SectionCard } from "./flow-parts";
-import { MobileActionBar, SummaryRail, type RailRow } from "./summary-rail";
+import { MobileActionBar, RailColumn, SummaryRail, type RailData, type RailRow } from "./summary-rail";
 
 type ProviderProps = Omit<ComponentProps<typeof IssuanceProvider>, "children">;
 
@@ -28,7 +28,7 @@ export type IssuanceStageRail = {
   destination: string;
   freshness: string;
   handover: string;
-  origin: { detail?: string; title: string } | null;
+  origin: string | null;
   packageLabel: string;
   sender: string;
 };
@@ -37,12 +37,17 @@ export type IssuanceStageRail = {
 export function IssuanceStage({
   destinationContext,
   draftHref,
+  lead,
+  progress,
   provider,
   rail,
   sections,
 }: {
   destinationContext: string;
   draftHref: string;
+  /** The draft number line, first in the form column (T-249: the rail rises beside the H1). */
+  lead: ReactNode;
+  progress: ReactNode;
   provider: ProviderProps;
   rail: IssuanceStageRail;
   sections: ReactNode;
@@ -51,12 +56,14 @@ export function IssuanceStage({
     <IssuanceProvider {...provider}>
       <div className="flex flex-col items-start gap-6 pb-32 lg:flex-row lg:pb-0">
         <div className="flex w-full min-w-0 flex-1 flex-col gap-6">
+          {lead}
           {sections}
           <SectionCard
             aside={<EstimateRefreshButton shipmentId={provider.shipmentId} />}
             emphasis
             id="section-service"
             number={5}
+            state="current"
             title="Pilih layanan ekspedisi"
           >
             <IssuanceServiceChooser context={destinationContext} />
@@ -66,16 +73,17 @@ export function IssuanceStage({
             <IssuanceOutcome />
           </SectionCard>
         </div>
-        <div className="hidden w-90 shrink-0 lg:sticky lg:top-24 lg:block">
-          <IssuanceRail draftHref={draftHref} rail={rail} />
-        </div>
+        <RailColumn>
+          <IssuanceRail draftHref={draftHref} progress={progress} rail={rail} />
+        </RailColumn>
       </div>
-      <IssuanceBottomBar draftHref={draftHref} />
+      <IssuanceBottomBar draftHref={draftHref} rail={rail} />
     </IssuanceProvider>
   );
 }
 
-function IssuanceRail({ draftHref, rail }: { draftHref: string; rail: IssuanceStageRail }) {
+/** The rail's values after the estimate: the chosen service and its charges (one source for rail and Sheet). */
+function useIssuanceRailData(rail: IssuanceStageRail): RailData {
   const { charges, paymentMethod, selected } = useIssuance();
   const rows: RailRow[] = [
     { label: "Tipe penyerahan", tone: "accent", value: rail.handover },
@@ -85,6 +93,21 @@ function IssuanceRail({ draftHref, rail }: { draftHref: string; rail: IssuanceSt
     { label: "Berat & jumlah", value: rail.packageLabel },
     { label: "Metode bayar", tone: "accent", value: PAYMENT_METHOD_LABELS[paymentMethod] },
   ];
+  return {
+    destination: rail.destination,
+    freshness: rail.freshness,
+    moneyRows: charges?.rows ?? [{ amountIdr: null, label: "Pilih layanan untuk rincian biaya" }],
+    origin: rail.origin,
+    rows,
+    source: "Tarif resmi",
+    total: charges
+      ? { amountIdr: charges.total.amountIdr, label: charges.total.label, note: charges.note }
+      : { amountIdr: null, label: "Total", note: "Pilih layanan terlebih dahulu" },
+  };
+}
+
+function IssuanceRail({ draftHref, progress, rail }: { draftHref: string; progress: ReactNode; rail: IssuanceStageRail }) {
+  const data = useIssuanceRailData(rail);
   return (
     <SummaryRail
       actions={(
@@ -95,21 +118,15 @@ function IssuanceRail({ draftHref, rail }: { draftHref: string; rail: IssuanceSt
           </Button>
         </>
       )}
-      destination={rail.destination}
-      freshness={rail.freshness}
-      moneyRows={charges?.rows ?? [{ amountIdr: null, label: "Pilih layanan untuk rincian biaya" }]}
-      origin={rail.origin}
-      rows={rows}
-      source="Tarif resmi"
-      total={charges
-        ? { amountIdr: charges.total.amountIdr, label: charges.total.label, note: charges.note }
-        : { amountIdr: null, label: "Total", note: "Pilih layanan terlebih dahulu" }}
+      progress={progress}
+      {...data}
     />
   );
 }
 
-function IssuanceBottomBar({ draftHref }: { draftHref: string }) {
+function IssuanceBottomBar({ draftHref, rail }: { draftHref: string; rail: IssuanceStageRail }) {
   const { charges, gateMessage, paymentMethod, selected } = useIssuance();
+  const summary = useIssuanceRailData(rail);
   return (
     <MobileActionBar
       actions={(
@@ -121,6 +138,7 @@ function IssuanceBottomBar({ draftHref }: { draftHref: string }) {
         </>
       )}
       caption={gateMessage ?? `${selected ? serviceDisplayName(selected.providerService) : "—"} · ${PAYMENT_METHOD_LABELS[paymentMethod]}`}
+      summary={summary}
       total={charges?.total.amountIdr ?? null}
     />
   );

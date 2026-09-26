@@ -18,7 +18,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 /** Rows of the chart in rem, so its height follows the number of couriers. */
-const ROW_REM = 2.75;
+const ROW_REM = 2.25;
 
 /**
  * "Performa kurir": horizontal bars from 0 to 100% in ranking order (`orderCouriersForRanking`),
@@ -44,7 +44,7 @@ export function CourierPerformanceChart({ data }: { data: CourierPerformancePoin
         <XAxis axisLine={false} domain={[0, 100]} tickLine={false} type="number" unit="%" />
         <YAxis axisLine={false} dataKey="courier" tickLine={false} type="category" width={Math.min(128, longestName * 7.5 + 8)} />
         <ChartTooltip content={<ChartTooltipContent hideIndicator />} cursor={false} />
-        <Bar barSize={24} dataKey="rate" fill="var(--color-rate)" isAnimationActive={false} radius={4}>
+        <Bar barSize={20} dataKey="rate" fill="var(--color-rate)" isAnimationActive={false} radius={4}>
           <LabelList className="fill-foreground" dataKey="label" fontSize={13} position="right" />
         </Bar>
       </BarChart>
