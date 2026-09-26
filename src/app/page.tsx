@@ -17,7 +17,7 @@ export default function HomePage() {
       description="Buat kiriman, terbitkan resi, dan cetak label dengan identitas gerai Anda."
       footer={
         <Link className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href="/login/super-admin">
-          Masuk sebagai Super Admin
+          Masuk Admin Platform
         </Link>
       }
       surface="tenant"

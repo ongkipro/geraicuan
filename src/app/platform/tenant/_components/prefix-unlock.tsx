@@ -56,7 +56,7 @@ export function PrefixUnlock({ initialAttemptId, locked, tenantId, tenantName }:
           <AlertDialogHeader>
             <AlertDialogTitle>Buka kunci awalan {tenantName}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tenant Admin dapat memilih awalan baru satu kali. Semua nomor kiriman tenant ini akan tampil dengan awalan baru,
+              Pemilik gerai dapat memilih awalan baru satu kali. Semua nomor kiriman gerai ini akan tampil dengan awalan baru,
               sehingga label yang sudah tercetak tidak lagi sama dengan layar. Tindakan ini tercatat di jejak audit.
             </AlertDialogDescription>
           </AlertDialogHeader>

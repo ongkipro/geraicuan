@@ -154,8 +154,8 @@ const platformNavigationGroups: readonly {
       {
         href: "/platform/tenant",
         key: "platform-tenants",
-        label: "Tenant",
-        shortLabel: "TN",
+        label: "Gerai",
+        shortLabel: "GR",
       },
       // T-182 (PR-61): stores awaiting approval.
       {

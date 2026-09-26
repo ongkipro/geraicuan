@@ -33,7 +33,7 @@ export function EstimateLoader({ autoLoad, shipmentId }: { autoLoad: boolean; sh
           <CircleAlert aria-hidden="true" />
           <AlertTitle>Tarif belum dapat dimuat</AlertTitle>
           <AlertDescription className="flex flex-col items-start gap-3">
-            <span>{state.unconfigured ? "Koneksi Mengantar outlet ini belum siap. Hubungi Tenant Admin." : state.error} Draf tetap tersimpan.</span>
+            <span>{state.unconfigured ? "Koneksi Mengantar outlet ini belum siap. Hubungi pemilik gerai." : state.error} Draf tetap tersimpan.</span>
             <Button disabled={pending} type="submit" variant="outline">
               <RefreshCw aria-hidden="true" className={pending ? "animate-spin" : undefined} />
               {pending ? "Memuat tarif…" : "Coba lagi"}

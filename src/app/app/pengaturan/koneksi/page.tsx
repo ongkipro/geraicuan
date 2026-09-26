@@ -53,7 +53,7 @@ export default async function ConnectionSettingsPage({
     return (
       <DataCard>
         <EmptyState
-          description="Koneksi Mengantar diatur per outlet. Hubungi Super Admin untuk menyiapkan outlet gerai ini."
+          description="Koneksi Mengantar diatur per outlet. Hubungi admin platform untuk menyiapkan outlet gerai ini."
           icon={Store}
           title="Belum ada outlet"
         />

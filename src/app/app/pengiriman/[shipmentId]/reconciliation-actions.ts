@@ -57,7 +57,7 @@ export async function reconcileShipmentUnknownSubmission(
 
   const principal = await requireTenantPrincipal();
   if (principal.role !== "TENANT_ADMIN") {
-    return { error: "Rekonsiliasi hasil penyedia hanya tersedia untuk Tenant Admin." };
+    return { error: "Rekonsiliasi hasil penyedia hanya tersedia untuk pemilik gerai." };
   }
   if (!isSanctionedReconciliationFixtureEnabled()) {
     return { error: "Rekonsiliasi dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan." };

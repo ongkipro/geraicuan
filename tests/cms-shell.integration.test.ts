@@ -185,7 +185,7 @@ describe("platform CMS shell contract", () => {
 
     expect(groups.map((group) => group.label)).toEqual(["Platform"]);
     // T-182 (PR-61) adds the approval queue.
-    expect(items.map((item) => item.label)).toEqual(["Ringkasan", "Tenant", "Pendaftaran", "Audit"]);
+    expect(items.map((item) => item.label)).toEqual(["Ringkasan", "Gerai", "Pendaftaran", "Audit"]);
     expect(items.map((item) => item.href)).toEqual([
       "/platform",
       "/platform/tenant",
@@ -200,8 +200,8 @@ describe("platform CMS shell contract", () => {
 
   it.each([
     ["/platform", "Ringkasan"],
-    ["/platform/tenant", "Tenant"],
-    ["/platform/tenant/10000000-0000-4000-8000-000000000471", "Tenant"],
+    ["/platform/tenant", "Gerai"],
+    ["/platform/tenant/10000000-0000-4000-8000-000000000471", "Gerai"],
     ["/platform/pendaftaran", "Pendaftaran"],
     ["/platform/audit", "Audit"],
   ])("marks exactly one platform current destination for %s", (pathname, label) => {

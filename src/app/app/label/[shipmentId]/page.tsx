@@ -162,7 +162,7 @@ export default async function LabelDetailPage({
                         {event.sequence ? `Cetak ke-${event.sequence}` : "Tidak dicetak"} · {printEventOutcome(event)}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {event.actorRole === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"} · {event.actorNameMasked}
+                        {event.actorRole === "TENANT_ADMIN" ? "Pemilik gerai" : "Operator"} · {event.actorNameMasked}
                       </span>
                     </span>
                     <time className="text-xs text-muted-foreground tabular-nums" dateTime={event.printedAt.toISOString()}>

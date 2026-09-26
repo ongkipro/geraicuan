@@ -54,10 +54,10 @@ describe("login notices and the demo hint", () => {
 
 describe("public auth markup", () => {
   it("puts the Super Admin login on the dark ground with its own badge", () => {
-    const html = render(createElement(AuthShell, { surface: "platform", title: "Masuk Super Admin" } as ComponentProps<typeof AuthShell>, createElement(LoginForm, { destination: "/platform" })));
+    const html = render(createElement(AuthShell, { surface: "platform", title: "Masuk Admin Platform" } as ComponentProps<typeof AuthShell>, createElement(LoginForm, { destination: "/platform" })));
     expect(html).toContain('data-surface="platform"');
     expect(html).toContain("bg-foreground");
-    expect(html).toContain("Khusus Super Admin");
+    expect(html).toContain("Khusus tim GeraiCUAN");
     expect((html.match(/<h1/g) ?? []).length).toBe(1);
   });
 
@@ -127,8 +127,8 @@ describe("public auth markup", () => {
     for (const core of ["Kirim", "Cetak resi", "Invoice", "Gratis"]) expect(tenant, core).toContain(core);
     expect(tenant).not.toMatch(/gratis selamanya/i);
     expect(tenant).not.toContain("<img");
-    const platform = render(createElement(AuthShell, { surface: "platform", title: "Masuk Super Admin", visual: true } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")));
-    expect(platform).toContain("Khusus Super Admin");
+    const platform = render(createElement(AuthShell, { surface: "platform", title: "Masuk Admin Platform", visual: true } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")));
+    expect(platform).toContain("Khusus tim GeraiCUAN");
     expect(platform).not.toContain(">Gratis<");
     expect(platform).toMatch(/data-surface="platform"/);
     expect(render(createElement(AuthShell, { surface: "tenant", title: "Lupa kata sandi" } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")))).not.toContain('data-slot="auth-visual"');
@@ -214,7 +214,7 @@ describe("platform markup", () => {
     expect(html).toContain("Zona berbahaya");
     expect(html).toContain('name="confirmationName"');
     expect(html).toContain('name="lifecycleAction" value="suspend"');
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Tangguhkan tenant/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Tangguhkan gerai/);
     expect(html).toContain("Sekar Batik");
     expect(render(createElement(TenantLifecycle, { initialAttemptId: "a", status: "SUSPENDED", tenantId: "b", tenantName: "X" }))).toContain('value="reactivate"');
     expect(render(createElement(TenantLifecycle, { initialAttemptId: "a", status: "ARCHIVED", tenantId: "b", tenantName: "X" }))).toBe("");

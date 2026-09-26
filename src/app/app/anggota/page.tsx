@@ -85,8 +85,8 @@ export default async function MembersPage() {
       {summary.activeAdmins === 1 ? (
         <Alert role="status">
           <CircleAlert aria-hidden="true" />
-          <AlertTitle>Hanya satu Tenant Admin aktif</AlertTitle>
-          <AlertDescription>Undang Tenant Admin lain agar akses gerai tetap terjaga.</AlertDescription>
+          <AlertTitle>Hanya satu pemilik gerai aktif</AlertTitle>
+          <AlertDescription>Undang pemilik gerai lain agar akses gerai tetap terjaga.</AlertDescription>
         </Alert>
       ) : null}
 
@@ -96,7 +96,7 @@ export default async function MembersPage() {
           label="Total anggota"
           value={summary.total}
         />
-        <SummaryTile hint="Akses penuh & pengaturan" label="Tenant Admin" value={summary.activeAdmins} />
+        <SummaryTile hint="Akses penuh & pengaturan" label="Pemilik gerai" value={summary.activeAdmins} />
         <SummaryTile hint="Buat kiriman & cetak resi" label="Operator" value={summary.activeOperators} />
       </section>
 

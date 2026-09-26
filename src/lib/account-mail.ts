@@ -29,7 +29,7 @@ export function sendVerificationMail(to: string, url: string) {
     paragraphs: [
       "Halo,",
       "Email ini baru saja dipakai untuk mendaftarkan gerai di GeraiCUAN. Jika itu Anda, tekan tombol di bawah, lalu masukkan kata sandi yang Anda buat saat mendaftar. Tautan berlaku 24 jam.",
-      "Setelah email terverifikasi, Anda sudah bisa masuk dan menyiapkan gerai sambil menunggu persetujuan Super Admin.",
+      "Setelah email terverifikasi, Anda sudah bisa masuk dan menyiapkan gerai sambil menunggu persetujuan admin platform.",
       "Jika Anda tidak mendaftar, abaikan email ini. Email ini hanya terverifikasi dengan kata sandi pendaftarnya, jadi tidak ada yang bisa masuk dengan email Anda.",
     ],
     subject: "Verifikasi email GeraiCUAN Anda",

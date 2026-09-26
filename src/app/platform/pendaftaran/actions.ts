@@ -37,7 +37,7 @@ export async function reviewRegistration(
   const resultToken = randomUUID();
   const access = await resolvePlatformAccess();
   if (access.status !== "authorized") {
-    return { message: "Akses Super Admin diperlukan.", outcome: "denied", resultToken };
+    return { message: "Akses admin platform diperlukan.", outcome: "denied", resultToken };
   }
 
   const tenantId = formData.get("tenantId");
@@ -81,7 +81,7 @@ export async function reviewRegistration(
     });
   } catch (error) {
     if (error instanceof RegistrationReviewDeniedError) {
-      return { message: "Akses Super Admin diperlukan.", outcome: "denied", resultToken, tenantId };
+      return { message: "Akses admin platform diperlukan.", outcome: "denied", resultToken, tenantId };
     }
     if (error instanceof RegistrationReviewStateError) {
       return {

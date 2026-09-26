@@ -10,11 +10,11 @@ type AuditAction = (typeof auditEventActions)[number];
 type TenantStatus = (typeof tenantStatuses)[number];
 type Tone = "danger" | "neutral" | "ok" | "warn";
 
-/** Predicate after the actor: "Super Admin menangguhkan tenant". */
+/** Predicate after the actor: "Admin platform menangguhkan gerai". */
 const actionPredicate: Record<AuditAction, string> = {
-  TENANT_CREATED: "membuat tenant",
-  TENANT_SUSPENDED: "menangguhkan tenant",
-  TENANT_REACTIVATED: "mengaktifkan kembali tenant",
+  TENANT_CREATED: "membuat gerai",
+  TENANT_SUSPENDED: "menangguhkan gerai",
+  TENANT_REACTIVATED: "mengaktifkan kembali gerai",
   PLATFORM_MONITORING_VIEWED: "membuka pemantauan platform",
   MEMBER_INVITED: "mengundang anggota",
   MEMBER_ROLE_CHANGED: "mengubah peran anggota",
@@ -32,8 +32,8 @@ const actionPredicate: Record<AuditAction, string> = {
 };
 
 const actorLabels: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  TENANT_MEMBER: "Anggota tenant",
+  SUPER_ADMIN: "Admin platform",
+  TENANT_MEMBER: "Anggota gerai",
 };
 
 export const tenantStatusPresentation: Record<TenantStatus, { label: string; tone: Tone }> = {

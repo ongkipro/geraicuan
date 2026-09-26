@@ -86,15 +86,15 @@ function succeeded(message: string): MemberActionState {
 function denialMessage(reason: MemberGovernanceReason) {
   switch (reason) {
     case "LAST_ACTIVE_ADMIN":
-      return "Perubahan ditolak. Tenant harus memiliki setidaknya satu Tenant Admin aktif.";
+      return "Perubahan ditolak. Gerai harus memiliki setidaknya satu pemilik gerai aktif.";
     case "NO_CHANGE":
       return "Tidak ada perubahan peran untuk disimpan.";
     case "SELF_CHANGE_NOT_ALLOWED":
-      return "Ubah peran atau status akun Anda melalui Tenant Admin aktif lain.";
+      return "Ubah peran atau status akun Anda melalui pemilik gerai aktif lain.";
     case "ALREADY_ACTIVE":
-      return "Akun tersebut sudah menjadi anggota aktif tenant ini.";
+      return "Akun tersebut sudah menjadi anggota aktif gerai ini.";
     case "INVITATION_NOT_ALLOWED":
-      return "Undangan tidak dapat diproses. Pastikan email adalah akun GeraiCUAN aktif yang belum terikat ke tenant lain.";
+      return "Undangan tidak dapat diproses. Pastikan email adalah akun GeraiCUAN aktif yang belum terikat ke gerai lain.";
     case "MEMBER_NOT_FOUND":
     case "NOT_AUTHORIZED":
     case "ATTEMPT_CONFLICT":
@@ -155,7 +155,7 @@ export async function inviteMemberAction(
   }
 
   revalidatePath("/app/anggota");
-  return succeeded(`${result.member.name} ditambahkan sebagai ${result.member.role === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"}.`);
+  return succeeded(`${result.member.name} ditambahkan sebagai ${result.member.role === "TENANT_ADMIN" ? "Pemilik gerai" : "Operator"}.`);
 }
 
 export async function changeMemberRoleAction(
@@ -212,7 +212,7 @@ export async function changeMemberRoleAction(
   }
 
   revalidatePath("/app/anggota");
-  return succeeded(`Peran ${result.member.name} diubah menjadi ${result.member.role === "TENANT_ADMIN" ? "Tenant Admin" : "Operator"}.`);
+  return succeeded(`Peran ${result.member.name} diubah menjadi ${result.member.role === "TENANT_ADMIN" ? "Pemilik gerai" : "Operator"}.`);
 }
 
 export async function deactivateMemberAction(
@@ -254,5 +254,5 @@ export async function deactivateMemberAction(
   }
 
   revalidatePath("/app/anggota");
-  return succeeded(`${result.member.name} dinonaktifkan dari tenant ini.`);
+  return succeeded(`${result.member.name} dinonaktifkan dari gerai ini.`);
 }

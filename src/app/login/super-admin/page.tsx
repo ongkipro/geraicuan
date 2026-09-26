@@ -5,7 +5,7 @@ import { LoginForm } from "@/app/login/_components/login-form";
 import { demoPassword, resolveLoginNotice } from "@/app/login/_components/login-notices";
 import { resolveHostRouting } from "@/lib/auth-config";
 
-export const metadata: Metadata = { robots: { index: false }, title: "Masuk Super Admin" };
+export const metadata: Metadata = { robots: { index: false }, title: "Masuk Admin Platform" };
 
 const demo = demoPassword(process.env);
 const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
@@ -21,7 +21,7 @@ export default async function SuperAdminLoginPage({ searchParams }: PageProps<"/
       description="Lupa kata sandi? Hubungi pengelola platform."
       homeHref={homeHref}
       surface="platform"
-      title="Masuk Super Admin"
+      title="Masuk Admin Platform"
       visual
     >
       <LoginForm

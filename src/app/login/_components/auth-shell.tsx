@@ -37,7 +37,7 @@ function AuthVisualPanel({ platform }: { platform: boolean }) {
         >
           GC
         </span>
-        <span className="text-lg font-bold">Gerai<span className="text-brand-light">CUAN</span></span>
+        <span className="text-lg font-bold">GeraiCUAN</span>
       </div>
       <div className="flex flex-1 flex-col justify-center gap-8">
         <div className="flex flex-col gap-4">
@@ -130,7 +130,7 @@ export function AuthShell({
           >
             GC
           </span>
-          <span className="text-lg font-bold">Gerai<span className={platform ? "text-brand-light" : "text-brand-strong"}>CUAN</span></span>
+          <span className="text-lg font-bold">GeraiCUAN</span>
         </Link>
         <span
           className={cn(
@@ -140,7 +140,7 @@ export function AuthShell({
           data-slot="surface-badge"
         >
           {platform ? <ShieldCheck aria-hidden="true" className="size-4" /> : <Store aria-hidden="true" className="size-4" />}
-          {platform ? "Khusus Super Admin" : "Untuk gerai"}
+          {platform ? "Khusus tim GeraiCUAN" : "Untuk gerai"}
         </span>
       </div>
       <section

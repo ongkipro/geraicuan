@@ -12,7 +12,7 @@ const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
 export default function RegistrationPage() {
   return (
     <AuthShell
-      description="Setelah email terverifikasi, Anda bisa menyiapkan gerai sambil menunggu persetujuan Super Admin."
+      description="Setelah email terverifikasi, Anda bisa menyiapkan gerai sambil menunggu persetujuan admin platform."
       footer={<AuthLink href="/login/tenant">Sudah punya akun? Masuk</AuthLink>}
       homeHref={homeHref}
       surface="tenant"

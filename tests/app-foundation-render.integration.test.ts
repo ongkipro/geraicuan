@@ -80,7 +80,7 @@ describe("AppSidebar", () => {
 
   it("renders the platform menu with the tenant list current on a tenant detail", () => {
     const { html, links } = renderSidebar({ kind: "platform" }, "/platform/tenant/3b4f");
-    expect(links.map((link) => link.label)).toEqual(["Ringkasan", "Tenant", "Pendaftaran", "Audit"]);
+    expect(links.map((link) => link.label)).toEqual(["Ringkasan", "Gerai", "Pendaftaran", "Audit"]);
     expect(links.filter((link) => link.current).map((link) => link.href)).toEqual(["/platform/tenant"]);
     expect(html).toContain('data-active="true"');
   });

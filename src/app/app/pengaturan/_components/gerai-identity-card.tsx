@@ -34,7 +34,7 @@ export function GeraiIdentityCard({ name, whatsapp }: { name: string; whatsapp: 
 
   return (
     <DataCard
-      description="Hubungi Super Admin bila nama gerai perlu diubah."
+      description="Hubungi admin platform bila nama gerai perlu diubah."
       footer={(
         <Button className="ml-auto" disabled={pending} form={FORM_ID} type="submit">
           {pending ? "Menyimpan…" : "Simpan"}

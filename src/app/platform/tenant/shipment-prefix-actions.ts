@@ -26,7 +26,7 @@ export async function unlockShipmentPrefix(
 ): Promise<ShipmentPrefixUnlockState> {
   const done = (outcome: "success" | "error", message: string) => ({ outcome, message, resultToken: randomUUID() });
   const access = await resolvePlatformAccess();
-  if (access.status !== "authorized") return done("error", "Akses Super Admin diperlukan.");
+  if (access.status !== "authorized") return done("error", "Akses admin platform diperlukan.");
   const tenantId = formData.get("tenantId");
   const attemptId = formData.get("attemptId");
   if (typeof tenantId !== "string" || !UUID_PATTERN.test(tenantId) || typeof attemptId !== "string" || !UUID_PATTERN.test(attemptId)) {
@@ -35,10 +35,10 @@ export async function unlockShipmentPrefix(
   try {
     await unlockTenantShipmentPrefix(db, access.principal.userId, tenantId, attemptId);
   } catch (error) {
-    if (error instanceof ShipmentPrefixLockedError) return done("error", "Awalan tenant ini belum terkunci; tidak ada yang perlu dibuka.");
-    if (error instanceof ShipmentPrefixDeniedError) return done("error", "Akses Super Admin diperlukan.");
+    if (error instanceof ShipmentPrefixLockedError) return done("error", "Awalan gerai ini belum terkunci; tidak ada yang perlu dibuka.");
+    if (error instanceof ShipmentPrefixDeniedError) return done("error", "Akses admin platform diperlukan.");
     return done("error", "Kunci awalan belum dapat dibuka. Coba lagi.");
   }
   revalidatePath(`/platform/tenant/${tenantId}`);
-  return done("success", "Kunci awalan dibuka dan tercatat di audit. Tenant Admin dapat memilih awalan sekali lagi di Pengaturan.");
+  return done("success", "Kunci awalan dibuka dan tercatat di audit. Pemilik gerai dapat memilih awalan sekali lagi di Pengaturan.");
 }

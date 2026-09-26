@@ -9,13 +9,13 @@ import { Card } from "@/components/ui/card";
 export default function TenantNotFound() {
   return (
     <>
-      <PageHeader eyebrow="Tenant" title="Tenant tidak ditemukan" />
+      <PageHeader eyebrow="Gerai" title="Gerai tidak ditemukan" />
       <Card>
         <EmptyState
-          action={<Button asChild variant="outline"><Link href="/platform/tenant">Kembali ke daftar tenant</Link></Button>}
-          description="Tautan salah atau tenant tidak lagi tersedia."
+          action={<Button asChild variant="outline"><Link href="/platform/tenant">Kembali ke daftar gerai</Link></Button>}
+          description="Tautan salah atau gerai tidak lagi tersedia."
           icon={SearchX}
-          title="Tenant ini tidak ada"
+          title="Gerai ini tidak ada"
         />
       </Card>
     </>

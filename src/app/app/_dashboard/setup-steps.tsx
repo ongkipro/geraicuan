@@ -25,7 +25,7 @@ export function setupSteps(progress: SetupProgress): Step[] {
       state: progress.hasPickupPoint ? "done" : "todo",
       title: "Atur titik pickup",
     },
-    { detail: "Kami kirim email ke pemilik begitu gerai disetujui atau ditolak.", state: "waiting", title: "Persetujuan Super Admin" },
+    { detail: "Kami kirim email ke pemilik begitu gerai disetujui atau ditolak.", state: "waiting", title: "Persetujuan admin platform" },
   ];
 }
 

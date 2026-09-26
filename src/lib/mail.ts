@@ -151,7 +151,7 @@ export function composeMail(input: {
     '<p style="font-size:20px;font-weight:700;margin:0 0 16px">GeraiCUAN</p>',
     ...input.paragraphs.map((paragraph) => `<p style="margin:0 0 16px">${escapeHtml(paragraph)}</p>`),
     input.action
-      ? `<p style="margin:24px 0"><a href="${escapeHtml(input.action.url)}" style="display:inline-block;background:#0b2d4f;color:#ffffff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700">${escapeHtml(input.action.label)}</a></p><p style="margin:0 0 16px;font-size:14px;color:#4b5563">Jika tombol tidak berfungsi, salin tautan ini ke browser: ${escapeHtml(input.action.url)}</p>`
+      ? `<p style="margin:24px 0"><a href="${escapeHtml(input.action.url)}" style="display:inline-block;background:#2e47ba;color:#ffffff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700">${escapeHtml(input.action.label)}</a></p><p style="margin:0 0 16px;font-size:14px;color:#4b5563">Jika tombol tidak berfungsi, salin tautan ini ke browser: ${escapeHtml(input.action.url)}</p>`
       : "",
     '<p style="margin:24px 0 0;font-size:14px;color:#4b5563">Email ini dikirim otomatis oleh GeraiCUAN. Abaikan jika Anda tidak merasa melakukan permintaan ini.</p>',
     "</div>",

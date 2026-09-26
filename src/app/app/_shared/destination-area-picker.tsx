@@ -108,7 +108,7 @@ export function DestinationAreaPicker({
           <AlertDescription>
             {canManageSettings
               ? <>Lengkapi titik pickup dan koneksi Mengantar di <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/app/pengaturan">Pengaturan</Link>.</>
-              : "Minta Tenant Admin melengkapi titik pickup dan koneksi Mengantar outlet."}
+              : "Minta pemilik gerai melengkapi titik pickup dan koneksi Mengantar outlet."}
           </AlertDescription>
         </Alert>
       ) : (

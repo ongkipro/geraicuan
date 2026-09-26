@@ -83,4 +83,4 @@ export function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toLocaleUpperCase("id-ID")).join("") || "?";
 }
 
-export const ROLE_LABEL = { OPERATOR: "Operator", TENANT_ADMIN: "Tenant Admin" } as const;
+export const ROLE_LABEL = { OPERATOR: "Operator", TENANT_ADMIN: "Pemilik gerai" } as const;

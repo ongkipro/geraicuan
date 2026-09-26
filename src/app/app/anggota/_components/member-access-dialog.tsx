@@ -110,7 +110,7 @@ export function MemberAccessDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="OPERATOR">Operator — buat kiriman dan cetak resi</SelectItem>
-                <SelectItem value="TENANT_ADMIN">Tenant Admin — juga laporan, pengaturan, dan anggota</SelectItem>
+                <SelectItem value="TENANT_ADMIN">Pemilik gerai — juga laporan, pengaturan, dan anggota</SelectItem>
               </SelectContent>
             </Select>
             <FieldError>{roleState.errors?.role}</FieldError>
@@ -142,7 +142,7 @@ export function MemberAccessDialog({
           <p className="text-sm font-semibold">Nonaktifkan akses</p>
           <p className="text-sm text-muted-foreground">
             {role === "TENANT_ADMIN"
-              ? "Tenant Admin hanya dapat dinonaktifkan selama admin aktif lain tetap ada."
+              ? "Pemilik gerai hanya dapat dinonaktifkan selama pemilik gerai aktif lain tetap ada."
               : "Anggota tidak dapat masuk ke gerai ini sampai diundang ulang."}
           </p>
           <AlertDialog onOpenChange={setConfirmDeactivate} open={confirmDeactivate}>

@@ -19,19 +19,19 @@ describe("T-202 audit and tenant-status labels (spec 10 §8, spec 18 /platform/a
     }
     expect(new Set(sentences).size).toBe(auditEventActions.length);
     expect(auditActionSentence({ action: "PLATFORM_MONITORING_VIEWED", actorRole: "SUPER_ADMIN", outcome: "SUCCESS" }))
-      .toBe("Super Admin membuka pemantauan platform");
+      .toBe("Admin platform membuka pemantauan platform");
     expect(auditActionSentence({ action: "TENANT_SELF_REGISTERED", actorRole: "TENANT_MEMBER", outcome: "SUCCESS" }))
       .toBe("Pemilik gerai mendaftarkan gerai baru");
   });
 
   it("reads a denied event as an attempt and an unknown code as a generic sentence", () => {
     expect(auditActionSentence({ action: "TENANT_SUSPENDED", actorRole: "SUPER_ADMIN", outcome: "DENIED" }))
-      .toBe("Super Admin mencoba menangguhkan tenant");
+      .toBe("Admin platform mencoba menangguhkan gerai");
     expect(auditActionSentence({ action: "SOMETHING_NEW", actorRole: null, outcome: "SUCCESS" }))
       .toBe("Sistem melakukan aktivitas lain");
     expect(auditActionSentence({ action: "SOMETHING_NEW", actorRole: "SUPER_ADMIN", outcome: "DENIED" }))
       .not.toContain("SOMETHING_NEW");
-    expect(auditActorLabel("TENANT_MEMBER")).toBe("Anggota tenant");
+    expect(auditActorLabel("TENANT_MEMBER")).toBe("Anggota gerai");
     expect(auditActorLabel("toString")).toBe("Sistem");
   });
 

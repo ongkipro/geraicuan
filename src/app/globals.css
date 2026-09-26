@@ -26,42 +26,37 @@
   --font-text:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   /* §2.1 colour: blue-grey canvas, navy ink, white borderless cards. */
-  --background:#f8fafc;
-  --foreground:#0f172a;
+  --background:#f2f4f8;
+  --foreground:#203551;
   --card:#ffffff;
-  --card-foreground:#0f172a;
+  --card-foreground:#203551;
   --popover:#ffffff;
-  --popover-foreground:#0f172a;
-  --primary:#0b2d4f;
-  --primary-hover:#071e33;
+  --popover-foreground:#203551;
+  --primary:#2e47ba;
+  --primary-hover:#243a9b;
   --primary-foreground:#ffffff;
-  /* GeraiCUAN brand green (D-22): an accent only; white text on it is 2.54:1. */
-  --brand:#10b981;
-  --brand-strong:#047857;
-  --brand-soft:#d1fae5;
-  --brand-light:#34d399; /* on navy only: 7.27:1 */
-  --secondary:#f1f5f9;
-  --secondary-foreground:#0f172a;
-  --muted:#f1f5f9;
+  --secondary:#eef1f6;
+  --secondary-foreground:#203551;
+  --muted:#eef1f6;
   /* Mengantar #6C7E95/12px fails the 40+ floor (D7 rejected): 6.9:1 on card, 6.3:1 on canvas. */
-  --muted-foreground:#475569;
-  --accent:#ecfdf5;
-  --accent-foreground:#0b2d4f;
-  --destructive:#b91c1c;
-  --border:#e2e8f0;
+  --muted-foreground:#4f5b6b;
+  --accent:#eef2ff;
+  --accent-foreground:#2e47ba;
+  --destructive:#b42318;
+  --border:#e3e8f0;
   /* D8 rejected: Mengantar #BFCEE0 is faint. #8C8C8C holds 3:1 on card (3.4) and canvas (3.05). */
-  --input:#7b8aa0;
-  --ring:#059669;
+  --input:#8c8c8c;
+  --ring:#2e47ba;
   /* Status tones: text on its own tint (status badges, variance, danger). */
-  --ok:#047857;
-  --ok-surface:#ecfdf5;
-  --warn:#b45309;
-  --warn-surface:#fffbeb;
-  --danger:#b91c1c;
-  --danger-surface:#fef2f2;
+  --ok:#087443;
+  --ok-surface:#ecfdf3;
+  --warn:#a15c07;
+  --warn-surface:#fffaeb;
+  --danger:#b42318;
+  --danger-surface:#fff1f0;
   /* In progress / waiting on the provider (spec 10 v3.1 §2.1, from GeraiOS v0.5). */
-  --info:#2563eb;
-  --info-surface:#eff6ff;
+  --info:#245a85;
+  --info-surface:#e9f1f8;
   /* Okabe-Ito categorical series; each series also carries a marker or label. */
   --chart-1:#0072b2;
   --chart-2:#009e73;
@@ -69,25 +64,25 @@
   --chart-4:#cc79a7;
   --chart-5:#d55e00;
   /* §3 the sidebar sits on the canvas; the current item is a white pill. */
-  --sidebar:#f8fafc;
-  --sidebar-foreground:#0f172a;
-  --sidebar-primary:#0b2d4f;
+  --sidebar:#f2f4f8;
+  --sidebar-foreground:#203551;
+  --sidebar-primary:#2e47ba;
   --sidebar-primary-foreground:#ffffff;
   --sidebar-accent:#ffffff;
-  --sidebar-accent-foreground:#0b2d4f;
-  --sidebar-border:#e2e8f0;
-  --sidebar-ring:#059669;
+  --sidebar-accent-foreground:#2e47ba;
+  --sidebar-border:#e3e8f0;
+  --sidebar-ring:#2e47ba;
   /* Opaque hover/stripe row fill (a pinned cell inherits it). */
-  --table-stripe:#f8fafc;
+  --table-stripe:#f6f8fc;
   /* §2.1 inner tile inside a card, and one pastel tint per status meaning (tiles only). */
-  --tile:#f8fafc;
-  --tile-info:#eff6ff;
-  --tile-ok:#ecfdf5;
+  --tile:#f6f8fc;
+  --tile-info:#edf4fb;
+  --tile-ok:#effaf3;
   --tile-warn:#fffbeb;
-  --tile-danger:#fef2f2;
+  --tile-danger:#fff5f5;
   /* §2.3 borderless card: Mengantar's 0 15px 20px rgba(217,223,232,.2) is invisible on the canvas,
      so its alpha is doubled and a 1px navy contact shadow gives the card an edge. */
-  --elevation-card:0 1px 3px rgb(15 23 42 / 6%), 0 12px 20px rgb(15 23 42 / 5%);
+  --elevation-card:0 1px 3px rgb(32 53 81 / 8%), 0 15px 20px rgb(217 223 232 / 40%);
   /* The one restrained elevation for sticky bars. */
   --elevation-resting:0 1px 2px -1px rgb(16 24 40 / 8%), 0 1px 3px 0 rgb(16 24 40 / 5%);
   --radius:0.5rem;
@@ -125,10 +120,6 @@
   --color-popover:var(--popover);
   --color-popover-foreground:var(--popover-foreground);
   --color-primary:var(--primary);
-  --color-brand:var(--brand);
-  --color-brand-strong:var(--brand-strong);
-  --color-brand-soft:var(--brand-soft);
-  --color-brand-light:var(--brand-light);
   --color-primary-hover:var(--primary-hover);
   --color-primary-foreground:var(--primary-foreground);
   --color-secondary:var(--secondary);
@@ -192,7 +183,7 @@
   }
 }
 
-/* The CMS ground behind the white cards (§2.1 `--background` #F8FAFC). */
+/* The CMS ground behind the white cards (§2.1 `--background` #F2F4F8). */
 [data-slot="sidebar-inset"] { background:var(--background); }
 
 .dark {
@@ -205,25 +196,25 @@
   --card-foreground:oklch(0.985 0 0);
   --popover:oklch(0.205 0 0);
   --popover-foreground:oklch(0.985 0 0);
-  --primary:#34d399;
-  --primary-hover:#6ee7b7;
-  --primary-foreground:#0b2d4f;
+  --primary:#a5b4fc;
+  --primary-hover:#c7d2fe;
+  --primary-foreground:#171717;
   --secondary:oklch(0.269 0 0);
   --secondary-foreground:oklch(0.985 0 0);
   --muted:oklch(0.269 0 0);
   --muted-foreground:oklch(0.708 0 0);
-  --accent:#0b2d4f;
-  --accent-foreground:#34d399;
+  --accent:#202b50;
+  --accent-foreground:#a5b4fc;
   --destructive:oklch(0.78 0.13 22);
   --border:oklch(1 0 0 / 10%);
   --input:oklch(1 0 0 / 15%);
-  --ring:#34d399;
+  --ring:#a5b4fc;
   --sidebar:oklch(0.205 0 0);
   --sidebar-foreground:oklch(0.985 0 0);
-  --sidebar-primary:#34d399;
-  --sidebar-primary-foreground:#0b2d4f;
+  --sidebar-primary:#a5b4fc;
+  --sidebar-primary-foreground:#171717;
   --sidebar-accent:oklch(0.205 0 0);
-  --sidebar-accent-foreground:#34d399;
+  --sidebar-accent-foreground:#a5b4fc;
   --sidebar-border:oklch(1 0 0 / 10%);
-  --sidebar-ring:#34d399;
+  --sidebar-ring:#a5b4fc;
 }

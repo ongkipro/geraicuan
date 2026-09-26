@@ -163,7 +163,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
           })}
         />
         {!view.observationsVisible && awb ? (
-          <p className="text-xs text-muted-foreground">Status dari Mengantar terlihat oleh Tenant Admin.</p>
+          <p className="text-xs text-muted-foreground">Status dari Mengantar terlihat oleh pemilik gerai.</p>
         ) : null}
       </DetailCard>
 

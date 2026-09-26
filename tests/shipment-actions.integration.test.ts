@@ -197,7 +197,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     fixture.recoveryEnabled = true;
     fixture.role = "OPERATOR";
     await expect(recoverShipmentUnpaidPayment({}, confirmationForm())).resolves.toEqual({
-      error: "Pemulihan pembayaran hanya tersedia untuk Tenant Admin.",
+      error: "Pemulihan pembayaran hanya tersedia untuk pemilik gerai.",
     });
     expect(recoverFixtureBackedShipmentPayment).not.toHaveBeenCalled();
 
@@ -215,7 +215,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     fixture.reconciliationEnabled = true;
     fixture.role = "OPERATOR";
     await expect(reconcileShipmentUnknownSubmission({}, confirmationForm())).resolves.toEqual({
-      error: "Rekonsiliasi hasil penyedia hanya tersedia untuk Tenant Admin.",
+      error: "Rekonsiliasi hasil penyedia hanya tersedia untuk pemilik gerai.",
     });
     expect(reconcileFixtureBackedShipment).not.toHaveBeenCalled();
 

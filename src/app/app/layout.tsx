@@ -71,7 +71,7 @@ export default async function TenantLayout({ children }: { children: ReactNode }
         </Alert>
       ) : undefined}
       scope={{ kind: "tenant", role: principal.role }}
-      subtitle={shell.outletCount === 0 ? "Data tenant · belum ada outlet" : `Data tenant · ${shell.outletCount} outlet terdaftar`}
+      subtitle={shell.outletCount === 0 ? "Belum ada outlet" : `${shell.outletCount} outlet terdaftar`}
       title={shell.tenant.name}
     >
       {children}

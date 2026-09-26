@@ -72,9 +72,9 @@ const PLATFORM_KEYS: Record<string, true> = {
   halaman: true,
 };
 const issueMessages: Record<Exclude<PlatformIssue, AnalyticsIssue>, string> = {
-  tenant_tidak_dikenal: "Tenant tidak dikenal, lingkup dikembalikan ke global.",
-  outlet_tanpa_tenant: "Outlet memerlukan lingkup tenant dan telah dihapus.",
-  outlet_tidak_dikenal: "Outlet tidak dikenal pada tenant terpilih dan telah dihapus.",
+  tenant_tidak_dikenal: "Gerai tidak dikenal, lingkup dikembalikan ke global.",
+  outlet_tanpa_tenant: "Outlet memerlukan lingkup gerai dan telah dihapus.",
+  outlet_tidak_dikenal: "Outlet tidak dikenal pada gerai terpilih dan telah dihapus.",
   kurir_tidak_dikenal: "Kurir tidak dikenal dan telah dihapus dari filter.",
   status_tidak_dikenal: "Status kiriman tidak dikenal dan telah dihapus dari filter.",
   hasil_tidak_dikenal: "Hasil audit tidak dikenal dan telah dihapus dari filter.",

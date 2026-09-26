@@ -57,10 +57,10 @@ export function TenantLifecycle({
   if (status !== "ACTIVE" && status !== "SUSPENDED") return null;
 
   const suspending = status === "ACTIVE";
-  const label = suspending ? "Tangguhkan tenant" : "Aktifkan kembali tenant";
+  const label = suspending ? "Tangguhkan gerai" : "Aktifkan kembali gerai";
   const matches = typed.trim() === tenantName;
   const consequence = suspending
-    ? `Semua anggota ${tenantName} tidak dapat membuat, menerbitkan, atau mencetak kiriman sampai tenant diaktifkan kembali.`
+    ? `Semua anggota ${tenantName} tidak dapat membuat, menerbitkan, atau mencetak kiriman sampai gerai diaktifkan kembali.`
     : `Anggota ${tenantName} dapat kembali membuat dan menerbitkan kiriman.`;
 
   return (
@@ -69,7 +69,7 @@ export function TenantLifecycle({
         <CardHeader>
           <CardTitle className={cn("flex items-center gap-2", suspending && "text-destructive")}>
             {suspending ? <TriangleAlert aria-hidden="true" className="size-5" /> : null}
-            <h2 id="siklus-tenant">{suspending ? "Zona berbahaya" : "Siklus tenant"}</h2>
+            <h2 id="siklus-tenant">{suspending ? "Zona berbahaya" : "Siklus gerai"}</h2>
           </CardTitle>
           <CardDescription>{consequence}</CardDescription>
         </CardHeader>
@@ -77,7 +77,7 @@ export function TenantLifecycle({
           {state.message ? (
             <div className="outline-none" ref={resultRef} tabIndex={-1}>
               <Alert role={state.outcome === "success" ? "status" : "alert"} variant={state.outcome === "success" ? "default" : "destructive"}>
-                <AlertTitle>{state.outcome === "success" ? "Status tenant diperbarui" : "Status tenant belum berubah"}</AlertTitle>
+                <AlertTitle>{state.outcome === "success" ? "Status gerai diperbarui" : "Status gerai belum berubah"}</AlertTitle>
                 <AlertDescription>{state.message}</AlertDescription>
               </Alert>
             </div>
@@ -133,7 +133,7 @@ export function TenantLifecycle({
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              {!matches ? <span className="text-xs text-muted-foreground">Ketik nama tenant persis untuk mengaktifkan tombol.</span> : null}
+              {!matches ? <span className="text-xs text-muted-foreground">Ketik nama gerai persis untuk mengaktifkan tombol.</span> : null}
             </div>
           </form>
         </CardContent>

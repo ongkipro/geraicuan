@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | Accepted — the single design contract for every GeraiCUAN surface |
-| Version | 3.3 / 2026-09-26 (**v3.3 GeraiCUAN brand colours**, D-22: navy primary, green accent — §2.0; layout unchanged from v3.2. UI rebuilt from zero, [ADR-0001](../adr/ADR-0001-ui-v3-rebuild.md); v3.1 adopts the GeraiOS v0.5 token, status, component-state and validation contracts — `~/Projects/geraios/docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md`, `docs/UI_UX_ANATOMY.md`; **v3.2 adopts the Mengantar-app look** (D-18, PR-85, T-228): §13 deltas D1–D6, D9, D11, D12 through the tokens and the shared shell/components; D7 and D8 rejected for the 40+ floor) |
+| Version | 3.2 / 2026-09-26 (the v3.3 brand-colour trial, D-22, was reverted by the owner the same day — D-24; §2.0 is kept as a record only. UI rebuilt from zero, [ADR-0001](../adr/ADR-0001-ui-v3-rebuild.md); v3.1 adopts the GeraiOS v0.5 token, status, component-state and validation contracts — `~/Projects/geraios/docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md`, `docs/UI_UX_ANATOMY.md`; **v3.2 adopts the Mengantar-app look** (D-18, PR-85, T-228): §13 deltas D1–D6, D9, D11, D12 through the tokens and the shared shell/components; D7 and D8 rejected for the 40+ floor) |
 | Owner | Product owner (Paduka Ongki) |
 | Visual source | Layout and content: the owner's HTML reference `~/Documents/work/notes/geraicuan-html/` (26 pages, served at `http://100.127.67.86:3333/` during development) and `~/Documents/work/notes/geraicuan-ui-analysis.md`, measured at 1440×900 on 2026-09-25. Look (colour, shell, cards, tiles, header): the Mengantar app study `~/Documents/work/notes/mengantar-app-ui-analysis.md` §1–§3, §7–§9 (v3.2). |
 | Component source | Official shadcn/ui primitives in `src/components/ui/*` (reinstalled from the registry 2026-09-25) and the registry blocks `dashboard-01`, `sidebar-07`, `sidebar-16` as composition patterns |
@@ -25,7 +25,7 @@ One brand, no white-labelling in MVP. Locale `id-ID`, IDR, timezone WIB (`Asia/J
 
 ## 2. Tokens (`src/app/globals.css`)
 
-### 2.0 Brand palette (v3.3, D-22 — supersedes the v3.2 colour values in §2.1; layout, sizes and anatomy unchanged)
+### 2.0 Brand palette trial (v3.3, D-22) — REVERTED (D-24); §2.1 v3.2 values are in force
 
 Owner palette (2026-09-26): navy `#0B2D4F` / `#071E33`, green `#10B981` / `#059669` / `#34D399` / `#D1FAE5`, ground `#F8FAFC`, text `#0F172A` / `#475569` / `#94A3B8`, border `#E2E8F0`, success `#10B981`, info `#2563EB`, warning `#F59E0B`, danger `#DC2626`. Mapped to tokens under the 40+ floor (WCAG ratios computed in sRGB):
 
@@ -49,7 +49,7 @@ Owner palette (2026-09-26): navy `#0B2D4F` / `#071E33`, green `#10B981` / `#0596
 
 The thermal label and the invoice sheet stay black on white. Dark palette (dormant) uses `#34D399` as primary with navy foreground.
 
-### 2.1 Colour (v3.2, Mengantar look — values superseded by §2.0)
+### 2.1 Colour (v3.2, Mengantar look — in force)
 
 | Token | v3.1 | **v3.2** | Use |
 |---|---|---|---|
@@ -129,7 +129,7 @@ Operators are 40+ (presbyopia), sit 60–90 cm from a 14–24" screen past scale
 
 ## 3. Shell (`sidebar-16` pattern; v3.2 Mengantar look)
 
-- **Top bar** (full width, 64px, sticky, solid `--primary`, white text): sidebar trigger (below 1024px; hamburger on the phone, panel icon beside the rail) · brand (white "GC" square with primary text + "GeraiCUAN", the wordmark from 768px) · a white 30% rule · gerai name + role badge + "Data tenant · N outlet terdaftar" (the role badge and line from 640px) · white "Cari halaman…" field with ⌘K (a white search icon below 640px) · date · time WIB at 85% white (from 768px).
+- **Top bar** (full width, 64px, sticky, solid `--primary`, white text): sidebar trigger (below 1024px; hamburger on the phone, panel icon beside the rail) · brand (white "GC" square with primary text + "GeraiCUAN", the wordmark from 768px) · a white 30% rule · gerai name + role badge + "N outlet terdaftar" (the role badge and line from 640px) · white "Cari halaman…" field with ⌘K (a white search icon below 640px) · date · time WIB at 85% white (from 768px).
 - **Sidebar** (below the top bar, on the canvas, no panel or rule): flat groups with uppercase 13px labels (groups and order unchanged, below); each item an icon in a 40×40 box + label 15/500 navy; the current item is a white pill with `shadow-card`, primary label 600, its icon box filled primary with a white icon, and a 4px primary bar at the right edge; account row in the footer (avatar initial, name, email, menu: Anggota & akses, Keluar) above a `--border` rule. Desktop ≥ 1024 full; 768–1023 icon rail with tooltips (the 40px icon box alone); < 768 a Sheet opened from the top bar.
 - **Focused layout** (D11; `/app/pengiriman/baru`): no sidebar; the top bar holds the brand, the 3-step stepper centred (white on primary: current = white chip, done = check, pending = outlined; below 768px only the current step keeps its label) and a close ✕ (44px, "Tutup, kembali ke Histori kiriman") to `/app/pengiriman`; the content column (max 1120px) is centred; the summary rail stays sticky.
 - **Menu (tenant):** Dasbor · PENGIRIMAN: Buat kiriman, Histori kiriman, Retur (RTS), Cetak resi · DATA: Pengirim, Penerima · CEK: Cek resi, Cek tarif · LAPORAN: Laporan pengiriman, Riwayat cetak resi (Tenant Admin) · PENGELOLAAN: Pengaturan (Tenant Admin). **Platform:** Ringkasan, Tenant, Pendaftaran, Audit.
@@ -230,7 +230,7 @@ Below 768px: record cards (§4.5).
 Every region renders: loading (skeleton of its final shape), system-empty (why + next action), filtered-empty (filters + "Hapus filter"), error (cause + retry, siblings unaffected), pending (disabled control with progress word), success (announced beside the control). Alerts: `role="status"` for information, `role="alert"` only for failures.
 
 ## 7. Content
-Indonesian, sentence case, one term per concept (kiriman, resi, titik pickup, gerai, Perlu perhatian). Buttons name the consequence ("Simpan & cek tarif", "Konfirmasi & terbitkan AWB"). Money `Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0})`. Dates "25 Sep 2026, 10.13 WIB". Areas shown as "Kecamatan, Kota" in lists; full label only on detail.
+Indonesian, sentence case, one term per concept (kiriman, resi, titik pickup, gerai, Perlu perhatian). **Roles and the business in UI copy (D-23):** `TENANT_ADMIN` reads "Pemilik gerai", `OPERATOR` "Operator", `SUPER_ADMIN` "Admin platform" (the platform login is "Masuk Admin Platform" with the badge "Khusus tim GeraiCUAN"); the business is always "gerai" ("Daftar gerai", "Buat gerai", "lintas gerai"). "Tenant" and "Super Admin" are internal terms for code, specs, audit codes and routes (`/login/tenant`, `/login/super-admin`, `/platform/tenant`) and never appear in rendered text, metadata, toasts or email. Buttons name the consequence ("Simpan & cek tarif", "Konfirmasi & terbitkan AWB"). Money `Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0})`. Dates "25 Sep 2026, 10.13 WIB". Areas shown as "Kecamatan, Kota" in lists; full label only on detail.
 
 ## 8. Responsive
 Checked at 1440, 1024, 768, 390. No page-level horizontal overflow at 390. Lists become record cards below 768px. Two-column flows/details stack below 1024px (detail rail first, flow rail hidden behind the bottom bar).
@@ -278,6 +278,6 @@ Functional facts from the study used elsewhere: Mengantar's own order form has a
 
 ## 15. Sign-in and sign-up (PR-83)
 
-One `AuthShell` card (max-width 448 px) on the canvas: brand mark, H1 24 px, fields 48 px with labels above, password field with a 44 px show/hide button (`aria-pressed`), one filled primary, secondary links as text links below. Errors: text under the field + one `Alert` summary. Super Admin: same card on the `--foreground` navy ground with the "Khusus Super Admin" badge.
+One `AuthShell` card (max-width 448 px) on the canvas: brand mark, H1 24 px, fields 48 px with labels above, password field with a 44 px show/hide button (`aria-pressed`), one filled primary, secondary links as text links below. Errors: text under the field + one `Alert` summary. Super Admin: same card on the `--foreground` navy ground with the "Khusus tim GeraiCUAN" badge (D-23).
 
 **Split layout (T-225, D-21).** `AuthShell visual` (Masuk tenant, Masuk Super Admin, Daftar) adds at ≥ 1024 px a sticky full-height left panel, 44 % wide (max 640 px), padding 48/64 px, tokens only (no hex or arbitrary colours, so a palette swap in `globals.css` carries through): `bg-primary` ground (Super Admin: `bg-foreground` with a `border-background/15` divider), `text-primary-foreground`; GC mark on a `bg-primary-foreground` 40 px square, pills and icon squares `bg-primary-foreground/15`, nota mock `bg-card` + `shadow-xl`, a 13 px "Gratis" pill (tenant only), one 32 px/700 headline, the three cores as 18 px/600 items with 36 px icon squares (`Send`, `Printer`, `ReceiptText`) separated by "·", and a 320 px static nota mock (card, −2° rotation, `INV-SBN-10001` · `SBN-10001` · Total ongkir) built from markup and `aria-hidden`. The card column keeps the surface badge; its brand row hides at ≥ 1024 px. Below 1024 px the panel is not rendered visible and the page is the card alone. The Daftar stepper: three 32 px numbered chips (current = filled primary, done = primary outline + check, pending = `--input` outline) joined by 2 px rules, labels 15 px. Screen contract: spec 17 UX-v3.10.

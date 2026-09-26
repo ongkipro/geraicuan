@@ -36,7 +36,7 @@ import { loadPlatformView, type PlatformView } from "../../_components/platform-
 import { PrefixUnlock } from "../_components/prefix-unlock";
 import { TenantLifecycle } from "../_components/tenant-lifecycle";
 
-export const metadata: Metadata = { robots: { index: false }, title: "Detail tenant" };
+export const metadata: Metadata = { robots: { index: false }, title: "Detail gerai" };
 export const dynamic = "force-dynamic";
 
 type Detail = NonNullable<PlatformView["detail"]>;
@@ -83,7 +83,7 @@ function Outlets({ detail }: { detail: Detail }) {
           })}
         </ul>
       ) : (
-        <p className="text-muted-foreground">Tenant belum memiliki outlet.</p>
+        <p className="text-muted-foreground">Gerai belum memiliki outlet.</p>
       )}
     </PlatformCard>
   );
@@ -210,7 +210,7 @@ function FinanceSummary({ finance, timezone }: { finance: Finance; timezone: str
 }
 
 function TenantAudit({ view }: { view: PlatformView }) {
-  if (!view.audit) return <RegionError title="Jejak audit tenant" />;
+  if (!view.audit) return <RegionError title="Jejak audit gerai" />;
   const rows = view.audit.rows;
   return (
     <PlatformCard
@@ -252,11 +252,11 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
         back={
           <Link className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary hover:underline md:min-h-6" href="/platform/tenant">
             <ArrowLeft aria-hidden="true" className="size-4" />
-            Tenant
+            Gerai
           </Link>
         }
         description={`Terdaftar sejak ${DATE.format(tenant.createdAt)}${prefix ? ` · Awalan nomor kiriman ${prefix.prefix}` : ""}`}
-        eyebrow="Tenant"
+        eyebrow="Gerai"
         title={
           <span className="flex flex-wrap items-center gap-3">
             {tenant.name}
@@ -266,20 +266,20 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
       />
       <FilterBar
         clearHref={view.filters.range.presetId !== "30-hari" ? `/platform/tenant/${tenant.id}` : undefined}
-        label="Periode tenant"
+        label="Periode gerai"
         summary={`${range.periodLabel} · ${range.timezoneLabel}`}
       >
         <DateRangePicker endDate={view.filters.range.lastIncludedDate} label={range.presetLabel} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
       </FilterBar>
       {counts ? (
-        <section aria-label="Ringkasan tenant" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <section aria-label="Ringkasan gerai" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard icon={Package} label="Kiriman dibuat" value={counts.lifecycle.shipments} />
           <KpiCard icon={ReceiptText} label="Resi terbit" value={counts.lifecycle.issued} />
           <KpiCard icon={Send} label="Pengajuan gagal" value={`${formatCount(counts.lifecycle.batchesFailed)} / ${formatCount(counts.lifecycle.batches)}`} />
           <KpiCard icon={ClipboardCheck} label="Rekonsiliasi" value={!view.finance ? "—" : !reconciliations.length ? "—" : variances ? `${formatCount(variances)} selisih` : "Cocok"} />
         </section>
       ) : (
-        <RegionError title="Ringkasan tenant" />
+        <RegionError title="Ringkasan gerai" />
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Outlets detail={detail} />
@@ -294,7 +294,7 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
             : (
               <>
                 Awalan <span className="font-mono font-semibold">{prefix.prefix}-</span>{" "}
-                {prefix.lockedAt ? `terkunci sejak ${formatWib(prefix.lockedAt)}` : "belum terkunci; Tenant Admin masih dapat memilih."}
+                {prefix.lockedAt ? `terkunci sejak ${formatWib(prefix.lockedAt)}` : "belum terkunci; pemilik gerai masih dapat memilih."}
               </>
             )}
         </p>

@@ -53,7 +53,7 @@ export async function submitPlatformTenantLifecycle(
   if (access.status !== "authorized") {
     return {
       outcome: "denied",
-      message: "Akses Super Admin diperlukan.",
+      message: "Akses admin platform diperlukan.",
       resultToken: randomUUID(),
     };
   }
@@ -68,7 +68,7 @@ export async function submitPlatformTenantLifecycle(
   const values = action === "create" ? { name } : { expectedName };
   if (!action) {
     return {
-      errors: { confirmation: "Tindakan siklus tenant tidak valid." },
+      errors: { confirmation: "Tindakan siklus gerai tidak valid." },
       outcome: "invalid",
       message: "Periksa kembali tindakan yang dipilih.",
       nextAttemptId: UUID_PATTERN.test(attemptId ?? "") ? attemptId : randomUUID(),
@@ -81,18 +81,18 @@ export async function submitPlatformTenantLifecycle(
     errors.attemptId = "Identitas permintaan tidak valid. Muat ulang formulir.";
   }
   if (confirmation !== "confirmed") {
-    errors.confirmation = "Konfirmasi eksplisit diperlukan sebelum status tenant diubah.";
+    errors.confirmation = "Konfirmasi eksplisit diperlukan sebelum status gerai diubah.";
   }
   if (action === "create") {
-    if (!name) errors.tenantName = "Nama tenant wajib diisi.";
-    else if (name.length > 120 || characterClassError("BUSINESS_NAME", "Nama tenant", name)) {
-      errors.tenantName = "Nama tenant maksimal 120 karakter dan tidak boleh memuat karakter kontrol.";
+    if (!name) errors.tenantName = "Nama gerai wajib diisi.";
+    else if (name.length > 120 || characterClassError("BUSINESS_NAME", "Nama gerai", name)) {
+      errors.tenantName = "Nama gerai maksimal 120 karakter dan tidak boleh memuat karakter kontrol.";
     }
   } else {
     if (!tenantId || !UUID_PATTERN.test(tenantId)) {
-      errors.tenantId = "Identitas tenant tidak valid. Muat ulang halaman.";
+      errors.tenantId = "Identitas gerai tidak valid. Muat ulang halaman.";
     }
-    if (!expectedName) errors.confirmationName = "Ketik nama tenant untuk mengonfirmasi.";
+    if (!expectedName) errors.confirmationName = "Ketik nama gerai untuk mengonfirmasi.";
     else if (expectedName.length > 120 || /[\u0000-\u001f\u007f]/u.test(expectedName)) {
       errors.confirmationName = "Nama konfirmasi maksimal 120 karakter dan tidak boleh memuat karakter kontrol.";
     }
@@ -126,10 +126,10 @@ export async function submitPlatformTenantLifecycle(
     return {
       outcome: "success",
       message: action === "create"
-        ? `Tenant ${resultName} berhasil dibuat.`
+        ? `Gerai ${resultName} berhasil dibuat.`
         : action === "suspend"
-          ? `Tenant ${resultName} berhasil ditangguhkan.`
-          : `Tenant ${resultName} berhasil diaktifkan kembali.`,
+          ? `Gerai ${resultName} berhasil ditangguhkan.`
+          : `Gerai ${resultName} berhasil diaktifkan kembali.`,
       nextAttemptId: randomUUID(),
       resultToken: randomUUID(),
       tenant: { id: tenant.id, name: resultName, status: tenant.status },
@@ -138,10 +138,10 @@ export async function submitPlatformTenantLifecycle(
     if (error instanceof TenantLifecycleDeniedError) {
       return {
         errors: action === "create"
-          ? { confirmation: "Tenant tidak dapat dibuat." }
-          : { confirmationName: "Nama tenant tidak cocok atau status sudah berubah." },
+          ? { confirmation: "Gerai tidak dapat dibuat." }
+          : { confirmationName: "Nama gerai tidak cocok atau status sudah berubah." },
         outcome: "denied",
-        message: "Tenant tidak ditemukan, status berubah, atau nama konfirmasi tidak cocok.",
+        message: "Gerai tidak ditemukan, status berubah, atau nama konfirmasi tidak cocok.",
         nextAttemptId: randomUUID(),
         resultToken: randomUUID(),
         values,
@@ -154,11 +154,11 @@ export async function submitPlatformTenantLifecycle(
       return {
         errors: error instanceof TenantLifecycleAttemptConflictError
           ? { attemptId: "Identitas permintaan sudah digunakan untuk perubahan lain." }
-          : { confirmation: "Data perubahan tenant tidak valid." },
+          : { confirmation: "Data perubahan gerai tidak valid." },
         outcome: "invalid",
         message: error instanceof TenantLifecycleAttemptConflictError
           ? "Permintaan ini sudah dipakai untuk perubahan lain. Periksa kembali lalu kirim ulang."
-          : "Data perubahan tenant tidak valid.",
+          : "Data perubahan gerai tidak valid.",
         nextAttemptId: randomUUID(),
         resultToken: randomUUID(),
         values,
@@ -166,7 +166,7 @@ export async function submitPlatformTenantLifecycle(
     }
     return {
       outcome: "error",
-      message: "Perubahan tenant gagal. Muat ulang halaman lalu coba kembali.",
+      message: "Perubahan gerai gagal. Muat ulang halaman lalu coba kembali.",
       nextAttemptId: attemptId,
       resultToken: randomUUID(),
       values,

@@ -88,7 +88,7 @@ export function RateCheck({ canManageSettings, initialState = {}, outlets }: {
           action={canManageSettings ? <Button asChild variant="outline"><Link href="/app/pengaturan"><Settings aria-hidden="true" />Buka pengaturan</Link></Button> : undefined}
           description={canManageSettings
             ? "Lengkapi titik pickup dan koneksi Mengantar pada outlet terlebih dahulu."
-            : "Minta Tenant Admin melengkapi titik pickup dan koneksi Mengantar outlet."}
+            : "Minta pemilik gerai melengkapi titik pickup dan koneksi Mengantar outlet."}
           icon={Truck}
           title="Belum ada outlet yang siap"
         />

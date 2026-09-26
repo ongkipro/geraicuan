@@ -446,7 +446,7 @@ export async function archiveContactAction(
       error instanceof ContactArchiveDeniedError ||
       error instanceof ContactUnavailableError
     ) {
-      return { error: "Kontak tidak tersedia atau akun Anda tidak memiliki izin Tenant Admin." };
+      return { error: "Kontak tidak tersedia atau akun Anda tidak memiliki izin pemilik gerai." };
     }
     throw error;
   }

@@ -73,7 +73,7 @@ export function InviteMemberCard({ attemptId }: { attemptId: string }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="OPERATOR">Operator — buat kiriman dan cetak resi</SelectItem>
-              <SelectItem value="TENANT_ADMIN">Tenant Admin — juga laporan, pengaturan, dan anggota</SelectItem>
+              <SelectItem value="TENANT_ADMIN">Pemilik gerai — juga laporan, pengaturan, dan anggota</SelectItem>
             </SelectContent>
           </Select>
           <FieldError>{roleError}</FieldError>

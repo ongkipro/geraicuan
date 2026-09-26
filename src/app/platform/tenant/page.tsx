@@ -32,7 +32,7 @@ import {
 import { loadPlatformView } from "../_components/platform-view";
 import { CreateTenant } from "./_components/create-tenant";
 
-export const metadata: Metadata = { robots: { index: false }, title: "Tenant" };
+export const metadata: Metadata = { robots: { index: false }, title: "Gerai" };
 export const dynamic = "force-dynamic";
 
 /** The counts that ask for a look; a tenant without any reads plainly. */
@@ -60,42 +60,42 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
       <PageHeader
         actions={<CreateTenant initialAttemptId={randomUUID()} />}
         eyebrow="Platform"
-        title="Tenant"
+        title="Gerai"
       />
-      <FilterBar clearHref={changed ? "/platform/tenant" : undefined} label="Filter tenant" summary={`${range.periodLabel} · ${range.timezoneLabel}`}>
+      <FilterBar clearHref={changed ? "/platform/tenant" : undefined} label="Filter gerai" summary={`${range.periodLabel} · ${range.timezoneLabel}`}>
         <label className="w-full sm:w-72">
-          <span className="sr-only">Cari nama tenant</span>
-          <Input defaultValue={filters.query ?? ""} maxLength={80} minLength={2} name="q" placeholder="Cari nama tenant…" type="search" />
+          <span className="sr-only">Cari nama gerai</span>
+          <Input defaultValue={filters.query ?? ""} maxLength={80} minLength={2} name="q" placeholder="Cari nama gerai…" type="search" />
         </label>
         <DateRangePicker endDate={filters.range.lastIncludedDate} label={range.presetLabel} presetId={filters.range.presetId} startDate={filters.range.startDate} />
       </FilterBar>
       {!view.usage ? (
-        <RegionError title="Daftar tenant" />
+        <RegionError title="Daftar gerai" />
       ) : (
         <PlatformCard
           count={view.usage.total}
-          countNoun="tenant"
+          countNoun="gerai"
           flush
           footer={rows.length ? (
             <PlatformPagination
               hrefForPage={(page) => buildPlatformHref("/platform/tenant", filters, { page })}
-              label="Halaman tenant"
-              noun="tenant"
+              label="Halaman gerai"
+              noun="gerai"
               page={filters.page}
               pageSize={PLATFORM_PAGE_SIZE}
               total={view.usage.total}
             />
           ) : undefined}
           id="daftar-tenant"
-          title="Daftar tenant"
+          title="Daftar gerai"
         >
           {rows.length ? (
             <>
               <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
-                <TableCaption className="sr-only">Tenant dengan masalah pengajuan tampil lebih dulu · {range.periodLabel}</TableCaption>
+                <TableCaption className="sr-only">Gerai dengan masalah pengajuan tampil lebih dulu · {range.periodLabel}</TableCaption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tenant</TableHead>
+                    <TableHead>Gerai</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Kiriman / resi</TableHead>
                     <TableHead>Pengajuan</TableHead>
@@ -131,7 +131,7 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                 </TableBody>
               </Table>
               <div className={PHONE_ONLY}>
-                <RecordList label="Daftar tenant">
+                <RecordList label="Daftar gerai">
                   {rows.map((row) => (
                     <RecordItem
                       href={href(row.tenantId)}
@@ -151,10 +151,10 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
             <EmptyState
               action={<Button asChild variant="outline"><Link href="/platform/tenant">Hapus filter</Link></Button>}
               icon={SearchX}
-              title="Tidak ada tenant yang cocok"
+              title="Tidak ada gerai yang cocok"
             />
           ) : (
-            <EmptyState description="Buat tenant pertama, atau setujui pendaftaran gerai." icon={Building2} title="Belum ada tenant" />
+            <EmptyState description="Buat gerai pertama, atau setujui pendaftaran gerai." icon={Building2} title="Belum ada gerai" />
           )}
         </PlatformCard>
       )}

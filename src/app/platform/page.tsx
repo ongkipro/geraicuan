@@ -109,7 +109,7 @@ function Trend({ view }: { view: PlatformView }) {
         </span>
       }
       id="tren-kiriman"
-      title="Tren kiriman seluruh tenant"
+      title="Tren kiriman seluruh gerai"
     >
       {total || view.trend.some((bucket) => bucket.issued) ? (
         <PlatformTrendChart data={view.trend.map(({ created, issued, label }) => ({ created, issued, label }))} />
@@ -124,9 +124,9 @@ function Volume({ view }: { view: PlatformView }) {
   const counts = view.counts;
   const rows: [string, string][] = counts
     ? [
-        ["Tenant aktif", formatCount(counts.tenants.active)],
-        ["Tenant ditangguhkan", formatCount(counts.tenants.suspended)],
-        ["Tenant baru", formatCount(counts.tenants.newInRange)],
+        ["Gerai aktif", formatCount(counts.tenants.active)],
+        ["Gerai ditangguhkan", formatCount(counts.tenants.suspended)],
+        ["Gerai baru", formatCount(counts.tenants.newInRange)],
         ["Outlet lengkap", `${formatCount(counts.outlets.configured)} / ${formatCount(counts.outlets.total)}`],
         ["Anggota aktif", formatCount(counts.memberships.active)],
         ["Pengajuan selesai", `${formatCount(counts.lifecycle.batchesCompleted)} / ${formatCount(counts.lifecycle.batches)}`],
@@ -151,21 +151,21 @@ function Volume({ view }: { view: PlatformView }) {
 }
 
 function TopTenants({ view }: { view: PlatformView }) {
-  if (!view.usage) return <RegionError title="Aktivitas tenant" />;
+  if (!view.usage) return <RegionError title="Aktivitas gerai" />;
   const rows = view.usage.rows;
   return (
     <PlatformCard
-      action={<ArrowLink href={buildPlatformHref("/platform/tenant", view.filters, { page: 1 })}>Lihat semua tenant</ArrowLink>}
+      action={<ArrowLink href={buildPlatformHref("/platform/tenant", view.filters, { page: 1 })}>Lihat semua gerai</ArrowLink>}
       flush={rows.length > 0}
       id="aktivitas-tenant"
-      title="Aktivitas tenant teratas"
+      title="Aktivitas gerai teratas"
     >
       {rows.length ? (
         <>
           <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
-            <TableCaption className="sr-only">Tenant dengan masalah pengajuan lebih dulu, lalu resi terbit terbanyak.</TableCaption>
+            <TableCaption className="sr-only">Gerai dengan masalah pengajuan lebih dulu, lalu resi terbit terbanyak.</TableCaption>
             <TableHeader>
-              <TableRow><TableHead>Tenant</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Kiriman</TableHead><TableHead className="text-right">Resi terbit</TableHead><TableHead>Aktivitas terakhir</TableHead></TableRow>
+              <TableRow><TableHead>Gerai</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Kiriman</TableHead><TableHead className="text-right">Resi terbit</TableHead><TableHead>Aktivitas terakhir</TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
@@ -185,7 +185,7 @@ function TopTenants({ view }: { view: PlatformView }) {
             </TableBody>
           </Table>
           <div className={PHONE_ONLY}>
-            <RecordList label="Aktivitas tenant teratas">
+            <RecordList label="Aktivitas gerai teratas">
               {rows.map((row) => (
                 <RecordItem
                   href={`/platform/tenant/${row.tenantId}`}
@@ -200,7 +200,7 @@ function TopTenants({ view }: { view: PlatformView }) {
           </div>
         </>
       ) : (
-        <p className="text-muted-foreground">Belum ada tenant.</p>
+        <p className="text-muted-foreground">Belum ada gerai.</p>
       )}
     </PlatformCard>
   );

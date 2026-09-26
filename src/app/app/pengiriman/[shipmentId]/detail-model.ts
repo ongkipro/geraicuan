@@ -74,14 +74,14 @@ export function detailNextStep(input: DetailNextStepInput): DetailNextStep {
     case "SUBMISSION_UNKNOWN":
       return admin
         ? { kind: "reconcile" }
-        : { kind: "none", message: "Jangan kirim ulang. Minta Tenant Admin menjalankan rekonsiliasi." };
+        : { kind: "none", message: "Jangan kirim ulang. Minta pemilik gerai menjalankan rekonsiliasi." };
     case "AWAITING_UPSTREAM_PAYMENT":
       if (recoveryNeedsReconciliation(input.recoveryStatus)) {
         return { kind: "none", message: "Upaya pembayaran sebelumnya belum pasti. Jangan jalankan pemulihan ulang." };
       }
       return admin
         ? { kind: "recover" }
-        : { kind: "none", message: "Jangan buat kiriman pengganti. Minta Tenant Admin memulihkan pembayaran." };
+        : { kind: "none", message: "Jangan buat kiriman pengganti. Minta pemilik gerai memulihkan pembayaran." };
     case "FAILED":
       return { href: "/app/pengiriman/baru", kind: "new-draft" };
     default:

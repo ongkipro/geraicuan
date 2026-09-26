@@ -162,7 +162,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <Alert role="status">
       <Settings2 aria-hidden="true" />
       <AlertTitle>{outlets.length === 0 ? "Belum ada outlet" : "Belum ada outlet yang siap mengirim"}</AlertTitle>
-      <AlertDescription>{isAdmin ? "Lengkapi titik pickup dan koneksi Mengantar di Pengaturan outlet." : "Hubungi Tenant Admin untuk melengkapi outlet."}</AlertDescription>
+      <AlertDescription>{isAdmin ? "Lengkapi titik pickup dan koneksi Mengantar di Pengaturan outlet." : "Hubungi pemilik gerai untuk melengkapi outlet."}</AlertDescription>
     </Alert>
   );
 

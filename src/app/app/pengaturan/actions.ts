@@ -520,13 +520,13 @@ export async function saveShipmentPrefix(
       saveTenantShipmentPrefix(tx, context, prefix, attemptId), STORE_SETUP);
   } catch (error) {
     if (error instanceof ShipmentPrefixLockedError) {
-      return { error: "Awalan sudah terkunci dan tidak dapat diubah. Hubungi Super Admin bila ada kesalahan.", resultToken: randomUUID() };
+      return { error: "Awalan sudah terkunci dan tidak dapat diubah. Hubungi admin platform bila ada kesalahan.", resultToken: randomUUID() };
     }
     if (error instanceof ShipmentPrefixInvalidError) {
       return { error: "Awalan harus 2–3 huruf besar atau angka tanpa spasi, mis. PHI atau A29.", resultToken: randomUUID() };
     }
     if (error instanceof ShipmentPrefixDeniedError || error instanceof TenantContextDeniedError) {
-      return { error: "Hanya Tenant Admin yang dapat mengatur awalan nomor kiriman.", resultToken: randomUUID() };
+      return { error: "Hanya pemilik gerai yang dapat mengatur awalan nomor kiriman.", resultToken: randomUUID() };
     }
     return { error: "Awalan belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
   }
@@ -563,7 +563,7 @@ export async function saveTenantContact(
   } catch (error) {
     if (error instanceof TenantContactInvalidError) return { error: WHATSAPP_ERROR, resultToken: randomUUID() };
     if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
-      return { error: "Hanya Tenant Admin yang dapat mengubah WhatsApp gerai.", resultToken: randomUUID() };
+      return { error: "Hanya pemilik gerai yang dapat mengubah WhatsApp gerai.", resultToken: randomUUID() };
     }
     return { error: "WhatsApp gerai belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
   }
@@ -594,7 +594,7 @@ export async function saveLabelSettings(
       saveTenantLabelFields(tx, context, fields), STORE_SETUP);
   } catch (error) {
     if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
-      return { error: "Hanya Tenant Admin yang dapat mengubah informasi label.", resultToken: randomUUID() };
+      return { error: "Hanya pemilik gerai yang dapat mengubah informasi label.", resultToken: randomUUID() };
     }
     return { error: "Informasi label belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
   }

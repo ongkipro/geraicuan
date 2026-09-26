@@ -26,7 +26,7 @@ export function attentionItems(health: PlatformHealth | null, tenants: readonly 
     ];
     for (const signal of signals) {
       if (signal.tile.severity === "normal") continue;
-      const affected = signal.tile.affectedTenants ? ` · ${formatCount(signal.tile.affectedTenants)} tenant terdampak` : "";
+      const affected = signal.tile.affectedTenants ? ` · ${formatCount(signal.tile.affectedTenants)} gerai terdampak` : "";
       items.push({ detail: `${signal.detail}${affected}`, key: signal.key, severity: signal.tile.severity, title: signal.title });
     }
   }

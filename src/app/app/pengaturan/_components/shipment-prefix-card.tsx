@@ -76,7 +76,7 @@ export function ShipmentPrefixCard({
           <p className="text-sm text-muted-foreground">
             Contoh nomor: <span className="font-mono font-semibold text-foreground">{lockedPrefix}-10013</span>.{" "}
             {state.savedPrefix ? "Baru saja dikunci." : `Dikunci ${lockedAtLabel}.`}{" "}
-            Hubungi Super Admin bila awalan perlu diperbaiki.
+            Hubungi admin platform bila awalan perlu diperbaiki.
           </p>
         </div>
       </DataCard>

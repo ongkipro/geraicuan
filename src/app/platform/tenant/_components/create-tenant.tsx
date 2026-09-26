@@ -58,20 +58,20 @@ export function CreateTenant({ initialAttemptId }: { initialAttemptId: string })
         <DialogTrigger asChild>
           <Button type="button">
             <Plus aria-hidden="true" data-icon="inline-start" />
-            Buat tenant
+            Buat gerai
           </Button>
         </DialogTrigger>
         <DialogContent onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }}>
           <form action={action} aria-busy={pending} className="flex flex-col gap-4" noValidate>
             <DialogHeader>
-              <DialogTitle>Buat tenant baru</DialogTitle>
-              <DialogDescription>Tenant dibuat aktif dan tercatat di jejak audit.</DialogDescription>
+              <DialogTitle>Buat gerai baru</DialogTitle>
+              <DialogDescription>Gerai dibuat aktif dan tercatat di jejak audit.</DialogDescription>
             </DialogHeader>
             <input name="attemptId" type="hidden" value={attemptId} />
             <input name="lifecycleAction" type="hidden" value="create" />
             <input name="confirmation" type="hidden" value="confirmed" />
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tenant-name">Nama tenant</Label>
+              <Label htmlFor="tenant-name">Nama gerai</Label>
               <CharacterClassInput
                 aria-describedby={nameError ? "tenant-name-error" : undefined}
                 aria-invalid={nameError ? true : undefined}
@@ -91,7 +91,7 @@ export function CreateTenant({ initialAttemptId }: { initialAttemptId: string })
               <DialogClose asChild>
                 <Button disabled={pending} type="button" variant="outline">Batal</Button>
               </DialogClose>
-              <Button disabled={pending} type="submit">{pending ? "Membuat…" : "Buat tenant"}</Button>
+              <Button disabled={pending} type="submit">{pending ? "Membuat…" : "Buat gerai"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -107,7 +107,7 @@ function CreatedNotice({ id, message, name, resultRef }: { id: string; message: 
   return (
     <div className="fixed right-4 bottom-4 z-50 w-full max-w-sm outline-none" ref={resultRef} tabIndex={-1}>
       <Alert className="shadow-md" role="status">
-        <AlertTitle>Tenant dibuat</AlertTitle>
+        <AlertTitle>Gerai dibuat</AlertTitle>
         <AlertDescription className="grid gap-2">
           <p>{message}</p>
           <Link className="font-semibold text-primary" href={`/platform/tenant/${id}`}>Buka {name}</Link>

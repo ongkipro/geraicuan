@@ -76,7 +76,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
         <FlowStepper steps={steps("fill")} />
         <DataCard>
           <EmptyState
-            description="Pembuatan kiriman aktif setelah Super Admin menyetujui gerai ini."
+            description="Pembuatan kiriman aktif setelah admin platform menyetujui gerai ini."
             icon={Clock}
             title="Gerai menunggu persetujuan"
           />
@@ -132,7 +132,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
               ) : undefined}
               description={admin
                 ? "Lengkapi titik pickup dan koneksi Mengantar outlet sebelum membuat kiriman."
-                : "Hubungi Tenant Admin untuk menyiapkan titik pickup outlet."}
+                : "Hubungi pemilik gerai untuk menyiapkan titik pickup outlet."}
               icon={Settings2}
               title="Outlet belum siap untuk kiriman"
             />

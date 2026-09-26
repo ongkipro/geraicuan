@@ -53,7 +53,7 @@ export default async function PickupSettingsPage({
     return (
       <DataCard>
         <EmptyState
-          description="Titik pickup diatur per outlet. Hubungi Super Admin untuk menyiapkan outlet gerai ini."
+          description="Titik pickup diatur per outlet. Hubungi admin platform untuk menyiapkan outlet gerai ini."
           icon={Store}
           title="Belum ada outlet"
         />

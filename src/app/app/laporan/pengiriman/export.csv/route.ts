@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   }
 
   if (principal.scope !== "tenant" || principal.role !== "TENANT_ADMIN") {
-    return textResponse("Tenant Admin access is required.", 403);
+    return textResponse("Akses pemilik gerai diperlukan.", 403);
   }
 
   try {

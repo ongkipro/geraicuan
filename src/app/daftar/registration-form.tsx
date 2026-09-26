@@ -162,7 +162,7 @@ export function RegistrationForm() {
         <ol className="flex list-decimal flex-col gap-2 pl-5">
           <li>Tekan tombol <strong>Verifikasi email</strong> di email dari GeraiCUAN. Tautan berlaku 24 jam.</li>
           <li>Masuk, lalu hubungkan akun Mengantar milik gerai dan pilih titik pickup.</li>
-          <li>Tunggu persetujuan Super Admin; setelah itu Anda bisa membuat kiriman.</li>
+          <li>Tunggu persetujuan admin platform; setelah itu Anda bisa membuat kiriman.</li>
         </ol>
         <Button asChild className="w-full text-[length:inherit]" size="lg">
           <Link href="/login/tenant">Ke halaman masuk</Link>
@@ -326,7 +326,7 @@ export function RegistrationForm() {
               value="setuju"
             />
             <Label className="text-[length:inherit] leading-normal font-normal" htmlFor="terms">
-              Saya setuju data gerai diperiksa Super Admin sebelum disetujui, dan gerai mengirim dengan akun Mengantar miliknya sendiri.
+              Saya setuju data gerai diperiksa admin platform sebelum disetujui, dan gerai mengirim dengan akun Mengantar miliknya sendiri.
             </Label>
           </div>
           {errors.terms ? <p className={AUTH_ERROR} id="terms-error">{errors.terms}</p> : null}

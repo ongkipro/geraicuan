@@ -45,8 +45,8 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
       <FilterBar clearHref={changed ? "/platform/audit" : undefined} label="Filter audit" summary={`${range.periodLabel} · ${range.timezoneLabel}`}>
         <DateRangePicker endDate={filters.range.lastIncludedDate} label={range.presetLabel} presetId={filters.range.presetId} startDate={filters.range.startDate} />
         <FilterSelect
-          allLabel="Semua tenant"
-          label="Tenant"
+          allLabel="Semua gerai"
+          label="Gerai"
           name="tenant"
           options={view.tenants.map((tenant) => ({ label: tenant.name, value: tenant.id }))}
           value={filters.scope.kind === "tenant" ? filters.scope.tenantId : null}
@@ -84,7 +84,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
               <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
                 <TableCaption className="sr-only">Jejak audit · {range.periodLabel} · {range.timezoneLabel}</TableCaption>
                 <TableHeader>
-                  <TableRow><TableHead>Waktu</TableHead><TableHead>Aksi</TableHead><TableHead>Pelaku</TableHead><TableHead>Tenant</TableHead><TableHead>Hasil</TableHead></TableRow>
+                  <TableRow><TableHead>Waktu</TableHead><TableHead>Aksi</TableHead><TableHead>Pelaku</TableHead><TableHead>Gerai</TableHead><TableHead>Hasil</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (

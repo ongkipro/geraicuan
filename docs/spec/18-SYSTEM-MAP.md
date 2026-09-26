@@ -195,7 +195,7 @@ One group, "Platform". `platformCmsNavigation` matches `/platform` exactly and e
 | Navigation Item (in order) | Path | Accessible Roles | Active Match Rule |
 |---|---|---|---|
 | **Ringkasan** | `/platform` | Super Admin only | Exact `/platform`; also the fallback |
-| **Tenant** | `/platform/tenant` | Super Admin only | `/platform/tenant` and `/platform/tenant/[tenantId]` |
+| **Gerai** | `/platform/tenant` | Super Admin only | `/platform/tenant` and `/platform/tenant/[tenantId]` |
 | **Pendaftaran** | `/platform/pendaftaran` | Super Admin only | `/platform/pendaftaran` and sub-paths |
 | **Audit** | `/platform/audit` | Super Admin only | `/platform/audit` and sub-paths |
 

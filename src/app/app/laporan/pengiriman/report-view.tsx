@@ -155,9 +155,9 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
         {totals.map((total) => (
           <li className="grid gap-1 py-3 first:pt-0 last:pb-0" key={total.courier ?? "tanpa-kurir"}>
             <div className="flex items-center justify-between gap-3">
-              <span className="flex min-w-0 items-center gap-3 font-medium">
-                {total.courier ? <CourierLogo className={logoBox} courier={total.courier} decorative /> : null}
-                <span className="truncate">{carrierName(total.courier)}</span>
+              {/* Owner (2026-09-26): logo only; the logo's alt text (or the name without a logo) labels the row. */}
+              <span className="flex min-w-0 items-center font-medium">
+                {total.courier ? <CourierLogo className={logoBox} courier={total.courier} /> : carrierName(total.courier)}
               </span>
               <span className="shrink-0 tabular-nums">{number.format(total.shipmentCount)} kiriman</span>
             </div>
@@ -186,9 +186,8 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
           {totals.map((total) => (
             <TableRow className="hover:bg-transparent" key={total.courier ?? "tanpa-kurir"}>
               <TableCell className="pr-2 pl-0">
-                <span className="flex items-center gap-3 font-medium">
-                  <span className="flex w-16 shrink-0">{total.courier ? <CourierLogo className={logoBox} courier={total.courier} decorative /> : null}</span>
-                  {carrierName(total.courier)}
+                <span className="flex items-center font-medium">
+                  {total.courier ? <CourierLogo className={logoBox} courier={total.courier} /> : carrierName(total.courier)}
                 </span>
               </TableCell>
               <TableCell className="px-2 text-right">{number.format(total.shipmentCount)}</TableCell>

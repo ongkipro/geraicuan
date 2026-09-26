@@ -67,7 +67,7 @@ export async function recoverShipmentUnpaidPayment(
 
   const principal = await requireTenantPrincipal();
   if (principal.role !== "TENANT_ADMIN") {
-    return { error: "Pemulihan pembayaran hanya tersedia untuk Tenant Admin." };
+    return { error: "Pemulihan pembayaran hanya tersedia untuk pemilik gerai." };
   }
   if (!isSanctionedUnpaidRecoveryFixtureEnabled()) {
     return {

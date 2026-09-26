@@ -237,7 +237,7 @@ describe("Member governance Server Actions", () => {
     const state = await deactivateMemberAction({}, deactivateForm());
 
     expect(state).toMatchObject({
-      message: expect.stringContaining("Tenant Admin aktif"),
+      message: expect.stringContaining("pemilik gerai aktif"),
       nextAttemptId: ATTEMPT_ID,
       resultToken: expect.stringMatching(UUID_PATTERN),
       status: "error",

@@ -44,7 +44,7 @@ export const LOGIN_NOTICES: Record<LoginNotice, { body: string; title: string; t
     tone: "default",
   },
   "email-terverifikasi": {
-    body: "Anda sudah bisa masuk dan menyiapkan gerai. Membuat kiriman terbuka setelah Super Admin menyetujui gerai.",
+    body: "Anda sudah bisa masuk dan menyiapkan gerai. Membuat kiriman terbuka setelah admin platform menyetujui gerai.",
     title: "Email terverifikasi",
     tone: "default",
   },

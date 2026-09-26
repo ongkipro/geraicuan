@@ -86,7 +86,7 @@ export default async function OutletSettingsPage() {
     >
       {safe.length === 0 ? (
         <EmptyState
-          description="Outlet disiapkan oleh Super Admin. Hubungi Super Admin untuk menambahkan outlet gerai ini."
+          description="Outlet disiapkan oleh admin platform. Hubungi admin platform untuk menambahkan outlet gerai ini."
           icon={Store}
           title="Belum ada outlet"
         />
