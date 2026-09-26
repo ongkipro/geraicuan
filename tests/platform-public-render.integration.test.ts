@@ -126,7 +126,8 @@ describe("public auth markup", () => {
     expect(tenant).toMatch(/class="[^"]*hidden[^"]*lg:flex[^"]*bg-primary/);
     for (const core of ["Kirim", "Cetak resi", "Invoice", "Gratis"]) expect(tenant, core).toContain(core);
     expect(tenant).not.toMatch(/gratis selamanya/i);
-    expect(tenant).not.toContain("<img");
+    // No stock imagery: the only images are the owner's brand logo files (2026-09-26).
+    expect([...tenant.matchAll(/<img[^>]*src="([^"]+)"/g)].map((m) => m[1]).every((src) => src.startsWith("/brand/"))).toBe(true);
     const platform = render(createElement(AuthShell, { surface: "platform", title: "Masuk Admin Platform", visual: true } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")));
     expect(platform).toContain("Khusus tim GeraiCUAN");
     expect(platform).not.toContain(">Gratis<");

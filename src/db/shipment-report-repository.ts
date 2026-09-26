@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { PgSelect } from "drizzle-orm/pg-core";
 
 import {
@@ -8,6 +8,7 @@ import {
   codDisbursementEstimateExpression,
   mengantarCodFeeExpression,
 } from "@/db/analytics-repository";
+import { RTS_STATUSES } from "@/db/rts-repository";
 import {
   outlets,
   printEvents,
@@ -22,6 +23,7 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsFilters } from "@/lib/analytics-filters";
 import type { AnalyticsRange } from "@/lib/analytics-range";
 import type { PaymentMethod } from "@/lib/payment-method";
+import type { ShipmentReportAreaGroup } from "@/lib/shipment-report-analytics";
 import { SHIPMENT_REPORT_EXPORT_MAX_ROWS } from "@/lib/shipment-report";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
@@ -56,6 +58,10 @@ export type ShipmentReportCourierTotal = {
   codFeeIdr: number;
   /** `null` is a shipment that never reached a provider batch. */
   courier: string | null;
+  /** Spec 19 RPT-SHP-COURIER-DELIVERED (= CRR-DELIVERED's predicate). */
+  deliveredCount: number;
+  /** Spec 19 RPT-SHP-COURIER-RETURNED (= CRR-RETURNED's predicate). */
+  returnedCount: number;
   shipmentCount: number;
   shippingCostIdr: number;
 };
@@ -181,6 +187,19 @@ function reportFilter(
   );
 }
 
+/**
+ * The dashboard's outcome predicates (spec 19 SHP-OUTCOME-*), reused rather than restated so the
+ * report's Terkirim / Retur / Gagal equal the Dasbor's for the same cohort: delivered is
+ * `DELIVERED`, returned is `RTS_STATUSES` (queued, in transit, received — never `PROBLEM`).
+ */
+const deliveredPredicate = eq(shipments.status, "DELIVERED");
+const returnedPredicate = inArray(shipments.status, [...RTS_STATUSES]);
+const failedPredicate = eq(shipments.status, "FAILED");
+const countWhere = (predicate: ReturnType<typeof eq>) =>
+  sql<number>`count(*) filter (where ${predicate})::int`.mapWith(Number);
+/** Spec 19 RPT-SHP-COD-VALUE-IDR: what the courier collects, COD provider orders only. */
+const codValueExpression = sql`${shipmentCodTotals.providerCodAmountIdr}`;
+
 function printCountExpression(context: TenantContext) {
   return sql<number>`(
     SELECT count(*)::int
@@ -236,6 +255,8 @@ async function loadTotals(
         codDisbursementEstimateIdr: sql<number>`coalesce(sum(${codDisbursementEstimateExpression}), 0)::bigint`.mapWith(Number),
         codFeeIdr: sql<number>`coalesce(sum(${codFeeExpression}), 0)::bigint`.mapWith(Number),
         courier: providerBatches.courier,
+        deliveredCount: countWhere(deliveredPredicate),
+        returnedCount: countWhere(returnedPredicate),
         shipmentCount,
         shippingCostIdr: sql<number>`coalesce(sum(${shippingCostExpression}), 0)::bigint`.mapWith(Number),
       })
@@ -375,4 +396,127 @@ export async function loadShipmentReportExport(
     .limit(maxRows);
 
   return { rows, totalCount: totals.shipmentCount };
+}
+
+export type ShipmentReportKpis = {
+  /** RPT-SHP-COD-DISBURSEMENT-EST-TOTAL: Σ RPT-SHP-COD-DISBURSEMENT-EST-IDR (= Σ per-courier). */
+  codDisbursementEstimateIdr: number;
+  /** COD provider orders the COD value is summed over. */
+  codOrderCount: number;
+  /** RPT-SHP-COD-VALUE-TOTAL. */
+  codValueIdr: number;
+  /** RPT-SHP-DELIVERED (= SHP-OUTCOME-DELIVERED's predicate). */
+  deliveredCount: number;
+  /** RPT-SHP-FAILED (= SHP-OUTCOME-FAILED's predicate). */
+  failedCount: number;
+  /** RPT-SHP-IN-PROGRESS: rows − delivered − returned − failed (the Dasbor's "Masih berjalan"). */
+  inProgressCount: number;
+  /** RPT-SHP-RETURNED (= SHP-OUTCOME-RETURNED's predicate). */
+  returnedCount: number;
+  /** RPT-SHP-ROWS. */
+  shipmentCount: number;
+};
+
+/** RPT-SHP-TREND-*: one WIB bucket (`YYYY-MM-DD`, or `YYYY-MM` above 31 days). */
+export type ShipmentReportTrendRow = {
+  codCount: number;
+  codValueIdr: number;
+  key: string;
+  nonCodCount: number;
+};
+
+export type ShipmentReportAnalytics = {
+  /** Outlet × stored destination label, folded into wilayah and routes by `groupRegions` / `groupRoutes`. */
+  areas: ShipmentReportAreaGroup[];
+  kpis: ShipmentReportKpis;
+  trend: ShipmentReportTrendRow[];
+};
+
+/**
+ * T-235: the analytics above the Laporan pengiriman list. Every read goes through `reportJoins` and
+ * `reportFilter` — the very cohort, tenant predicate and filters the rows, the totals and the CSV
+ * use — so each figure reconciles with RPT-SHP-ROWS. Aggregated in SQL; only the area label is
+ * parsed in TypeScript, after grouping, because the one parser (`parseAreaRegion`) must read a
+ * label the same way the list and the dashboard do.
+ */
+export async function loadShipmentReportAnalytics(
+  tx: TenantTransaction,
+  context: TenantContext,
+  input: { filters: AnalyticsFilters; range: AnalyticsRange },
+): Promise<ShipmentReportAnalytics> {
+  requireTenantAdmin(context);
+  const where = reportFilter(context, input.range, input.filters);
+  const shipmentCount = sql<number>`count(*)::int`.mapWith(Number);
+  const money = (expression: ReturnType<typeof sql>) =>
+    sql<number>`coalesce(sum(${expression}), 0)::bigint`.mapWith(Number);
+
+  const [kpiRow] = await reportJoins(
+    tx
+      .select({
+        codDisbursementEstimateIdr: money(codDisbursementEstimateExpression),
+        codOrderCount: sql<number>`count(${shipmentCodTotals.shipmentId})::int`.mapWith(Number),
+        codValueIdr: money(codValueExpression),
+        deliveredCount: countWhere(deliveredPredicate),
+        failedCount: countWhere(failedPredicate),
+        returnedCount: countWhere(returnedPredicate),
+        shipmentCount,
+      })
+      .from(shipments)
+      .$dynamic(),
+  ).where(where);
+
+  const bucket = input.range.granularity === "harian"
+    ? sql<string>`to_char(date_trunc('day', ${shipments.createdAt} AT TIME ZONE ${input.range.timezone}), 'YYYY-MM-DD')`
+    : sql<string>`to_char(date_trunc('month', ${shipments.createdAt} AT TIME ZONE ${input.range.timezone}), 'YYYY-MM')`;
+  const trend = await reportJoins(
+    tx
+      .select({
+        // SHP-COD's basis: the draft's flag, COD Ongkir included — the Dasbor's split.
+        codCount: sql<number>`count(*) filter (where ${shipmentDrafts.isCod})::int`.mapWith(Number),
+        codValueIdr: money(codValueExpression),
+        key: bucket,
+        nonCodCount: sql<number>`count(*) filter (where not ${shipmentDrafts.isCod})::int`.mapWith(Number),
+      })
+      .from(shipments)
+      .$dynamic(),
+  )
+    .where(where)
+    .groupBy(sql`3`)
+    .orderBy(sql`3`);
+
+  // lazy: one row per outlet × distinct label; fine for a tenant's destinations, move the parse
+  // into SQL if a tenant ever ships to tens of thousands of distinct areas in one window.
+  const areas = await reportJoins(
+    tx
+      .select({
+        areaLabel: shipmentDrafts.destinationAreaLabel,
+        deliveredCount: countWhere(deliveredPredicate),
+        outletId: outlets.id,
+        outletName: outlets.name,
+        returnedCount: countWhere(returnedPredicate),
+        shipmentCount,
+      })
+      .from(shipments)
+      .$dynamic(),
+  )
+    .where(where)
+    .groupBy(outlets.id, outlets.name, shipmentDrafts.destinationAreaLabel);
+
+  const kpis = kpiRow ?? {
+    codDisbursementEstimateIdr: 0,
+    codOrderCount: 0,
+    codValueIdr: 0,
+    deliveredCount: 0,
+    failedCount: 0,
+    returnedCount: 0,
+    shipmentCount: 0,
+  };
+  return {
+    areas,
+    kpis: {
+      ...kpis,
+      inProgressCount: kpis.shipmentCount - kpis.deliveredCount - kpis.returnedCount - kpis.failedCount,
+    },
+    trend,
+  };
 }

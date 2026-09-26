@@ -6,7 +6,9 @@ import {
   REPORT_PAGE_SIZE,
   reportCarry,
   reportExportHref,
+  reportAnalyticsView,
   reportIssueMessage,
+  type ReportAnalyticsView,
 } from "@/app/app/laporan/pengiriman/report-logic";
 import { ShipmentReportView } from "@/app/app/laporan/pengiriman/report-view";
 import { requireReportAdmin } from "@/app/app/laporan/_components/report-access";
@@ -14,7 +16,7 @@ import type { CourierPerformancePoint } from "@/app/app/laporan/pengiriman/couri
 import { loadAnalyticsFilterOptions, loadCourierPerformance } from "@/db/analytics-repository";
 import { db } from "@/db/client";
 import { shipmentStatuses } from "@/db/schema";
-import { loadShipmentReportPage, type ShipmentReportPage } from "@/db/shipment-report-repository";
+import { loadShipmentReportAnalytics, loadShipmentReportPage, type ShipmentReportPage } from "@/db/shipment-report-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { parseTenantAnalyticsQuery } from "@/lib/analytics-filters";
 import { formatRangeLabel } from "@/lib/analytics-range";
@@ -64,11 +66,23 @@ export default async function ShipmentReportPage({
     }
   }
 
+  // T-235: its own transaction too, so a failed analytics read keeps the totals and the list.
+  let analytics: ReportAnalyticsView | null = null;
+  if (!parsed.filterRejected && data.totals.shipmentCount > 0) {
+    try {
+      analytics = reportAnalyticsView(range, await withTenantContext(db, principal.userId, principal.tenantId,
+        (tx, context) => loadShipmentReportAnalytics(tx, context, { filters, range })));
+    } catch {
+      analytics = null;
+    }
+  }
+
   const carry = reportCarry(parsed.canonicalQuery);
 
   return (
     <ShipmentReportView
       activeCount={activeFilterCount({ ...filters, presetId: range.presetId })}
+      analytics={analytics}
       carry={carry}
       data={data}
       exportHref={reportExportHref(carry)}

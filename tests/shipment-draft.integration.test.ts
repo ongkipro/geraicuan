@@ -291,6 +291,23 @@ describe("tenant shipment drafts", () => {
     )).rejects.toMatchObject({ constraint: "shipment_drafts_pickup_vehicle_pickup_only" });
   });
 
+  it("stores the T-234 08:00 pickup slot and the database refuses a start outside 08:00–17:00", async () => {
+    const validated = validateShipmentDraft(submission());
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const shipmentId = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      createShipmentDraft(tx, context, { ...validated.input, handoverType: "PICKUP", pickupDate: "2026-09-30", pickupSlot: "08:00" }));
+    const loaded = await withTenantContext(appDb, "draft-user-a", tenantA, (tx, context) =>
+      loadShipmentFlowDraft(tx, context, shipmentId));
+    expect(loaded).toMatchObject({ handoverType: "PICKUP", pickupSlot: "08:00" });
+    // 17:00 stays valid for drafts saved before T-234; 07:00 and 18:00 never were.
+    await expect(adminPool.query("UPDATE shipment_drafts SET pickup_slot = '17:00' WHERE shipment_id = $1", [shipmentId])).resolves.toBeTruthy();
+    for (const slot of ["07:00", "18:00"]) {
+      await expect(adminPool.query("UPDATE shipment_drafts SET pickup_slot = $2 WHERE shipment_id = $1", [shipmentId, slot]))
+        .rejects.toMatchObject({ constraint: "shipment_drafts_pickup_slot_valid" });
+    }
+  });
+
   it("replays one canonical submission without creating duplicate rows", async () => {
     const validated = validateShipmentDraft(submission());
     expect(validated.ok).toBe(true);

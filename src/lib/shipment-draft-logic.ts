@@ -303,8 +303,13 @@ export function isPickupVehicle(value: unknown): value is PickupVehicle {
   return typeof value === "string" && (PICKUP_VEHICLES as readonly string[]).includes(value);
 }
 
-/** One-hour pickup windows 09.00–18.00 WIB, stored by their start ("09:00"). */
-export const PICKUP_SLOTS = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"] as const;
+/**
+ * One-hour pickup windows 08.00–17.00 WIB (owner, T-234), stored by their start ("08:00").
+ * GeraiCUAN's own schedule: Mengantar's documented POST /time window is 09:00–18:00
+ * (unverified, spec 05 DATA-13) and nothing here is sent to Mengantar until T-153.
+ * The DB CHECK also accepts the legacy "17:00" start held by drafts saved before T-234.
+ */
+export const PICKUP_SLOTS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"] as const;
 export type PickupSlot = (typeof PICKUP_SLOTS)[number];
 /** A same-day slot must start at least this far ahead. */
 export const PICKUP_LEAD_MINUTES = 90;

@@ -3,9 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 /**
  * The toolbar status facet (spec 10 §4.4): the tiles above cover the groups; this reaches every
- * single status. Choosing one navigates to that option's URL, which keeps the period.
+ * single status. Choosing one navigates to that option's URL, which keeps the period; the URL
+ * stays the state (`key` remounts the control when the page's status changes).
  */
 export function StatusSelect({
   label,
@@ -19,20 +22,20 @@ export function StatusSelect({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   return (
-    <label className="max-md:w-full">
-      <span className="sr-only">{label}</span>
-      <select
-        aria-busy={pending || undefined}
-        className="h-10 w-full rounded-lg border border-input bg-card px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:h-11 md:w-56"
-        onChange={(event) => {
-          const next = options.find((option) => option.value === event.target.value);
-          if (next) startTransition(() => router.push(next.href));
-        }}
-        defaultValue={value}
-        key={value}
-      >
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </label>
+    <Select
+      defaultValue={value}
+      key={value}
+      onValueChange={(next) => {
+        const option = options.find((candidate) => candidate.value === next);
+        if (option) startTransition(() => router.push(option.href));
+      }}
+    >
+      <SelectTrigger aria-busy={pending || undefined} aria-label={label} className="w-full font-medium md:w-56">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        {options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
   );
 }

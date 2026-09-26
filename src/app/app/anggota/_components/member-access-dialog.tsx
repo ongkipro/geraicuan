@@ -24,11 +24,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 
-type Role = keyof typeof ROLE_LABEL;
+import { type MemberRole, RoleChoice } from "./role-choice";
+
+type Role = MemberRole;
 
 export function ActionMessage({ state }: { state: MemberActionState }) {
   if (!state.message) return null;
@@ -102,19 +102,14 @@ export function MemberAccessDialog({
         <form action={roleAction} aria-busy={rolePending} className="flex flex-col gap-4" id={roleFormId} noValidate>
           <input name="attemptId" type="hidden" value={roleState.nextAttemptId ?? roleAttemptId} />
           <input name="membershipId" type="hidden" value={membershipId} />
-          <Field data-invalid={Boolean(roleState.errors?.role)}>
-            <FieldLabel htmlFor={`${roleFormId}-role`}>Peran</FieldLabel>
-            <Select disabled={busy || !manageable} name="role" onValueChange={(value) => setSelectedRole(value as Role)} value={selectedRole}>
-              <SelectTrigger aria-invalid={Boolean(roleState.errors?.role)} className="w-full" id={`${roleFormId}-role`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="OPERATOR">Operator — buat kiriman dan cetak resi</SelectItem>
-                <SelectItem value="TENANT_ADMIN">Pemilik gerai — juga laporan, pengaturan, dan anggota</SelectItem>
-              </SelectContent>
-            </Select>
-            <FieldError>{roleState.errors?.role}</FieldError>
-          </Field>
+          <RoleChoice
+            disabled={busy || !manageable}
+            error={roleState.errors?.role}
+            key={roleState.resultToken ?? "initial"}
+            legend="Peran"
+            onChange={setSelectedRole}
+            value={selectedRole}
+          />
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {changed
               ? `${name} menjadi ${ROLE_LABEL[selectedRole]}. Izin baru berlaku pada permintaan berikutnya dan dicatat di jejak audit.`

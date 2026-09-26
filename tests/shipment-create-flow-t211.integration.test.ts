@@ -50,13 +50,18 @@ describe("PR-72 product weight in kg becomes grams exactly", () => {
   });
 });
 
-describe("PR-70 pickup schedule: 09.00–18.00 WIB, ≥ 90 minutes ahead today", () => {
+describe("PR-70 pickup schedule: 08.00–17.00 WIB (T-234), ≥ 90 minutes ahead today", () => {
   it("keeps same-day slots starting at least 90 minutes from now (WIB)", () => {
     expect(jakartaDateKey(TEN_AM_WIB)).toBe("2026-09-26");
     // 10.00 now → 11.00 is only 60 minutes ahead; 12.00 is the first bookable slot.
     expect(availablePickupSlots("2026-09-26", TEN_AM_WIB)[0]).toBe("12:00");
-    expect(availablePickupSlots("2026-09-27", TEN_AM_WIB)).toHaveLength(9);
+    expect(availablePickupSlots("2026-09-27", TEN_AM_WIB)).toEqual(
+      ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"],
+    );
     expect(availablePickupSlots("2026-09-25", TEN_AM_WIB)).toEqual([]);
+    expect(pickupSlotLabel("08:00")).toBe("08.00–09.00 WIB");
+    expect(pickupSlotLabel("16:00")).toBe("16.00–17.00 WIB");
+    // A legacy pre-T-234 draft's 17:00 start still reads correctly.
     expect(pickupSlotLabel("17:00")).toBe("17.00–18.00 WIB");
   });
 
@@ -65,12 +70,20 @@ describe("PR-70 pickup schedule: 09.00–18.00 WIB, ≥ 90 minutes ahead today",
     const options = pickupDateOptions(evening);
     expect(options[0].value).toBe("2026-09-27");
     expect(pickupDateOptions(TEN_AM_WIB)).toHaveLength(7);
+    // The last slot starts 16.00: today stays until 14.30 WIB and drops a minute later.
+    expect(pickupDateOptions(new Date("2026-09-26T07:30:00.000Z"))[0].value).toBe("2026-09-26");
+    expect(availablePickupSlots("2026-09-26", new Date("2026-09-26T07:30:00.000Z"))).toEqual(["16:00"]);
+    expect(pickupDateOptions(new Date("2026-09-26T07:31:00.000Z"))[0].value).toBe("2026-09-27");
   });
 
   it("checks a date inside the window and a still-bookable slot", () => {
     expect(checkPickupSchedule("2026-09-26", "12:00", TEN_AM_WIB)).toBeNull();
     expect(checkPickupSchedule("2026-09-26", "11:00", TEN_AM_WIB)).toBe("slot");
     expect(checkPickupSchedule("2026-09-26", "18:00", TEN_AM_WIB)).toBe("slot");
+    expect(checkPickupSchedule("2026-09-27", "08:00", TEN_AM_WIB)).toBeNull();
+    expect(checkPickupSchedule("2026-09-27", "07:00", TEN_AM_WIB)).toBe("slot");
+    // 17:00 is no longer offered (16.00–17.00 is the last window).
+    expect(checkPickupSchedule("2026-09-27", "17:00", TEN_AM_WIB)).toBe("slot");
     expect(checkPickupSchedule("2026-10-03", "09:00", TEN_AM_WIB)).toBe("date");
     expect(checkPickupSchedule("2026-09-25", "09:00", TEN_AM_WIB)).toBe("date");
     expect(checkPickupSchedule("bukan-tanggal", "09:00", TEN_AM_WIB)).toBe("date");
@@ -101,8 +114,10 @@ function draftForm(extra: Record<string, string>) {
 
 describe("PR-70 server validation of the handover", () => {
   it("stores a pickup with its date and slot", () => {
-    const result = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "09:00" }), TEN_AM_WIB);
-    expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "09:00" });
+    const result = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" }), TEN_AM_WIB);
+    expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" });
+    const late = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00" }), TEN_AM_WIB);
+    expect(late.ok ? null : late.errors.pickupSlot).toMatch(/08\.00–17\.00 WIB/);
   });
 
   it("refuses a slot under 90 minutes away and an unknown type", () => {

@@ -7,6 +7,7 @@ import { PrintHistoryView, type PrintHistoryViewProps } from "@/app/app/laporan/
 import {
   activeFilterCount,
   courierPerformancePoints,
+  reportAnalyticsView,
   reportCarry,
   reportExportHref,
 } from "@/app/app/laporan/pengiriman/report-logic";
@@ -14,6 +15,9 @@ import { ShipmentReportView, type ShipmentReportViewProps } from "@/app/app/lapo
 import { pageWindow } from "@/app/app/laporan/_components/report-pagination";
 import type { ShipmentReportRow } from "@/db/shipment-report-repository";
 import type { PrintHistoryRow } from "@/db/label-print-repository";
+import { parseAnalyticsRange } from "@/lib/analytics-range";
+import { parseAreaRegion } from "@/lib/label-format";
+import { formatRate, groupRegions, groupRoutes, returnRate, UNKNOWN_REGION_LABEL } from "@/lib/shipment-report-analytics";
 
 /**
  * T-216 (UI v3): Laporan pengiriman and Riwayat cetak resi — pure logic and key markup of the
@@ -43,10 +47,28 @@ function reportRow(index: number, overrides: Partial<ShipmentReportRow> = {}): S
 
 const range = { endDate: "2026-09-25", periodLabel: "27 Agu 2026 – 25 Sep 2026", presetId: "30-hari" as const, startDate: "2026-08-27" };
 
+const areaRows = [
+  { areaLabel: "PANAKKUKANG, PANAKKUKANG, KOTA MAKASSAR, SULAWESI SELATAN, 90231", deliveredCount: 3, outletId: "o-1", outletName: "Gudang Jakarta Barat", returnedCount: 1, shipmentCount: 5 },
+  { areaLabel: "Panaikang, Panakkukang, Kota Makassar, Sulawesi Selatan, 90231", deliveredCount: 1, outletId: "o-2", outletName: "Kios Tanah Abang", returnedCount: 1, shipmentCount: 2 },
+  { areaLabel: "Kebon Jeruk, Kebon Jeruk, Kota Jakarta Barat, DKI Jakarta, 11530", deliveredCount: 0, outletId: "o-1", outletName: "Gudang Jakarta Barat", returnedCount: 0, shipmentCount: 3 },
+  { areaLabel: "Kecamatan 9, Kota 9", deliveredCount: 0, outletId: "o-1", outletName: "Gudang Jakarta Barat", returnedCount: 0, shipmentCount: 1 },
+  ...Array.from({ length: 11 }, (_, index) => ({
+    areaLabel: `Area ${index}, Distrik ${index}, Kota Contoh ${index}, Provinsi Contoh ${index}, 1000${index % 10}`,
+    deliveredCount: 0, outletId: "o-1", outletName: "Gudang Jakarta Barat", returnedCount: 0, shipmentCount: 1,
+  })),
+];
+const analyticsRange = parseAnalyticsRange({ rentang: "kustom", dari: "2026-09-20", sampai: "2026-09-25", tz: "Asia/Jakarta" }, new Date("2026-09-26T00:00:00Z"));
+const analytics = reportAnalyticsView(analyticsRange, {
+  areas: areaRows,
+  kpis: { codDisbursementEstimateIdr: 201_762, codOrderCount: 3, codValueIdr: 666_480, deliveredCount: 4, failedCount: 1, inProgressCount: 20, returnedCount: 2, shipmentCount: 27 },
+  trend: [{ codCount: 2, codValueIdr: 444_320, key: "2026-09-22", nonCodCount: 1 }, { codCount: 1, codValueIdr: 222_160, key: "2026-09-25", nonCodCount: 0 }],
+});
+
 function reportProps(overrides: Partial<ShipmentReportViewProps> = {}): ShipmentReportViewProps {
   const carry = { kurir: "JNE", rentang: "30-hari", tz: "Asia/Jakarta" };
   return {
     activeCount: 1,
+    analytics,
     carry,
     data: {
       generatedAt: new Date(),
@@ -54,7 +76,7 @@ function reportProps(overrides: Partial<ShipmentReportViewProps> = {}): Shipment
       pageSize: 20,
       rows: [reportRow(1), reportRow(2, { codDisbursementEstimateIdr: null, codFeeIdr: null, courier: null, isCod: false, paymentMethod: "NON_COD", providerService: null, shippingCostIdr: null, status: "DRAFT" })],
       totals: {
-        byCourier: [{ codDisbursementEstimateIdr: 95_000, codFeeIdr: 2_979, courier: "JNE", shipmentCount: 1, shippingCostIdr: 21_000 }],
+        byCourier: [{ codDisbursementEstimateIdr: 95_000, codFeeIdr: 2_979, courier: "JNE", deliveredCount: 6, returnedCount: 2, shipmentCount: 10, shippingCostIdr: 21_000 }],
         byLifecycle: [{ shipmentCount: 1, status: "ISSUED" }, { shipmentCount: 1, status: "DRAFT" }],
         shipmentCount: 45,
       },
@@ -74,7 +96,7 @@ function reportProps(overrides: Partial<ShipmentReportViewProps> = {}): Shipment
 const render = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 const filledButtons = (html: string) => (html.match(/data-slot="button"[^>]*data-variant="default"|data-variant="default"[^>]*data-slot="button"/g) ?? []).length;
 const tableHeaders = (html: string, label: string) => {
-  const start = html.indexOf(`<table data-slot="table" class="w-full caption-bottom text-sm tabular-nums" aria-label="${label}"`);
+  const start = html.search(new RegExp(`<table data-slot="table" class="[^"]*" aria-label="${label}"`));
   const table = html.slice(start, html.indexOf("</table>", start));
   return [...table.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map(([, body]) => body.replace(/<[^>]+>/g, ""));
 };
@@ -104,13 +126,56 @@ describe("Laporan pengiriman logic", () => {
   });
 });
 
+describe("Laporan pengiriman analytics logic (T-235)", () => {
+  it("reads city and province from the end of an area label, unknown when it cannot", () => {
+    expect(parseAreaRegion("PANAKKUKANG, PANAKKUKANG, KOTA MAKASSAR, SULAWESI SELATAN, 90231")).toEqual({
+      city: { key: "KOTA MAKASSAR", name: "Kota Makassar" },
+      province: { key: "SULAWESI SELATAN", name: "Sulawesi Selatan" },
+    });
+    // A comma inside the subdistrict never shifts the result; no postal code is fine.
+    expect(parseAreaRegion("20 Ilir D. I, Ilir Timur I, Kota Palembang, Sumatera Selatan, 30128")?.city.name).toBe("Kota Palembang");
+    expect(parseAreaRegion("Kel, A, B, Kec, Kota  Bandung , Jawa Barat")?.city.key).toBe("KOTA BANDUNG");
+    expect(parseAreaRegion("DKI JAKARTA, x, KOTA JAKARTA BARAT, DKI JAKARTA")?.province.name).toBe("DKI Jakarta");
+    for (const label of ["Kecamatan 4, Kota 4", "Kota Bandung, 40191", "", " , , 12345", null]) {
+      expect(parseAreaRegion(label), String(label)).toBeNull();
+    }
+  });
+
+  it("groups wilayah casing-blind, unknown last, and sums to the cohort; routes skip the unknown", () => {
+    const { cities, provinces } = groupRegions(areaRows);
+    expect(provinces[0]).toMatchObject({ deliveredCount: 4, name: "Sulawesi Selatan", returnedCount: 2, shipmentCount: 7 });
+    expect(provinces.at(-1)?.name).toBe(UNKNOWN_REGION_LABEL);
+    expect(provinces.reduce((sum, row) => sum + row.shipmentCount, 0)).toBe(22);
+    expect(cities.reduce((sum, row) => sum + row.shipmentCount, 0)).toBe(22);
+    expect(cities[0]).toMatchObject({ name: "Kota Makassar", province: "Sulawesi Selatan", shipmentCount: 7 });
+    const routes = groupRoutes(areaRows);
+    expect(routes).toHaveLength(5);
+    expect(routes[0]).toMatchObject({ city: "Kota Makassar", outletName: "Gudang Jakarta Barat", shipmentCount: 5 });
+    expect(routes.some((route) => route.city === UNKNOWN_REGION_LABEL)).toBe(false);
+  });
+
+  it("formats rates with one decimal and a dash without a denominator", () => {
+    expect(formatRate(returnRate({ deliveredCount: 2, returnedCount: 1 }))).toBe("33,3%");
+    expect(formatRate(returnRate({ deliveredCount: 0, returnedCount: 0 }))).toBe("—");
+  });
+
+  it("fills every day of the range so a quiet day is a zero, not a gap", () => {
+    expect(analytics.trend.map((point) => [point.cod, point.nonCod])).toEqual([[0, 0], [0, 0], [2, 1], [0, 0], [0, 0], [1, 0]]);
+    expect(analytics.granularity).toBe("harian");
+  });
+});
+
 describe("Laporan pengiriman view", () => {
   it("renders the report with an outline export, seven list columns and pagination that keeps the filters", () => {
     const html = render(createElement(ShipmentReportView, reportProps()));
     expect(filledButtons(html)).toBe(0);
     expect(html).toContain('href="/app/laporan/pengiriman/export.csv?kurir=JNE&amp;rentang=30-hari&amp;tz=Asia%2FJakarta"');
     expect(tableHeaders(html, "Daftar kiriman")).toEqual(["Nomor", "Dibuat", "Penerima", "Kurir/Layanan", "Status", "Pembayaran", "Biaya Mengantar"]);
-    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "Ongkir Mengantar", "Biaya COD", "Estimasi cair"]);
+    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Ongkir Mengantar", "Biaya COD", "Estimasi cair"]);
+    // JNE: 6 of 10 delivered; 2 of 8 finished returned. The logo alone names the courier.
+    expect(html).toContain("60,0%");
+    expect(html).toContain("25,0%");
+    expect(html).toContain('alt="JNE"');
     // Area as "Kecamatan, Kota" without the postal code or province.
     expect(html).toContain("Panakkukang, Kota Makassar");
     expect(html).not.toContain("90231");
@@ -119,6 +184,47 @@ describe("Laporan pengiriman view", () => {
     // No slop lines from the old report.
     for (const slop of ["baris", "Geser", "diurutkan"]) expect(html).not.toContain(slop);
     expect(html).toContain('data-slot="record-list"');
+  });
+
+  it("renders the T-235 KPI strip, trend, status distribution, wilayah and routes", () => {
+    const html = render(createElement(ShipmentReportView, reportProps()));
+    for (const title of ["Ringkasan", "Total kiriman", "Terkirim", "Retur", "Masih berjalan", "Nilai COD", "Estimasi cair", "Tren harian", "Distribusi status", "Wilayah tujuan", "Rute teratas"]) {
+      expect(html, title).toContain(title);
+    }
+    // Terkirim 4 of 27; Retur 2 of 6 finished (4 + 2).
+    expect(html).toContain("14,8% dari 27 kiriman");
+    expect(html).toContain("33,3% dari 6 selesai");
+    expect(html).toMatch(/Rp\s666\.480/);
+    // Tabs are real tabs: a labelled tablist, keyboard-reachable triggers.
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('aria-label="Tampilan tren"');
+    expect(html).toContain("Nilai COD per hari");
+    expect(html).toContain('aria-label="Kelompok wilayah"');
+    expect(html).toContain("Per kota");
+    // Trend data table: every day of the range, newest first.
+    expect(tableHeaders(html, "Data tren")).toEqual(["Tanggal", "COD", "Non-COD", "Nilai COD"]);
+    expect(html).toContain("Lihat tabel data tren");
+    // Status distribution replaces the old table, keeping badge, count and share.
+    expect(html).not.toContain("Total per status");
+    expect(html).toContain('aria-label="Distribusi status"');
+    expect(html).toMatch(/data-status="ISSUED"[\s\S]*?50,0%/);
+    // Wilayah: top 10 visible, the rest behind the disclosure, unknown named.
+    expect(tableHeaders(html, "Kiriman per provinsi")).toEqual(["Wilayah", "Kiriman", "Terkirim", "Retur", "% retur"]);
+    expect(html).toContain("Tampilkan semua (14 provinsi)");
+    expect(html).toContain(UNKNOWN_REGION_LABEL);
+    expect(html).toContain("Sulawesi Selatan");
+    // Routes: outlet → city.
+    expect(tableHeaders(html, "Rute teratas")).toEqual(["Rute", "Kiriman", "% terkirim", "% retur"]);
+    expect(html).toContain("Kota Makassar");
+    expect(filledButtons(html)).toBe(0);
+  });
+
+  it("keeps the totals and the list when the analytics read failed", () => {
+    const html = render(createElement(ShipmentReportView, reportProps({ analytics: null })));
+    expect(html).toContain("Ringkasan dan analitik tidak dapat dimuat");
+    expect(html).toContain("Total per kurir");
+    expect(html).toContain("Daftar kiriman");
+    expect(html).not.toContain("Wilayah tujuan");
   });
 
   it("degrades only the performance card when its read failed", () => {

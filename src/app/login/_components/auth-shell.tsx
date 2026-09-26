@@ -27,17 +27,9 @@ function AuthVisualPanel({ platform }: { platform: boolean }) {
       )}
       data-slot="auth-visual"
     >
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "flex size-10 items-center justify-center rounded-lg bg-primary-foreground text-sm font-bold",
-            platform ? "text-foreground" : "text-primary",
-          )}
-        >
-          GC
-        </span>
-        <span className="text-lg font-bold">GeraiCUAN</span>
+      <div className="flex items-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img alt="GeraiCUAN" className="h-11 w-auto" height={44} src="/brand/geraicuan-logo-white.svg" width={172} />
       </div>
       <div className="flex flex-1 flex-col justify-center gap-8">
         <div className="flex flex-col gap-4">
@@ -121,16 +113,15 @@ export function AuthShell({
           className={cn("flex items-center gap-3 rounded-lg", platform ? "text-background" : "text-foreground", visual && "lg:hidden")}
           href={homeHref ?? "/"}
         >
-          <span
-            aria-hidden="true"
-            className={cn(
-              "flex size-10 items-center justify-center rounded-lg text-sm font-bold",
-              platform ? "bg-background text-foreground" : "bg-foreground text-background",
-            )}
-          >
-            GC
-          </span>
-          <span className="text-lg font-bold">GeraiCUAN</span>
+          {/* The owner's logo: white on the dark platform ground, full colour on the light gerai ground. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt="GeraiCUAN"
+            className="h-10 w-auto"
+            height={40}
+            src={platform ? "/brand/geraicuan-logo-white.svg" : "/brand/geraicuan-logo-color.svg"}
+            width={156}
+          />
         </Link>
         <span
           className={cn(

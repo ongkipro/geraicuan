@@ -31,10 +31,12 @@ import {
 } from "@/app/app/actions";
 import { searchMengantarDestinationAreas } from "@/app/app/location-actions";
 import { SearchPicker } from "@/app/app/pengiriman/_components/search-picker";
+import { OptionCard } from "@/components/app/option-card";
 import { Button } from "@/components/ui/button";
 import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/character-class-input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { MengantarDestinationAreaOption } from "@/lib/mengantar-locations";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
 import {
@@ -92,35 +94,6 @@ function FormField({ children, error, htmlFor, label, required = false }: {
 }
 
 const PICKUP_VEHICLE_ICONS: Record<PickupVehicle, typeof Truck> = { MOBIL: Car, MOTOR: Motorbike, TRUK: Truck };
-
-/** A selectable option card (handover type, pickup vehicle, payment method): 1px input border; selected = accent + 2px primary. */
-function OptionCard({ checked, children, description, icon, name, onSelect, value }: {
-  checked: boolean;
-  children: ReactNode;
-  description?: ReactNode;
-  icon?: ReactNode;
-  name: string;
-  onSelect: () => void;
-  value: string;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start justify-between gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-input has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
-        checked && "border-2 border-primary bg-accent hover:border-primary",
-      )}
-    >
-      <span className="flex flex-col gap-1">
-        <span className={cn("flex flex-wrap items-center gap-2 text-base font-bold", checked ? "text-accent-foreground" : "text-foreground")}>
-          {icon}
-          {children}
-        </span>
-        {description ? <span className={cn("text-xs", checked ? "text-accent-foreground" : "text-muted-foreground")}>{description}</span> : null}
-      </span>
-      <input checked={checked} className="mt-1 size-4 shrink-0 accent-primary" name={name} onChange={onSelect} type="radio" value={value} />
-    </label>
-  );
-}
 
 function effectivePickup(outlets: FlowOutlet[], outletId: string, pickupAddressId: string) {
   const points = outlets.find((outlet) => outlet.id === outletId)?.pickupPoints ?? [];
@@ -461,34 +434,36 @@ export function ShipmentCreateForm({
               <div className="flex flex-col gap-1.5">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField error={errors.pickupDate} htmlFor="pickupDate" label="Tanggal penjemputan" required>
-                    <div className="relative">
-                      <CalendarDays aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <select
+                    <Select onValueChange={setPickupDate} value={pickupDate}>
+                      <SelectTrigger
                         aria-describedby={errors.pickupDate ? "pickupDate-error" : undefined}
                         aria-invalid={Boolean(errors.pickupDate)}
-                        className="h-10 w-full appearance-none rounded-lg border border-input bg-card pr-3 pl-9 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 max-md:h-11"
+                        className="w-full text-left *:data-[slot=select-value]:flex-1"
                         id="pickupDate"
-                        onChange={(event) => setPickupDate(event.target.value)}
-                        value={pickupDate}
                       >
-                        {dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </div>
+                        <CalendarDays aria-hidden="true" className="text-muted-foreground" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper">
+                        {dateOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </FormField>
                   <FormField error={errors.pickupSlot} htmlFor="pickupSlot" label="Jam penjemputan" required>
-                    <div className="relative">
-                      <Clock aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <select
+                    <Select onValueChange={setPickupSlot} value={effectiveSlot}>
+                      <SelectTrigger
                         aria-describedby={errors.pickupSlot ? "pickupSlot-error" : undefined}
                         aria-invalid={Boolean(errors.pickupSlot)}
-                        className="h-10 w-full appearance-none rounded-lg border border-input bg-card pr-3 pl-9 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 max-md:h-11"
+                        className="w-full text-left *:data-[slot=select-value]:flex-1"
                         id="pickupSlot"
-                        onChange={(event) => setPickupSlot(event.target.value)}
-                        value={effectiveSlot}
                       >
-                        {slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}</option>)}
-                      </select>
-                    </div>
+                        <Clock aria-hidden="true" className="text-muted-foreground" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper">
+                        {slots.map((slot) => <SelectItem key={slot} value={slot}>{pickupSlotLabel(slot)}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </FormField>
                 </div>
                 <fieldset className="mt-2.5 flex flex-col gap-2">
@@ -514,7 +489,7 @@ export function ShipmentCreateForm({
                           name="pickupVehicleChoice"
                           onSelect={() => setPickupVehicle(vehicle)}
                           value={vehicle}
-                        >
+                      >
                           {PICKUP_VEHICLE_LABELS[vehicle]}
                         </OptionCard>
                       );
@@ -792,7 +767,7 @@ export function ShipmentCreateForm({
                       <div className="flex flex-col gap-1.5 md:col-span-6">
                         <label className="text-sm font-medium" htmlFor={`product-${index}-name`}>Nama produk<span className="sr-only">{suffix}</span><Required /></label>
                         <CharacterClassInput
-                          aria-invalid={first && Boolean(errors.packageContent)}
+                        aria-invalid={first && Boolean(errors.packageContent)}
                           autoComplete="off"
                           characterClass="FREE_TEXT"
                           className={controlClass}
@@ -805,7 +780,7 @@ export function ShipmentCreateForm({
                       <div className="flex flex-col gap-1.5 md:col-span-2">
                         <label className="text-sm font-medium" htmlFor={`product-${index}-quantity`}>Jumlah<span className="sr-only">{suffix}</span><Required /></label>
                         <CharacterClassInput
-                          aria-invalid={first && Boolean(errors.packageQuantity)}
+                        aria-invalid={first && Boolean(errors.packageQuantity)}
                           characterClass="NUMERIC_INTEGER"
                           className={cn(controlClass, "tabular-nums")}
                           id={`product-${index}-quantity`}
@@ -895,7 +870,7 @@ export function ShipmentCreateForm({
                       <div className="flex flex-col gap-1" key={field}>
                         <label className="text-xs text-muted-foreground" htmlFor={field}>{label}</label>
                         <CharacterClassInput
-                          aria-invalid={Boolean(errors[field])}
+                        aria-invalid={Boolean(errors[field])}
                           characterClass="NUMERIC_INTEGER"
                           className={cn(controlClass, "tabular-nums")}
                           id={field}

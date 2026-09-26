@@ -833,9 +833,11 @@ export const shipmentDrafts = pgTable(
       "shipment_drafts_handover_type_known",
       sql`handover_type IS NULL OR handover_type IN ('PICKUP', 'DROP_OFF')`,
     ),
+    // T-234 (0061): the app offers 08:00–16:00 starts; 17:00 is legacy (drafts saved before
+    // T-234 under 0054's 09–17) and stays valid so no existing row breaks.
     check(
       "shipment_drafts_pickup_slot_valid",
-      sql`pickup_slot IS NULL OR pickup_slot ~ '^(09|1[0-7]):00$'`,
+      sql`pickup_slot IS NULL OR pickup_slot ~ '^(0[89]|1[0-7]):00$'`,
     ),
     check(
       "shipment_drafts_pickup_schedule_complete",

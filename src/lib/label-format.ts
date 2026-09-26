@@ -118,3 +118,23 @@ export function formatPostalCode(areaLabel: string | null) {
   const last = parts[parts.length - 1];
   return last && /^\d{5}$/.test(last) ? last : null;
 }
+
+/**
+ * T-235: city and province from a Mengantar area label ("subdistrict, district, city, province, zip"),
+ * counted from the end exactly as `formatDistrictCity` does — drop a trailing postal code, the last
+ * part is the province and the one before it the city. A label with fewer than three area parts
+ * cannot say which part is which, so it returns `null` ("Wilayah tidak dikenal"). `key` folds case
+ * and spacing so "KOTA BANDUNG" and "Kota Bandung" are one wilayah; `name` is for display.
+ */
+export function parseAreaRegion(areaLabel: string | null | undefined): {
+  city: { key: string; name: string };
+  province: { key: string; name: string };
+} | null {
+  if (!areaLabel) return null;
+  const parts = areaLabel.split(",").map((part) => part.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (parts.length > 0 && /^\d{5}$/.test(parts[parts.length - 1])) parts.pop();
+  if (parts.length < 3) return null;
+  const [city, province] = parts.slice(-2);
+  const entry = (name: string) => ({ key: name.toLocaleUpperCase("id-ID"), name: areaDisplayCase(name) });
+  return { city: entry(city), province: entry(province) };
+}

@@ -1,4 +1,5 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Card } from "@/components/ui/card";
 
@@ -29,12 +30,15 @@ export function KpiCard({
   delta,
   icon: Icon,
   label,
+  note,
   value,
 }: {
   comparison?: string;
   delta?: KpiDelta;
   icon?: LucideIcon;
   label: string;
+  /** One 13px line under the value that says what it counts (a rate and its denominator). */
+  note?: ReactNode;
   value: string | number;
 }) {
   const words = delta ? deltaWords(delta) : null;
@@ -51,6 +55,7 @@ export function KpiCard({
       <p className="px-(--card-spacing) text-3xl font-bold tabular-nums text-foreground">
         {typeof value === "number" ? number.format(value) : value}
       </p>
+      {note ? <p className="px-(--card-spacing) text-xs text-muted-foreground">{note}</p> : null}
       {words ? (
         <div className="flex flex-wrap items-center gap-2 px-(--card-spacing)">
           <span className="inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2.5 text-xs font-medium text-foreground">

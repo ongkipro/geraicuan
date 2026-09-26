@@ -4905,3 +4905,22 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 
 - **What.** Owner palette (navy `#0B2D4F`, green `#10B981`, slate neutrals) mapped to tokens under the 40+ floor: navy primary (white 13.98:1), green as accent only (white on it is 2.54:1), `#047857` for green text, `#059669` ring, `#7B8AA0` input border, `#B45309` warning text, `#B91C1C` danger/destructive, owner `#94A3B8` kept off text. "CUAN" in the wordmark uses `#34D399` on navy. Layout, sizes and anatomy unchanged. Dasbor courier recap shows logos only (owner request). Spec 10 §2.0.
 - **Checks.** Contrast ratios computed in sRGB; screened 13 tenant + 2 platform routes at 1440/390 (0 overflow, 0 low-contrast text); tsc 0; lint 0; full suite 114 files / 1,328 passed on the isolated DB.
+
+## 2026-09-26 — T-234 shadcn Selects, pickup 08.00–17.00, role cards
+
+- **What.** No native `<select>` remains: pickup date/slot, Histori status facet and the status-pull outlet use the shadcn Select; Anggota role (invite and Kelola akses) is two radio option cards. Pickup slots start 08:00–16:00 (owner); migration 0061 widens the slot CHECK to a superset so pre-T-234 17:00 rows stay valid (D-25). Mengantar's documented window stays 09:00–18:00 (unverified); nothing is sent until T-153.
+- **Gotcha.** Radix Select registers a `reset` listener on its form and snaps back to its first value when React resets the form after a `<form action>`; the status-pull outlet Select therefore sits outside the form and posts through a hidden input (same as the T-229 Switch). Buat kiriman already posts through hidden inputs and submits via `onSubmit`, so no reset occurs there. Role radios are keyed on the result token so the reset cannot revert them.
+- **Checks.** Related tests 10 files / 124 passed on the iso DB; `verify-migration-upgrade` through 0061 (temporary DB created and dropped); 0061 applied to iso and dev DBs; tsc 0; lint 0; browser at 1440/390 on the dev app (no shipment or invite submitted).
+
+## 2026-09-26 — T-235 Laporan pengiriman analytics
+
+- `loadShipmentReportAnalytics` reuses `reportJoins` + `reportFilter`, so KPIs, trend, wilayah and routes always describe the list's cohort and follow every filter; outcome predicates are the Dasbor's (`DELIVERED`, `RTS_STATUSES`, `FAILED`), so Terkirim / Retur / Masih berjalan match SHP-OUTCOME-* (verified 134 / 45 / 18 / 65 on both pages).
+- Wilayah is grouped in SQL by raw `destination_area_label`, then parsed once in TypeScript (`parseAreaRegion`, counted from the end like `formatDistrictCity`, casing-blind key) so the report can never read a label differently from the list. Labels with < 3 area parts → "Wilayah tidak dikenal", listed last; routes into it are dropped.
+- Gotchas: the trend groups by ordinal (`sql`3``, the select's third key: `codCount`, `codValueIdr`, `key`) as `loadShipmentTrend` does, because the bucket expression binds the timezone as a parameter; reordering the select keys breaks it (the DB test would catch it). Intl currency output contains a no-break space, so render tests match `Rp\s…`. Radix Tabs render only the active panel server-side. At 1024 the 7-column courier table overflowed by 8 px; it uses the record list below xl.
+- Evidence: shipment-report + report-pages-render 32/32 on the iso DB; full suite 1,342 passed / 4 failed outside this change (auth shell visual panel, registration security cases); tsc 0; lint 0; browser 1440/1024/390 screenshots in the session scratchpad `t235/`.
+
+
+## 2026-09-26 — Owner logo in the shell
+
+- **What.** The owner's logo (PNG from the owner's Mac, copied over Tailscale) traced to SVG in pure Python (PIL mask → contour → RDP): `public/brand/geraicuan-logo-white.svg` (top bar, auth panel), `-logo-color.svg` (light grounds), `-mark-white.svg` (focused Buat kiriman bar on phones), `-mark-color.svg` (also `src/app/icon.svg` favicon). The logo's blue half is 1.82:1 on the Mengantar primary, so the bar uses the all-white variant.
+- **Checks.** Full suite 115 files / 1,346 passed on the isolated DB (auth test now allows only `/brand/` images); header checked at 390 and 1440.

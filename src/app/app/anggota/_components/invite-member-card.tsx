@@ -1,18 +1,24 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { inviteMemberAction } from "@/app/app/anggota/actions";
 import { DataCard } from "@/components/app/data-card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { ActionMessage } from "./member-access-dialog";
+import { type MemberRole, RoleChoice } from "./role-choice";
 
 const FORM_ID = "member-invite-form";
+
+/** The invite's "Peran awal"; remounted per result so it restarts from the submitted role. */
+function InviteRole({ disabled, error, initial }: { disabled: boolean; error?: string; initial: MemberRole }) {
+  const [role, setRole] = useState<MemberRole>(initial);
+  return <RoleChoice disabled={disabled} error={error} legend="Peran awal" onChange={setRole} value={role} />;
+}
 
 /** Undang anggota: its submit sits in the card footer, tied to the form by `form=`. */
 export function InviteMemberCard({ attemptId }: { attemptId: string }) {
@@ -60,24 +66,12 @@ export function InviteMemberCard({ attemptId }: { attemptId: string }) {
           <FieldDescription id="member-invite-email-help">Akun aktif yang belum menjadi anggota gerai lain.</FieldDescription>
           <FieldError id="member-invite-email-error">{emailError}</FieldError>
         </Field>
-        <Field data-invalid={Boolean(roleError)}>
-          <FieldLabel htmlFor="member-invite-role">Peran awal</FieldLabel>
-          <Select
-            defaultValue={state.values?.role ?? "OPERATOR"}
-            disabled={pending}
-            key={`${state.resultToken ?? "initial"}-role`}
-            name="role"
-          >
-            <SelectTrigger aria-invalid={Boolean(roleError)} className="w-full" id="member-invite-role">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="OPERATOR">Operator — buat kiriman dan cetak resi</SelectItem>
-              <SelectItem value="TENANT_ADMIN">Pemilik gerai — juga laporan, pengaturan, dan anggota</SelectItem>
-            </SelectContent>
-          </Select>
-          <FieldError>{roleError}</FieldError>
-        </Field>
+        <InviteRole
+          disabled={pending}
+          error={roleError}
+          initial={state.values?.role === "TENANT_ADMIN" ? "TENANT_ADMIN" : "OPERATOR"}
+          key={`${state.resultToken ?? "initial"}-role`}
+        />
         <div className="outline-none" ref={resultRef} tabIndex={-1}>
           <ActionMessage state={state} />
         </div>

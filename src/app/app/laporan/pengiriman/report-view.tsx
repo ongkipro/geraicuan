@@ -2,8 +2,9 @@ import { CircleAlert, Download, FileSpreadsheet, SearchX } from "lucide-react";
 import Link from "next/link";
 
 import { AdvancedFilters } from "@/app/app/laporan/pengiriman/advanced-filters";
+import { RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
 import { CourierPerformanceChart, type CourierPerformancePoint } from "@/app/app/laporan/pengiriman/courier-performance-chart";
-import { REPORT_PATH } from "@/app/app/laporan/pengiriman/report-logic";
+import { REPORT_PATH, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
 import { FilterSelect } from "@/app/app/laporan/_components/filter-select";
 import { ReportPagination } from "@/app/app/laporan/_components/report-pagination";
 import { CourierLogo } from "@/components/app/courier-logo";
@@ -27,11 +28,14 @@ import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import { shipmentReportHref } from "@/lib/shipment-report";
+import { deliveredRate, formatRate, returnRate } from "@/lib/shipment-report-analytics";
 
 type Option = { label: string; value: string };
 
 export type ShipmentReportViewProps = {
   activeCount: number;
+  /** T-235 analytics; `null` when that read failed — the totals and the list stay. */
+  analytics: ReportAnalyticsView | null;
   carry: Record<string, string>;
   data: ShipmentReportPage;
   exportHref: string;
@@ -56,6 +60,7 @@ function carrierName(courier: string | null) {
 /** Spec 17 §UX-v3.6 Laporan pengiriman (ref `laporan-pengiriman.html`). */
 export function ShipmentReportView({
   activeCount,
+  analytics,
   carry,
   data,
   exportHref,
@@ -128,11 +133,35 @@ export function ShipmentReportView({
         </DataCard>
       ) : (
         <>
-          <div className="grid min-w-0 gap-6 xl:grid-cols-5">
-            <div className="min-w-0 xl:col-span-3"><CourierTotals totals={data.totals.byCourier} /></div>
-            <div className="min-w-0 xl:col-span-2"><StatusTotals totals={data.totals.byLifecycle} /></div>
-          </div>
+          {analytics === null ? (
+            <Alert role="alert" variant="destructive">
+              <CircleAlert aria-hidden="true" />
+              <AlertTitle>Ringkasan dan analitik tidak dapat dimuat</AlertTitle>
+              <AlertDescription>Total per kurir dan daftar kiriman di bawah tetap lengkap. Muat ulang halaman untuk mencoba lagi.</AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <section aria-labelledby="ringkasan-laporan" className="grid gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-base font-semibold" id="ringkasan-laporan">Ringkasan</h2>
+                  <ReportKpiHelp />
+                </div>
+                <ReportKpiStrip kpis={analytics.kpis} />
+              </section>
+              <div className="grid min-w-0 gap-6 xl:grid-cols-5">
+                <div className="min-w-0 xl:col-span-3"><ReportTrendCard granularity={analytics.granularity} trend={analytics.trend} /></div>
+                <div className="min-w-0 xl:col-span-2"><StatusDistribution total={count} totals={data.totals.byLifecycle} /></div>
+              </div>
+            </>
+          )}
+          <CourierTotals totals={data.totals.byCourier} />
           <CourierPerformance points={performance} />
+          {analytics === null ? null : (
+            <div className="grid min-w-0 gap-6 xl:grid-cols-5">
+              <div className="min-w-0 xl:col-span-3"><RegionCard regions={analytics.regions} /></div>
+              <div className="min-w-0 xl:col-span-2"><RoutesCard routes={analytics.routes} /></div>
+            </div>
+          )}
           <ShipmentRows carry={carry} count={count} data={data} />
         </>
       )}
@@ -147,11 +176,13 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
         <HelpHint label="Penjelasan total per kurir">
           <p>Ongkir dan biaya COD adalah tagihan Mengantar per kiriman.</p>
           <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dan biaya COD. Jumlah pasti mengikuti pencairan Mengantar.</p>
+          <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman yang selesai (terkirim + retur).</p>
         </HelpHint>
       )}
       title="Total per kurir"
     >
-      <ul aria-label="Total per kurir" className="divide-y md:hidden">
+      {/* T-235: seven columns fit only from xl; below it each courier is a short record. */}
+      <ul aria-label="Total per kurir" className="divide-y xl:hidden">
         {totals.map((total) => (
           <li className="grid gap-1 py-3 first:pt-0 last:pb-0" key={total.courier ?? "tanpa-kurir"}>
             <div className="flex items-center justify-between gap-3">
@@ -162,6 +193,9 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
               <span className="shrink-0 tabular-nums">{number.format(total.shipmentCount)} kiriman</span>
             </div>
             <p className="text-xs text-muted-foreground">
+              Terkirim {formatRate(deliveredRate(total))} · Retur {formatRate(returnRate(total))}
+            </p>
+            <p className="text-xs text-muted-foreground">
               Ongkir Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
             </p>
             <div className="flex items-baseline justify-between gap-3">
@@ -171,12 +205,14 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
           </li>
         ))}
       </ul>
-      <div className="max-md:hidden">
+      <div className="max-xl:hidden">
       <Table aria-label="Total per kurir">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="pr-2 pl-0">Kurir</TableHead>
             <TableHead className="px-2 text-right">Kiriman</TableHead>
+            <TableHead className="px-2 text-right">% terkirim</TableHead>
+            <TableHead className="px-2 text-right">% retur</TableHead>
             <TableHead className="px-2 text-right">Ongkir Mengantar</TableHead>
             <TableHead className="px-2 text-right">Biaya COD</TableHead>
             <TableHead className="pr-0 pl-2 text-right">Estimasi cair</TableHead>
@@ -191,6 +227,8 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
                 </span>
               </TableCell>
               <TableCell className="px-2 text-right">{number.format(total.shipmentCount)}</TableCell>
+              <TableCell className="px-2 text-right tabular-nums">{formatRate(deliveredRate(total))}</TableCell>
+              <TableCell className="px-2 text-right tabular-nums">{formatRate(returnRate(total))}</TableCell>
               <TableCell className="px-2 text-right"><Money amount={total.shippingCostIdr} /></TableCell>
               <TableCell className="px-2 text-right"><Money amount={total.codFeeIdr} /></TableCell>
               <TableCell className="pr-0 pl-2 text-right font-semibold"><Money amount={total.codDisbursementEstimateIdr} /></TableCell>
@@ -199,31 +237,6 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
         </TableBody>
       </Table>
       </div>
-    </DataCard>
-  );
-}
-
-function StatusTotals({ totals }: { totals: ShipmentReportPage["totals"]["byLifecycle"] }) {
-  return (
-    <DataCard title="Total per status">
-      <Table aria-label="Total per status">
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="pl-0">Status</TableHead>
-            <TableHead className="pr-0 text-right">Kiriman</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {totals.map((total) => {
-            return (
-              <TableRow className="hover:bg-transparent" key={total.status}>
-                <TableCell className="pl-0"><ShipmentStatusBadge status={total.status} /></TableCell>
-                <TableCell className="pr-0 text-right font-semibold">{number.format(total.shipmentCount)}</TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
     </DataCard>
   );
 }

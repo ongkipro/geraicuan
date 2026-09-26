@@ -6,6 +6,7 @@ import { AnalyticsExportLimitError } from "@/db/analytics-repository";
 import * as schema from "@/db/schema";
 import { loadShipmentQueuePage } from "@/db/shipment-queue-repository";
 import {
+  loadShipmentReportAnalytics,
   loadShipmentReportExport,
   loadShipmentReportPage,
 } from "@/db/shipment-report-repository";
@@ -14,6 +15,7 @@ import { serializeShipmentReportCsv } from "@/lib/analytics-export";
 import { EMPTY_ANALYTICS_FILTERS } from "@/lib/analytics-filters";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { SHIPMENT_REPORT_COLUMNS } from "@/lib/shipment-report";
+import { groupRegions, groupRoutes, returnRate, UNKNOWN_REGION_LABEL } from "@/lib/shipment-report-analytics";
 
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
@@ -59,6 +61,8 @@ function uuid(prefix: string, sequence: number) {
 }
 
 type Fixture = {
+  /** The stored destination area label; the default has no city/province (an unknown wilayah). */
+  areaLabel?: string;
   cod?: boolean;
   codAmountIdr?: number | null;
   /** Mengantar's settlement shipping basis, when it differs from `price`. */
@@ -78,10 +82,11 @@ type Fixture = {
 // Two couriers, one shipment that never reached a batch, one outside the
 // period, one in the second outlet and one owned by the other tenant.
 const fixtures: Fixture[] = [
-  { courier: "JNE", createdAt: "2026-09-02T03:00:00Z", printedCount: 2, sequence: 1, shippingAmountIdr: 12_000, staleCodTotals: true, status: "ISSUED" },
+  { areaLabel: "Kebon Jeruk, Kebon Jeruk, Kota Jakarta Barat, DKI Jakarta, 11530", courier: "JNE", createdAt: "2026-09-02T03:00:00Z", printedCount: 2, sequence: 1, shippingAmountIdr: 12_000, staleCodTotals: true, status: "ISSUED" },
   // Formula version 1 COD: goods 200_000 + shipping 15_000 + fee 6_450 + VAT 710.
-  { chargedShippingIdr: 13_000, cod: true, codAmountIdr: 222_160, courier: "JNE", createdAt: "2026-09-03T03:00:00Z", sequence: 2, shippingAmountIdr: 15_000, status: "DELIVERED" },
-  { courier: "SICEPAT", createdAt: "2026-09-04T03:00:00Z", outletId: outletA2, printedCount: 1, sequence: 3, shippingAmountIdr: 9_000, status: "ISSUED" },
+  { areaLabel: "PANAKKUKANG, PANAKKUKANG, KOTA MAKASSAR, SULAWESI SELATAN, 90231", chargedShippingIdr: 13_000, cod: true, codAmountIdr: 222_160, courier: "JNE", createdAt: "2026-09-03T03:00:00Z", sequence: 2, shippingAmountIdr: 15_000, status: "DELIVERED" },
+  // T-235: the same city in the provider's other casing, returned, from the second outlet.
+  { areaLabel: "Panaikang, Panakkukang, Kota Makassar, Sulawesi Selatan, 90231", courier: "SICEPAT", createdAt: "2026-09-04T03:00:00Z", outletId: outletA2, printedCount: 1, sequence: 3, shippingAmountIdr: 9_000, status: "RTS_QUEUED" },
   { createdAt: "2026-09-05T03:00:00Z", sequence: 4, status: "DRAFT" },
   { createdAt: "2026-08-20T03:00:00Z", sequence: 5, status: "DRAFT" },
   { courier: "JNE", createdAt: "2026-09-06T03:00:00Z", outletId: outletB, sequence: 6, shippingAmountIdr: 11_000, status: "ISSUED", tenantId: tenantB },
@@ -107,7 +112,7 @@ async function seed(fixture: Fixture) {
       shipmentId,
       tenantId,
       `area-${fixture.sequence}`,
-      `Kecamatan ${fixture.sequence}, Kota ${fixture.sequence}`,
+      fixture.areaLabel ?? `Kecamatan ${fixture.sequence}, Kota ${fixture.sequence}`,
       `Paket ${fixture.sequence}`,
       Boolean(fixture.cod),
       fixture.createdAt,
@@ -324,7 +329,7 @@ describe("shipment report rows", () => {
     expect(issued!.codFeeIdr).toBeNull();
     expect(issued!.codDisbursementEstimateIdr).toBeNull();
     expect(issued!.printCount).toBe(2);
-    expect(issued!.destinationAreaLabel).toContain("Kecamatan");
+    expect(issued!.destinationAreaLabel).toBe("Kebon Jeruk, Kebon Jeruk, Kota Jakarta Barat, DKI Jakarta, 11530");
     expect(issued!.issuedAt).toBeInstanceOf(Date);
 
     // COD 222_160: Mengantar's settlement basis (13_000); the fee Mengantar
@@ -359,7 +364,7 @@ describe("shipment report rows", () => {
     });
     expect(byCourier.totals.shipmentCount).toBe(2);
     expect(byCourier.totals.byCourier).toEqual([
-      { codDisbursementEstimateIdr: 201_762, codFeeIdr: 7_398, courier: "JNE", shipmentCount: 2, shippingCostIdr: 25_000 },
+      { codDisbursementEstimateIdr: 201_762, codFeeIdr: 7_398, courier: "JNE", deliveredCount: 1, returnedCount: 0, shipmentCount: 2, shippingCostIdr: 25_000 },
     ]);
 
     const byLifecycle = await readReport({
@@ -482,10 +487,11 @@ describe("shipment report scope", () => {
         filters: EMPTY_ANALYTICS_FILTERS,
         range,
       });
+      await loadShipmentReportAnalytics(tx, context, { filters: EMPTY_ANALYTICS_FILTERS, range });
     });
 
     const reads = capturedStatements.filter((statement) => /\bfrom\s+"?shipments"?/i.test(statement));
-    expect(reads.length, "the report issues its row, total and export selects").toBeGreaterThanOrEqual(4);
+    expect(reads.length, "the report issues its row, total, export and analytics selects").toBeGreaterThanOrEqual(7);
     for (const statement of reads) {
       expect(statement, statement).toMatch(/"shipments"\."tenant_id"\s*=\s*\$\d/i);
     }
@@ -495,7 +501,103 @@ describe("shipment report scope", () => {
     await expect(readReport({}, operatorA)).rejects.toThrow(/TENANT_ADMIN/);
     await expect(
       withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
+        loadShipmentReportAnalytics(tx, context, { filters: EMPTY_ANALYTICS_FILTERS, range })),
+    ).rejects.toThrow(/TENANT_ADMIN/);
+    await expect(
+      withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
         loadShipmentReportExport(tx, context, { filters: EMPTY_ANALYTICS_FILTERS, range })),
     ).rejects.toThrow(/TENANT_ADMIN/);
+  });
+});
+
+// T-235: the analytics above the list read the same cohort, so every figure
+// reconciles with RPT-SHP-ROWS and with Histori kiriman.
+function readAnalytics(filters = EMPTY_ANALYTICS_FILTERS) {
+  return withTenantContext(appDb, adminA, tenantA, (tx, context) =>
+    loadShipmentReportAnalytics(tx, context, { filters, range }));
+}
+
+describe("shipment report analytics (T-235)", () => {
+  it("reconciles the KPI strip with the list and uses the Dasbor's outcome predicates", async () => {
+    const [analytics, report] = [await readAnalytics(), await readReport()];
+    const queue = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
+      loadShipmentQueuePage(tx, context, { page: 1, pageSize: 100, range, status: "ALL" }));
+
+    expect(analytics.kpis).toEqual({
+      codDisbursementEstimateIdr: 201_762,
+      // Fixture 1 holds a stale COD total but was issued non-COD: never counted.
+      codOrderCount: 1,
+      codValueIdr: 222_160,
+      deliveredCount: 1,
+      failedCount: 0,
+      inProgressCount: 2,
+      returnedCount: 1,
+      shipmentCount: 4,
+    });
+    expect(analytics.kpis.shipmentCount).toBe(report.totals.shipmentCount);
+    expect(analytics.kpis.shipmentCount).toBe(queue.totalCount);
+    // Estimasi cair is the sum of the per-courier column it sits above.
+    expect(analytics.kpis.codDisbursementEstimateIdr)
+      .toBe(report.totals.byCourier.reduce((sum, row) => sum + row.codDisbursementEstimateIdr, 0));
+    // Per-courier outcomes add up to the strip.
+    expect(report.totals.byCourier.reduce((sum, row) => sum + row.deliveredCount, 0)).toBe(1);
+    expect(report.totals.byCourier.find((row) => row.courier === "SICEPAT")).toMatchObject({ returnedCount: 1, shipmentCount: 1 });
+    expect(returnRate(report.totals.byCourier.find((row) => row.courier === "SICEPAT")!)).toBe(100);
+  });
+
+  it("buckets the trend per WIB day on the draft's COD flag and sums the COD value", async () => {
+    const analytics = await readAnalytics();
+    expect(analytics.trend).toEqual([
+      { codCount: 0, codValueIdr: 0, key: "2026-09-02", nonCodCount: 1 },
+      { codCount: 1, codValueIdr: 222_160, key: "2026-09-03", nonCodCount: 0 },
+      { codCount: 0, codValueIdr: 0, key: "2026-09-04", nonCodCount: 1 },
+      { codCount: 0, codValueIdr: 0, key: "2026-09-05", nonCodCount: 1 },
+    ]);
+    expect(analytics.trend.reduce((sum, row) => sum + row.codCount + row.nonCodCount, 0)).toBe(4);
+  });
+
+  it("folds destination labels into provinces and cities, casing-blind, unknown last, summing to the cohort", async () => {
+    const { areas } = await readAnalytics();
+    const { cities, provinces } = groupRegions(areas);
+
+    expect(provinces.map((row) => [row.name, row.shipmentCount, row.deliveredCount, row.returnedCount])).toEqual([
+      ["Sulawesi Selatan", 2, 1, 1],
+      ["DKI Jakarta", 1, 0, 0],
+      [UNKNOWN_REGION_LABEL, 1, 0, 0],
+    ]);
+    expect(returnRate(provinces[0])).toBe(50);
+    expect(returnRate(provinces[1])).toBeNull();
+    expect(cities.map((row) => [row.name, row.province, row.shipmentCount])).toEqual([
+      ["Kota Makassar", "Sulawesi Selatan", 2],
+      ["Kota Jakarta Barat", "DKI Jakarta", 1],
+      [UNKNOWN_REGION_LABEL, null, 1],
+    ]);
+    for (const rows of [provinces, cities]) {
+      expect(rows.reduce((sum, row) => sum + row.shipmentCount, 0)).toBe(4);
+    }
+  });
+
+  it("ranks outlet → city routes and leaves the unknown wilayah out", async () => {
+    const routes = groupRoutes((await readAnalytics()).areas);
+    expect(routes.map((route) => `${route.outletName} → ${route.city}: ${route.shipmentCount}`).sort()).toEqual([
+      "Outlet Laporan A1 → Kota Jakarta Barat: 1",
+      "Outlet Laporan A1 → Kota Makassar: 1",
+      "Outlet Laporan A2 → Kota Makassar: 1",
+    ]);
+  });
+
+  it("follows the outlet and courier filters exactly as the list does", async () => {
+    for (const filters of [
+      { ...EMPTY_ANALYTICS_FILTERS, courier: "JNE" },
+      { ...EMPTY_ANALYTICS_FILTERS, outletId: outletA2 },
+      { ...EMPTY_ANALYTICS_FILTERS, lifecycleStatus: "DRAFT" as const },
+    ]) {
+      const [analytics, report] = [await readAnalytics(filters), await readReport({ filters })];
+      expect(analytics.kpis.shipmentCount).toBe(report.totals.shipmentCount);
+      expect(groupRegions(analytics.areas).provinces.reduce((sum, row) => sum + row.shipmentCount, 0))
+        .toBe(report.totals.shipmentCount);
+    }
+    const jne = await readAnalytics({ ...EMPTY_ANALYTICS_FILTERS, courier: "JNE" });
+    expect(jne.kpis).toMatchObject({ deliveredCount: 1, returnedCount: 0, shipmentCount: 2 });
   });
 });

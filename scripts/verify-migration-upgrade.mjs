@@ -57,6 +57,12 @@ if (prefixRuleIndex <= contactIndex) {
   throw new Error("Expected the three-character prefix upgrade boundary after 0058.");
 }
 
+const pickupWindowIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0061_pickup_window_eight"));
+if (pickupWindowIndex <= prefixRuleIndex) {
+  throw new Error("Expected the 08:00 pickup window upgrade boundary after 0060.");
+}
+
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
 
@@ -1268,7 +1274,7 @@ try {
   // keeps allocating: a NOT VALID CHECK would have refused every later update of the row.
   await client.query("UPDATE tenant_shipment_counters SET shipment_prefix = 'LEGAC' WHERE tenant_id = '00000000-0000-0000-0000-000000000901'");
   const countersBefore060 = (await client.query("SELECT to_jsonb(c) AS row FROM tenant_shipment_counters c ORDER BY tenant_id")).rows;
-  await applyMigrations(migrations.slice(prefixRuleIndex));
+  await applyMigrations(migrations.slice(prefixRuleIndex, pickupWindowIndex));
   if (JSON.stringify((await client.query("SELECT to_jsonb(c) AS row FROM tenant_shipment_counters c ORDER BY tenant_id")).rows) !== JSON.stringify(countersBefore060)) {
     throw new Error("0060 changed an existing counter row.");
   }
@@ -1308,6 +1314,37 @@ try {
     || registeredWithPrefix.code !== "stored" || registeredLongPrefix.code !== "22023"
   ) {
     throw new Error(`0060 did not upgrade cleanly: ${JSON.stringify({ legacyAllocation, legacyRewrite, fourCharacters, threeCharacters, registeredWithPrefix, registeredLongPrefix })}`);
+  }
+
+  // 0061 (T-234): the pickup-slot CHECK becomes a superset (08:00 added). A draft holding
+  // the legacy 17:00 start, valid under 0054, is untouched, still updatable, and the
+  // re-added constraint is validated; 08:00 is accepted, 07:00 and 18:00 are refused.
+  await client.query(`
+    UPDATE shipment_drafts SET handover_type = 'PICKUP', pickup_date = '2026-09-26', pickup_slot = '17:00'
+    WHERE shipment_id = '00000000-0000-0000-0000-000000000903'`);
+  const draftsSnapshot = async () => (await client.query("SELECT to_jsonb(d) AS row FROM shipment_drafts d ORDER BY shipment_id")).rows;
+  const draftsBefore061 = await draftsSnapshot();
+  await applyMigrations(migrations.slice(pickupWindowIndex));
+  if (JSON.stringify(await draftsSnapshot()) !== JSON.stringify(draftsBefore061)) {
+    throw new Error("0061 changed an existing draft row.");
+  }
+  const { rows: [slotCheck] } = await client.query(`
+    SELECT convalidated, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+    WHERE conrelid = 'shipment_drafts'::regclass AND conname = 'shipment_drafts_pickup_slot_valid'`);
+  const setSlot = (slot) => asOwner(
+    `UPDATE shipment_drafts SET pickup_slot = '${slot}' WHERE shipment_id = '00000000-0000-0000-0000-000000000903'`);
+  const legacyTouch = await asOwner(
+    "UPDATE shipment_drafts SET pickup_date = '2026-09-27' WHERE shipment_id = '00000000-0000-0000-0000-000000000903' AND pickup_slot = '17:00' RETURNING pickup_slot");
+  const [eight, nine, seven, eighteen] = [await setSlot("08:00"), await setSlot("09:00"), await setSlot("07:00"), await setSlot("18:00")];
+  if (
+    slotCheck?.convalidated !== true || !slotCheck.definition.includes("^(0[89]|1[0-7]):00$")
+    || legacyTouch.code !== "accepted" || legacyTouch.rows[0]?.pickup_slot !== "17:00"
+    || eight.code !== "accepted" || nine.code !== "accepted" || seven.code !== "23514" || eighteen.code !== "23514"
+  ) {
+    throw new Error(`0061 did not upgrade cleanly: ${JSON.stringify({ slotCheck, legacyTouch, eight, nine, seven, eighteen })}`);
+  }
+  if (JSON.stringify(await draftsSnapshot()) !== JSON.stringify(draftsBefore061)) {
+    throw new Error("The 0061 probes left a change behind.");
   }
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);

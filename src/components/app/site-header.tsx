@@ -45,14 +45,18 @@ function useWibStamp() {
   return useSyncExternalStore(subscribeMinute, () => formatWibStamp(new Date()), () => "");
 }
 
-/** The white "GC" mark and wordmark on the primary bar (the brand moved here from the sidebar). */
-function Brand({ home }: { home: string }) {
+/** The owner's GeraiCUAN logo, all-white on the primary bar (its blue half would be 1.82:1 on #2E47BA). */
+function Brand({ compact = false, home }: { compact?: boolean; home: string }) {
   return (
-    <Link aria-label="GeraiCUAN, ke beranda" className="flex shrink-0 items-center gap-3 rounded-lg outline-offset-2 focus-visible:outline-primary-foreground" href={home}>
-      <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary-foreground text-sm font-bold text-primary">
-        GC
-      </span>
-      <span aria-hidden="true" className="text-base font-bold max-md:hidden">GeraiCUAN</span>
+    <Link aria-label="GeraiCUAN, ke beranda" className="flex shrink-0 items-center rounded-lg outline-offset-2 focus-visible:outline-primary-foreground" href={home}>
+      {/* Static brand SVGs: next/image adds nothing for a vector. The focused bar on a phone keeps
+          only the G mark so the stepper has room. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt="" className={compact ? "h-9 w-auto max-md:hidden" : "h-9 w-auto max-md:h-8"} height={36} src="/brand/geraicuan-logo-white.svg" width={141} />
+      {compact ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt="" className="size-8 md:hidden" height={32} src="/brand/geraicuan-mark-white.svg" width={32} />
+      ) : null}
     </Link>
   );
 }
@@ -103,7 +107,7 @@ export function SiteHeader({
         data-focused="true"
         data-slot="site-header"
       >
-        <Brand home={home} />
+        <Brand compact home={home} />
         <Button aria-label="Tutup, kembali ke Histori kiriman" asChild className={onPrimary} size="icon" variant="ghost">
           <Link href="/app/pengiriman"><X aria-hidden="true" className="size-6" /></Link>
         </Button>
