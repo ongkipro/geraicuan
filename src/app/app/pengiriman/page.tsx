@@ -67,7 +67,7 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
   const isAdmin = principal.role === "TENANT_ADMIN";
   // T-231: "Tanpa update" reads provider observations, which RLS shows to a Tenant Admin only.
   const query = !isAdmin && isStaleShipmentFilter(parsed.status)
-    ? { ...parsed, issues: [...parsed.issues, "Filter tanpa update hanya untuk Admin gerai; semua status ditampilkan."], status: "ALL" as const }
+    ? { ...parsed, issues: [...parsed.issues, "Filter tanpa update hanya untuk Pemilik gerai; semua status ditampilkan."], status: "ALL" as const }
     : parsed;
   const statusOptions = isAdmin ? SHIPMENT_STATUS_OPTIONS : SHIPMENT_STATUS_OPTIONS.filter((option) => !isStaleShipmentFilter(option.value));
 

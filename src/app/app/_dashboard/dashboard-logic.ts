@@ -25,9 +25,10 @@ export function recentNextStep(row: { publicReference: string; shipmentId: strin
     case "AWAITING_UPSTREAM_PAYMENT":
       return role === "TENANT_ADMIN"
         ? { actionable: true, href: `${detail}#pemulihan-pembayaran`, label: "Pulihkan pembayaran" }
-        : { actionable: true, href: detail, label: "Lihat panduan admin" };
+        : { actionable: true, href: detail, label: "Lihat panduan" };
     case "SUBMISSION_UNKNOWN":
-      return { actionable: true, href: detail, label: "Periksa rekonsiliasi" };
+      // An Operator cannot reconcile; the detail tells them to ask the Pemilik gerai.
+      return { actionable: true, href: detail, label: role === "TENANT_ADMIN" ? "Periksa rekonsiliasi" : "Lihat panduan" };
     case "FAILED":
       return { actionable: true, href: detail, label: "Periksa kegagalan" };
     default:

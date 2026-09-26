@@ -7,6 +7,7 @@ import Link from "next/link";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
 import { loadBatchPrint } from "@/app/app/label/cetak/batch-data";
 import { BatchPrintPanel } from "@/app/app/label/cetak/batch-print-panel";
+import { IssueBatchInvoicesButton } from "@/app/app/label/cetak/issue-batch-invoices-button";
 import { BATCH_CONTENT_LABELS, includesInvoices, includesLabels, parseBatchPrintQuery } from "@/app/app/label/cetak/batch-query";
 import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { DataCard } from "@/components/app/data-card";
@@ -58,10 +59,22 @@ export default async function BatchPrintPage({ searchParams }: { searchParams: P
     </div>
   );
 
+  const pendingInvoices = withoutInvoice.length > 0 ? (
+    <Alert className="label-hide" role="status">
+      <CircleAlert aria-hidden="true" />
+      <AlertTitle>{withoutInvoice.length} invoice belum diterbitkan</AlertTitle>
+      <AlertDescription className="grid gap-3">
+        <p>Invoice diterbitkan sekali per kiriman dan tidak berubah saat dicetak ulang.</p>
+        <IssueBatchInvoicesButton numbers={withoutInvoice.map((item) => item.tenantNumber)} />
+      </AlertDescription>
+    </Alert>
+  ) : null;
+
   if (labels.length === 0 && invoices.length === 0) {
     return (
       <>
         {header}
+        {pendingInvoices}
         <DataCard>
           <EmptyState
             action={
@@ -81,21 +94,17 @@ export default async function BatchPrintPage({ searchParams }: { searchParams: P
   return (
     <>
       {header}
-      {skipped.length > 0 || withoutInvoice.length > 0 || query.invalid.length > 0 ? (
+      {pendingInvoices}
+      {skipped.length > 0 || query.invalid.length > 0 ? (
         <Alert className="label-hide" role="status">
           <CircleAlert aria-hidden="true" />
-          <AlertTitle>{skipped.length + withoutInvoice.length + query.invalid.length} kiriman dilewati</AlertTitle>
+          <AlertTitle>{skipped.length + query.invalid.length} kiriman dilewati</AlertTitle>
           <AlertDescription>
             <ul className="grid gap-1">
               {skipped.map((item) => (
                 <li key={item.tenantNumber}>
                   <span className="font-mono">{item.tenantNumber}</span>
                   {item.reason === "NOT_ISSUED" ? " — resi belum terbit" : " — tidak ditemukan"}
-                </li>
-              ))}
-              {withoutInvoice.map((item) => (
-                <li key={`inv-${item.tenantNumber}`}>
-                  <span className="font-mono">{item.label.awb}</span> — invoice belum dapat diterbitkan
                 </li>
               ))}
               {query.invalid.map((entry) => (

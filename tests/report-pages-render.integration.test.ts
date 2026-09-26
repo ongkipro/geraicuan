@@ -17,7 +17,7 @@ import type { ShipmentReportRow } from "@/db/shipment-report-repository";
 import type { PrintHistoryRow } from "@/db/label-print-repository";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { parseAreaRegion } from "@/lib/label-format";
-import { formatRate, groupRegions, groupRoutes, returnRate, UNKNOWN_REGION_LABEL } from "@/lib/shipment-report-analytics";
+import { formatRate, groupRegions, groupRoutes, lowVolumeNote, returnRate, UNKNOWN_REGION_LABEL } from "@/lib/shipment-report-analytics";
 
 /**
  * T-216 (UI v3): Laporan pengiriman and Riwayat cetak resi — pure logic and key markup of the
@@ -217,6 +217,41 @@ describe("Laporan pengiriman view", () => {
     expect(tableHeaders(html, "Rute teratas")).toEqual(["Rute", "Kiriman", "% terkirim", "% retur"]);
     expect(html).toContain("Kota Makassar");
     expect(filledButtons(html)).toBe(0);
+  });
+
+  it("marks courier, wilayah and route rates under 10 shipments as low volume and keeps the number (spec 19 M-0)", () => {
+    expect(lowVolumeNote({ shipmentCount: 9 })).toBe("Volume rendah (n = 9)");
+    expect(lowVolumeNote({ shipmentCount: 10 })).toBeNull();
+    const base = reportProps();
+    const html = render(createElement(ShipmentReportView, reportProps({
+      data: {
+        ...base.data,
+        totals: {
+          ...base.data.totals,
+          byCourier: [
+            ...base.data.totals.byCourier,
+            { codDisbursementEstimateIdr: 0, codFeeIdr: 0, courier: "SICEPAT", deliveredCount: 2, returnedCount: 1, shipmentCount: 3, shippingCostIdr: 9_000 },
+          ],
+        },
+      },
+    })));
+    const section = (label: string) => {
+      const start = html.search(new RegExp(`<table data-slot="table" class="[^"]*" aria-label="${label}"`));
+      return html.slice(start, html.indexOf("</table>", start));
+    };
+    // Courier: JNE (10) has no note; SiCepat (3) keeps 66,7% / 33,3% and carries the note, on both layouts.
+    const courierTable = section("Total per kurir");
+    expect(courierTable).toContain("66,7%");
+    expect(courierTable).toContain("Volume rendah (n = 3)");
+    expect(courierTable.match(/data-low-volume/g)).toHaveLength(1);
+    expect(html.match(/Volume rendah \(n = 3\)/g)?.length).toBeGreaterThanOrEqual(2);
+    // Wilayah: Sulawesi Selatan has 7 shipments (5 + 2): note, rate kept (2 of 6 finished).
+    const provinces = section("Kiriman per provinsi");
+    expect(provinces).toMatch(/Sulawesi Selatan[\s\S]*?Volume rendah \(n = 7\)[\s\S]*?33,3%/);
+    // Route Gudang Jakarta Barat → Kota Makassar has 5.
+    expect(section("Rute teratas")).toMatch(/Kota Makassar[\s\S]*?Volume rendah \(n = 5\)/);
+    // The note is muted text, not a badge or alert.
+    expect(html).toMatch(/<span class="block text-xs text-muted-foreground" data-low-volume="">Volume rendah/);
   });
 
   it("keeps the totals and the list when the analytics read failed", () => {

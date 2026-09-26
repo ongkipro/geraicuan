@@ -2,7 +2,7 @@ import "server-only";
 
 import { includesInvoices, type BatchPrintQuery } from "@/app/app/label/cetak/batch-query";
 import { LabelUnavailableError, loadPrintableLabel, type PrintableLabel } from "@/db/label-print-repository";
-import { issueShipmentInvoice, type ShipmentInvoice } from "@/db/shipment-invoice-repository";
+import { issueShipmentInvoice, loadShipmentInvoice, type ShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { resolveShipmentRouteKey } from "@/db/shipment-number-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 
@@ -13,8 +13,9 @@ export type BatchPrintItem =
 /**
  * The shipments of one batch print, in the requested order. A number that is unknown
  * here (or another tenant's) or has no resi yet is skipped and named, never printed.
- * For invoice content the one invoice of each shipment is issued if absent (PR-76, the
- * repository's idempotent insert), so a repeated or reloaded batch issues nothing new.
+ * Read-only (review 2026-09-26): opening the view never issues an invoice — a GET that
+ * wrote permanent rows could be triggered by a link from another site. Missing invoices
+ * are issued only through `issueMissingBatchInvoices`, behind an explicit button.
  */
 export async function loadBatchPrint(
   tx: TenantTransaction,
@@ -36,10 +37,30 @@ export async function loadBatchPrint(
       items.push({ kind: "skipped", reason: error.reason === "NOT_FOUND" ? "NOT_FOUND" : "NOT_ISSUED", tenantNumber });
       continue;
     }
-    const issued = includesInvoices(query.content)
-      ? await issueShipmentInvoice(tx, context, resolved.shipmentId)
+    const invoice = includesInvoices(query.content)
+      ? await loadShipmentInvoice(tx, context, resolved.shipmentId)
       : null;
-    items.push({ invoice: issued?.ok ? issued.invoice : null, kind: "ready", label, tenantNumber });
+    items.push({ invoice, kind: "ready", label, tenantNumber });
   }
   return items;
+}
+
+/**
+ * PR-76 for a batch: issues the one invoice of each listed shipment that has a resi and
+ * none yet (the repository's idempotent insert), so a repeat or a double click adds
+ * nothing. Returns how many shipments now carry an invoice.
+ */
+export async function issueMissingBatchInvoices(
+  tx: TenantTransaction,
+  context: TenantContext,
+  numbers: readonly number[],
+): Promise<number> {
+  let issued = 0;
+  for (const tenantNumber of numbers) {
+    const resolved = await resolveShipmentRouteKey(tx, context, { canonical: true, kind: "number", tenantNumber });
+    if (!resolved) continue;
+    const result = await issueShipmentInvoice(tx, context, resolved.shipmentId);
+    if (result.ok) issued += 1;
+  }
+  return issued;
 }

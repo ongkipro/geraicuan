@@ -1,3 +1,4 @@
+import { COURIER_LOW_VOLUME_THRESHOLD } from "@/lib/courier-volume";
 import { parseAreaRegion } from "@/lib/label-format";
 
 /**
@@ -58,6 +59,16 @@ const percent = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1, minim
 /** Spec 19 M-0: one decimal ("66,7%"), "—" without a denominator. */
 export function formatRate(rate: number | null) {
   return rate === null ? "—" : `${percent.format(rate)}%`;
+}
+
+const count = new Intl.NumberFormat("id-ID");
+
+/**
+ * Spec 19 M-0 low-volume guard for a courier, wilayah or route: fewer than 10 shipments carries
+ * "Volume rendah (n = N)" beside its rates (the rates stay shown). `null` from 10 up.
+ */
+export function lowVolumeNote(tally: Pick<ShipmentOutcomeTally, "shipmentCount">) {
+  return tally.shipmentCount < COURIER_LOW_VOLUME_THRESHOLD ? `Volume rendah (n = ${count.format(tally.shipmentCount)})` : null;
 }
 
 function add<T extends ShipmentOutcomeTally>(map: Map<string, T>, key: string, create: () => T, row: ShipmentOutcomeTally) {

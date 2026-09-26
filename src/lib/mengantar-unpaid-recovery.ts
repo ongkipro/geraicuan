@@ -11,9 +11,9 @@ import {
   claimUnpaidRecovery,
   completeUnpaidRecovery,
   markUnpaidRecoveryUnknown,
+  MengantarUnpaidRecoveryBatchIdMissingError,
   prepareUnpaidRecoveries,
   UnpaidRecoveryDeniedError,
-  UnpaidRecoveryUnavailableError,
 } from "@/db/unpaid-recovery-repository";
 import {
   normalizeMengantarProviderIdentifier,
@@ -80,9 +80,7 @@ export class MengantarUnpaidRecoveryUnknownError extends Error {
  * sending the order id instead was the bug. Subclasses the repository's
  * unavailable error so every caller already maps it to a safe refusal.
  */
-export class MengantarUnpaidRecoveryBatchIdMissingError extends UnpaidRecoveryUnavailableError {
-  readonly safeCode = "PAY_UNPAID_BATCH_ID_MISSING";
-}
+export { MengantarUnpaidRecoveryBatchIdMissingError };
 
 export class MengantarUnpaidRecoveryTransportUnavailableError extends Error {
   constructor() {

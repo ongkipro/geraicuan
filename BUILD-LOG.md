@@ -4924,3 +4924,12 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 
 - **What.** The owner's logo (PNG from the owner's Mac, copied over Tailscale) traced to SVG in pure Python (PIL mask → contour → RDP): `public/brand/geraicuan-logo-white.svg` (top bar, auth panel), `-logo-color.svg` (light grounds), `-mark-white.svg` (focused Buat kiriman bar on phones), `-mark-color.svg` (also `src/app/icon.svg` favicon). The logo's blue half is 1.82:1 on the Mengantar primary, so the bar uses the all-white variant.
 - **Checks.** Full suite 115 files / 1,346 passed on the isolated DB (auth test now allows only `/brand/` images); header checked at 390 and 1440.
+
+
+## 2026-09-26 — T-236 Operator pass and report low-volume note
+
+- An admin-only page whose guard sits in `page.tsx` redirects *after* its segment `loading.tsx` streamed, so the Operator briefly saw that page's skeleton (for `/app/anggota`, the whole settings frame). A guard-only `layout.tsx` above `loading.tsx` (as `pengaturan/layout.tsx` already did) moves the redirect before any admin markup; the redirect is still streamed (200 + client redirect) because `/app/loading.tsx` wraps every child segment.
+- Radix `SelectValue` without children renders nothing on the server; pass the selected label as children.
+- `lowVolumeNote` reuses the courier threshold (10); denominator is the group's shipment count.
+- Checks: tsc 0, lint 0, full suite on the iso DB 1,345 passed / 2 failed (`system-map-inventory`: layout count fixed in spec 18; action count from uncommitted `issueBatchInvoices` work outside this task). Screenshots in scratchpad `t236/`.
+

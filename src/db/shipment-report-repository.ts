@@ -146,13 +146,16 @@ function reportJoins<T extends PgSelect>(query: T) {
       ),
     )
     // One row per shipment (`shipment_cod_totals_shipment_tenant_key`), and
-    // only read once the shipment reached a COD provider order.
+    // only read once Mengantar issued the COD order (review 2026-09-26: a refused,
+    // unknown or unpaid order is not money the courier will collect; same basis as
+    // FIN-COD-DISBURSEMENT-EST).
     .leftJoin(
       shipmentCodTotals,
       and(
         eq(shipmentCodTotals.shipmentId, providerOrderSnapshots.shipmentId),
         eq(shipmentCodTotals.tenantId, providerOrderSnapshots.tenantId),
         eq(providerOrderSnapshots.isCod, true),
+        eq(providerOrderSnapshots.status, "ISSUED"),
       ),
     );
 }

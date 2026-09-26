@@ -31,7 +31,8 @@ export function StatusSelect({
       }}
     >
       <SelectTrigger aria-busy={pending || undefined} aria-label={label} className="w-full font-medium md:w-56">
-        <SelectValue />
+        {/* Children render the label on the server too, so the trigger is never blank before hydration. */}
+        <SelectValue>{options.find((option) => option.value === value)?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent position="popper">
         {options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}

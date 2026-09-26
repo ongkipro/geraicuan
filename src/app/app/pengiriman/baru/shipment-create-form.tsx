@@ -442,7 +442,7 @@ export function ShipmentCreateForm({
                         id="pickupDate"
                       >
                         <CalendarDays aria-hidden="true" className="text-muted-foreground" />
-                        <SelectValue />
+                        <SelectValue>{dateOptions.find((option) => option.value === pickupDate)?.label}</SelectValue>
                       </SelectTrigger>
                       <SelectContent position="popper">
                         {dateOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
@@ -458,7 +458,7 @@ export function ShipmentCreateForm({
                         id="pickupSlot"
                       >
                         <Clock aria-hidden="true" className="text-muted-foreground" />
-                        <SelectValue />
+                        <SelectValue>{effectiveSlot ? pickupSlotLabel(effectiveSlot) : null}</SelectValue>
                       </SelectTrigger>
                       <SelectContent position="popper">
                         {slots.map((slot) => <SelectItem key={slot} value={slot}>{pickupSlotLabel(slot)}</SelectItem>)}

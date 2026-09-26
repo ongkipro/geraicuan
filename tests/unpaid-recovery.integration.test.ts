@@ -407,8 +407,8 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
     const recoveries = await adminDb
       .select({ status: schema.providerUnpaidRecoveries.status })
       .from(schema.providerUnpaidRecoveries);
-    // Nothing was sent, so the recovery stays queued rather than unknown.
-    expect(recoveries).toEqual([{ status: "PAYMENT_QUEUED" }]);
+    // Review 2026-09-26: refused before any row is written, so nothing sits queued for good.
+    expect(recoveries).toEqual([]);
     const [snapshot] = await adminDb
       .select({ status: schema.providerOrderSnapshots.status })
       .from(schema.providerOrderSnapshots);

@@ -373,7 +373,9 @@ export type PickupScheduleError = "date" | "slot";
 /** The one schedule rule: a date inside the window and a slot still bookable on it. */
 export function checkPickupSchedule(dateKey: string, slot: string, now: Date): PickupScheduleError | null {
   const today = jakartaDateKey(now);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || Number.isNaN(Date.parse(`${dateKey}T00:00:00.000Z`))
+  // Round-trip: V8 rolls "2026-04-31" over to 1 May, so a parse alone accepts impossible dates.
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(dateKey) ? new Date(`${dateKey}T00:00:00.000Z`) : null;
+  if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateKey
     || dateKey < today || dateKey > addDays(today, PICKUP_DATE_WINDOW_DAYS - 1)) return "date";
   if (!isPickupSlot(slot) || !availablePickupSlots(dateKey, now).includes(slot)) return "slot";
   return null;

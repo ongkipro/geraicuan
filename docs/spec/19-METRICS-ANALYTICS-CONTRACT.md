@@ -535,3 +535,6 @@ Verification: `tests/mengantar-field-parity.integration.test.ts` (`describe("PR-
 Verification: `tests/analytics-range.integration.test.ts` covers every preset's window and every preset's comparison period, including the year boundary; `tests/date-range-filter.integration.test.ts` binds the URL contract.
 
 > T-204 (2026-09-25): `/app/analitik` and `/app/keuangan` were removed from the product; metric consumers above now read Dasbor and Laporan pengiriman. Tables and repository functions are unchanged.
+
+
+> Review 2026-09-26: report COD money (Nilai COD, Biaya COD, Estimasi cair, per row and KPI) counts only COD orders Mengantar issued (`provider_order_snapshots.status = 'ISSUED'`), the same basis as FIN-COD-DISBURSEMENT-EST; refused, unknown or unpaid orders carry no COD money.

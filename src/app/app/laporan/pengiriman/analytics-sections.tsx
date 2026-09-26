@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ShipmentReportLifecycleTotal } from "@/db/shipment-report-repository";
 import { shipmentStatuses } from "@/lib/domain-enums";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
-import { deliveredRate, formatRate, returnRate, type RegionTotal, UNKNOWN_REGION_KEY } from "@/lib/shipment-report-analytics";
+import { deliveredRate, formatRate, lowVolumeNote, returnRate, type RegionTotal, UNKNOWN_REGION_KEY } from "@/lib/shipment-report-analytics";
 import { cn } from "@/lib/utils";
 
 const number = new Intl.NumberFormat("id-ID");
@@ -25,6 +25,12 @@ const inCardTable = cn(
 );
 const disclosureSummary = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground md:min-h-6 [&::-webkit-details-marker]:hidden";
 const REGION_TOP = 10;
+
+/** Spec 19 M-0: a muted "Volume rendah (n = N)" under a group of fewer than 10 shipments; its rates stay. */
+export function LowVolumeNote({ shipmentCount }: { shipmentCount: number }) {
+  const note = lowVolumeNote({ shipmentCount });
+  return note ? <span className="block text-xs text-muted-foreground" data-low-volume="">{note}</span> : null;
+}
 
 function share(part: number, whole: number) {
   return formatRate(whole === 0 ? null : (part / whole) * 100);
@@ -173,6 +179,7 @@ function RegionTable({ label, rows }: { label: string; rows: RegionTotal[] }) {
             <TableCell className="min-w-0 whitespace-normal">
               <span className={cn("font-medium", row.key === UNKNOWN_REGION_KEY && "text-muted-foreground")}>{row.name}</span>
               {row.province ? <span className="block text-xs text-muted-foreground">{row.province}</span> : null}
+              <LowVolumeNote shipmentCount={row.shipmentCount} />
             </TableCell>
             <TableCell className={cn(numeric, "font-semibold")}>{number.format(row.shipmentCount)}</TableCell>
             <TableCell className={numeric}>{number.format(row.deliveredCount)}</TableCell>
@@ -259,6 +266,7 @@ export function RoutesCard({ routes }: { routes: ReportAnalyticsView["routes"] }
                 <TableCell className="min-w-0 whitespace-normal">
                   <span className="block text-xs text-muted-foreground">{route.outletName}</span>
                   <span className="font-medium"><span aria-hidden="true">→ </span><span className="sr-only">ke </span>{route.city}</span>
+                  <LowVolumeNote shipmentCount={route.shipmentCount} />
                 </TableCell>
                 <TableCell className={cn(numeric, "font-semibold")}>{number.format(route.shipmentCount)}</TableCell>
                 <TableCell className={numeric}>{formatRate(deliveredRate(route))}</TableCell>

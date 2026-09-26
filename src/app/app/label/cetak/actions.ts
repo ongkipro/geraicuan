@@ -1,7 +1,11 @@
 "use server";
 
 import { recordLabelPrint } from "@/app/app/label/[shipmentId]/actions";
+import { issueMissingBatchInvoices } from "@/app/app/label/cetak/batch-data";
 import { MAX_BATCH_SHIPMENTS } from "@/app/app/label/cetak/batch-query";
+import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
+import { db } from "@/db/client";
+import { withTenantContext } from "@/db/tenant-context";
 
 export type BatchLabelPrintResult = {
   printed: number;
@@ -32,4 +36,19 @@ export async function recordBatchLabelPrints(
     if (outcome.nextAttemptId) result.nextAttemptIds[String(entry?.shipmentId)] = outcome.nextAttemptId;
   }
   return result;
+}
+
+/**
+ * PR-76/PR-87: the explicit "Terbitkan invoice" of a batch (a POST, never a page load).
+ * Numbers are re-validated here; both tenant roles may issue, as on the invoice page.
+ */
+export async function issueBatchInvoices(numbers: number[]): Promise<{ issued: number }> {
+  const principal = await requireTenantPrincipal();
+  const valid = Array.isArray(numbers)
+    ? [...new Set(numbers.filter((n) => Number.isSafeInteger(n) && n >= 10_000))].slice(0, MAX_BATCH_SHIPMENTS)
+    : [];
+  if (valid.length === 0) return { issued: 0 };
+  const issued = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+    issueMissingBatchInvoices(tx, context, valid));
+  return { issued };
 }

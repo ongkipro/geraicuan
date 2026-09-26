@@ -111,7 +111,7 @@ export function RateCheck({ canManageSettings, initialState = {}, outlets }: {
                 value={outletId}
               >
                 <SelectTrigger aria-describedby="rate-outlet-error" aria-invalid={Boolean(errors.outletId)} className="w-full" id="rate-outlet">
-                  <SelectValue />
+                  <SelectValue>{outlets.find((outlet) => outlet.id === outletId)?.name}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {outlets.map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>)}

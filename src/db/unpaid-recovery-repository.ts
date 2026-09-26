@@ -53,6 +53,11 @@ export class UnpaidRecoveryUnavailableError extends Error {
   }
 }
 
+/** A legacy order without the stored Mengantar `batch` id cannot be paid (T-223). */
+export class MengantarUnpaidRecoveryBatchIdMissingError extends UnpaidRecoveryUnavailableError {
+  readonly safeCode = "PAY_UNPAID_BATCH_ID_MISSING";
+}
+
 export const UNPAID_RECOVERY_CLAIM_STALE_AFTER_SECONDS = 120;
 
 function requireTenantAdmin(context: TenantContext) {
@@ -171,6 +176,9 @@ export async function prepareUnpaidRecoveries(
   if (targets.length === 0) throw new UnpaidRecoveryUnavailableError();
 
   const missing = targets.filter((row) => row.recoveryId === null);
+  // Review 2026-09-26: a legacy order without the Mengantar batch id can never be paid;
+  // refuse before any row is written so it cannot sit in PAYMENT_QUEUED for good.
+  if (missing.some((row) => !row.providerBatchId)) throw new MengantarUnpaidRecoveryBatchIdMissingError();
   const inserted = missing.length === 0
     ? []
     : await tx

@@ -33,7 +33,11 @@ describe("recent shipments", () => {
   it("gives every row a link and sends payment recovery to the admin only", () => {
     const unpaid = row("10003", "AWAITING_UPSTREAM_PAYMENT", 0);
     expect(recentNextStep(unpaid, "TENANT_ADMIN")).toEqual({ actionable: true, href: "/app/pengiriman/10003#pemulihan-pembayaran", label: "Pulihkan pembayaran" });
-    expect(recentNextStep(unpaid, "OPERATOR").label).toBe("Lihat panduan admin");
+    expect(recentNextStep(unpaid, "OPERATOR").label).toBe("Lihat panduan");
+    // T-236: an Operator cannot reconcile, so the row does not promise it.
+    const unknown = row("10008", "SUBMISSION_UNKNOWN", 0);
+    expect(recentNextStep(unknown, "TENANT_ADMIN").label).toBe("Periksa rekonsiliasi");
+    expect(recentNextStep(unknown, "OPERATOR").label).toBe("Lihat panduan");
     expect(recentNextStep(row("10001", "DRAFT", 0), "OPERATOR").href).toBe("/app/pengiriman/baru?draft=00000000-0000-4000-8000-000000010001");
     expect(recentNextStep(row("10004", "DELIVERED", 0), "OPERATOR")).toMatchObject({ actionable: false, label: "Lihat detail" });
   });

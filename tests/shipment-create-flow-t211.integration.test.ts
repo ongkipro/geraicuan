@@ -87,6 +87,9 @@ describe("PR-70 pickup schedule: 08.00–17.00 WIB (T-234), ≥ 90 minutes ahead
     expect(checkPickupSchedule("2026-10-03", "09:00", TEN_AM_WIB)).toBe("date");
     expect(checkPickupSchedule("2026-09-25", "09:00", TEN_AM_WIB)).toBe("date");
     expect(checkPickupSchedule("bukan-tanggal", "09:00", TEN_AM_WIB)).toBe("date");
+    // Review 2026-09-26: an impossible date must not roll over into the window.
+    expect(checkPickupSchedule("2026-09-31", "09:00", TEN_AM_WIB)).toBe("date");
+    expect(checkPickupSchedule("2026-02-30", "09:00", new Date("2026-02-27T03:00:00.000Z"))).toBe("date");
   });
 });
 

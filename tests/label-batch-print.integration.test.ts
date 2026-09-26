@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { loadBatchPrint } from "@/app/app/label/cetak/batch-data";
+import { issueMissingBatchInvoices, loadBatchPrint } from "@/app/app/label/cetak/batch-data";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
@@ -141,26 +141,30 @@ afterAll(async () => {
 });
 
 describe("batch print view", () => {
-  it("issues exactly one invoice per shipment on repeat and skips a shipment without a resi", async () => {
+  it("never issues on open; the explicit issue adds exactly one invoice per shipment on repeat", async () => {
     const first = await seedShipment(1);
     const second = await seedShipment(2);
     const unpaid = await seedShipment(3, "AWAITING_UPSTREAM_PAYMENT");
     const numbers = [first.tenantNumber, unpaid.tenantNumber, second.tenantNumber, 99_999];
     const open = () => withTenantContext(appDb, operatorId, tenantId, (tx, context) =>
       loadBatchPrint(tx, context, { content: "keduanya", numbers }));
+    const issue = () => withTenantContext(appDb, operatorId, tenantId, (tx, context) =>
+      issueMissingBatchInvoices(tx, context, numbers));
 
-    const once = await open();
-    const twice = await open();
-    const [a, b, c] = await Promise.all([open(), open(), open()]);
-
-    expect(once.map((item) => [item.tenantNumber, item.kind])).toEqual([
+    // Review 2026-09-26: a GET (page load) must not write invoices.
+    const before = await open();
+    expect(before.map((item) => [item.tenantNumber, item.kind])).toEqual([
       [first.tenantNumber, "ready"], [unpaid.tenantNumber, "skipped"], [second.tenantNumber, "ready"], [99_999, "skipped"],
     ]);
-    expect(once[1]).toMatchObject({ reason: "NOT_ISSUED" });
-    expect(once[3]).toMatchObject({ reason: "NOT_FOUND" });
-    const invoiceIds = (items: typeof once) => items.flatMap((item) => (item.kind === "ready" && item.invoice ? [item.invoice.id] : []));
-    expect(invoiceIds(once)).toHaveLength(2);
-    for (const again of [twice, a, b, c]) expect(invoiceIds(again)).toEqual(invoiceIds(once));
+    expect(before[1]).toMatchObject({ reason: "NOT_ISSUED" });
+    expect(before[3]).toMatchObject({ reason: "NOT_FOUND" });
+    expect(await invoiceCounts()).toEqual({});
+
+    expect(await issue()).toBe(2);
+    await Promise.all([issue(), issue(), issue()]);
+    const after = await open();
+    const invoiceIds = (items: typeof after) => items.flatMap((item) => (item.kind === "ready" && item.invoice ? [item.invoice.id] : []));
+    expect(invoiceIds(after)).toHaveLength(2);
     expect(await invoiceCounts()).toEqual({ [first.shipmentId]: 1, [second.shipmentId]: 1 });
   });
 

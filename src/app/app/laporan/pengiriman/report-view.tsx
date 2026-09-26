@@ -2,7 +2,7 @@ import { CircleAlert, Download, FileSpreadsheet, SearchX } from "lucide-react";
 import Link from "next/link";
 
 import { AdvancedFilters } from "@/app/app/laporan/pengiriman/advanced-filters";
-import { RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
+import { LowVolumeNote, RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
 import { CourierPerformanceChart, type CourierPerformancePoint } from "@/app/app/laporan/pengiriman/courier-performance-chart";
 import { REPORT_PATH, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
 import { FilterSelect } from "@/app/app/laporan/_components/filter-select";
@@ -195,6 +195,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
             <p className="text-xs text-muted-foreground">
               Terkirim {formatRate(deliveredRate(total))} · Retur {formatRate(returnRate(total))}
             </p>
+            <LowVolumeNote shipmentCount={total.shipmentCount} />
             <p className="text-xs text-muted-foreground">
               Ongkir Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
             </p>
@@ -225,6 +226,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
                 <span className="flex items-center font-medium">
                   {total.courier ? <CourierLogo className={logoBox} courier={total.courier} /> : carrierName(total.courier)}
                 </span>
+                <LowVolumeNote shipmentCount={total.shipmentCount} />
               </TableCell>
               <TableCell className="px-2 text-right">{number.format(total.shipmentCount)}</TableCell>
               <TableCell className="px-2 text-right tabular-nums">{formatRate(deliveredRate(total))}</TableCell>

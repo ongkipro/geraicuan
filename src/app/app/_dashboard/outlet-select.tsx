@@ -17,7 +17,7 @@ export function OutletSelect({ outlets, value }: { outlets: readonly { id: strin
       <input name="outlet" type="hidden" value={selected === ALL ? "" : selected} />
       <Select onValueChange={setSelected} value={selected}>
         <SelectTrigger aria-label="Outlet" className="min-w-44 font-medium">
-          <SelectValue />
+          <SelectValue>{outlets.find((outlet) => outlet.id === selected)?.name ?? "Semua outlet"}</SelectValue>
         </SelectTrigger>
         <SelectContent position="popper">
           <SelectItem value={ALL}>Semua outlet</SelectItem>
