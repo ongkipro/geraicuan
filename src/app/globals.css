@@ -106,8 +106,9 @@
   --text-3xl--line-height:1.5;
   --text-h1:2rem;
   --text-h1--line-height:1.25;
-  /* §2.3 content width: 1120px, left-aligned in the main area (`max-w-content`). */
+  /* §2.3 content width (owner 2026-09-26): centred in the main area; 1120px, 1400px from 2xl. */
   --container-content:70rem;
+  --container-content-wide:87.5rem;
   --font-sans:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-heading:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;

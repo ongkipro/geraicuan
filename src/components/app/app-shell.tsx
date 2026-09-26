@@ -6,7 +6,6 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { AppSidebar, SHELL_ROLE_LABEL, type ShellAccount, type ShellScope } from "@/components/app/app-sidebar";
 import { SiteHeader } from "@/components/app/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
 
 const FULL_SIDEBAR_QUERY = "(min-width: 1024px)";
 
@@ -71,7 +70,7 @@ export function AppShell({
         {focused ? null : <AppSidebar account={account} scope={scope} />}
         <SidebarInset className="min-w-0">
           <div className="px-4 py-4 md:px-8 md:py-8" data-shell={focused ? "focused" : undefined} data-slot="app-content">
-            <div className={cn("flex w-full max-w-content flex-col gap-6 outline-none", focused && "mx-auto")} id="konten" tabIndex={-1}>
+            <div className="mx-auto flex w-full max-w-content flex-col gap-6 outline-none 2xl:max-w-content-wide" id="konten" tabIndex={-1}>
               {notice}
               {children}
             </div>
