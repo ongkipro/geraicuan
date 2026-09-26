@@ -49,7 +49,6 @@ import { SetupSteps } from "./_dashboard/setup-steps";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Dasbor" };
 
-const DESCRIPTION = "Ringkasan operasional pengiriman, status paket, dan kinerja ekspedisi.";
 const clock = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -155,7 +154,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       ) : isAdmin ? (
         <Button asChild variant="outline"><Link href="/app/pengaturan/outlet"><Settings2 aria-hidden="true" />Siapkan outlet</Link></Button>
       ) : undefined}
-      description={DESCRIPTION}
       eyebrow="Utama"
       title="Dasbor"
     />

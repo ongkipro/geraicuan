@@ -96,7 +96,7 @@ export function AppSidebar({ account, scope }: { account: ShellAccount; scope: S
                       <SidebarMenuItem key={item.key}>
                         <SidebarMenuButton
                           asChild
-                          className="relative h-11 gap-3 px-0.5 text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground data-active:shadow-card after:absolute after:inset-y-2 after:right-0 after:hidden after:w-1 after:rounded-l-full after:bg-primary data-active:after:block max-md:h-11 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:after:hidden [&_svg]:size-5"
+                          className="relative h-11 gap-3 px-0.5 text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground data-active:shadow-card after:absolute after:inset-y-2 after:right-0 after:hidden after:w-1 after:rounded-l-full after:bg-brand data-active:after:block max-md:h-11 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:after:hidden [&_svg]:size-5"
                           isActive={item.current}
                           tooltip={item.label}
                         >

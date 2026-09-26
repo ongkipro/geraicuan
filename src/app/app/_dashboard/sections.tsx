@@ -215,7 +215,8 @@ export function CourierRecapTable({ recap }: { recap: TenantDashboardCourierReca
         {rows.map((row) => (
           <TableRow key={row.courier}>
             <TableCell className="font-medium">
-              <span className="flex items-center gap-2"><CourierLogo className="h-5 w-auto" courier={row.courier} decorative />{courierDisplayName(row.courier)}</span>
+              {/* Owner (2026-09-26): logo only; its alt text (or the name, when there is no logo) is the label. */}
+              <CourierLogo className="h-6 w-auto" courier={row.courier} />
             </TableCell>
             <TableCell className={numeric}>{count.format(row.shipmentCount)}</TableCell>
             <TableCell className={cn(numeric, "max-sm:hidden")}>{count.format(row.deliveredCount)}</TableCell>

@@ -499,8 +499,9 @@ describe("design token contrast", () => {
     expect(contrast(token("--primary-foreground"), token("--primary-hover"))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("shares the accepted blue accent between actions and sidebar navigation", () => {
-    expect(token("--primary")).toEqual(parse("#2e47ba"));
+  it("shares the accepted brand navy between actions and sidebar navigation", () => {
+    // v3.3 (D-22): GeraiCUAN brand navy replaces Mengantar blue.
+    expect(token("--primary")).toEqual(parse("#0b2d4f"));
     for (const [sidebar, shared] of [
       ["--sidebar-primary", "--primary"],
       ["--sidebar-primary-foreground", "--primary-foreground"],
@@ -635,12 +636,12 @@ describe("design token contrast", () => {
       .not.toMatch(/@apply[^;]*\boutline-ring\/\d+/);
   });
 
-  it("includes the blue dark companion without automatic activation", () => {
+  it("includes the dark companion without automatic activation", () => {
     const dark = cssRules.find((rule) => rule.selector === ".dark");
     expect(dark).toBeDefined();
     expect(dark?.declarations.get("--background")).toBe("oklch(0.145 0 0)");
-    // T-132: lighter blue keeps dark labels and links readable.
-    expect(dark?.declarations.get("--primary")).toBe("#a5b4fc");
+    // v3.3 (D-22): the light brand green keeps dark labels and links readable.
+    expect(dark?.declarations.get("--primary")).toBe("#34d399");
     expect(dark?.declarations.get("--input")).toBe("oklch(1 0 0 / 15%)");
   });
 
@@ -767,7 +768,8 @@ describe("design token contrast", () => {
     // T-228 (spec 10 v3.2 §2.1, D-18): the CMS ground is `--background`, Mengantar's #F2F4F8;
     // `--muted` is the neutral badge/skeleton fill, no longer the ground.
     expect(css).toMatch(/\[data-slot="sidebar-inset"\]\s*\{[^}]*background:\s*var\(--background\)/);
-    expect(token("--background")).toEqual(parse("#f2f4f8"));
+    // v3.3 (D-22): the GeraiCUAN brand ground.
+    expect(token("--background")).toEqual(parse("#f8fafc"));
     // `:root, .dark {` at the top is the alias block; the dark palette is the standalone
     // `.dark {` rule further down.
     const darkIndex = css.indexOf("\n.dark {");

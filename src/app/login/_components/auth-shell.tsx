@@ -37,7 +37,7 @@ function AuthVisualPanel({ platform }: { platform: boolean }) {
         >
           GC
         </span>
-        <span className="text-lg font-bold">GeraiCUAN</span>
+        <span className="text-lg font-bold">Gerai<span className="text-brand-light">CUAN</span></span>
       </div>
       <div className="flex flex-1 flex-col justify-center gap-8">
         <div className="flex flex-col gap-4">
@@ -130,7 +130,7 @@ export function AuthShell({
           >
             GC
           </span>
-          <span className="text-lg font-bold">GeraiCUAN</span>
+          <span className="text-lg font-bold">Gerai<span className={platform ? "text-brand-light" : "text-brand-strong"}>CUAN</span></span>
         </Link>
         <span
           className={cn(

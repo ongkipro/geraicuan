@@ -4900,3 +4900,8 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Gotcha.** The requested `CHECK (...) NOT VALID` would have broken shipment creation for any tenant holding a legacy 4–5 character prefix: PostgreSQL enforces a NOT VALID CHECK on every later UPDATE of a row, and allocation updates `last_number` each time. A trigger on `INSERT OR UPDATE OF shipment_prefix` that compares OLD/NEW enforces only new writes. `verify-migration-upgrade` proves a legacy `LEGAC` row still allocates after 0060.
 - **Gotcha.** A stepped form built on `<form action>` loses typed values when the server refuses (React resets the form after the action); controlled fields plus `startTransition(() => action(formData))` keep them.
 - **Checks.** tsc 0; lint 0; full suite on the iso DB 114 files / 1,328 passed; `verify-migration-upgrade` through 0060; browser evidence at 1440/390 in the scratchpad `t225/`.
+
+## 2026-09-26 — Brand palette v3.3 (D-22)
+
+- **What.** Owner palette (navy `#0B2D4F`, green `#10B981`, slate neutrals) mapped to tokens under the 40+ floor: navy primary (white 13.98:1), green as accent only (white on it is 2.54:1), `#047857` for green text, `#059669` ring, `#7B8AA0` input border, `#B45309` warning text, `#B91C1C` danger/destructive, owner `#94A3B8` kept off text. "CUAN" in the wordmark uses `#34D399` on navy. Layout, sizes and anatomy unchanged. Dasbor courier recap shows logos only (owner request). Spec 10 §2.0.
+- **Checks.** Contrast ratios computed in sRGB; screened 13 tenant + 2 platform routes at 1440/390 (0 overflow, 0 low-contrast text); tsc 0; lint 0; full suite 114 files / 1,328 passed on the isolated DB.

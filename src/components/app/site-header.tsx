@@ -52,7 +52,7 @@ function Brand({ home }: { home: string }) {
       <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary-foreground text-sm font-bold text-primary">
         GC
       </span>
-      <span aria-hidden="true" className="text-base font-bold max-md:hidden">GeraiCUAN</span>
+      <span aria-hidden="true" className="text-base font-bold max-md:hidden">Gerai<span className="text-brand-light">CUAN</span></span>
     </Link>
   );
 }

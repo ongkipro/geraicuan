@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | Accepted — the single design contract for every GeraiCUAN surface |
-| Version | 3.2 / 2026-09-26 (UI rebuilt from zero, [ADR-0001](../adr/ADR-0001-ui-v3-rebuild.md); v3.1 adopts the GeraiOS v0.5 token, status, component-state and validation contracts — `~/Projects/geraios/docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md`, `docs/UI_UX_ANATOMY.md`; **v3.2 adopts the Mengantar-app look** (D-18, PR-85, T-228): §13 deltas D1–D6, D9, D11, D12 through the tokens and the shared shell/components; D7 and D8 rejected for the 40+ floor) |
+| Version | 3.3 / 2026-09-26 (**v3.3 GeraiCUAN brand colours**, D-22: navy primary, green accent — §2.0; layout unchanged from v3.2. UI rebuilt from zero, [ADR-0001](../adr/ADR-0001-ui-v3-rebuild.md); v3.1 adopts the GeraiOS v0.5 token, status, component-state and validation contracts — `~/Projects/geraios/docs/spec/10-DESIGN-SYSTEM-WHITELABEL.md`, `docs/UI_UX_ANATOMY.md`; **v3.2 adopts the Mengantar-app look** (D-18, PR-85, T-228): §13 deltas D1–D6, D9, D11, D12 through the tokens and the shared shell/components; D7 and D8 rejected for the 40+ floor) |
 | Owner | Product owner (Paduka Ongki) |
 | Visual source | Layout and content: the owner's HTML reference `~/Documents/work/notes/geraicuan-html/` (26 pages, served at `http://100.127.67.86:3333/` during development) and `~/Documents/work/notes/geraicuan-ui-analysis.md`, measured at 1440×900 on 2026-09-25. Look (colour, shell, cards, tiles, header): the Mengantar app study `~/Documents/work/notes/mengantar-app-ui-analysis.md` §1–§3, §7–§9 (v3.2). |
 | Component source | Official shadcn/ui primitives in `src/components/ui/*` (reinstalled from the registry 2026-09-25) and the registry blocks `dashboard-01`, `sidebar-07`, `sidebar-16` as composition patterns |
@@ -25,7 +25,31 @@ One brand, no white-labelling in MVP. Locale `id-ID`, IDR, timezone WIB (`Asia/J
 
 ## 2. Tokens (`src/app/globals.css`)
 
-### 2.1 Colour (v3.2, Mengantar look)
+### 2.0 Brand palette (v3.3, D-22 — supersedes the v3.2 colour values in §2.1; layout, sizes and anatomy unchanged)
+
+Owner palette (2026-09-26): navy `#0B2D4F` / `#071E33`, green `#10B981` / `#059669` / `#34D399` / `#D1FAE5`, ground `#F8FAFC`, text `#0F172A` / `#475569` / `#94A3B8`, border `#E2E8F0`, success `#10B981`, info `#2563EB`, warning `#F59E0B`, danger `#DC2626`. Mapped to tokens under the 40+ floor (WCAG ratios computed in sRGB):
+
+| Token | Value | Ratio / rule |
+|---|---|---|
+| `--primary` (top bar, primary buttons, links, sidebar icon square) | `#0B2D4F`, hover `#071E33` | white on it 13.98 |
+| `--brand` (active-item bar, success accents) | `#10B981` | accent only: white text on it is 2.54 — never a text background with white text |
+| `--brand-light` ("CUAN" in the top-bar wordmark) | `#34D399` | on navy only, 7.27 |
+| `--brand-strong` (green text) / `--ok` | `#047857` | 5.48 on white, 5.21 on `#ECFDF5` |
+| `--ring` | `#059669` | ≥ 3:1 on every ground (3.6 on `#F8FAFC`) |
+| `--background` / `--card` | `#F8FAFC` / `#FFFFFF` | — |
+| `--foreground` | `#0F172A` | 17.06 on ground |
+| `--muted-foreground` | `#475569` | ≥ 6.9 on every ground and tile |
+| owner `--text-muted #94A3B8` | not a text token | 2.56 on white — decorative icons/disabled only |
+| `--border` / `--input` | `#E2E8F0` / `#7B8AA0` | input ≥ 3.35 (the owner's `#E2E8F0` would be 1.23 for a field boundary) |
+| `--accent` (selected option, hover) | `#ECFDF5` with navy text | 13.27 |
+| `--warn` text / fill | `#B45309` / `#F59E0B` for icons and fills | owner `#F59E0B` as text is 2.15 |
+| `--danger` text, `--destructive` | `#B91C1C` | owner `#DC2626` on its own tint is 4.41 |
+| `--info` | `#2563EB` | 5.17 |
+| tiles | `#F8FAFC`, info `#EFF6FF`, ok `#ECFDF5`, warn `#FFFBEB`, danger `#FEF2F2` | muted text ≥ 6.9 on each |
+
+The thermal label and the invoice sheet stay black on white. Dark palette (dormant) uses `#34D399` as primary with navy foreground.
+
+### 2.1 Colour (v3.2, Mengantar look — values superseded by §2.0)
 
 | Token | v3.1 | **v3.2** | Use |
 |---|---|---|---|
