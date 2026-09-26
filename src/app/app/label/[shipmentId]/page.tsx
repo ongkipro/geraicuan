@@ -19,6 +19,7 @@ import { db } from "@/db/client";
 import { LabelUnavailableError, listPrintEvents, loadPrintableLabel } from "@/db/label-print-repository";
 import { loadShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { loadTenantLabelFields } from "@/db/tenant-settings-repository";
 import { formatWibDateTime, recipientDensity } from "@/lib/label-format";
 
 export const metadata: Metadata = { title: "Label kiriman", robots: { index: false } };
@@ -51,7 +52,9 @@ export default async function LabelDetailPage({
       const label = await loadPrintableLabel(tx, context, shipmentId);
       const events = await listPrintEvents(tx, context, shipmentId);
       const invoice = withInvoice ? await loadShipmentInvoice(tx, context, shipmentId) : null;
-      return { events, invoice, kind: "ready" as const, label };
+      // PR-86: the gerai's Informasi label choice, per size; the sheet applies the chosen size's.
+      const fields = await loadTenantLabelFields(tx, context);
+      return { events, fields, invoice, kind: "ready" as const, label };
     } catch (error) {
       if (!(error instanceof LabelUnavailableError)) throw error;
       if (error.reason === "NOT_FOUND") return { kind: "not-found" as const };
@@ -83,7 +86,7 @@ export default async function LabelDetailPage({
     );
   }
 
-  const { events, invoice, label } = detail;
+  const { events, fields, invoice, label } = detail;
   const labelHref = `/app/label/${routeKey}`;
   const recipientLayout = recipientDensity({
     addressLength: label.recipient.address.length,
@@ -177,7 +180,7 @@ export default async function LabelDetailPage({
         printCount={label.printCount}
         shipmentId={label.shipmentId}
       >
-        <LabelSheet label={label} />
+        <LabelSheet fields={fields} label={label} />
       </LabelPrintPanel>
     </>
   );

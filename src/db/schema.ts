@@ -62,6 +62,8 @@ export const auditEventActions = [
   "TENANT_SELF_REGISTERED",
   "TENANT_REGISTRATION_APPROVED",
   "TENANT_REGISTRATION_REJECTED",
+  // T-233 (0058): written only by `set_tenant_contact_whatsapp`.
+  "TENANT_CONTACT_UPDATED",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
@@ -271,6 +273,37 @@ export const tenants = pgTable(
       "tenants_contact_whatsapp_valid",
       sql`contact_whatsapp IS NULL OR contact_whatsapp ~ '^0[2-9][0-9]{7,11}$'`,
     ),
+  ],
+);
+
+/**
+ * T-229 / PR-86 (0059): which fields the gerai's thermal label prints, per label size.
+ * No row means the defaults, which reproduce the label as printed before 0059. There is
+ * deliberately no column for the Mengantar pickup identity: it is never printable (PR-71).
+ */
+export const tenantLabelSizes = ["10x15", "10x10"] as const;
+
+export const tenantLabelSettings = pgTable(
+  "tenant_label_settings",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    labelSize: text("label_size", { enum: tenantLabelSizes }).notNull(),
+    showSenderAddress: boolean("show_sender_address").notNull().default(true),
+    showSenderPhone: boolean("show_sender_phone").notNull().default(true),
+    showRecipientName: boolean("show_recipient_name").notNull().default(true),
+    showRecipientPhone: boolean("show_recipient_phone").notNull().default(true),
+    showRecipientAddressDetail: boolean("show_recipient_address_detail").notNull().default(true),
+    showReturnWarning: boolean("show_return_warning").notNull().default(false),
+    updatedByUserId: text("updated_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "tenant_label_settings_pkey", columns: [table.tenantId, table.labelSize] }),
+    check("tenant_label_settings_size_valid", sql`label_size IN ('10x15', '10x10')`),
+    check("tenant_label_settings_updater_not_blank", sql`char_length(btrim(updated_by_user_id)) > 0`),
   ],
 );
 
@@ -1994,7 +2027,8 @@ export const auditEvents = pgTable(
         'SHIPMENT_PREFIX_UNLOCKED',
         'TENANT_SELF_REGISTERED',
         'TENANT_REGISTRATION_APPROVED',
-        'TENANT_REGISTRATION_REJECTED'
+        'TENANT_REGISTRATION_REJECTED',
+        'TENANT_CONTACT_UPDATED'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),

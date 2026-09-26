@@ -32,7 +32,17 @@ import {
   ShipmentPrefixLockedError,
 } from "@/db/shipment-number-repository";
 import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
+import {
+  saveTenantContactWhatsapp,
+  saveTenantLabelFields,
+  TenantContactInvalidError,
+  TenantSettingsDeniedError,
+} from "@/db/tenant-settings-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { characterClassError } from "@/lib/field-character-classes";
+import { parseLabelFieldsForm } from "@/lib/label-fields";
+import { LABEL_SIZES, type LabelSize } from "@/lib/label-size";
+import { normalizePartyPhone } from "@/lib/shipment-draft";
 import { normalizeShipmentPrefixInput } from "@/lib/shipment-number";
 import {
   assertPlatformDefaultMengantarCredentialsAvailable,
@@ -523,4 +533,72 @@ export async function saveShipmentPrefix(
   // Every screen that shows a shipment number must pick up the new prefix.
   revalidatePath("/app", "layout");
   return { savedPrefix: prefix, resultToken: randomUUID() };
+}
+
+export type TenantContactActionState = {
+  error?: string;
+  resultToken?: string;
+  savedWhatsapp?: string;
+};
+
+const WHATSAPP_ERROR = "Isi nomor WhatsApp Indonesia yang benar, misalnya 0812 3456 7890.";
+
+/**
+ * T-233: the gerai WhatsApp printed on the nota and offered as the label sender. Same
+ * normaliser as registration (`normalizePartyPhone`); the database function re-checks the
+ * format, the Tenant Admin role and the tenant, and audits the change.
+ */
+export async function saveTenantContact(
+  _previous: TenantContactActionState,
+  formData: FormData,
+): Promise<TenantContactActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const raw = formString(formData, "whatsapp");
+  const classError = characterClassError("PHONE", "Nomor WhatsApp", raw);
+  const whatsapp = classError ? null : normalizePartyPhone(raw);
+  if (!whatsapp) return { error: classError ?? WHATSAPP_ERROR, resultToken: randomUUID() };
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveTenantContactWhatsapp(tx, context, whatsapp), STORE_SETUP);
+  } catch (error) {
+    if (error instanceof TenantContactInvalidError) return { error: WHATSAPP_ERROR, resultToken: randomUUID() };
+    if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya Tenant Admin yang dapat mengubah WhatsApp gerai.", resultToken: randomUUID() };
+    }
+    return { error: "WhatsApp gerai belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
+  }
+  revalidatePath("/app/pengaturan");
+  revalidatePath("/app/pengaturan/label");
+  revalidatePath("/app/pengiriman/baru");
+  return { resultToken: randomUUID(), savedWhatsapp: whatsapp };
+}
+
+export type LabelSettingsActionState = {
+  error?: string;
+  resultToken?: string;
+  saved?: boolean;
+};
+
+/** T-229 / PR-86: both sizes' label fields in one save; every later label print applies them. */
+export async function saveLabelSettings(
+  _previous: LabelSettingsActionState,
+  formData: FormData,
+): Promise<LabelSettingsActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const fields = parseLabelFieldsForm(formData, Object.keys(LABEL_SIZES) as LabelSize[]);
+  if (!fields) {
+    return { error: "Pilihan informasi label tidak lengkap. Muat ulang halaman lalu coba lagi.", resultToken: randomUUID() };
+  }
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveTenantLabelFields(tx, context, fields), STORE_SETUP);
+  } catch (error) {
+    if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya Tenant Admin yang dapat mengubah informasi label.", resultToken: randomUUID() };
+    }
+    return { error: "Informasi label belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
+  }
+  revalidatePath("/app/pengaturan/label");
+  revalidatePath("/app/label", "layout");
+  return { resultToken: randomUUID(), saved: true };
 }

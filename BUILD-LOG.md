@@ -4885,3 +4885,11 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Invoice defect found and fixed.** For COD Ongkir the nota showed the list price as "Total ongkir" (Rp 31.500) next to the courier collection (Rp 27.000). The nota now charges the courier collection for that mode (DATA-14 updated), prints the courier display name ("Lion Parcel", not "lion") and a normalised estimate. Invoices issued before this fix keep their snapshot (immutable).
 - **Checks.** tsc 0; lint 0; full suite 113 files / 1,305 passed.
 - **New task.** T-233: the gerai WhatsApp printed on label and nota has no edit path.
+
+## 2026-09-26 — T-233 gerai WhatsApp, T-229 Informasi label
+
+- **T-233.** `tenants.contact_whatsapp` is edited only through the definer `set_tenant_contact_whatsapp` (0058): a row policy for Tenant Admins would also have opened `name`/`status`, which the runtime role may UPDATE for the Super Admin path. Audit `TENANT_CONTACT_UPDATED` carries no numbers. Issued invoices keep their snapshot.
+- **T-229.** `tenant_label_settings` (0059) per size; no row = the old label. `LabelSheet` became a client component (`fields` for both sizes, size from the print context); the warning takes the footer's issue-time slot, so the label geometry and `label.css` did not change. Switch added verbatim from the shadcn registry (radix-ui already present).
+- **Gotcha.** React resets a `<form>` after its action; a Radix Switch inside the form listens to `reset` and calls `onCheckedChange` with its first value, silently reverting a controlled editor. Keep switches outside the form and post hidden inputs.
+- **Checks.** tsc 0; lint 0; full integration suite on the isolated DB 114 files / 1,322 passed; `verify-migration-upgrade` through 0059 (temporary DB created and dropped); migrations applied to the iso and dev DBs. Browser evidence at 1440/390 in the scratchpad `t229/`.
+

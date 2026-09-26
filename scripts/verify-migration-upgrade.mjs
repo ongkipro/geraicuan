@@ -45,6 +45,12 @@ if (emailReleaseIndex !== signUpHardeningIndex + 1) {
   throw new Error("Expected the rejected-registration email release boundary right after 0052.");
 }
 
+const contactIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0058_tenant_contact_whatsapp"));
+if (contactIndex <= emailReleaseIndex) {
+  throw new Error("Expected the tenant contact upgrade boundary after 0053.");
+}
+
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
 
@@ -1134,7 +1140,7 @@ try {
     throw new Error(`Pre-0053 rejected-registration fixtures are missing: ${JSON.stringify(rejectedUnverifiedBefore)}`);
   }
 
-  await applyMigrations(migrations.slice(emailReleaseIndex));
+  await applyMigrations(migrations.slice(emailReleaseIndex, contactIndex));
 
   const afterRelease = await identitySnapshot();
   const releasedAfter = afterRelease.users.find((row) => row.id === rejectedFixtures.unverified.userId);
@@ -1201,6 +1207,54 @@ try {
   `);
   if (vehicle.drafts < 1 || vehicle.with_vehicle !== 0 || vehicle.validated !== 2 || vehicle.privileges !== "INSERT,SELECT") {
     throw new Error(`0057 pickup_vehicle did not upgrade cleanly: ${JSON.stringify(vehicle)}`);
+  }
+
+  // 0058 (T-233) and 0059 (T-229): additive. Every tenant row (WhatsApp included) and
+  // every audit row is unchanged; the WhatsApp is writable only through the definer
+  // function, for an active Tenant Admin of the context tenant; the label settings table
+  // starts empty (defaults) with forced RLS and the exact column grants.
+  const fullTenants = async () => (await client.query("SELECT to_jsonb(t) AS row FROM tenants t ORDER BY id")).rows;
+  const auditRows = async () => (await client.query("SELECT to_jsonb(a) AS row FROM audit_events a ORDER BY id")).rows;
+  const tenantsBefore058 = await fullTenants();
+  const auditBefore058 = await auditRows();
+  if (tenantsBefore058.length < 5 || auditBefore058.length < 4) throw new Error("Pre-0058 fixtures missing.");
+  await applyMigrations(migrations.slice(contactIndex));
+  if (JSON.stringify(await fullTenants()) !== JSON.stringify(tenantsBefore058)
+    || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore058)) {
+    throw new Error("0058/0059 changed an existing tenant or audit row.");
+  }
+  const { rows: [admin058] } = await client.query(`
+    SELECT m.user_id, m.tenant_id FROM memberships m JOIN users u ON u.id = m.user_id JOIN tenants t ON t.id = m.tenant_id
+    WHERE m.role = 'TENANT_ADMIN' AND m.status = 'ACTIVE' AND u.status = 'ACTIVE' AND t.status = 'ACTIVE' ORDER BY m.id LIMIT 1`);
+  if (!admin058) throw new Error("No active Tenant Admin fixture for the 0058 probe.");
+  const inContext = async (userId, tenantId, statement) => asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", [userId, tenantId]);
+    await client.query(statement);
+    return { code: "accepted" };
+  });
+  const contactSaved = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", [admin058.user_id, admin058.tenant_id]);
+    await client.query("SELECT public.set_tenant_contact_whatsapp('081355556666')");
+    const { rows: [row] } = await client.query("SELECT contact_whatsapp FROM tenants WHERE id = $1", [admin058.tenant_id]);
+    return { code: row?.contact_whatsapp === "081355556666" ? "saved" : JSON.stringify(row) };
+  });
+  const contactInvalid = await inContext(admin058.user_id, admin058.tenant_id, "SELECT public.set_tenant_contact_whatsapp('12345')");
+  const contactDirect = await inContext(admin058.user_id, admin058.tenant_id, "UPDATE tenants SET contact_whatsapp = '081355556666'");
+  const { rows: [labelTable] } = await client.query(`
+    SELECT (SELECT count(*)::int FROM tenant_label_settings) AS rows,
+      (SELECT relforcerowsecurity FROM pg_class WHERE relname = 'tenant_label_settings') AS forced,
+      (SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.column_privileges
+        WHERE table_name = 'tenant_label_settings' AND grantee = 'geraicuan_app' AND privilege_type = 'UPDATE') AS updatable
+  `);
+  if (
+    contactSaved.code !== "saved" || contactInvalid.code !== "22023" || contactDirect.code !== "42501"
+    || labelTable.rows !== 0 || labelTable.forced !== true
+    || labelTable.updatable !== "show_recipient_address_detail,show_recipient_name,show_recipient_phone,show_return_warning,show_sender_address,show_sender_phone,updated_at,updated_by_user_id"
+  ) {
+    throw new Error(`0058/0059 did not upgrade cleanly: ${JSON.stringify({ contactSaved, contactInvalid, contactDirect, labelTable })}`);
+  }
+  if (JSON.stringify(await fullTenants()) !== JSON.stringify(tenantsBefore058)) {
+    throw new Error("The 0058 probes left a change behind.");
   }
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);

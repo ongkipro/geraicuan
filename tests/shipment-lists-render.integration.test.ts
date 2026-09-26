@@ -151,7 +151,8 @@ describe("list sources", () => {
 
   it("keeps the label preview the print: the kept sheet inside the print panel", () => {
     const page = read("src/app/app/label/[shipmentId]/page.tsx");
-    expect(page).toContain("<LabelSheet label={label} />");
+    // T-229: the sheet also carries the gerai's Informasi label choice.
+    expect(page).toContain("<LabelSheet fields={fields} label={label} />");
     expect(page).toContain('resolveShipmentRoute(principal, routeKey, "/app/label")');
     const panel = read("src/app/app/label/[shipmentId]/label-print-panel.tsx");
     expect(panel).toContain("recordLabelPrint");

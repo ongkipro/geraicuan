@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
+import { loadTenantLabelFields } from "@/db/tenant-settings-repository";
 import { LABEL_SIZES } from "@/lib/label-size";
 
 export const metadata: Metadata = { title: "Pratinjau cetak", robots: { index: false } };
@@ -32,9 +33,13 @@ function BackToList() {
 export default async function BatchPrintPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const principal = await requireTenantPrincipal();
   const query = parseBatchPrintQuery(await searchParams);
-  const items = query.numbers.length === 0
-    ? []
-    : await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) => loadBatchPrint(tx, context, query));
+  const { fields, items } = query.numbers.length === 0
+    ? { fields: undefined, items: [] }
+    : await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => ({
+      // PR-86: every sheet applies the gerai's Informasi label choice for the batch size.
+      fields: await loadTenantLabelFields(tx, context),
+      items: await loadBatchPrint(tx, context, query),
+    }));
 
   const ready = items.flatMap((item) => (item.kind === "ready" ? [item] : []));
   const skipped = items.flatMap((item) => (item.kind === "skipped" ? [item] : []));
@@ -103,7 +108,7 @@ export default async function BatchPrintPage({ searchParams }: { searchParams: P
       <BatchPrintPanel
         attempts={labels.map((item) => ({ attemptId: randomUUID(), shipmentId: item.label.shipmentId }))}
         invoices={invoices}
-        labels={labels.length > 0 ? labels.map((item) => <LabelSheet key={item.label.shipmentId} label={item.label} />) : null}
+        labels={labels.length > 0 ? labels.map((item) => <LabelSheet fields={fields} key={item.label.shipmentId} label={item.label} />) : null}
         size={query.size}
       />
     </>

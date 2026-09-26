@@ -1,6 +1,6 @@
 "use client";
 
-import { Link2, MapPin, Store, User, UsersRound } from "lucide-react";
+import { Link2, MapPin, Store, Tag, User, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 /** Spec 10 §4.10: the settings sub-menu, in this order. */
 export const SETTINGS_NAV_ITEMS = [
   { href: "/app/pengaturan", icon: User, label: "Profil gerai" },
+  { href: "/app/pengaturan/label", icon: Tag, label: "Informasi label" },
   { href: "/app/pengaturan/pickup", icon: MapPin, label: "Titik pickup" },
   { href: "/app/pengaturan/outlet", icon: Store, label: "Outlet" },
   { href: "/app/pengaturan/koneksi", icon: Link2, label: "Koneksi Mengantar" },

@@ -17,7 +17,9 @@ vi.mock("@/app/app/pengaturan/actions", () => ({
   loadMengantarPickupOptions: async () => ({}),
   removeOutletPickupPoint: async () => ({}),
   savePrivateMengantarCredential: async () => ({}),
+  saveLabelSettings: async () => ({}),
   saveShipmentPrefix: async () => ({}),
+  saveTenantContact: async () => ({}),
   setDefaultOutletPickupPoint: async () => ({}),
   switchMengantarToPlatformDefault: async () => ({}),
 }));
@@ -30,6 +32,9 @@ vi.mock("@/app/app/anggota/actions", () => ({
 const logic = await import("@/app/app/pengaturan/_components/settings-logic");
 const { SettingsNav } = await import("@/app/app/pengaturan/_components/settings-nav");
 const { ShipmentPrefixCard } = await import("@/app/app/pengaturan/_components/shipment-prefix-card");
+const { GeraiIdentityCard } = await import("@/app/app/pengaturan/_components/gerai-identity-card");
+const { LabelInfoEditor } = await import("@/app/app/pengaturan/label/label-info-editor");
+const { DEFAULT_LABEL_FIELDS, DEFAULT_LABEL_FIELDS_BY_SIZE } = await import("@/lib/label-fields");
 const { ConnectionForm } = await import("@/app/app/pengaturan/koneksi/connection-form");
 const { PickupPoints } = await import("@/app/app/pengaturan/pickup/pickup-points");
 const { MemberAccessDialog } = await import("@/app/app/anggota/_components/member-access-dialog");
@@ -107,15 +112,44 @@ describe("settings sub-menu", () => {
     ["/app/pengaturan/pickup", "Titik pickup"],
     ["/app/anggota", "Anggota & akses"],
     ["/app/pengaturan", "Profil gerai"],
-  ])("lists the five pages in order and marks %s current", (pathname, current) => {
+    ["/app/pengaturan/label", "Informasi label"],
+  ])("lists the six pages in order and marks %s current", (pathname, current) => {
     route.pathname = pathname;
     const html = renderToStaticMarkup(createElement(SettingsNav));
     const links = [...html.matchAll(/<a([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, body]) => ({
       current: attributes.includes('aria-current="page"'),
       label: body.replace(/<[^>]+>/g, "").replace("&amp;", "&").trim(),
     }));
-    expect(links.map((link) => link.label)).toEqual(["Profil gerai", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota & akses"]);
+    expect(links.map((link) => link.label)).toEqual(["Profil gerai", "Informasi label", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota & akses"]);
     expect(links.filter((link) => link.current).map((link) => link.label)).toEqual([current]);
+  });
+});
+
+describe("gerai identity card (T-233)", () => {
+  it("shows the name read-only and the WhatsApp as the one editable field with one save", () => {
+    const html = renderToStaticMarkup(createElement(GeraiIdentityCard, { name: "Gerai Sinar", whatsapp: "081234567890" }));
+    expect(html).toContain("Gerai Sinar");
+    expect(html).not.toContain('name="name"');
+    expect(html).toContain('name="whatsapp"');
+    expect(html).toContain('value="081234567890"');
+    expect(html).toContain("Simpan");
+    expect(filledButtons(html)).toBe(1);
+  });
+});
+
+describe("Informasi label editor (T-229)", () => {
+  it("renders the size cards, one switch per field, the real label sheet and one Simpan", () => {
+    const initial = { ...DEFAULT_LABEL_FIELDS_BY_SIZE, "10x10": { ...DEFAULT_LABEL_FIELDS, senderPhone: false } };
+    const html = renderToStaticMarkup(createElement(LabelInfoEditor, { geraiName: "Gerai Sinar", geraiWhatsapp: "081234567890", initial }));
+    expect(html.match(/name="label-info-size"/g)).toHaveLength(2);
+    expect(html.match(/data-slot="switch"/g)).toHaveLength(6);
+    expect(html.match(/class="label-sheet"/g)).toHaveLength(1);
+    expect(html).toContain("Gerai Sinar");
+    // Both sizes travel in the form; the 10 × 10 choice is kept while 10 × 15 is shown.
+    expect(html).toContain('type="hidden" name="10x10.senderPhone" value="0"');
+    expect(html).toContain('type="hidden" name="10x15.senderPhone" value="1"');
+    expect(html).not.toMatch(/pickup Mengantar<\/label>/);
+    expect(filledButtons(html)).toBe(1);
   });
 });
 

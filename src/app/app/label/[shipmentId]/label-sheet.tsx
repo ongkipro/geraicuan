@@ -1,6 +1,17 @@
+"use client";
+
+import { useContext } from "react";
+
 import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
-import { HandoverTime, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
+import { HandoverTime, LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
+import {
+  DEFAULT_LABEL_FIELDS_BY_SIZE,
+  formatCityProvince,
+  RETURN_WARNING_TEXT,
+  type LabelFields,
+  type LabelFieldsBySize,
+} from "@/lib/label-fields";
 import {
   formatDimensions,
   formatDistrictCity,
@@ -19,20 +30,29 @@ function serviceName(courier: string, service: string) {
 /**
  * T-176 thermal sheet: a 10 × 10 cm package label for the courier and, at 10 × 15 cm,
  * a 10 × 5 cm stub the operator cuts off and hands to the sender.
+ *
+ * T-229 / PR-86: `fields` is the gerai's saved choice per size (Pengaturan → Informasi
+ * label); the size comes from the print context, so switching size in the preview
+ * applies that size's choice. Without it the sheet prints the defaults, which are the
+ * label as it was before T-229. Geometry is unchanged: hidden text leaves its row.
  */
-export function LabelSheet({ label }: { label: PrintableLabel }) {
+export function LabelSheet({ fields, label }: { fields?: LabelFieldsBySize; label: PrintableLabel }) {
+  const { size } = useContext(LabelPrintContext);
+  const shown = (fields ?? DEFAULT_LABEL_FIELDS_BY_SIZE)[size];
   return (
     <LabelSheetFrame stub={<LabelSenderStub label={label} />}>
-      <LabelPackage label={label} />
+      <LabelPackage label={label} shown={shown} />
     </LabelSheetFrame>
   );
 }
 
-function LabelPackage({ label }: { label: PrintableLabel }) {
+function LabelPackage({ label, shown }: { label: PrintableLabel; shown: LabelFields }) {
+  const cityProvince = shown.recipientAddressDetail ? null : formatCityProvince(label.destinationAreaLabel);
+  // Density follows what prints, so hidden fields let the rest print larger.
   const recipientLayout = recipientDensity({
-    nameLength: label.recipient.name.length,
-    addressLength: label.recipient.address.length,
-    areaLabelLength: label.destinationAreaLabel.length,
+    nameLength: shown.recipientName ? label.recipient.name.length : 0,
+    addressLength: cityProvince === null ? label.recipient.address.length : 0,
+    areaLabelLength: cityProvince === null ? label.destinationAreaLabel.length : cityProvince.length,
   });
   const dimensions = formatDimensions(label.package.lengthCm, label.package.widthCm, label.package.heightCm);
   const insurance = label.insuranceAmountIdr === null ? "Tidak ada" : formatIdr(label.insuranceAmountIdr);
@@ -53,23 +73,28 @@ function LabelPackage({ label }: { label: PrintableLabel }) {
 
       <div className="label-party label-recipient" data-density={recipientLayout.tier}>
         <p className="label-party-line">
-          <span className="label-eyebrow">Penerima</span>{" "}
-          <span className="label-party-name">{label.recipient.name}</span>{" "}
-          <span className="label-party-phone">{label.recipient.phone}</span>
+          <span className="label-eyebrow">Penerima</span>
+          {shown.recipientName ? <>{" "}<span className="label-party-name">{label.recipient.name}</span></> : null}
+          {shown.recipientPhone ? <>{" "}<span className="label-party-phone">{label.recipient.phone}</span></> : null}
         </p>
-        {recipientLayout.omitAreaLine ? null : (
-          <p className="label-party-area">{label.destinationAreaLabel}</p>
+        {cityProvince !== null ? (
+          <p className="label-party-area">{cityProvince}</p>
+        ) : (
+          <>
+            {recipientLayout.omitAreaLine ? null : (
+              <p className="label-party-area">{label.destinationAreaLabel}</p>
+            )}
+            <p className="label-party-address">{label.recipient.address}</p>
+          </>
         )}
-        <p className="label-party-address">{label.recipient.address}</p>
       </div>
 
       <div className="label-party label-sender">
         <p className="label-sender-line">
           <span className="label-eyebrow">Pengirim</span>{" "}
-          <span className="label-party-name">{label.sender.name}</span>{" "}
-          <span className="label-party-phone">{label.sender.phone}</span>
-          {" · "}
-          <span className="label-party-address">{label.sender.address}</span>
+          <span className="label-party-name">{label.sender.name}</span>
+          {shown.senderPhone ? <>{" "}<span className="label-party-phone">{label.sender.phone}</span></> : null}
+          {shown.senderAddress ? <>{" · "}<span className="label-party-address">{label.sender.address}</span></> : null}
         </p>
       </div>
 
@@ -127,9 +152,14 @@ function LabelPackage({ label }: { label: PrintableLabel }) {
       </dl>
 
       <div className="label-footer">
-        <p>
-          Nomor kiriman {label.publicReference} · Terbit {formatWibDateTime(label.issuedAt)}
-        </p>
+        {shown.returnWarning ? (
+          // The footer row stays one 7 pt line: the warning takes the issue time's place.
+          <p><b className="label-footer-warning">{RETURN_WARNING_TEXT}</b> · Nomor kiriman {label.publicReference}</p>
+        ) : (
+          <p>
+            Nomor kiriman {label.publicReference} · Terbit {formatWibDateTime(label.issuedAt)}
+          </p>
+        )}
       </div>
     </section>
   );

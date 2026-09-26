@@ -197,6 +197,10 @@ describe("tenant isolation posture", () => {
       shipment_drafts:
         "UPDATE(cogs_amount_idr,declared_value_idr,destination_area_id,destination_area_label,destination_area_verified_at,is_cod,package_content,package_height_cm,package_length_cm,package_quantity,package_weight_grams,package_width_cm,updated_at)",
       shipments: "UPDATE(cogs_amount_idr,status,updated_at)",
+      // T-229 / 0059: the per-size choices and who changed them; never the tenant or size.
+      tenant_label_settings:
+        "UPDATE(show_recipient_address_detail,show_recipient_name,show_recipient_phone,show_return_warning,show_sender_address,show_sender_phone,updated_at,updated_by_user_id)",
+      // T-233 / 0058: contact_whatsapp is written only by set_tenant_contact_whatsapp.
       tenants: "UPDATE(name,status,updated_at)",
     };
     for (const [table, update] of Object.entries(mutable)) {
@@ -221,7 +225,8 @@ describe("tenant isolation posture", () => {
       shipment_drafts: ["tenant_id", "created_at", "shipment_id"],
       shipments: ["id", "tenant_id", "created_at", "outlet_id", "created_by_user_id", "public_reference", "reference_user_number", "reference_date", "daily_sequence"],
       users: ["public_number"],
-      tenants: ["id", "created_at"],
+      tenants: ["id", "created_at", "contact_whatsapp"],
+      tenant_label_settings: ["tenant_id", "label_size", "created_at"],
     };
 
     for (const [table, columns] of Object.entries({

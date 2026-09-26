@@ -37,14 +37,14 @@ Every change touching routes, handlers, actions, data models, or navigation must
 
 ### Current Repository Inventory (2026-09-26)
 
-- **35 `page.tsx` files**:
+- **36 `page.tsx` files**:
   - 8 Public & Authentication pages (`/`, `/login/tenant`, `/login/super-admin`, `/daftar`, `/verifikasi-email`, `/verifikasi-email/konfirmasi`, `/lupa-password`, `/atur-ulang-password`).
-  - 22 Authenticated Tenant CMS pages reached from 12 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
+  - 23 Authenticated Tenant CMS pages reached from 12 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
   - 5 Authenticated Platform CMS pages (Ringkasan, Tenant, Detail tenant, Pendaftaran, Audit).
 - **3 `route.ts` Route Handlers**: Better Auth (`/api/auth/[...all]`), the report CSV export (`/app/laporan/pengiriman/export.csv`), and the closed provider webhook (`/api/webhooks/mengantar`, always 404).
-- **24 files declaring Server Actions** (`"use server"`), exporting 42 Server Actions (`export async function`).
-- **4 `layout.tsx` files**, **27 `loading.tsx`** (22 tenant, 5 platform), **20 `error.tsx`** (19 tenant, 1 platform), **5 `not-found.tsx`** (Section 10).
-- **35 repository and data-layer modules** in `src/db/`.
+- **24 files declaring Server Actions** (`"use server"`), exporting 44 Server Actions (`export async function`).
+- **4 `layout.tsx` files**, **28 `loading.tsx`** (23 tenant, 5 platform), **20 `error.tsx`** (19 tenant, 1 platform), **5 `not-found.tsx`** (Section 10).
+- **36 repository and data-layer modules** in `src/db/`.
 - These counts are checked against the filesystem by `tests/system-map-inventory.integration.test.ts` (T-199, re-enabled by T-224); a drifted number fails the suite.
 - **Apex landing site**: standalone Astro static site in `apps/landing` for `https://geraicuan.com` (not part of the Next.js route tree).
 
@@ -109,6 +109,7 @@ flowchart TD
         TenantShell --> Report[Laporan pengiriman /app/laporan/pengiriman - admin]
         TenantShell --> PrintHistory[Riwayat cetak resi /app/laporan/cetak-resi - admin]
         TenantShell --> Settings[Pengaturan /app/pengaturan - admin]
+        Settings --> LabelInfo[Informasi label /app/pengaturan/label]
         Settings --> Pickup[Titik pickup /app/pengaturan/pickup]
         Settings --> Outlet[Outlet /app/pengaturan/outlet]
         Settings --> Connection[Koneksi Mengantar /app/pengaturan/koneksi]
@@ -150,7 +151,7 @@ flowchart TD
 |---|---|---|
 | Tenant frame | `src/app/app/layout.tsx` → `AppShell` (`src/components/app/app-shell.tsx`) | Guard `requireCmsScope("tenant", { allowPendingApproval: true })`; anyone else → `/login/tenant?notice=session-required\|access-unavailable`. 64px primary top bar (`SiteHeader`), sidebar on the canvas (full ≥ 1024px, icon rail 768–1023px, Sheet < 768px), 1120px content column. A `PROVISIONING` gerai gets the approval notice above every page. |
 | **Focused layout** (D11) | `AppShell` `FOCUSED_ROUTES = {"/app/pengiriman/baru"}` | No sidebar; the top bar holds the brand, the 3-step stepper (`FlowStepper`: Isi data · Cek tarif · Terbitkan resi) and a close ✕ to `/app/pengiriman`; the content column is centred; the summary rail stays sticky (mobile: bottom bar). |
-| Settings frame | `src/app/app/pengaturan/layout.tsx` → `SettingsFrame` | Guard `requireTenantAdmin()` (Operator → `/app`). Page header "Pengaturan" + settings sub-menu (`SETTINGS_NAV_ITEMS`, `src/app/app/pengaturan/_components/settings-nav.tsx`: Profil gerai, Titik pickup, Outlet, Koneksi Mengantar, Anggota & akses). `/app/anggota` is outside this directory and renders `SettingsFrame` itself. |
+| Settings frame | `src/app/app/pengaturan/layout.tsx` → `SettingsFrame` | Guard `requireTenantAdmin()` (Operator → `/app`). Page header "Pengaturan" + settings sub-menu (`SETTINGS_NAV_ITEMS`, `src/app/app/pengaturan/_components/settings-nav.tsx`: Profil gerai, Informasi label, Titik pickup, Outlet, Koneksi Mengantar, Anggota & akses). `/app/anggota` is outside this directory and renders `SettingsFrame` itself. |
 | Platform frame | `src/app/platform/layout.tsx` → `AppShell` scope `platform` | Guard `resolvePlatformAccess()`; anyone else → `/login/super-admin?notice=…`. |
 | Root document | `src/app/layout.tsx` | Fonts, tokens (`globals.css`), `TooltipProvider`. Public pages render `AuthShell` (`src/app/login/_components/auth-shell.tsx`). |
 
@@ -217,7 +218,7 @@ All render `AuthShell` (spec 17 UX-v3.10; polish is T-225). No route-level `load
 
 ---
 
-## 5. Tenant CMS Pages (22 Routes)
+## 5. Tenant CMS Pages (23 Routes)
 
 Guards (verified in code):
 
@@ -243,8 +244,8 @@ Guards (verified in code):
 | `/app/pengiriman/[shipmentId]` | `src/app/app/pengiriman/[shipmentId]/page.tsx` | T | Detail kiriman: identity strip, route, tracking timeline, parcel and payment, parties; rail with one next action. Recovery/reconciliation are RELEASE-GATED fixtures. | `resolveShipmentRoute` (`resolveShipmentRouteKey`), `loadShipmentDetailView` (`detail-data.ts`: `loadShipmentDetail`, `loadShipmentFlowDraft`, `listOutletPickupPoints`, `shipmentCodFormulaRetired`, provider snapshots/observations) | `confirmShipmentIssuance` + `verifyShipmentDraftDestinationArea` (`IssuancePanel`), `recoverShipmentUnpaidPayment`, `reconcileShipmentUnknownSubmission`, `checkStaleShipmentOperation`; links to label, `?invoice=1`, draft | Boundaries own `loading`/`error`/`not-found`; UUID or `GC-…` → canonical number redirect; per-status rail (Diestimasi, Menunggu pembayaran, Perlu rekonsiliasi, Resi terbit, Bermasalah); retired COD formula refusal | `detail-kiriman.html` | WORKTREE |
 | `/app/pengiriman/rts` | `src/app/app/pengiriman/rts/page.tsx` | T | Retur: follow returns and courier problems. | `loadRtsShipmentsPage` (`rts-repository.ts`); admin: `listTenantOutlets` | `pullMengantarStatus` (admin) | Boundaries own `loading`/`error`; adjusted-filter alert; empty; filtered-empty | `retur-rts.html` | WORKTREE |
 | `/app/label` | `src/app/app/label/page.tsx` | T | Cetak resi: list issued shipments, print one, or select several for the print-format modal (PR-87). | `loadLabelIndexPage` (`label-print-repository.ts`) | None (row "Cetak" → `/app/label/[n]`; "Cetak terpilih (N)" → `/app/label/cetak`) | Boundaries own `loading`/`error`; invalid AWB suffix; empty; filtered-empty | `cetak-resi.html` | WORKTREE |
-| `/app/label/[shipmentId]` | `src/app/app/label/[shipmentId]/page.tsx` | T | Print the masked thermal label (10×15 / 10×10); with `invoice=1` print label then invoice as two ordered steps. | `resolveShipmentRoute`, `loadPrintableLabel`, `listPrintEvents`, `loadShipmentInvoice` (with `invoice=1`) | `recordLabelPrint`, `issueShipmentInvoice` (`IssueInvoiceButton`) | Boundaries own `loading`/`error`/`not-found`; not issued / awaiting upstream payment (blocked alert); ready; print history | `label-detail.html` | WORKTREE |
-| `/app/label/cetak` | `src/app/app/label/cetak/page.tsx` | T | Batch print view for selected shipments: labels, invoices or both. | `loadBatchPrint` (`batch-data.ts`: `resolveShipmentRouteKey`, `loadPrintableLabel`, repository `issueShipmentInvoice` — idempotent, issues a missing invoice on render) | `recordBatchLabelPrints` | Boundaries own `loading`/`error`; nothing printable (empty); invalid numbers dropped; per-shipment unavailable | — (no spec 17 row; PR-87 modal target) | WORKTREE |
+| `/app/label/[shipmentId]` | `src/app/app/label/[shipmentId]/page.tsx` | T | Print the masked thermal label (10×15 / 10×10); with `invoice=1` print label then invoice as two ordered steps. | `resolveShipmentRoute`, `loadPrintableLabel`, `listPrintEvents`, `loadShipmentInvoice` (with `invoice=1`), `loadTenantLabelFields` (Informasi label, PR-86) | `recordLabelPrint`, `issueShipmentInvoice` (`IssueInvoiceButton`) | Boundaries own `loading`/`error`/`not-found`; not issued / awaiting upstream payment (blocked alert); ready; print history | `label-detail.html` | WORKTREE |
+| `/app/label/cetak` | `src/app/app/label/cetak/page.tsx` | T | Batch print view for selected shipments: labels, invoices or both. | `loadBatchPrint` (`batch-data.ts`: `resolveShipmentRouteKey`, `loadPrintableLabel`, repository `issueShipmentInvoice` — idempotent, issues a missing invoice on render), `loadTenantLabelFields` (Informasi label, PR-86) | `recordBatchLabelPrints` | Boundaries own `loading`/`error`; nothing printable (empty); invalid numbers dropped; per-shipment unavailable | — (no spec 17 row; PR-87 modal target) | WORKTREE |
 
 ### 5.3 Invoice (1 Route)
 
@@ -276,11 +277,12 @@ Guards (verified in code):
 | `/app/laporan/pengiriman` | `src/app/app/laporan/pengiriman/page.tsx` | A | Period report: totals per courier and status, Performa kurir, paginated list, CSV export. | `loadAnalyticsFilterOptions`, `loadShipmentReportPage` (`shipment-report-repository.ts`), `loadCourierPerformance` (own transaction) | None (link to `export.csv` carrying the filters) | Boundaries own `loading`/`error`; rejected filter reads nothing; empty; filtered-empty; chart card error only | `laporan-pengiriman.html` | WORKTREE |
 | `/app/laporan/cetak-resi` | `src/app/app/laporan/cetak-resi/page.tsx` | A | Who printed what: print events with role, result, order, reprint. | `loadAnalyticsFilterOptions`, `loadPrintHistoryPage` (`label-print-repository.ts`, ≤ 200 rows) | None | Boundaries own `loading`/`error`; empty; filtered-empty | `riwayat-cetak-resi.html` | WORKTREE |
 
-### 5.7 Pengelolaan (Tenant Admin Only — 5 Routes)
+### 5.7 Pengelolaan (Tenant Admin Only — 6 Routes)
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app/pengaturan` | `src/app/app/pengaturan/page.tsx` | A+P | Profil gerai and the one-time shipment prefix lock. | `loadTenantShipmentPrefix` | `saveShipmentPrefix` (confirm dialog) | Boundaries own `loading`, `pengaturan/error`; `?outlet=` → redirect to Outlet; locked prefix | `pengaturan.html` | WORKTREE |
+| `/app/pengaturan` | `src/app/app/pengaturan/page.tsx` | A+P | Profil gerai: name (read-only), gerai WhatsApp (T-233), the one-time shipment prefix lock. | `loadTenantProfile` (`tenant-settings-repository.ts`), `loadTenantShipmentPrefix` | `saveTenantContact`, `saveShipmentPrefix` (confirm dialog) | Boundaries own `loading`, `pengaturan/error`; `?outlet=` → redirect to Outlet; WhatsApp invalid/saved; locked prefix | `pengaturan.html` | WORKTREE |
+| `/app/pengaturan/label` | `src/app/app/pengaturan/label/page.tsx` | A+P | Informasi label (PR-86, T-229): per-size switches (sender address/phone, recipient name/phone/address detail, return warning) with a live preview of the real `LabelSheet`; one Simpan for both sizes. | `loadTenantLabelFields`, `loadTenantProfile` (`tenant-settings-repository.ts`) | `saveLabelSettings` | Boundaries own `loading`, `pengaturan/error`; saved / refused alert; no row = defaults | `pengaturan.html`, Mengantar analysis §9.12 | WORKTREE |
 | `/app/pengaturan/pickup` | `src/app/app/pengaturan/pickup/page.tsx` | A+P | Titik pickup per outlet: add from Mengantar, set default, remove. | `loadSettingsOutlets` (`listOutletReadiness`), `listOutletPickupPoints` | `loadMengantarPickupOptions`, `addOutletPickupPoint`, `setDefaultOutletPickupPoint`, `removeOutletPickupPoint` | Boundaries own `loading`, `pengaturan/error`; no outlet; no pickup point; provider error; delete confirm | `pengaturan.html` | WORKTREE |
 | `/app/pengaturan/outlet` | `src/app/app/pengaturan/outlet/page.tsx` | A+P | Outlet readiness checklist (pickup point, Mengantar connection). | `loadSettingsOutlets` (`listOutletReadiness`) | None | Boundaries own `loading`, `pengaturan/error`; no outlet; missing configuration | `pengaturan.html` | WORKTREE |
 | `/app/pengaturan/koneksi` | `src/app/app/pengaturan/koneksi/page.tsx` | A+P | Koneksi Mengantar: platform default or the gerai's own API key. | `loadSettingsOutlets` (`listOutletReadiness`) | `savePrivateMengantarCredential`, `switchMengantarToPlatformDefault` (confirm dialog) | Boundaries own `loading`, `pengaturan/error`; no outlet; `PRIVATE_ONLY` tenants cannot switch | `pengaturan.html` | WORKTREE |
@@ -353,7 +355,7 @@ Client-only state (not in the URL): the label size per operator in `localStorage
 
 ---
 
-## 9. Mutation Ownership Map (24 Server Action Files, 42 Actions)
+## 9. Mutation Ownership Map (24 Server Action Files, 44 Actions)
 
 Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enforce Invariants/Idempotency -> Write -> Record Audit/Ledger -> Revalidate/Redirect`. Every exported action is remotely callable, including those only called by other actions.
 
@@ -390,6 +392,8 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 | `setDefaultOutletPickupPoint` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/pickup` | Default point, mirrored to `outlets` | **Tenant Admin only** |
 | `removeOutletPickupPoint` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/pickup` | Deletes an `outlet_pickup_points` row | **Tenant Admin only**; not the sole default |
 | `saveShipmentPrefix` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | Sets and locks `shipment_prefix` | **Tenant Admin only**; one-time lock |
+| `saveTenantContact` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | `tenants.contact_whatsapp` through definer `set_tenant_contact_whatsapp` (0058), audit `TENANT_CONTACT_UPDATED` on change | **Tenant Admin only** (action + function); own tenant only; `normalizePartyPhone` |
+| `saveLabelSettings` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/label` | Upserts both `tenant_label_settings` rows (0059) | **Tenant Admin only** (action, repository, RLS); complete form only |
 | `inviteMemberAction` | `src/app/app/anggota/actions.ts` | `/app/anggota` | Invitation / membership | **Tenant Admin only** |
 | `changeMemberRoleAction` | `src/app/app/anggota/actions.ts` | `/app/anggota` | `memberships.role` | **Tenant Admin only**; last admin protected |
 | `deactivateMemberAction` | `src/app/app/anggota/actions.ts` | `/app/anggota` | Suspends a membership | **Tenant Admin only**; last admin protected |
@@ -414,8 +418,8 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 ### Layouts, Loading, Error and Not-Found Boundaries
 
 - **Layouts (4)**: `src/app/layout.tsx` (root document), `src/app/app/layout.tsx` (tenant frame, `requireCmsScope("tenant", { allowPendingApproval: true })`), `src/app/app/pengaturan/layout.tsx` (settings frame, `requireTenantAdmin`), `src/app/platform/layout.tsx` (platform frame, `resolvePlatformAccess`).
-- **Tenant Loading Boundaries (22)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `invoice/[shipmentNumber]/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/penerima/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `label/cetak/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
-- **Tenant Error Boundaries (19)**: `error.tsx` beside every tenant loading boundary above (`src/app/app/error.tsx` included) **except** the three settings sub-pages (`pengaturan/pickup`, `pengaturan/outlet`, `pengaturan/koneksi`), which share `src/app/app/pengaturan/error.tsx` so the settings sub-menu stays while a page fails.
+- **Tenant Loading Boundaries (23)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `invoice/[shipmentNumber]/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/penerima/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `label/cetak/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/label/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
+- **Tenant Error Boundaries (19)**: `error.tsx` beside every tenant loading boundary above (`src/app/app/error.tsx` included) **except** the four settings sub-pages (`pengaturan/label`, `pengaturan/pickup`, `pengaturan/outlet`, `pengaturan/koneksi`), which share `src/app/app/pengaturan/error.tsx` so the settings sub-menu stays while a page fails.
 - **Platform Boundaries (6)**: `src/app/platform/loading.tsx`, `src/app/platform/error.tsx`, `src/app/platform/tenant/loading.tsx`, `src/app/platform/tenant/[tenantId]/loading.tsx`, `src/app/platform/pendaftaran/loading.tsx`, `src/app/platform/audit/loading.tsx`; every platform page fails into `src/app/platform/error.tsx`.
 - **Dedicated Not-Found Boundaries (5)**: `src/app/app/pengiriman/[shipmentId]/not-found.tsx`, `src/app/app/label/[shipmentId]/not-found.tsx`, `src/app/app/invoice/[shipmentNumber]/not-found.tsx`, `src/app/app/kontak/[contactId]/not-found.tsx`, `src/app/platform/tenant/[tenantId]/not-found.tsx`. Any other `notFound()` falls through to the framework 404.
 - **Public pages** have no route-level `loading`, `error` or `not-found` file.
@@ -442,12 +446,12 @@ A rendered count keeps its metric ID in code (`metricId` / `SHIPMENT_QUEUE_SUMMA
 | Histori kiriman (`/app/pengiriman`) | `tests/shipment-lists-render.integration.test.ts`, `tests/shipment-queue.integration.test.ts`, `tests/state-summary-panel.integration.test.ts`, `tests/mengantar-status-pull-action.integration.test.ts`, `tests/provider-delivery-vocabulary.integration.test.ts` |
 | Detail kiriman (`/app/pengiriman/[shipmentId]`) | `tests/shipment-detail-t213.integration.test.ts`, `tests/shipment-actions.integration.test.ts`, `tests/shipment-issuance.integration.test.ts`, `tests/shipment-reconciliation.integration.test.ts`, `tests/shipment-unpaid-recovery.integration.test.ts`, `tests/shipment-reference-repository.integration.test.ts` |
 | Retur (`/app/pengiriman/rts`) | `tests/shipment-lists-render.integration.test.ts`, `tests/rts-repository.integration.test.ts`, `tests/shipment-status-copy.integration.test.ts`, `tests/mengantar-status-pull-action.integration.test.ts` |
-| Cetak resi, Label, batch (`/app/label/**`) | `tests/shipment-lists-render.integration.test.ts`, `tests/label-render.integration.test.ts`, `tests/label-thermal.integration.test.ts`, `tests/label-print.integration.test.ts`, `tests/label-print-actions.integration.test.ts`, `tests/label-batch-print.integration.test.ts` |
+| Cetak resi, Label, batch (`/app/label/**`) | `tests/label-info-settings.integration.test.ts` (Informasi label on the sheet), `tests/shipment-lists-render.integration.test.ts`, `tests/label-render.integration.test.ts`, `tests/label-thermal.integration.test.ts`, `tests/label-print.integration.test.ts`, `tests/label-print-actions.integration.test.ts`, `tests/label-batch-print.integration.test.ts` |
 | Invoice (`/app/invoice/[shipmentNumber]`, `invoice=1`) | `tests/shipment-invoice.integration.test.ts`, `tests/invoice-print.integration.test.ts` |
 | Pengirim, Penerima, Kontak baru/detail (`/app/kontak/**`) | `tests/contact-lookup-screens.integration.test.ts`, `tests/contact-directory.integration.test.ts`, `tests/contact-actions.integration.test.ts`, `tests/location-search-actions.integration.test.ts` |
 | Cek resi, Cek tarif | `tests/contact-lookup-screens.integration.test.ts`, `tests/tracking-lookup.integration.test.ts`, `tests/quick-rate-actions.integration.test.ts` |
 | Laporan pengiriman (+ CSV), Riwayat cetak resi | `tests/report-pages-render.integration.test.ts`, `tests/shipment-report.integration.test.ts`, `tests/shipment-report-courier-performance.integration.test.ts`, `tests/print-history-report.integration.test.ts`, `tests/analytics-filters.integration.test.ts` |
-| Pengaturan (profil, pickup, outlet, koneksi), Anggota | `tests/settings-screens-t217.integration.test.ts`, `tests/outlet-settings-actions.integration.test.ts`, `tests/outlet-pickup-points.integration.test.ts`, `tests/outlet-readiness.integration.test.ts`, `tests/member-governance.integration.test.ts`, `tests/member-governance-actions.integration.test.ts` |
+| Pengaturan (profil, informasi label, pickup, outlet, koneksi), Anggota | `tests/settings-screens-t217.integration.test.ts`, `tests/label-info-settings.integration.test.ts`, `tests/shipment-invoice.integration.test.ts` (gerai WhatsApp), `tests/outlet-settings-actions.integration.test.ts`, `tests/outlet-pickup-points.integration.test.ts`, `tests/outlet-readiness.integration.test.ts`, `tests/member-governance.integration.test.ts`, `tests/member-governance-actions.integration.test.ts` |
 | Platform pages | `tests/platform-public-render.integration.test.ts`, `tests/platform-monitoring.integration.test.ts`, `tests/platform-monitoring-filters.integration.test.ts`, `tests/platform-tenant-actions.integration.test.ts`, `tests/platform-tenant-lifecycle.integration.test.ts` |
 | Route handlers | `tests/provider-webhook-boundary.integration.test.ts` (webhook), `tests/report-pages-render.integration.test.ts` (CSV link), `tests/auth-session-boundary.integration.test.ts` (auth) |
 | Tenant isolation posture | `tests/tenant-isolation.integration.test.ts`, `tests/tenant-isolation-posture.integration.test.ts` |
@@ -475,7 +479,7 @@ Browser evidence for v3 screens is recorded per task in `TASKS.md` (T-210–T-23
 Run these read-only commands before committing:
 
 ```bash
-# 1. Verify Page Count (Must equal 35)
+# 1. Verify Page Count (Must equal 36)
 find src/app -name 'page.tsx' | wc -l
 
 # 2. Verify Route Handler Count (Must equal 3)
@@ -487,7 +491,7 @@ grep -rlE "^\s*[\"']use server[\"'];?\s*$" src | wc -l
 # 4. Verify Exported Server Actions (Must equal 42)
 grep -rlE "^\s*[\"']use server[\"'];?\s*$" src | xargs grep -h '^export async function' | wc -l
 
-# 5. Verify boundaries (4 layouts, 27 loading, 20 error, 5 not-found)
+# 5. Verify boundaries (4 layouts, 28 loading, 20 error, 5 not-found)
 for f in layout loading error not-found; do echo "$f $(find src/app -name "$f.tsx" | wc -l)"; done
 
 # 6. This map's counts, lists and navigation against the filesystem (DB-free)

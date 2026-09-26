@@ -34,6 +34,8 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+
 vi.mock("@/lib/cms-auth", () => ({
   CmsAuthorizationDeniedError: class CmsAuthorizationDeniedError extends Error {},
   requireCmsScope: vi.fn(async () => principal.current),
@@ -179,6 +181,7 @@ async function invoiceCount(shipmentId: string) {
 async function clean() {
   const tenantIds = [tenantA, tenantB];
   for (const table of [
+    "audit_events",
     "shipment_invoices",
     "print_events",
     "provider_order_snapshots",
@@ -471,3 +474,96 @@ describe("invoice courier/service line", () => {
     expect(courierServiceName("JNE", "REG")).toBe("JNE REG");
   });
 });
+
+// T-233: the gerai WhatsApp on the nota is the owner's to change, through one definer
+// function limited to an active Tenant Admin of the caller's own tenant.
+describe("gerai WhatsApp (T-233)", () => {
+  const whatsappOf = async (tenantId: string) =>
+    (await adminPool.query<{ w: string | null }>("SELECT contact_whatsapp AS w FROM tenants WHERE id = $1", [tenantId])).rows[0].w;
+
+  it("lets the Tenant Admin change their own gerai's WhatsApp, normalised and audited", async () => {
+    const { saveTenantContact } = await import("@/app/app/pengaturan/actions");
+    principal.current = { scope: "tenant", userId: adminA, tenantId: tenantA, role: "TENANT_ADMIN", tenantStatus: "ACTIVE" };
+
+    const saved = await saveTenantContact({}, formWith({ whatsapp: "+62 813-2222-3333" }));
+
+    expect(saved).toMatchObject({ savedWhatsapp: "081322223333" });
+    expect(await whatsappOf(tenantA)).toBe("081322223333");
+    expect(await whatsappOf(tenantB)).toBeNull();
+    const { rows } = await adminPool.query(
+      "SELECT actor_id, actor_role, target_id, metadata FROM audit_events WHERE tenant_id = $1 AND action = 'TENANT_CONTACT_UPDATED'",
+      [tenantA],
+    );
+    expect(rows).toEqual([{ actor_id: adminA, actor_role: "TENANT_MEMBER", target_id: tenantA, metadata: { field: "contact_whatsapp", hadPrevious: true } }]);
+
+    // Saving the same number again changes nothing and audits nothing.
+    await saveTenantContact({}, formWith({ whatsapp: "081322223333" }));
+    const { rows: again } = await adminPool.query("SELECT count(*)::int AS n FROM audit_events WHERE tenant_id = $1", [tenantA]);
+    expect(again[0].n).toBe(1);
+  });
+
+  it("refuses an Operator in the action and in the database", async () => {
+    const { saveTenantContact } = await import("@/app/app/pengaturan/actions");
+    principal.current = { scope: "tenant", userId: operatorA, tenantId: tenantA, role: "OPERATOR", tenantStatus: "ACTIVE" };
+    await expect(saveTenantContact({}, formWith({ whatsapp: "081322223333" }))).rejects.toThrow("REDIRECT:/app");
+
+    // Called directly, the function refuses the Operator too.
+    await expect(asUser(operatorA, tenantA, (tx) => tx.execute(sql`SELECT public.set_tenant_contact_whatsapp('081322223333')`)))
+      .rejects.toMatchObject({ cause: { code: "42501" } });
+    expect(await whatsappOf(tenantA)).toBe("081234567890");
+  });
+
+  it("cannot reach another tenant: the function writes only the context tenant, and no direct UPDATE path exists", async () => {
+    // Even with the tenant setting forged to B inside A's transaction, the function
+    // checks the caller's membership in that tenant and refuses.
+    await expect(asUser(adminA, tenantA, async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantB}, true)`);
+      return tx.execute(sql`SELECT public.set_tenant_contact_whatsapp('081377778888')`);
+    })).rejects.toMatchObject({ cause: { code: "42501" } });
+    expect(await whatsappOf(tenantB)).toBeNull();
+    expect(await whatsappOf(tenantA)).toBe("081234567890");
+    // userB is only an Operator of B; a tenant admin elsewhere is nothing in B.
+    await expect(asUser(userB, tenantB, (tx) => tx.execute(sql`SELECT public.set_tenant_contact_whatsapp('081377778888')`)))
+      .rejects.toMatchObject({ cause: { code: "42501" } });
+    // The runtime role has no UPDATE on the column and cannot forge the audit action.
+    await expect(asUser(adminA, tenantA, (tx) => tx.execute(sql`UPDATE tenants SET contact_whatsapp = '081311112222' WHERE id = ${tenantB}`)))
+      .rejects.toMatchObject({ cause: { code: "42501" } });
+    await expect(asUser(adminA, tenantA, (tx) => tx.execute(sql`INSERT INTO audit_events (actor_id, actor_role, tenant_id, action, target_type, target_id, outcome)
+      VALUES (${adminA}, 'TENANT_MEMBER', ${tenantA}, 'TENANT_CONTACT_UPDATED', 'TENANT', ${tenantA}, 'SUCCESS')`)))
+      .rejects.toMatchObject({ cause: { code: "42501" } });
+    expect(await whatsappOf(tenantB)).toBeNull();
+  });
+
+  it("rejects an invalid number in the action and in the database", async () => {
+    const { saveTenantContact } = await import("@/app/app/pengaturan/actions");
+    principal.current = { scope: "tenant", userId: adminA, tenantId: tenantA, role: "TENANT_ADMIN", tenantStatus: "ACTIVE" };
+    for (const whatsapp of ["", "0812", "+1 415 555 0100", "0812abc45678", "01234567890"]) {
+      const result = await saveTenantContact({}, formWith({ whatsapp }));
+      expect(result.error, whatsapp).toBeTruthy();
+      expect(result.savedWhatsapp).toBeUndefined();
+    }
+    await expect(asUser(adminA, tenantA, (tx) => tx.execute(sql`SELECT public.set_tenant_contact_whatsapp('+6281322223333')`)))
+      .rejects.toMatchObject({ cause: { code: "22023" } });
+    expect(await whatsappOf(tenantA)).toBe("081234567890");
+  });
+
+  it("keeps the old WhatsApp on invoices issued before and prints the new one on later invoices", async () => {
+    const before = await seedShipment({ sequence: 21 });
+    const after = await seedShipment({ sequence: 22 });
+    const first = await asUser(operatorA, tenantA, (tx, context) => issueShipmentInvoice(tx, context, before.shipmentId));
+
+    await asUser(adminA, tenantA, (tx) => tx.execute(sql`SELECT public.set_tenant_contact_whatsapp('081377778888')`));
+
+    const reprint = await asUser(operatorA, tenantA, (tx, context) => loadShipmentInvoice(tx, context, before.shipmentId));
+    const later = await asUser(operatorA, tenantA, (tx, context) => issueShipmentInvoice(tx, context, after.shipmentId));
+    expect(first.ok && first.invoice.document.gerai.whatsapp).toBe("081234567890");
+    expect(reprint?.document.gerai.whatsapp).toBe("081234567890");
+    expect(later.ok && later.invoice.document.gerai.whatsapp).toBe("081377778888");
+  });
+});
+
+function formWith(values: Record<string, string>) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(values)) form.set(key, value);
+  return form;
+}

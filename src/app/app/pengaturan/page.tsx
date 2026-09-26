@@ -7,8 +7,10 @@ import { DataCard } from "@/components/app/data-card";
 import { db } from "@/db/client";
 import { loadTenantShipmentPrefix } from "@/db/shipment-number-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { loadTenantProfile } from "@/db/tenant-settings-repository";
 import { suggestShipmentPrefix } from "@/lib/shipment-number";
 
+import { GeraiIdentityCard } from "./_components/gerai-identity-card";
 import { formatWib, readAuditScenario, requireTenantAdmin, STORE_SETUP } from "./_components/settings-data";
 import { ShipmentPrefixCard } from "./_components/shipment-prefix-card";
 
@@ -33,22 +35,20 @@ export default async function ProfileSettingsPage({
   if (scenario === "settings-error") throw new Error("Intentional development-only profile settings failure.");
   if (scenario === "settings-stream") await new Promise((resolve) => setTimeout(resolve, 1_200));
 
-  const shipmentPrefix = await withTenantContext(
+  const { profile, shipmentPrefix } = await withTenantContext(
     db,
     principal.userId,
     principal.tenantId,
-    (tx, context) => loadTenantShipmentPrefix(tx, context),
+    async (tx, context) => ({
+      profile: await loadTenantProfile(tx, context),
+      shipmentPrefix: await loadTenantShipmentPrefix(tx, context),
+    }),
     STORE_SETUP,
   );
 
   return (
     <>
-      <DataCard description="Hubungi Super Admin bila nama gerai perlu diubah." title="Identitas gerai">
-        <dl className="grid gap-1">
-          <dt className="text-sm text-muted-foreground">Nama gerai</dt>
-          <dd className="text-base font-semibold wrap-anywhere">{shipmentPrefix.tenantName}</dd>
-        </dl>
-      </DataCard>
+      <GeraiIdentityCard name={profile.name} whatsapp={profile.contactWhatsapp} />
 
       <ShipmentPrefixCard
         attemptId={randomUUID()}

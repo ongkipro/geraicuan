@@ -21,6 +21,7 @@
 | `provider_order_snapshots` | Yes | Sanitized request/response fields, provider order ID, AWB, fees, `is_paid`. |
 | `print_events` | Yes | Shipment label print/reprint event and actor/time. |
 | `shipment_invoices` | Yes | Immutable nota for one issued shipment: number, issuer, snapshot document and charge (DATA-14). |
+| `tenant_label_settings` | Yes | Per-size choice of which fields the thermal label prints (Informasi label, DATA-17). |
 | `ledger_entries` | Yes | Immutable operational money entry, source transition, effective time, and reversal reference. |
 | `reconciliation_runs` | Yes | Daily/monthly tenant reconciliation period, source totals, variance, status, and actor. |
 | `audit_events` | Scope-tagged | Security-sensitive Super Admin/tenant-admin changes. |
@@ -186,7 +187,7 @@ Party phones are stored in one canonical Indonesian form (`0` + NSN), so `+62…
 | Change | Contents | Constraints and grants |
 |---|---|---|
 | `tenants.mengantar_credential_policy` | `PLATFORM_DEFAULT_ALLOWED` (default) or `PRIVATE_ONLY` | CHECK `tenants_mengantar_credential_policy_valid`; immutable (trigger `tenants_registration_transition_guard`); the runtime role holds no UPDATE on it |
-| `tenants.contact_whatsapp` | The store's WhatsApp from sign-up, `0` + Indonesian NSN (`normalizePartyPhone`) | NULL or `^0[2-9][0-9]{7,11}$` |
+| `tenants.contact_whatsapp` | The store's WhatsApp from sign-up, `0` + Indonesian NSN (`normalizePartyPhone`); editable by the gerai's Tenant Admin since 0058 (DATA-16) | NULL or `^0[2-9][0-9]{7,11}$`; no runtime UPDATE grant — written only by `set_tenant_contact_whatsapp` |
 | `public_auth_rate_limits` | `key` (`scope:hmac-hex`), `count`, `window_started_at` | CHECKs on key shape and count > 0; runtime SELECT/INSERT/UPDATE/DELETE; no RLS (anonymous boundary, no identifier stored) |
 | `audit_events_action_valid` | adds `TENANT_SELF_REGISTERED`, `TENANT_REGISTRATION_APPROVED`, `TENANT_REGISTRATION_REJECTED` | RESTRICTIVE `audit_events_tenant_registration_guard`: each only from its owning function |
 | `users` | `GRANT UPDATE (email_verified, updated_at)` for Better Auth's verification | nothing else on `users` writable |
@@ -261,3 +262,26 @@ Not ported: AdsBookCMS's JSON-flag status parser (contradicts L evidence), `x-cl
 - Status: Built 2026-09-26.
 
 `shipment_drafts.pickup_vehicle text NULL` — `MOTOR` | `MOBIL` | `TRUK` (CHECK `shipment_drafts_pickup_vehicle_known`), and NULL unless `handover_type = 'PICKUP'` (CHECK `shipment_drafts_pickup_vehicle_pickup_only`). Optional: a pickup without a chosen vehicle stores NULL; a drop-off never stores one. Written once at draft insert and part of the replay comparison (another vehicle is another submission); never UPDATEd, so no column grant was added (the 0008 table-level INSERT/SELECT covers it). Shown in the Buat kiriman form, saved view, summary rail and Detail kiriman "Penyerahan" through `handoverSummary`. Not sent to Mengantar (`mengantar-order.ts` does not read it) until T-153 verifies the key (DATA-13). Every pre-0057 row is NULL and satisfies both CHECKs (validated; `scripts/verify-migration-upgrade.mjs`).
+
+## DATA-16 — Gerai WhatsApp edit (T-233, migration 0058)
+- Owner: Engineering owner
+- Status: Built 2026-09-26.
+
+`tenants.contact_whatsapp` (DATA-12) is changed only through `public.set_tenant_contact_whatsapp(requested text)`, a SECURITY DEFINER function (`search_path` pinned, EXECUTE revoked from PUBLIC and granted to `geraicuan_app`). It checks the same pattern as the column CHECK (`22023` otherwise), requires `app.user_id` to be an ACTIVE Tenant Admin (ACTIVE user) of `app.tenant_id` whose tenant is ACTIVE or PROVISIONING (store setup, PR-60; `42501` otherwise), locks the row, writes only that column and `updated_at`, and appends `TENANT_CONTACT_UPDATED` (actor role `TENANT_MEMBER`, target the tenant, metadata `{field, hadPrevious}` — no phone numbers). Saving the current value is a no-op without an audit row.
+
+- **Why a function, not a grant.** The runtime role holds `UPDATE (name, status, updated_at)` on `tenants` for the Super Admin path; a tenant-admin UPDATE policy would have let a Tenant Admin rename or reactivate their tenant, because row policies cannot limit columns. The runtime role gets no UPDATE on `contact_whatsapp` (asserted by `tests/tenant-isolation-posture`).
+- **Policies.** `tenants_contact_whatsapp_function_update` (PERMISSIVE UPDATE for the function owner only, needed when the owner is not a superuser/BYPASSRLS role, FORCE RLS since 0034); RESTRICTIVE `audit_events_tenant_contact_guard` lets only the function owner append the new action. `audit_events_action_valid` gains `TENANT_CONTACT_UPDATED`; every existing row still passes.
+- **Snapshots stay.** Issued invoices keep the number in `document.gerai.whatsapp` (DATA-14); existing shipments keep their `shipment_parties` sender. Invoices issued later and new shipments whose sender is "Alamat gerai" use the new number.
+- **Upgrade proof.** `scripts/verify-migration-upgrade.mjs` compares every tenant and audit row before and after 0058/0059 and probes the runtime role (admin save accepted, invalid `22023`, direct UPDATE `42501`, nothing left behind).
+
+## DATA-17 — Label field settings (PR-86, T-229, migration 0059)
+- Owner: Engineering owner
+- Status: Built 2026-09-26.
+
+`tenant_label_settings` — PK (`tenant_id`, `label_size`), FK `tenant_id` → `tenants` ON DELETE RESTRICT; `label_size` `10x15` | `10x10` (CHECK); booleans `show_sender_address`, `show_sender_phone`, `show_recipient_name`, `show_recipient_phone`, `show_recipient_address_detail` (default true) and `show_return_warning` (default false); `updated_by_user_id` (non-blank), `created_at`, `updated_at`.
+
+- **Defaults = the label before 0059.** No row for a size means the defaults (`DEFAULT_LABEL_FIELDS`, `src/lib/label-fields.ts`), so every existing tenant prints exactly as before until a Tenant Admin saves. The migration writes no rows.
+- **No pickup-identity column.** The Mengantar pickup identity is never printable (PR-71); there is nothing to switch on.
+- **Grants and RLS.** `SELECT, INSERT` plus `UPDATE` on the six choices, `updated_by_user_id` and `updated_at` only (tenant and size are immutable). FORCE RLS: SELECT for any ACTIVE member (ACTIVE user) of the current tenant (ACTIVE or PROVISIONING), so both roles' label prints read it; INSERT and UPDATE only for an ACTIVE Tenant Admin of the current tenant with `updated_by_user_id = app.user_id`. Writes are an upsert of both sizes (`saveTenantLabelFields`).
+- **Printing.** `LabelSheet` takes both sizes and applies the print context's size: sender phone/address hidden from the sender line (the ` · ` goes with the address); recipient name/phone hidden from the name line; address detail off prints `formatCityProvince` (city, province) instead of the area line and street; the warning replaces the footer's issue time ("Sebelum retur, konfirmasi dulu ke pengirim · Nomor kiriman …", measured one 7 pt line with a 13-character reference). Label geometry and `label.css` are unchanged. The label page and the batch view (`/app/label/cetak`) load it in their tenant transaction.
+
