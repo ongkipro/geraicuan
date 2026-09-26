@@ -39,8 +39,10 @@ describe("Mengantar estimate normalization", () => {
 
     const services = normalizeMengantarEstimateServices(fixture.response.body.data);
 
-    expect(services).toHaveLength(14);
+    // 16 quoted: paxel is unsupported, Ninja discontinued (D-29).
+    expect(services).toHaveLength(13);
     expect(services).not.toContainEqual(expect.objectContaining({ providerService: "paxel" }));
+    expect(services).not.toContainEqual(expect.objectContaining({ providerService: "Ninja" }));
     expect(services).toContainEqual({
       providerService: "JNE",
       currency: "IDR",
@@ -76,7 +78,7 @@ describe("Mengantar estimate normalization", () => {
     // Captured shapes: key absent (JNE, SiCepat, Ninja), explicit false (SAP),
     // explicit true (SapCargo), coverage_cod true (SAP/SAPLite).
     expect(cod(normalizeMengantarEstimateServices(data))).toMatchObject({
-      JNE: true, JNECargo: true, SiCepat: true, SiCepatCargo: true, Ninja: true,
+      JNE: true, JNECargo: true, SiCepat: true, SiCepatCargo: true,
       SAP: true, SAPLite: true, SapCargo: false,
     });
 
@@ -156,7 +158,8 @@ describe("Mengantar estimate normalization", () => {
     await expect(fetchMengantarEstimate({
       ...credentials,
       apiKey: "key/private",
-    }, request)).resolves.toHaveLength(14);
+    // A 1 kg request also hides SapCargo (minimumWeightCargo 5, T-237).
+    }, request)).resolves.toHaveLength(12);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

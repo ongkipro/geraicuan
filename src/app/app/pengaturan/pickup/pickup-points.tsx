@@ -30,14 +30,19 @@ import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { PickupNotes } from "@/lib/gerai-settings";
 import type { MengantarPickupOption } from "@/lib/mengantar-locations";
 import { cn } from "@/lib/utils";
+
+import { PickupNotesBlock } from "./pickup-notes";
 
 export type SafePickupPoint = {
   pickupAddressId: string;
   pickupAddressLabel: string;
   originAreaLabel: string;
   isDefault: boolean;
+  /** T-243: internal notes, never sent to Mengantar. */
+  notes: PickupNotes;
 };
 
 const initialState: PickupPointActionState = {};
@@ -91,6 +96,13 @@ function PickupRow({ busy, outletId, point, onlyPoint, defaultAction, removeActi
         {point.isDefault ? <StatusBadge icon={Star} label="Utama" tone="success" /> : null}
       </div>
       <p className="text-sm text-muted-foreground wrap-anywhere">Area asal: {point.originAreaLabel}</p>
+      <PickupNotesBlock
+        busy={busy}
+        notes={point.notes}
+        outletId={outletId}
+        pickupAddressId={point.pickupAddressId}
+        pickupLabel={point.pickupAddressLabel}
+      />
       <div className="flex flex-wrap items-center gap-x-4">
         {point.isDefault ? null : (
           <form action={defaultAction}>
@@ -173,7 +185,7 @@ function PickupOptionPicker({ disabled, error, onSelect, optionsFixture, outletI
           <Button
             aria-describedby={describedBy}
             aria-invalid={Boolean(error)}
-            className="h-auto min-h-10 w-full justify-between gap-3 py-2 text-left font-normal whitespace-normal"
+            className="h-auto min-h-10 w-full justify-between gap-3 border-input py-2 text-left font-normal whitespace-normal text-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground max-md:min-h-11"
             disabled={disabled}
             id="pickup-address"
             role="combobox"

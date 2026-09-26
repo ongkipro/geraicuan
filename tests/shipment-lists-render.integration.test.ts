@@ -157,6 +157,10 @@ describe("list sources", () => {
     const panel = read("src/app/app/label/[shipmentId]/label-print-panel.tsx");
     expect(panel).toContain("recordLabelPrint");
     expect(panel).toContain("LabelPrintContext.Provider");
-    expect(panel).toContain("print:[&>.label-sheet]:[zoom:1]");
+    // T-243 moved the on-screen zoom into the shared frame; print still resets it to 1.
+    expect(panel).toContain("<LabelPreviewFrame");
+    const frame = read("src/app/app/label/[shipmentId]/label-preview-frame.tsx");
+    expect(frame).toContain("[&>.label-sheet]:[zoom:var(--label-preview-zoom,1)]");
+    expect(frame).toContain("print:[&>.label-sheet]:[zoom:1]");
   });
 });

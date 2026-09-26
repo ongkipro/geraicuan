@@ -6,10 +6,11 @@ import { shipmentCodFormulaRetired } from "@/db/cod-totals-repository";
 import { listOutletPickupPoints } from "@/db/outlet-pickup-point-repository";
 import { providerOrderSnapshots, providerOrderStatusObservations } from "@/db/schema";
 import { loadShipmentFlowDraft } from "@/db/shipment-draft-repository";
+import { listProviderHistoryEvents } from "@/db/provider-tracking-repository";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 
-import type { StatusObservation } from "./detail-model";
+import type { AttentionEvidence, StatusObservation } from "./detail-model";
 
 /** Enough history for one shipment's journey; repeats collapse in `buildTrackingTimeline`. */
 const OBSERVATION_LIMIT = 60;
@@ -37,14 +38,21 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
     .select({
       chargedShippingIdr: providerOrderSnapshots.providerChargedShippingIdr,
       estimateServiceId: providerOrderSnapshots.estimateServiceId,
+      returnCnoteNo: providerOrderSnapshots.returnCnoteNo,
     })
     .from(providerOrderSnapshots)
     .where(and(eq(providerOrderSnapshots.tenantId, context.tenantId), eq(providerOrderSnapshots.shipmentId, shipmentId)))
     .limit(1);
 
-  const observations: StatusObservation[] = context.role === "TENANT_ADMIN"
+  const observations: (StatusObservation & AttentionEvidence & { source: "PULL" | "WEBHOOK" })[] = context.role === "TENANT_ADMIN"
     ? await tx
       .select({
+        claimStatus: providerOrderStatusObservations.claimStatus,
+        isBreach: providerOrderStatusObservations.isBreach,
+        lastUndeliveredCode: providerOrderStatusObservations.lastUndeliveredCode,
+        podCode: providerOrderStatusObservations.podCode,
+        ticketStatus: providerOrderStatusObservations.ticketStatus,
+        source: providerOrderStatusObservations.source,
         lastHistoryAt: providerOrderStatusObservations.lastHistoryAt,
         lastHistoryDesc: providerOrderStatusObservations.lastHistoryDesc,
         mappedStatus: providerOrderStatusObservations.mappedStatus,
@@ -60,10 +68,17 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
       .limit(OBSERVATION_LIMIT)
     : [];
 
+  // T-238: the courier's own tracking history is operational, so both roles read it.
+  const historyEvents = await listProviderHistoryEvents(tx, context, shipmentId);
+  // Attention signals come from the newest *pull* (a webhook row carries none).
+  const attention = observations.find((observation) => observation.source === "PULL") ?? null;
+
   return {
+    attention,
     codFormulaRetired,
     detail,
     draft,
+    historyEvents,
     observations,
     observationsVisible: context.role === "TENANT_ADMIN",
     order: order ?? null,

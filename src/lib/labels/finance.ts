@@ -12,6 +12,9 @@ const PROVIDER_ONLY_STATUS_LABELS: Readonly<Record<string, string>> = {
   // T-231: unverified app vocabulary (§9.3) that names no lifecycle state.
   "MENUNGGU PENJEMPUTAN": "Menunggu dijemput kurir",
   "UNPAID ORDER": "Belum dibayar ke Mengantar",
+  // T-238: documented values that name no lifecycle state.
+  ACTIVE: "Aktif di Mengantar",
+  "ACTIVE/WAITING NEXT PROCESS": "Menunggu proses berikutnya",
 };
 
 /**

@@ -21,7 +21,6 @@ export const MENGANTAR_COURIERS = [
   "JNE",
   "JT",
   "SiCepat",
-  "Ninja",
   "SAP",
   "iDexpress",
   "anteraja",
@@ -64,6 +63,64 @@ export function mengantarCourierOfService(providerService: string): MengantarCou
   const normalized = providerService.trim().replace(/[^A-Za-z0-9]/g, "").toLowerCase();
   if (!normalized) return null;
   return MENGANTAR_COURIERS.find((courier) => normalized.startsWith(courier.toLowerCase())) ?? null;
+}
+
+/**
+ * D-29 (owner 2026-09-26: "ninja hapus aja"): service keys Mengantar still quotes
+ * for a courier it discontinued. Ninja was discontinued on 2026-09-01 — the public
+ * docs (api-public.mengantar.com/docs, read 2026-09-26) say "direct requests with
+ * `courier=Ninja` return HTTP 400, `success: false`, `message: \"Courier is not
+ * available\"`, and `code: \"COURIER_DISABLED\"`". It is removed from
+ * `MENGANTAR_COURIERS`, the display map and the logos; this list exists only so
+ * the estimate (Buat kiriman, Cek tarif) drops the quote. A historical shipment
+ * stored as `Ninja` renders its plain name through `CourierLogo`'s text fallback
+ * and appears as an extra column in `courierRecapOrder`.
+ */
+const DISCONTINUED_SERVICE_KEYS = ["ninja"];
+
+/** Whether a quoted service may be offered for a new shipment (D-29). */
+export function isMengantarServiceOffered(providerService: string) {
+  const normalized = providerService.trim().replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+  return !DISCONTINUED_SERVICE_KEYS.some((key) => normalized.startsWith(key));
+}
+
+/**
+ * D-26: the `courier` value `POST /order` documents — "JNE", "SiCepat", "Sap",
+ * "iDexpress", "JT", "lion", "anteraja", or "pos" (api-public.mengantar.com/docs,
+ * Create Order body table, read 2026-09-26). Our catalogue spells SAP in capitals
+ * (the estimate key); the order body wants "Sap". A courier the table does not
+ * list (spx, paxel) has no documented order value: null.
+ */
+const DOCUMENTED_ORDER_COURIERS: Partial<Record<MengantarCourier, string>> = {
+  JNE: "JNE",
+  JT: "JT",
+  SAP: "Sap",
+  SiCepat: "SiCepat",
+  anteraja: "anteraja",
+  iDexpress: "iDexpress",
+  lion: "lion",
+  pos: "pos",
+};
+
+export function mengantarDocumentedOrderCourier(courier: string): string | null {
+  const known = MENGANTAR_COURIERS.find((candidate) => candidate.toLowerCase() === courier.trim().toLowerCase());
+  return known ? DOCUMENTED_ORDER_COURIERS[known] ?? null : null;
+}
+
+/**
+ * D-26: how a quoted service is ordered — the courier, its documented `courier` value and whether
+ * it is the courier's cargo service — or null when the docs give no way to order it (spx, paxel,
+ * SAPLite). Such a service is still quoted (Cek tarif, Buat kiriman); only its order is refused.
+ * `buildMengantarOrderRequest` refuses with exactly this rule, so Cek tarif can say it upfront.
+ */
+export function mengantarOrderableService(providerService: string): { cargo: boolean; courier: MengantarCourier; documented: string } | null {
+  const courier = mengantarCourierOfService(providerService);
+  const documented = courier ? mengantarDocumentedOrderCourier(courier) : null;
+  if (!courier || !documented) return null;
+  const service = providerService.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+  if (service === courier.toLowerCase()) return { cargo: false, courier, documented };
+  if (service === `${courier.toLowerCase()}cargo`) return { cargo: true, courier, documented };
+  return null;
 }
 
 /**

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { parseContactCategory, type ContactCategory } from "@/lib/contact-category";
 import { characterClassError, normalizeFieldText, partyNameClass } from "@/lib/field-character-classes";
 import { normalizePartyPhone } from "@/lib/shipment-draft";
 
@@ -11,6 +12,8 @@ const MAX_ADDRESS_LENGTH = 500;
 export type ContactDirectoryInput = {
   address: string;
   addressLabel: string;
+  /** T-241: optional peran/kategori; omitted by callers that predate it (stored as NULL). */
+  category?: ContactCategory | null;
   destinationAreaId: string | null;
   destinationAreaLabel: string | null;
   isRecipient: boolean;
@@ -24,6 +27,7 @@ export type ContactDirectoryField =
   | "addressText"
   | "areaId"
   | "areaLabel"
+  | "category"
   | "contactName"
   | "contactPhone"
   | "roles";
@@ -84,9 +88,11 @@ export function validateContactDirectory(formData: FormData): ContactDirectoryVa
   const phone = normalizePartyPhone(rawPhone);
   const isRecipient = formData.get("roleRecipient") === "on";
   const isSender = formData.get("roleSender") === "on";
+  const category = parseContactCategory(formData.get("category"));
   const errors: Partial<Record<ContactDirectoryField, string>> = {
     ...contactIdentityErrors(name, rawPhone, { isSender }),
   };
+  if (category === undefined) errors.category = "Pilih kategori dari daftar.";
 
   if (!isSender && !isRecipient) errors.roles = "Pilih minimal satu peran kontak.";
   Object.assign(errors, contactAddressErrors(addressLabel, address));
@@ -104,6 +110,7 @@ export function validateContactDirectory(formData: FormData): ContactDirectoryVa
     input: {
       address,
       addressLabel,
+      category: category ?? null,
       destinationAreaId: areaId || null,
       destinationAreaLabel: areaLabel || null,
       isRecipient,

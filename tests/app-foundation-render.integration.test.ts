@@ -23,12 +23,17 @@ const { RecordItem, RecordList } = await import("@/components/app/record-list");
 
 const account = { email: "wulan@example.test", name: "Wulan Sekarsari" };
 
-function renderSidebar(scope: Parameters<typeof AppSidebar>[0]["scope"], pathname: string, search = "") {
+function renderSidebar(
+  scope: Parameters<typeof AppSidebar>[0]["scope"],
+  pathname: string,
+  search = "",
+  badges?: Parameters<typeof AppSidebar>[0]["badges"],
+) {
   route.pathname = pathname;
   route.search = search;
   const html = renderToStaticMarkup(
     createElement(TooltipProvider, null,
-      createElement(SidebarProvider, null, createElement(AppSidebar, { account, scope }))),
+      createElement(SidebarProvider, null, createElement(AppSidebar, { account, badges, scope }))),
   );
   const nav = html.slice(html.indexOf('<nav aria-label="Menu utama"'), html.indexOf("</nav>"));
   const links = [...nav.matchAll(/<a([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, body]) => ({
@@ -49,12 +54,12 @@ describe("AppSidebar", () => {
   it("shows an operator only the operator menu, one icon per item, with the create page current", () => {
     const { html, links, nav } = renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app/pengiriman/baru");
     expect(links.map((link) => link.label)).toEqual([
-      "Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Cetak resi",
+      "Info terbaru", "Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Cetak resi",
       "Pengirim", "Penerima", "Cek resi", "Cek tarif",
     ]);
     expect(links.every((link) => link.hasIcon)).toBe(true);
     expect(links.filter((link) => link.current).map((link) => link.label)).toEqual(["Buat kiriman"]);
-    // Group labels as in the reference; Dasbor sits alone without its "Utama" label.
+    // Group labels as in the reference; Info terbaru and Dasbor sit alone without their "Utama" label.
     for (const label of ["Pengiriman", "Data", "Cek"]) expect(nav).toContain(`>${label}</div>`);
     expect(nav).not.toContain(">Utama<");
     expect(nav).not.toContain(">Laporan<");
@@ -78,9 +83,20 @@ describe("AppSidebar", () => {
     expect(links.filter((link) => link.current).map((link) => link.label)).toEqual(["Penerima"]);
   });
 
+  it("shows the Info terbaru unread count as a badge only while it is above zero (T-244)", () => {
+    const withUnread = renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app", "", { announcements: 3 });
+    expect(withUnread.html).toMatch(/data-testid="nav-badge-announcements"[^>]*>3</);
+    expect(withUnread.links[0]).toMatchObject({ href: "/app/info", label: "Info terbaru, 3 belum dibaca" });
+    expect(renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app", "", { announcements: 150 }).html)
+      .toMatch(/data-testid="nav-badge-announcements"[^>]*>99\+</);
+    const read = renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app", "", { announcements: 0 });
+    expect(read.html).not.toContain("nav-badge-announcements");
+    expect(read.links[0]?.label).toBe("Info terbaru");
+  });
+
   it("renders the platform menu with the tenant list current on a tenant detail", () => {
     const { html, links } = renderSidebar({ kind: "platform" }, "/platform/tenant/3b4f");
-    expect(links.map((link) => link.label)).toEqual(["Ringkasan", "Gerai", "Pendaftaran", "Audit"]);
+    expect(links.map((link) => link.label)).toEqual(["Ringkasan", "Gerai", "Pendaftaran", "Audit", "Info terbaru"]);
     expect(links.filter((link) => link.current).map((link) => link.href)).toEqual(["/platform/tenant"]);
     expect(html).toContain('data-active="true"');
   });
@@ -174,6 +190,7 @@ describe("Mengantar look (v3.2)", () => {
     const { StatusTiles } = await import("@/components/app/status-tiles");
     const html = renderToStaticMarkup(createElement(StatusTiles, {
       label: "Ringkasan",
+      total: 6,
       tiles: [
         { count: 1, href: "/a", key: "ALL", label: "Semua", selected: true },
         { count: 2, href: "/b", key: "RTS_QUEUED", label: "Antre retur", selected: false },
@@ -183,5 +200,55 @@ describe("Mengantar look (v3.2)", () => {
     expect([...html.matchAll(/data-tone="(\w+)"/g)].map((match) => match[1])).toEqual(["neutral", "warning", "danger"]);
     expect(html).toContain("bg-tile-warn");
     expect(html.match(/ring-2 ring-primary/g)).toHaveLength(1);
+  });
+
+  // T-246: at 1024px six columns left a 68px label ("Dalam …", "Perlu p…"), and Dibatalkan
+  // wore the "Semua" stack icon. Labels wrap on shared row tracks; icons follow spec 10 §4.12.
+  it("never truncates a tile label, sizes columns by tile count and uses the status icon", async () => {
+    const { StatusTiles } = await import("@/components/app/status-tiles");
+    const tile = (key: string, label: string) => ({ count: 1, href: `/${key}`, key, label, selected: false });
+    const six = renderToStaticMarkup(createElement(StatusTiles, {
+      label: "Ringkasan",
+      total: 6,
+      tiles: ["ALL", "ISSUED", "IN_TRANSIT", "DELIVERED", "CANCELLED", "PROBLEM"].map((key) => tile(key, key)),
+    }));
+    expect(six).not.toContain("truncate");
+    expect(six).toContain("xl:grid-cols-6");
+    expect(six).not.toMatch(/\blg:grid-cols-6\b/);
+    expect(six).toContain("grid-rows-subgrid");
+    expect(six).toContain("lucide-ban");
+    expect(six).toContain("lucide-package-check");
+    const four = renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: ["A", "B", "C", "D"].map((key) => tile(key, key)), total: 4 }));
+    expect(four).toContain("md:grid-cols-4");
+  });
+
+  // T-247 (review L9): the share is of the page's stated base (spec 19 *-SHARE), never the
+  // largest count, and Cetak resi's base includes the cancelled resi Semua resi excludes.
+  it("takes each tile's share of the explicit base the page passes", async () => {
+    const { StatusTiles, tileShare } = await import("@/components/app/status-tiles");
+    const { labelTileShareBase } = await import("@/app/app/label/label-query");
+    const shares = (html: string) => [...html.matchAll(/>(\d+)%</g)].map((match) => Number(match[1]));
+    const tile = (key: string, count: number) => ({ count, href: `/${key}`, key, label: key, selected: false });
+    // Two of ten shipments, three of ten: 20 % and 30 %, not 67 % and 100 % of the larger tile.
+    expect(shares(renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: [tile("A", 2), tile("B", 3)], total: 10 }))))
+      .toEqual([20, 30]);
+    expect(tileShare(5, 0)).toBe(0);
+
+    // Cetak resi: 1 still printable, 3 cancelled since issuance.
+    const summary = { "LBL-ALL": 1, "LBL-CANCELLED": 3, "LBL-PRINTED": 0, "LBL-UNPRINTED": 1 };
+    const base = labelTileShareBase(summary);
+    expect(base).toBe(4);
+    const label = [tile("LBL-ALL", 1), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 0), tile("LBL-CANCELLED", 3)];
+    const rendered = shares(renderToStaticMarkup(createElement(StatusTiles, { label: "Cetak", tiles: label, total: base })));
+    expect(rendered).toEqual([25, 25, 0, 75]);
+    expect(Math.max(...rendered)).toBeLessThanOrEqual(100);
+
+    // Each displayed share has its metric ID, and each page states its base.
+    const { readFileSync } = await import("node:fs");
+    const spec = readFileSync("docs/spec/19-METRICS-ANALYTICS-CONTRACT.md", "utf8");
+    for (const id of ["QUE-SHARE", "RTS-SHARE", "LBL-SHARE"]) expect(spec).toMatch(new RegExp(`^\\| ${id} \\|`, "m"));
+    expect(readFileSync("src/app/app/pengiriman/page.tsx", "utf8")).toContain('total={data.summary["QUE-ALL"]}');
+    expect(readFileSync("src/app/app/pengiriman/rts/page.tsx", "utf8")).toContain("total={data.summary.totalRtsCount}");
+    expect(readFileSync("src/app/app/label/page.tsx", "utf8")).toContain("total={labelTileShareBase(data.summary)}");
   });
 });

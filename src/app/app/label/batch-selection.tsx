@@ -101,13 +101,14 @@ function OptionCard({ checked, children, name, onChange }: { checked: boolean; c
  * 10 × 15 or 10 × 10; (2) what to print — labels, invoices or both — then the batch view.
  * The toolbar button is outline until rows are selected (one primary per page).
  */
-export function BatchPrintDialog() {
+export function BatchPrintDialog({ defaultSize = DEFAULT_LABEL_SIZE }: { defaultSize?: LabelSize }) {
   const router = useRouter();
   const { numbers, selected } = useSelection();
   const chosen = numbers.filter((number) => selected.has(number));
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
-  const [size, setSize] = useState<LabelSize>(DEFAULT_LABEL_SIZE);
+  // T-243: the gerai's default size (Pengaturan → Informasi label) is preselected.
+  const [size, setSize] = useState<LabelSize>(defaultSize);
   const [content, setContent] = useState<BatchPrintContent>("label");
   const count = chosen.length;
 

@@ -10,8 +10,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
 import {
   COD_ONGKIR_METRIC_IDS,
-  evaluateCodOngkirCharge,
+  codOngkirAmount,
   formatDraftIdr,
+  issuanceCharges,
 } from "@/lib/shipment-draft-logic";
 import { loadShipmentPage } from "@/db/analytics-repository";
 import {
@@ -19,6 +20,7 @@ import {
   calculateCodOngkirAmounts,
   COD_ONGKIR_FORMULA_VERSION,
   CodOngkirChargeRefusedError,
+  computedCodOngkirChargeIdr,
   ensureCodTotalsForConfirmation,
 } from "@/db/cod-totals-repository";
 import {
@@ -42,14 +44,15 @@ import {
   mengantarCodFeeIdr,
   shippingMengantarDeductsIdr,
 } from "@/lib/mengantar-cod-fee";
-import { buildMengantarOrderPayload } from "@/lib/mengantar-order";
+import { buildMengantarOrderRequest } from "@/lib/mengantar-order";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
 import { SHIPMENT_REPORT_COLUMNS } from "@/lib/shipment-report";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 /**
  * T-186 / PR-64 / D-12 — COD Ongkir: the courier collects a shipping charge
- * only, editable upward from break-even.
+ * only — since D-28 (T-237) computed as ongkir + biaya COD (the break-even),
+ * never typed; rows recorded earlier may hold a raised charge.
  *
  * Deduction model (tests/fixtures/mengantar-cod-identities.json, T-146's 554/554
  * settlement identity): Mengantar keeps the shipping it deducts plus exactly
@@ -138,12 +141,12 @@ describe("T-186 COD Ongkir break-even (application)", () => {
     expect(failures).toEqual([]);
   });
 
-  it("refuses a charge one rupiah below break-even in the form and on the server, and accepts break-even", () => {
+  it("refuses a charge one rupiah below break-even on the server, and accepts break-even", () => {
     const failures: number[] = [];
     for (const shipping of [1, 7, 9_000, 9_800, 10_000, 14_000, 123_457, MAX_SHIPPING]) {
       const breakEven = codOngkirBreakEvenIdr(shipping)!;
       const accepted = calculateCodOngkirAmounts({ chargeIdr: breakEven, goodsValueIdr: 50_000, shippingAmountIdr: shipping, shippingDeductedIdr: shipping });
-      if (accepted.providerCodAmountIdr !== breakEven || evaluateCodOngkirCharge(String(breakEven), shipping).kind !== "valid") {
+      if (accepted.providerCodAmountIdr !== breakEven || codOngkirAmount(shipping)?.chargeIdr !== breakEven) {
         failures.push(shipping);
       }
       let refused: unknown = null;
@@ -152,13 +155,10 @@ describe("T-186 COD Ongkir break-even (application)", () => {
       } catch (error) {
         refused = error;
       }
-      const inline = evaluateCodOngkirCharge(String(breakEven - 1), shipping);
       if (
         !(refused instanceof CodOngkirChargeRefusedError)
         || refused.reason !== "BELOW_BREAK_EVEN"
         || refused.breakEvenIdr !== breakEven
-        || inline.kind !== "invalid"
-        || !inline.message.includes(formatDraftIdr(breakEven))
       ) {
         failures.push(shipping);
       }
@@ -166,14 +166,46 @@ describe("T-186 COD Ongkir break-even (application)", () => {
     expect(failures).toEqual([]);
     // The worked example the owner will see: JNE REG 14 000 → 14 483.
     expect(codOngkirBreakEvenIdr(14_000)).toBe(14_483);
-    expect(evaluateCodOngkirCharge("14.482", 14_000)).toEqual({
-      kind: "invalid",
-      message: `Ongkir tidak boleh di bawah titik impas ${formatDraftIdr(14_483)}. ${formatDraftIdr(14_482)} kurang ${formatDraftIdr(1)} dan membuat penjual rugi.`,
+  });
+
+  it("D-28: the COD Ongkir amount is ongkir + biaya COD, computed, with a non-negative rounding", () => {
+    // 14 000 + round_half_up(3.33% × 14 483) = 14 000 + 482 = 14 482; rounding 1.
+    expect(codOngkirAmount(14_000)).toEqual({ chargeIdr: 14_483, codFeeIdr: 482, roundingIdr: 1, shippingIdr: 14_000 });
+    expect(codOngkirAmount(9_800)).toEqual({ chargeIdr: 10_138, codFeeIdr: 338, roundingIdr: 0, shippingIdr: 9_800 });
+    expect(codOngkirAmount(null)).toBeNull();
+    expect(codOngkirAmount(-1)).toBeNull();
+    const failures: number[] = [];
+    for (const shipping of shippingCases()) {
+      const amount = codOngkirAmount(shipping);
+      if (
+        !amount
+        || amount.chargeIdr !== codOngkirBreakEvenIdr(shipping)
+        || amount.shippingIdr + amount.codFeeIdr + amount.roundingIdr !== amount.chargeIdr
+        || amount.roundingIdr < 0
+        || amount.codFeeIdr !== mengantarCodFeeIdr(amount.chargeIdr)
+      ) failures.push(shipping);
+      if (failures.length > 5) break;
+    }
+    expect(failures).toEqual([]);
+    // The server records the same figure and refuses any other.
+    expect(computedCodOngkirChargeIdr(null, 14_000)).toBe(14_483);
+    expect(computedCodOngkirChargeIdr(14_483, 14_000)).toBe(14_483);
+    expect(() => computedCodOngkirChargeIdr(20_000, 14_000))
+      .toThrow(expect.objectContaining({ reason: "NOT_COMPUTED", breakEvenIdr: 14_483 }));
+    expect(() => computedCodOngkirChargeIdr(14_482, 14_000))
+      .toThrow(expect.objectContaining({ reason: "NOT_COMPUTED" }));
+    // The rail shows the same lines and total, read-only.
+    const option = { codBreakdown: null, insuranceAmountIdr: null, shippingAmountIdr: 16_000, shippingDeductedIdr: 14_000 };
+    expect(issuanceCharges({ declaredValueIdr: 250_000, option, paymentMethod: "COD_ONGKIR" })).toEqual({
+      note: "Barang sudah dibayar; kurir menagih ongkir + biaya COD (dihitung otomatis).",
+      rows: [
+        { amountIdr: 250_000, label: "Nilai barang (sudah dibayar)" },
+        { amountIdr: 14_000, label: "Ongkir dipotong Mengantar" },
+        { amountIdr: 482, label: "Biaya COD 3,33%" },
+        { amountIdr: 1, label: "Pembulatan" },
+      ],
+      total: { amountIdr: 14_483, label: "Nilai COD Ongkir" },
     });
-    expect(evaluateCodOngkirCharge("20.000", 14_000)).toEqual({
-      chargeIdr: 20_000, kind: "valid", mengantarCodFeeIdr: 666, sellerDifferenceIdr: 5_334,
-    });
-    expect(evaluateCodOngkirCharge("20000,5", 14_000).kind).toBe("invalid");
   });
 
   it("collects the charge alone: the COD amount never contains the goods, and fee + VAT is Mengantar's 3.33% of the charge", () => {
@@ -202,16 +234,19 @@ describe("T-186 COD Ongkir break-even (application)", () => {
     expect(shippingMengantarDeductsIdr({ normalPriceIdr: null, shippingAmountIdr: 13_000, specialPriceIdr: null })).toBe(13_000);
   });
 
-  it("sends the charge as the COD amount and the goods only as the declared goods value (provisional, D-5)", () => {
-    const [payload] = buildMengantarOrderPayload([{
+  it("D-28: sends the computed amount as the documented `COD`, with no `goodsValue` (goods already paid)", () => {
+    const charge = codOngkirAmount(9_800)!.chargeIdr;
+    const body = buildMengantarOrderRequest({
       courier: "JNE", declaredValueIdr: 250_000, destinationAreaId: "area", destinationAreaLabel: "Area",
       destinationAreaVerifiedAt: new Date(), isCod: true, isHazardous: false, packageContent: "Kain",
-      pickupAddressId: "pickup", providerCodAmountIdr: 20_000, providerService: "JNE REG", quantity: 1,
+      pickupAddressId: "pickup", providerCodAmountIdr: charge, providerService: "JNE", quantity: 1,
       recipientAddress: "Alamat", recipientAddressLandmark: null, recipientName: "Penerima", recipientPhone: "081200000001",
       senderAddress: "Alamat", senderName: "Pengirim", senderPhone: "081200000002", shipmentId: randomUUID(),
       shippingInstruction: null, weightGrams: 1_000,
-    }]);
-    expect(payload).toMatchObject({ cod_amount: 20_000, goods_value: 250_000, is_cod: true });
+      handoverType: "DROP_OFF", pickupVehicle: null, pickupDate: null, pickupSlot: null,
+    });
+    expect(body.orders[0]).toMatchObject({ COD: 10_138 });
+    expect(body.orders[0]).not.toHaveProperty("goodsValue");
   });
 });
 
@@ -431,33 +466,33 @@ describe("T-186 COD Ongkir confirmation: application and row-level security", ()
   const confirm = (selection: Parameters<typeof ensureCodTotalsForConfirmation>[2]) =>
     withTenantContext(appDb, userA, tenantA, (tx, context) => ensureCodTotalsForConfirmation(tx, context, selection));
 
-  it("refuses a missing or below-break-even charge server-side, records a raised charge as version 3, and keeps it immutable", async () => {
+  it("D-28: records the computed amount as version 3 without a submitted charge, refuses any other, and keeps it immutable", async () => {
     const selection = await estimate(await seedDraft(1, "COD_ONGKIR"));
     const breakEven = codOngkirBreakEvenIdr(9_800)!;
     expect(breakEven).toBe(10_138);
 
-    await expect(confirm({ ...selection, codShippingChargeIdr: null }))
-      .rejects.toMatchObject({ reason: "MISSING", breakEvenIdr: breakEven });
+    // A raised or lowered amount is no longer the operator's to choose.
+    await expect(confirm({ ...selection, codShippingChargeIdr: 15_000 }))
+      .rejects.toMatchObject({ reason: "NOT_COMPUTED", breakEvenIdr: breakEven });
     await expect(confirm({ ...selection, codShippingChargeIdr: breakEven - 1 }))
-      .rejects.toMatchObject({ reason: "BELOW_BREAK_EVEN", breakEvenIdr: breakEven });
+      .rejects.toMatchObject({ reason: "NOT_COMPUTED", breakEvenIdr: breakEven });
     expect(await adminDb.select().from(schema.shipmentCodTotals)).toEqual([]);
 
-    const recorded = await confirm({ ...selection, codShippingChargeIdr: 15_000 });
+    const recorded = await confirm({ ...selection, codShippingChargeIdr: null });
     expect(recorded).toMatchObject({
       codFormulaVersion: 3,
       codShippingBasisIdr: 9_800,
       goodsValueIdr: 250_000,
-      providerCodAmountIdr: 15_000,
-      serviceFeeIdr: 450,
+      providerCodAmountIdr: breakEven,
       shippingAmountIdr: 12_000,
-      vatAmountIdr: 50,
     });
-    expect(recorded!.serviceFeeIdr + recorded!.vatAmountIdr).toBe(mengantarCodFeeIdr(15_000));
+    expect(recorded!.serviceFeeIdr + recorded!.vatAmountIdr).toBe(mengantarCodFeeIdr(breakEven));
 
-    // A retry confirms the recorded charge; a different one is refused, never rewritten.
-    await expect(confirm({ ...selection, codShippingChargeIdr: 15_000 })).resolves.toMatchObject({ id: recorded!.id });
+    // A retry confirms the recorded amount (with or without repeating it); another is refused.
+    await expect(confirm({ ...selection, codShippingChargeIdr: null })).resolves.toMatchObject({ id: recorded!.id });
+    await expect(confirm({ ...selection, codShippingChargeIdr: breakEven })).resolves.toMatchObject({ id: recorded!.id });
     await expect(confirm({ ...selection, codShippingChargeIdr: 16_000 }))
-      .rejects.toMatchObject({ reason: "ALREADY_RECORDED", recordedChargeIdr: 15_000 });
+      .rejects.toMatchObject({ reason: "ALREADY_RECORDED", recordedChargeIdr: breakEven });
   });
 
   it("refuses a charge for a shipment that is not COD Ongkir, and computes full COD without one", async () => {
@@ -671,23 +706,16 @@ describe("T-186 the draft validation, the charge rule and the label keep each me
     expect(form("CASH")).toMatchObject({ errors: { paymentType: "Pilih metode pembayaran: Non-COD, COD, atau COD Ongkir." }, ok: false });
   });
 
-  it("starts the COD Ongkir charge at break-even and states the seller's difference", () => {
-    // The field's starting value is break-even, and break-even is itself a valid charge.
-    const breakEven = codOngkirBreakEvenIdr(14_000);
-    expect(breakEven).toBe(14_483);
-    expect(evaluateCodOngkirCharge(String(breakEven), 14_000)).toMatchObject({
-      chargeIdr: 14_483,
-      kind: "valid",
-      sellerDifferenceIdr: codOngkirSellerDifferenceIdr(14_483, 14_000),
-    });
+  it("computes the COD Ongkir amount at break-even and states the seller's difference", () => {
+    const amount = codOngkirAmount(14_000)!;
+    expect(amount.chargeIdr).toBe(14_483);
+    expect(codOngkirSellerDifferenceIdr(amount.chargeIdr, 14_000)).toBe(amount.roundingIdr);
     expect(COD_ONGKIR_METRIC_IDS.mengantarFee).toBe("COD-ONGKIR-MENGANTAR-FEE-IDR");
   });
 
-  it("refuses any charge when the service has no usable shipping amount", () => {
-    expect(evaluateCodOngkirCharge("20000", -1)).toEqual({
-      kind: "invalid",
-      message: "Ongkir layanan ini tidak dapat dipakai untuk COD Ongkir.",
-    });
+  it("computes no amount when the service has no usable shipping amount", () => {
+    expect(codOngkirAmount(-1)).toBeNull();
+    expect(codOngkirAmount(undefined)).toBeNull();
   });
 
   it("never prints a goods breakdown on a COD Ongkir label, even if one is supplied", () => {

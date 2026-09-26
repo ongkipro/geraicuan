@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 
 import { validateMengantarDestinationAreaSelection } from "@/app/app/location-actions";
-import { createContact, listContactDirectory, type ContactDirectoryRow } from "@/db/contact-repository";
+import { toContactSearchRow } from "@/app/app/kontak/contact-directory-query";
+import { createContact, getContact, listContactDirectory } from "@/db/contact-repository";
 import { db } from "@/db/client";
 import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/mengantar-credentials";
 
 const CONTACT_FIELDS = [
+  "category",
   "contactName",
   "contactPhone",
   "roleSender",
@@ -46,6 +48,8 @@ export type CreateContactState = {
     query: string;
   };
   successId?: string;
+  /** T-241: the per-tenant number the new contact's detail URL carries. */
+  successNumber?: number;
   /** T-188: the list the new contact is shown under — the role the form was opened for, when the contact holds it. */
   successRole?: ContactRole;
   values?: ContactValues;
@@ -55,12 +59,17 @@ export type ContactSearchRow = {
   address: string | null;
   addressCount: number;
   archived: boolean;
+  category: string | null;
+  contactNumber: number;
+  /** T-241 CON-SHP-DELIVERED / CON-SHP-COUNT in the list's role. */
+  deliveredCount: number;
   destinationAreaLabel: string | null;
   id: string;
   isRecipient: boolean;
   isSender: boolean;
   name: string;
   phone: string;
+  shipmentCount: number;
 };
 
 export type ContactSearchState = {
@@ -87,20 +96,6 @@ async function requireTenantPrincipal() {
     if (error instanceof CmsAuthorizationDeniedError) redirect("/login/tenant");
     throw error;
   }
-}
-
-function contactSearchRows(rows: ContactDirectoryRow[]): ContactSearchRow[] {
-  return rows.map((contact) => ({
-    address: contact.address,
-    addressCount: contact.addressCount,
-    archived: Boolean(contact.archivedAt),
-    destinationAreaLabel: contact.destinationAreaLabel,
-    id: contact.id,
-    isRecipient: contact.isRecipient,
-    isSender: contact.isSender,
-    name: contact.name,
-    phone: contact.phone,
-  }));
 }
 
 export async function searchContacts(
@@ -131,7 +126,7 @@ export async function searchContacts(
   const rows = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
     listContactDirectory(tx, context, { query, role, status }),
   );
-  return { rows: contactSearchRows(rows), searched: Boolean(query) };
+  return { rows: rows.map(toContactSearchRow), searched: Boolean(query) };
 }
 
 export async function saveContact(
@@ -195,9 +190,9 @@ export async function saveContact(
     };
   }
 
-  let contactId: string;
+  let created: { contactNumber: number; id: string };
   try {
-    contactId = await withTenantContext(
+    created = await withTenantContext(
       db,
       principal.userId,
       principal.tenantId,
@@ -215,11 +210,15 @@ export async function saveContact(
             throw new MengantarConfigurationError();
           }
         }
-        return createContact(tx, context, {
+        const id = await createContact(tx, context, {
           ...validation.input,
           destinationAreaId: selectedArea?.areaId ?? null,
           destinationAreaLabel: selectedArea?.areaLabel ?? null,
         });
+        // The number is the database's (before-insert allocator), read back in the same transaction.
+        const contact = await getContact(tx, context, id);
+        if (!contact) throw new Error("Contact was not created.");
+        return { contactNumber: contact.contactNumber, id };
       },
     );
   } catch (error) {
@@ -238,7 +237,8 @@ export async function saveContact(
   const requestedRole = formData.get("peran");
   return {
     message: "Kontak tersimpan dan siap dipakai pada draf baru.",
-    successId: contactId,
+    successId: created.id,
+    successNumber: created.contactNumber,
     successRole: contactRoleFor(validation.input, parseContactRole(typeof requestedRole === "string" ? requestedRole : null)),
   };
 }

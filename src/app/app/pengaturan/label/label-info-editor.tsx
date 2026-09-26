@@ -1,14 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
+import { useActionState, useEffect, useRef, useState } from "react";
 
+import { GeraiBrandProvider, type GeraiBrand } from "@/app/app/brand/gerai-brand";
+import { LabelPreviewFrame } from "@/app/app/label/[shipmentId]/label-preview-frame";
 import { LabelPrintContext } from "@/app/app/label/[shipmentId]/label-print-context";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
 import { saveLabelSettings, type LabelSettingsActionState } from "@/app/app/pengaturan/actions";
 import { DataCard } from "@/components/app/data-card";
+import { OptionCard } from "@/components/app/option-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import {
@@ -18,12 +23,9 @@ import {
   type LabelFieldKey,
   type LabelFieldsBySize,
 } from "@/lib/label-fields";
-import { DEFAULT_LABEL_SIZE, LABEL_SIZES, type LabelSize } from "@/lib/label-size";
+import { LABEL_SIZES, type LabelSize } from "@/lib/label-size";
 
 const FORM_ID = "label-info-form";
-
-/** `.label-sheet` is 100 mm wide at every size (label.css, T-176); CSS px are 96 per inch. */
-const LABEL_SHEET_WIDTH_PX = (100 * 96) / 25.4;
 
 const SIZE_OPTIONS: { description: string; size: LabelSize }[] = [
   { description: "Label paket dan bukti pengirim.", size: "10x15" },
@@ -62,39 +64,32 @@ function sampleLabel(geraiName: string, geraiWhatsapp: string | null): Printable
  * identity: it is never printable (PR-71).
  */
 export function LabelInfoEditor({
+  brand,
   geraiName,
   geraiWhatsapp,
   initial,
 }: {
+  /** T-243: the gerai's logo, catatan resi and default size; the preview shows them. */
+  brand: GeraiBrand;
   geraiName: string;
   geraiWhatsapp: string | null;
   initial: LabelFieldsBySize;
 }) {
   const [state, formAction, pending] = useActionState<LabelSettingsActionState, FormData>(saveLabelSettings, {});
-  const [size, setSize] = useState<LabelSize>(DEFAULT_LABEL_SIZE);
+  const [size, setSize] = useState<LabelSize>(brand.defaultLabelSize);
+  const [defaultSize, setDefaultSize] = useState<LabelSize>(brand.defaultLabelSize);
   const [fields, setFields] = useState<LabelFieldsBySize>(initial);
   const resultRef = useRef<HTMLDivElement>(null);
-  const preview = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
   const [label] = useState(() => sampleLabel(geraiName, geraiWhatsapp));
+  // A logo or catatan switch means nothing until the gerai has one (Profil gerai).
+  const missing: Partial<Record<LabelFieldKey, string>> = {
+    geraiLogo: brand.logoSrc ? undefined : "Belum ada logo.",
+    labelNote: brand.note ? undefined : "Belum ada catatan resi.",
+  };
 
   useEffect(() => {
     if (state.resultToken) resultRef.current?.focus();
   }, [state.resultToken]);
-
-  useEffect(() => {
-    const region = preview.current;
-    if (!region) return;
-    const fit = () => {
-      const style = getComputedStyle(region);
-      const available = region.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      setZoom(Math.min(1, Math.max(available, 0) / LABEL_SHEET_WIDTH_PX));
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(region);
-    return () => observer.disconnect();
-  }, []);
 
   const toggle = (key: LabelFieldKey, on: boolean) =>
     setFields((current) => ({ ...current, [size]: { ...current[size], [key]: on } }));
@@ -116,6 +111,7 @@ export function LabelInfoEditor({
           LABEL_FIELD_KEYS.map((key) => (
             <input key={`${each}-${key}`} name={labelFieldInputName(each, key)} type="hidden" value={fields[each][key] ? "1" : "0"} />
           )))}
+        <input name="defaultSize" type="hidden" value={defaultSize} />
       </form>
       <div className="flex flex-col gap-6">
         {state.error ? (
@@ -131,58 +127,91 @@ export function LabelInfoEditor({
         ) : null}
 
         <fieldset className="grid gap-3 sm:grid-cols-2">
-          <legend className="sr-only">Ukuran label</legend>
+          <legend className="sr-only">Ukuran yang diatur dan dipratinjau</legend>
           {SIZE_OPTIONS.map((option) => (
-            <label
-              className="flex cursor-pointer items-start gap-3 rounded-lg border border-input p-4 has-checked:border-primary has-checked:bg-accent has-focus-visible:ring-2 has-focus-visible:ring-ring"
+            <OptionCard
+              checked={size === option.size}
+              description={option.description}
               key={option.size}
+              name="label-info-size"
+              onSelect={() => setSize(option.size)}
+              value={option.size}
             >
-              <span className="grid flex-1 gap-1">
-                <span className="text-sm font-bold">Thermal {LABEL_SIZES[option.size].name}</span>
-                <span className="text-xs text-muted-foreground">{option.description}</span>
-              </span>
-              <input
-                checked={size === option.size}
-                className="mt-1 size-4 shrink-0 accent-primary"
-                name="label-info-size"
-                onChange={() => setSize(option.size)}
-                type="radio"
-                value={option.size}
-              />
-            </label>
+              Thermal {LABEL_SIZES[option.size].name}
+            </OptionCard>
           ))}
         </fieldset>
 
+        <a
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline md:hidden"
+          href="#pratinjau-label"
+        >
+          Lihat pratinjau
+        </a>
+
         <div className="grid gap-6 md:grid-cols-2 md:items-start">
-          <ul aria-label={`Informasi tercetak di label ${LABEL_SIZES[size].name}`} className="divide-y">
-            {LABEL_FIELD_KEYS.map((key) => {
-              const id = `label-field-${key}`;
-              return (
-                <li className="py-3 first:pt-0 last:pb-0" key={key}>
-                  <Field orientation="horizontal">
-                    <FieldContent>
-                      <FieldLabel htmlFor={id}>{LABEL_FIELD_COPY[key].label}</FieldLabel>
-                      <FieldDescription>{LABEL_FIELD_COPY[key].description}</FieldDescription>
-                    </FieldContent>
-                    <Switch checked={fields[size][key]} className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']" id={id} onCheckedChange={(on) => toggle(key, on)} />
-                  </Field>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="grid min-w-0 gap-2">
-            <p aria-hidden="true" className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Pratinjau {LABEL_SIZES[size].name}</p>
-            <LabelPrintContext.Provider value={{ printedAt: null, size }}>
-              <div
-                aria-label={`Pratinjau label ${LABEL_SIZES[size].name} dengan contoh data`}
-                className="label-preview [&>.label-sheet]:[zoom:var(--label-preview-zoom,1)]"
-                ref={preview}
-                role="region"
-                style={{ "--label-preview-zoom": zoom } as CSSProperties}
+          <div className="grid gap-6">
+            <ul aria-label={`Informasi tercetak di label ${LABEL_SIZES[size].name}`} className="divide-y">
+              {LABEL_FIELD_KEYS.map((key) => {
+                const id = `label-field-${key}`;
+                const unavailable = missing[key];
+                return (
+                  <li className="py-3 first:pt-0 last:pb-0" key={key}>
+                    <Field data-disabled={unavailable ? true : undefined} orientation="horizontal">
+                      <FieldContent>
+                        <FieldLabel htmlFor={id}>{LABEL_FIELD_COPY[key].label}</FieldLabel>
+                        <FieldDescription>
+                          {unavailable ? (
+                            <>{unavailable} <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/app/pengaturan">{key === "geraiLogo" ? "Unggah di Profil gerai" : "Isi di Profil gerai"}</Link></>
+                          ) : LABEL_FIELD_COPY[key].description}
+                        </FieldDescription>
+                      </FieldContent>
+                      <Switch
+                        checked={unavailable ? false : fields[size][key]}
+                        className="relative after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']"
+                        disabled={Boolean(unavailable)}
+                        id={id}
+                        onCheckedChange={(on) => toggle(key, on)}
+                      />
+                    </Field>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <Field>
+              <FieldLabel id="label-default-size">Ukuran bawaan saat mencetak</FieldLabel>
+              <RadioGroup
+                aria-labelledby="label-default-size"
+                className="flex flex-wrap gap-x-6 gap-y-2"
+                onValueChange={(value) => setDefaultSize(value as LabelSize)}
+                value={defaultSize}
               >
-                <LabelSheet fields={fields} label={label} />
-              </div>
-            </LabelPrintContext.Provider>
+                {SIZE_OPTIONS.map((option) => (
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm md:min-h-8" key={option.size}>
+                    <RadioGroupItem value={option.size} />
+                    {LABEL_SIZES[option.size].name}
+                  </label>
+                ))}
+              </RadioGroup>
+              <FieldDescription>Terpilih lebih dulu di halaman label dan di cetak massal.</FieldDescription>
+            </Field>
+          </div>
+
+          <div className="min-w-0 md:sticky md:top-20">
+            <GeraiBrandProvider value={brand}>
+              <LabelPrintContext.Provider value={{ printedAt: null, size }}>
+                <LabelPreviewFrame
+                  id="pratinjau-label"
+                  label={`Pratinjau label ${LABEL_SIZES[size].name} dengan contoh data`}
+                  sample
+                  size={size}
+                  title={`Pratinjau ${LABEL_SIZES[size].name}`}
+                >
+                  <LabelSheet fields={fields} label={label} />
+                </LabelPreviewFrame>
+              </LabelPrintContext.Provider>
+            </GeraiBrandProvider>
           </div>
         </div>
       </div>

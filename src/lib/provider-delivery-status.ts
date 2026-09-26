@@ -27,7 +27,8 @@ import type { ShipmentStatus } from "@/lib/shipment-queue";
  *
  * `RTS` is the provider's single return value; it does not distinguish queued,
  * moving, and received. It therefore maps to the *least advanced* return state,
- * `RTS_QUEUED`, and this ingestion never advances a return on its own.
+ * `RTS_QUEUED`. T-238: only a return resi (`cnote_no_rts`) beside it advances
+ * the return, to `RTS_IN_TRANSIT` (`ProviderDeliveryEvidence`).
  */
 export const PROVIDER_DELIVERY_STATUS_MAP: Readonly<Record<string, ShipmentStatus | null>> = {
   DELIVERED: "DELIVERED",
@@ -44,7 +45,7 @@ export const PROVIDER_DELIVERY_STATUS_MAP: Readonly<Record<string, ShipmentStatu
  * display list may never arrive over the API at all. They are mapped anyway so a
  * pull that does return one is not refused, and conservatively:
  *
- * - anything that reads as trouble — including cancellation, loss, a return
+ * - anything that reads as trouble — including loss, a return
  *   still leaving the origin and "Close by system" — maps to `PROBLEM`
  *   ("Perlu perhatian"), which still allows `DELIVERED` or `RTS_QUEUED` later;
  * - only "Terkirim (Completed)" is clearly terminal, so only it maps to
@@ -58,6 +59,25 @@ export const PROVIDER_DELIVERY_STATUS_MAP: Readonly<Record<string, ShipmentStatu
  * map above and to DATA-13.
  */
 export const PROVIDER_DELIVERY_STATUS_UNVERIFIED_MAP: Readonly<Record<string, ShipmentStatus | null>> = {
+  // T-238: **documented, not captured.** Mengantar Public API docs
+  // (api-public.mengantar.com/docs/, read 2026-09-26): the webhook's
+  // `status_category` values and the `GET /order` `status` filter values.
+  // Same conservative rules: only a completed delivery is DELIVERED, a pending
+  // one is still moving, and failure words are "Perlu perhatian". `RTS`,
+  // `DELIVERED`, `PENDING PICKUP` are in the verified map already.
+  "DELIVERED_PENDING": "IN_TRANSIT",
+  "DELIVERED_COMPLETED": "DELIVERED",
+  "PICKED UP": "IN_TRANSIT",
+  UNDELIVERED: "PROBLEM",
+  "PICKUP FAILED": "PROBLEM",
+  // Owner 2026-09-26: a cancellation is its own terminal state, not "Perlu perhatian".
+  CANCELED: "CANCELLED",
+  CANCELLED: "CANCELLED",
+  // The `GET /order` example's `status: "active"` and the webhook's
+  // "ACTIVE/WAITING NEXT PROCESS": the order exists and waits, like PENDING PICKUP.
+  ACTIVE: null,
+  "ACTIVE/WAITING NEXT PROCESS": null,
+  // T-231: the app's "Status Parcel" display vocabulary (§9.3).
   ERROR: "PROBLEM",
   "UNPAID ORDER": null,
   "MENUNGGU PENJEMPUTAN": null,
@@ -73,7 +93,6 @@ export const PROVIDER_DELIVERY_STATUS_UNVERIFIED_MAP: Readonly<Record<string, Sh
   "KENDALA TRANSPORTASI": "PROBLEM",
   "PENGIRIMAN TERKENDALA": "PROBLEM",
   "RETURN ORIGIN": "PROBLEM",
-  CANCELED: "PROBLEM",
   "GAGAL KIRIM": "PROBLEM",
   "MASALAH PENGIRIMAN": "PROBLEM",
   "PAKET HILANG": "PROBLEM",
@@ -105,6 +124,9 @@ export function lookupProviderDeliveryStatus(normalizedStatus: string): Shipment
  * `NO_LIFECYCLE_STATE` — recognised value that reports no state we may write.
  * `UNRECOGNISED` — outside both the observed and the (unverified) app
  * vocabulary: recorded and surfaced, never mapped to the nearest lifecycle state.
+ * `SUPERSEDED` — webhook only (T-238): an allowed move carried by a delivery
+ * older than one already recorded; Mengantar says deliveries can arrive out of
+ * order, so the older one is recorded and not applied.
  */
 export const PROVIDER_DELIVERY_TRANSITION_OUTCOMES = [
   "APPLIED",
@@ -112,6 +134,7 @@ export const PROVIDER_DELIVERY_TRANSITION_OUTCOMES = [
   "REFUSED",
   "NO_LIFECYCLE_STATE",
   "UNRECOGNISED",
+  "SUPERSEDED",
 ] as const;
 
 export type ProviderDeliveryTransitionOutcome =
@@ -122,17 +145,42 @@ export type ProviderDeliveryTransitionOutcome =
  * "forward" is what this table says and nothing else. A state absent from the
  * keys is one this ingestion never transitions away from — `DRAFT`,
  * `ESTIMATED`, `SUBMISSION_QUEUED` and `SUBMISSION_UNKNOWN` because our own
- * issuance record does not yet say the order exists, and `FAILED`, `DELIVERED`
- * and `RTS_RECEIVED` because they are terminal. A return never becomes a
+ * issuance record does not yet say the order exists, and `FAILED`, `DELIVERED`,
+ * `RTS_RECEIVED` and `CANCELLED` because they are terminal. A return never becomes a
  * delivery: `RTS_QUEUED` leads only further into the return.
  */
-const ALLOWED_TRANSITIONS: Readonly<Partial<Record<ShipmentStatus, readonly ShipmentStatus[]>>> = {
-  ISSUED: ["IN_TRANSIT", "PROBLEM", "DELIVERED", "RTS_QUEUED"],
-  AWAITING_UPSTREAM_PAYMENT: ["IN_TRANSIT", "PROBLEM", "DELIVERED", "RTS_QUEUED"],
-  IN_TRANSIT: ["PROBLEM", "DELIVERED", "RTS_QUEUED"],
-  PROBLEM: ["DELIVERED", "RTS_QUEUED"],
+export const ALLOWED_TRANSITIONS: Readonly<Partial<Record<ShipmentStatus, readonly ShipmentStatus[]>>> = {
+  // T-238: a return first seen with its return resi may start at RTS_IN_TRANSIT.
+  // Owner 2026-09-26: CANCELLED only before the parcel is delivered or returning.
+  ISSUED: ["IN_TRANSIT", "PROBLEM", "DELIVERED", "RTS_QUEUED", "RTS_IN_TRANSIT", "CANCELLED"],
+  // T-247 (review M1, coordinator 2026-09-26): Mengantar may cancel an order still unpaid; the
+  // shipment follows it instead of staying "Menunggu pembayaran". Mirrored in 0068.
+  AWAITING_UPSTREAM_PAYMENT: ["IN_TRANSIT", "PROBLEM", "DELIVERED", "RTS_QUEUED", "RTS_IN_TRANSIT", "CANCELLED"],
+  IN_TRANSIT: ["PROBLEM", "DELIVERED", "RTS_QUEUED", "RTS_IN_TRANSIT", "CANCELLED"],
+  PROBLEM: ["DELIVERED", "RTS_QUEUED", "RTS_IN_TRANSIT", "CANCELLED"],
   RTS_QUEUED: ["RTS_IN_TRANSIT", "RTS_RECEIVED"],
   RTS_IN_TRANSIT: ["RTS_RECEIVED"],
+};
+
+const RETURN_PROGRESS: readonly ShipmentStatus[] = ["RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED"];
+
+/** A return report at or behind where the return already stands says nothing new. */
+function returnAlreadyAtOrPast(mapped: ShipmentStatus, current: ShipmentStatus) {
+  const reported = RETURN_PROGRESS.indexOf(mapped);
+  const standing = RETURN_PROGRESS.indexOf(current);
+  return reported >= 0 && standing >= 0 && reported <= standing;
+}
+
+/**
+ * T-238: what a Mengantar order record says beyond `status`. `returnCnoteNo` is
+ * the live-observed `cnote_no_rts` key (present on 3 of 100 captured orders,
+ * always null there): a return with its own courier resi has been handed back
+ * into the courier network, so `RTS` plus a return resi is `RTS_IN_TRANSIT`.
+ * Nothing documented or captured says a return was *received*; `RTS_RECEIVED`
+ * therefore stays unreachable from provider data (DATA-13 gap).
+ */
+export type ProviderDeliveryEvidence = {
+  returnCnoteNo?: string | null;
 };
 
 /** Provider spellings vary in case and inner spacing; nothing else is rewritten. */
@@ -155,16 +203,20 @@ export type ProviderDeliveryDecision = {
 export function decideProviderDeliveryTransition(
   providerStatus: string,
   currentStatus: ShipmentStatus,
+  evidence: ProviderDeliveryEvidence = {},
 ): ProviderDeliveryDecision {
   const normalizedStatus = normalizeProviderDeliveryStatus(providerStatus);
-  const mappedStatus = lookupProviderDeliveryStatus(normalizedStatus);
-  if (mappedStatus === undefined) {
+  const looked = lookupProviderDeliveryStatus(normalizedStatus);
+  if (looked === undefined) {
     return { mappedStatus: null, normalizedStatus, outcome: "UNRECOGNISED" };
   }
-  if (mappedStatus === null) {
+  if (looked === null) {
     return { mappedStatus: null, normalizedStatus, outcome: "NO_LIFECYCLE_STATE" };
   }
-  if (mappedStatus === currentStatus) {
+  const mappedStatus: ShipmentStatus = looked === "RTS_QUEUED" && evidence.returnCnoteNo?.trim()
+    ? "RTS_IN_TRANSIT"
+    : looked;
+  if (mappedStatus === currentStatus || returnAlreadyAtOrPast(mappedStatus, currentStatus)) {
     return { mappedStatus, normalizedStatus, outcome: "UNCHANGED" };
   }
   const allowed = ALLOWED_TRANSITIONS[currentStatus] ?? [];

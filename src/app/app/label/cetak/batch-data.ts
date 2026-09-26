@@ -8,7 +8,7 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 
 export type BatchPrintItem =
   | { kind: "ready"; tenantNumber: number; label: PrintableLabel; invoice: ShipmentInvoice | null }
-  | { kind: "skipped"; tenantNumber: number; reason: "NOT_FOUND" | "NOT_ISSUED" };
+  | { kind: "skipped"; tenantNumber: number; reason: "NOT_FOUND" | "NOT_ISSUED" | "CANCELLED" };
 
 /**
  * The shipments of one batch print, in the requested order. A number that is unknown
@@ -34,7 +34,7 @@ export async function loadBatchPrint(
       label = await loadPrintableLabel(tx, context, resolved.shipmentId);
     } catch (error) {
       if (!(error instanceof LabelUnavailableError)) throw error;
-      items.push({ kind: "skipped", reason: error.reason === "NOT_FOUND" ? "NOT_FOUND" : "NOT_ISSUED", tenantNumber });
+      items.push({ kind: "skipped", reason: error.reason === "NOT_FOUND" || error.reason === "CANCELLED" ? error.reason : "NOT_ISSUED", tenantNumber });
       continue;
     }
     const invoice = includesInvoices(query.content)

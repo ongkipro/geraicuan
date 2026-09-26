@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db/client";
 import { LabelUnavailableError, loadPrintableLabel } from "@/db/label-print-repository";
-import { loadShipmentInvoice } from "@/db/shipment-invoice-repository";
+import { isShipmentCancelled, loadShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { resolveShipmentRouteKey } from "@/db/shipment-number-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { parseShipmentRouteKey } from "@/lib/shipment-number";
@@ -41,13 +41,17 @@ export default async function InvoicePage({ params }: { params: Promise<{ shipme
     if (!resolved) return { kind: "not-found" as const };
     if (key.kind !== "number" || !key.canonical) return { kind: "redirect" as const, tenantNumber: resolved.tenantNumber };
     const invoice = await loadShipmentInvoice(tx, context, resolved.shipmentId);
-    if (invoice) return { invoice, kind: "issued" as const, tenantNumber: resolved.tenantNumber };
+    // T-238: an invoice is immutable; a cancelled shipment keeps it, marked "Dibatalkan".
+    const cancelled = await isShipmentCancelled(tx, context, resolved.shipmentId);
+    // T-247 (L3): the nota prints the logo version recorded on the invoice, not the current one.
+    if (invoice) return { cancelled, invoice, kind: "issued" as const, tenantNumber: resolved.tenantNumber };
     try {
       const label = await loadPrintableLabel(tx, context, resolved.shipmentId);
       return { kind: "absent" as const, publicReference: label.publicReference, tenantNumber: resolved.tenantNumber };
     } catch (error) {
       if (!(error instanceof LabelUnavailableError)) throw error;
       if (error.reason === "NOT_FOUND") return { kind: "not-found" as const };
+      if (error.reason === "CANCELLED") return { kind: "cancelled" as const, tenantNumber: resolved.tenantNumber };
       return { kind: "not-issued" as const, tenantNumber: resolved.tenantNumber };
     }
   });
@@ -55,6 +59,19 @@ export default async function InvoicePage({ params }: { params: Promise<{ shipme
   if (detail.kind === "redirect") redirect(`/app/invoice/${detail.tenantNumber}`);
 
   const back = <BackToDetail shipmentNumber={detail.tenantNumber} />;
+
+  if (detail.kind === "cancelled") {
+    return (
+      <>
+        <PageHeader back={back} eyebrow="Pengiriman" title="Invoice" />
+        <Alert role="status">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Kiriman dibatalkan</AlertTitle>
+          <AlertDescription>Mengantar melaporkan pesanan ini dibatalkan sebelum invoice diterbitkan, jadi invoice tidak diterbitkan.</AlertDescription>
+        </Alert>
+      </>
+    );
+  }
 
   if (detail.kind === "not-issued") {
     return (
@@ -107,6 +124,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ shipme
           eyebrow="Pengiriman"
           title={<>Invoice <span className="font-mono">{detail.invoice.invoiceNumber}</span></>}
         />
+        {detail.cancelled ? (
+          <Alert className="mb-4" role="status">
+            <CircleAlert aria-hidden="true" />
+            <AlertTitle>Dibatalkan</AlertTitle>
+            <AlertDescription>Mengantar melaporkan kiriman ini dibatalkan. Invoice ini tetap seperti saat diterbitkan.</AlertDescription>
+          </Alert>
+        ) : null}
       </div>
       <InvoicePrintPanel invoice={detail.invoice} />
     </>

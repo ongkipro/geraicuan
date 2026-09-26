@@ -1,4 +1,5 @@
 import type { ShipmentInvoice } from "@/db/shipment-invoice-repository";
+import { geraiLogoVersionSrc } from "@/lib/gerai-settings";
 import { formatIdr, formatWeight, formatWibDateTime } from "@/lib/label-format";
 
 export type InvoiceMedium = "80mm" | "a4";
@@ -34,10 +35,14 @@ export function InvoiceSheet({ invoice, medium }: { invoice: ShipmentInvoice; me
   const { document: doc } = invoice;
   const items = doc.items.slice(0, VISIBLE_ITEMS);
   const hiddenItems = doc.items.length - items.length;
+  // T-247 (L3): the logo version recorded at issuance, never the gerai's current logo.
+  const logoSrc = geraiLogoVersionSrc(invoice.logoSha256);
 
   return (
     <article aria-label={`Invoice ${invoice.invoiceNumber}`} className="invoice-sheet" data-medium={medium}>
       <section className="invoice-block-gerai">
+        {/* eslint-disable-next-line @next/next/no-img-element -- authenticated, same-origin bytes; next/image would proxy them */}
+        {logoSrc ? <img alt="" className="invoice-logo" src={logoSrc} /> : null}
         <p className="invoice-gerai-name">{doc.gerai.name}</p>
         {doc.gerai.whatsapp ? <p>WhatsApp {doc.gerai.whatsapp}</p> : null}
         {doc.gerai.address ? <p className="invoice-gerai-address">{doc.gerai.address}</p> : null}

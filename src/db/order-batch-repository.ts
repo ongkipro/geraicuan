@@ -5,7 +5,9 @@ import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { appendLedgerForIssuedProviderOrder } from "@/db/ledger-repository";
-import { mengantarCourierOfService } from "@/lib/mengantar-couriers";
+import { loadTenantDisabledCouriers } from "@/db/tenant-settings-repository";
+import { filterTenantCourierServices } from "@/lib/gerai-settings";
+import { mengantarCourierOfService, type MengantarCourier } from "@/lib/mengantar-couriers";
 import {
   providerBatches,
   providerOrderSnapshots,
@@ -53,6 +55,13 @@ export type ProviderOrderSource = {
   isHazardous: boolean;
   recipientAddressLandmark: string | null;
   shippingInstruction: string | null;
+  /** D-26: `pickup.type`; NULL on drafts that predate T-211. */
+  handoverType: "PICKUP" | "DROP_OFF" | null;
+  /** D-26: `pickup.volume` for a scheduled pickup; NULL when none was chosen. */
+  pickupVehicle: "MOTOR" | "MOBIL" | "TRUK" | null;
+  /** D-27: the WIB date ("YYYY-MM-DD") and slot start ("09:00") a `POST /time` reserves. */
+  pickupDate: string | null;
+  pickupSlot: string | null;
 };
 
 export type ProviderBatchScope = {
@@ -83,6 +92,17 @@ export type ProviderOrderResult = {
   isPaid: boolean;
   cnoteNo: string | null;
 };
+
+/**
+ * T-247 (review L1): Mitra kurir is enforced on the server, not only hidden in the UI. A
+ * service of a courier the gerai switched off is refused before any batch is written or any
+ * provider call is made, even when its estimate service id is posted directly.
+ */
+export class OrderCourierDisabledError extends Error {
+  constructor(readonly courier: MengantarCourier) {
+    super("The selected courier is switched off for this gerai.");
+  }
+}
 
 export class OrderBatchUnavailableError extends Error {
   constructor() {
@@ -136,13 +156,21 @@ type DraftOperationalColumns = {
   isHazardous: boolean;
   recipientAddressLandmark: string | null;
   shippingInstruction: string | null;
+  handoverType: ProviderOrderSource["handoverType"];
+  pickupVehicle: ProviderOrderSource["pickupVehicle"];
+  pickupDate: string | null;
+  pickupSlot: string | null;
 };
 
 const DRAFT_OPERATIONAL_SELECT = sql`
   draft.destination_area_verified_at AS "destinationAreaVerifiedAt",
   draft.is_hazardous AS "isHazardous",
   draft.recipient_address_landmark AS "recipientAddressLandmark",
-  draft.shipping_instruction AS "shippingInstruction"
+  draft.shipping_instruction AS "shippingInstruction",
+  draft.handover_type AS "handoverType",
+  draft.pickup_vehicle AS "pickupVehicle",
+  to_char(draft.pickup_date, 'YYYY-MM-DD') AS "pickupDate",
+  draft.pickup_slot AS "pickupSlot"
 `;
 
 function draftOperationalColumns(row: DraftOperationalColumns): DraftOperationalColumns {
@@ -151,6 +179,10 @@ function draftOperationalColumns(row: DraftOperationalColumns): DraftOperational
     isHazardous: row.isHazardous,
     recipientAddressLandmark: row.recipientAddressLandmark,
     shippingInstruction: row.shippingInstruction,
+    handoverType: row.handoverType,
+    pickupVehicle: row.pickupVehicle,
+    pickupDate: row.pickupDate,
+    pickupSlot: row.pickupSlot,
   };
 }
 
@@ -555,6 +587,11 @@ export async function prepareProviderBatches(
     return existing;
   }
   const selected = await loadAndLockSelections(tx, context, confirmations);
+  // T-247 (L1): the same rule Cek tarif and Buat kiriman display (`filterTenantCourierServices`),
+  // read inside this transaction. An already-accepted batch (the replay above) is never refused.
+  const disabledCouriers = await loadTenantDisabledCouriers(tx, context);
+  const refused = selected.find((row) => filterTenantCourierServices([row], disabledCouriers).length === 0);
+  if (refused) throw new OrderCourierDisabledError(mengantarCourierOfService(refused.providerService)!);
   const groups = new Map<string, SelectedOrderRow[]>();
 
   for (const row of selected) {

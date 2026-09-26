@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app/app-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { countUnreadAnnouncements } from "@/db/announcement-repository";
 import { db } from "@/db/client";
 import { outlets, tenants, users } from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -59,10 +60,23 @@ export default async function TenantLayout({ children }: { children: ReactNode }
     },
     { allowPendingApproval: true },
   );
+  // T-244: the Info terbaru badge — published announcements this member has not read. Its own
+  // transaction, so a failed count only hides the badge and never the frame.
+  const unreadAnnouncements = await withTenantContext(
+    db,
+    principal.userId,
+    principal.tenantId,
+    (tx, context) => countUnreadAnnouncements(tx, context.userId),
+    { allowPendingApproval: true },
+  ).catch((error: unknown) => {
+    console.error("Info terbaru unread count failed.", error);
+    return 0;
+  });
 
   return (
     <AppShell
       account={{ email: shell.user.email, name: shell.user.name }}
+      badges={{ announcements: unreadAnnouncements }}
       notice={principal.tenantStatus === "PROVISIONING" ? (
         <Alert className="border-warn bg-warn-surface" role="status">
           <Clock aria-hidden="true" className="text-warn" />

@@ -59,9 +59,11 @@ export type CodConfirmationSelection = {
   estimateSnapshotId: string;
   estimateServiceId: string;
   /**
-   * T-186: the COD Ongkir charge the operator confirmed. Required for a COD
-   * Ongkir draft and refused for any other method, so a value the form never
-   * showed cannot become money.
+   * D-28 (T-237): the COD Ongkir amount is computed, not chosen — ongkir + biaya
+   * COD, i.e. `codOngkirBreakEvenIdr(shipping Mengantar deducts)`. Optional: when
+   * given it must equal that computed amount (or, on a retry, the recorded one);
+   * refused for any other method, so a value the form never showed cannot
+   * become money.
    */
   codShippingChargeIdr?: number | null;
 };
@@ -110,7 +112,7 @@ export class CodTotalsFormulaRetiredError extends Error {
  * an immutable charge that a retry did not repeat.
  */
 export class CodOngkirChargeRefusedError extends Error {
-  readonly reason: "MISSING" | "INVALID" | "BELOW_BREAK_EVEN" | "NOT_COD_ONGKIR" | "ALREADY_RECORDED";
+  readonly reason: "MISSING" | "INVALID" | "BELOW_BREAK_EVEN" | "NOT_COMPUTED" | "NOT_COD_ONGKIR" | "ALREADY_RECORDED";
   readonly breakEvenIdr: number | null;
   readonly recordedChargeIdr: number | null;
 
@@ -241,6 +243,24 @@ export function calculateCodOngkirAmounts(input: {
     vatAmountIdr: wholeIdr(feeTotal - serviceFee),
     providerCodAmountIdr: input.chargeIdr,
   };
+}
+
+/**
+ * D-28 (T-237): the COD Ongkir amount a new confirmation records — ongkir + biaya
+ * COD, "computed automatically and shown to the operator". That is the version 3
+ * break-even: the smallest whole rupiah whose net of Mengantar's 3.33% still
+ * covers the shipping Mengantar deducts, `ceil(shipping × 10000 / 9667)`, the
+ * same gross-up as formula version 2 with goods = 0. A submitted amount that is
+ * not exactly this is refused (`NOT_COMPUTED`), so the operator can no longer
+ * raise it; rows recorded before D-28 with a raised charge stay valid.
+ */
+export function computedCodOngkirChargeIdr(submittedIdr: number | null, shippingDeductedIdr: number) {
+  const computed = shippingDeductedIdr > MAX_COD_AMOUNT_IDR ? null : codOngkirBreakEvenIdr(shippingDeductedIdr);
+  if (computed === null) throw new CodTotalsUnavailableError();
+  if (submittedIdr !== null && submittedIdr !== computed) {
+    throw new CodOngkirChargeRefusedError("NOT_COMPUTED", computed);
+  }
+  return computed;
 }
 
 export function calculateCodAmountsOrNull(
@@ -472,7 +492,8 @@ export async function ensureCodTotalsForConfirmation(
     // A recorded row is immutable: a retry confirms the charge already stored,
     // and a charge sent for a shipment that is not COD Ongkir is refused.
     if (existing.codFormulaVersion === COD_ONGKIR_FORMULA_VERSION) {
-      if (charge !== existing.providerCodAmountIdr) {
+      // D-28: a retry need not repeat the amount; it confirms the recorded one.
+      if (charge !== null && charge !== existing.providerCodAmountIdr) {
         throw new CodOngkirChargeRefusedError(
           "ALREADY_RECORDED",
           null,
@@ -503,7 +524,7 @@ export async function ensureCodTotalsForConfirmation(
 
   const amounts = estimate.codShippingOnly
     ? calculateCodOngkirAmounts({
-        chargeIdr: charge,
+        chargeIdr: computedCodOngkirChargeIdr(charge, estimate.shippingDeductedIdr),
         goodsValueIdr: estimate.goodsValueIdr,
         shippingAmountIdr: estimate.shippingAmountIdr,
         shippingDeductedIdr: estimate.shippingDeductedIdr,

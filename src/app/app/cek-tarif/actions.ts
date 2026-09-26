@@ -8,9 +8,11 @@ import { db } from "@/db/client";
 import { requireReadyShipmentOutlet } from "@/db/outlet-readiness-repository";
 import { outlets } from "@/db/schema";
 import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
+import { loadTenantDisabledCouriers } from "@/db/tenant-settings-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { enforceEstimateRateLimit, EstimateRateLimitedError } from "@/lib/estimate-rate-limit";
 import { characterClassError } from "@/lib/field-character-classes";
+import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import {
   lockMengantarAccountAuthority,
   MengantarConfigurationError,
@@ -132,7 +134,9 @@ export async function checkShippingRates(
         const originAreaLabel = outlet.originAreaId === resolved.originAreaId && outlet.originAreaLabel
           ? outlet.originAreaLabel
           : resolved.source === "platform_default" ? "Asal koneksi platform" : "Asal outlet";
-        return { resolved, originAreaLabel };
+        // T-243: Mitra kurir — the gerai's switched-off couriers are not quoted back.
+        const disabledCouriers = await loadTenantDisabledCouriers(tx, context);
+        return { disabledCouriers, resolved, originAreaLabel };
       },
     );
 
@@ -170,7 +174,7 @@ export async function checkShippingRates(
       destinationAreaLabel: destination.option.areaLabel,
       weightGrams,
       retrievedAt: new Date().toISOString(),
-      services: services.map(({ providerService, shippingAmountIdr, deliveryEstimate, codEligible }) => ({
+      services: filterTenantCourierServices(services, prepared.disabledCouriers).map(({ providerService, shippingAmountIdr, deliveryEstimate, codEligible }) => ({
         providerService, shippingAmountIdr, deliveryEstimate, codEligible,
       })),
     } };

@@ -97,8 +97,9 @@ export type ShipmentDraftInput = {
   shippingInstruction: string | null;
   /**
    * T-211 / PR-70: how the parcel reaches the courier, and for pickup the WIB date and
-   * one-hour slot start ("08:00"). Stored and shown only — not sent to Mengantar until
-   * T-153 verifies the order contract. Absent (null) on drafts that predate it.
+   * one-hour slot start ("09:00", D-27). The documented order body (D-26) carries the type
+   * as `pickup.type`; a scheduled pickup also needs a `POST /time` `time_id`, which only a
+   * live call returns (T-153). Absent (null) on drafts that predate it.
    */
   handoverType?: HandoverType | null;
   pickupDate?: string | null;
@@ -377,7 +378,7 @@ export function validateShipmentDraft(formData: FormData, now: Date = new Date()
         if (scheduleError === "date") {
           errors.pickupDate = "Pilih tanggal penjemputan (hari ini sampai 6 hari ke depan).";
         } else if (scheduleError === "slot") {
-          errors.pickupSlot = "Pilih jam penjemputan 08.00–17.00 WIB, paling cepat 90 menit dari sekarang.";
+          errors.pickupSlot = "Pilih jam penjemputan 09.00–18.00 WIB, paling cepat 90 menit dari sekarang.";
         } else {
           pickupDate = date;
           pickupSlot = slot;

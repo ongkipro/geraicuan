@@ -7,6 +7,7 @@ import { providerCourierFromService } from "@/db/order-batch-repository";
 import { normalizeMengantarEstimateServices } from "@/lib/mengantar-estimate";
 import {
   MENGANTAR_COURIERS,
+  isMengantarServiceOffered,
   courierDisplayName,
   courierRecapOrder,
   mengantarCourierOfService,
@@ -44,12 +45,14 @@ describe("Mengantar courier catalogue", () => {
     expect(catalogue.serviceKeys).toContain("paxel");
   });
 
-  it("names every courier the provider quotes", () => {
-    const unmapped = catalogue.serviceKeys.filter((key) => mengantarCourierOfService(key) === null);
+  it("names every courier the provider quotes, except the removed Ninja (D-29)", () => {
+    const unmapped = catalogue.serviceKeys
+      .filter((key) => isMengantarServiceOffered(key))
+      .filter((key) => mengantarCourierOfService(key) === null);
     expect(unmapped, `service keys no courier in MENGANTAR_COURIERS claims: ${unmapped.join(", ")}`)
       .toEqual([]);
 
-    const couriers = [...new Set(catalogue.serviceKeys.map((key) => mengantarCourierOfService(key)))];
+    const couriers = [...new Set(catalogue.serviceKeys.filter(isMengantarServiceOffered).map((key) => mengantarCourierOfService(key)))];
     for (const courier of couriers) {
       expect(MENGANTAR_COURIERS, `${courier} is quoted but not listed`).toContain(courier);
     }
@@ -83,9 +86,12 @@ describe("Mengantar courier catalogue", () => {
   });
 
   it("keeps the issued-order grouping and the recap on the same vocabulary", () => {
-    for (const key of catalogue.serviceKeys) {
+    for (const key of catalogue.serviceKeys.filter(isMengantarServiceOffered)) {
       expect(providerCourierFromService(key), key).toBe(mengantarCourierOfService(key));
     }
+    // D-29: Ninja left the catalogue; a historical Ninja order groups under its own name.
+    expect(mengantarCourierOfService("Ninja")).toBeNull();
+    expect(providerCourierFromService("Ninja")).toBe("Ninja");
     // A courier the list does not name still reaches the recap rather than
     // disappearing, and reaches it under its own name.
     expect(providerCourierFromService("Wahana")).toBe("Wahana");
@@ -99,7 +105,7 @@ describe("Mengantar courier catalogue", () => {
    * it — `spx` and `iDexpress` are exactly the mixed-case keys such a pattern
    * tends to lose.
    */
-  it("lets every catalogued service key through the estimate normalizer", () => {
+  it("lets every catalogued service key through the estimate normalizer, except a discontinued courier (D-29)", () => {
     const priced = Object.fromEntries(catalogue.serviceKeys.map((key) => [key, {
       price: 12_000,
       currency: "IDR",
@@ -112,7 +118,7 @@ describe("Mengantar courier catalogue", () => {
     }]));
     const quoted = normalizeMengantarEstimateServices(priced).map((service) => service.providerService);
 
-    expect([...quoted].sort()).toEqual([...catalogue.serviceKeys].sort());
+    expect([...quoted].sort()).toEqual(catalogue.serviceKeys.filter((key) => key !== "Ninja").sort());
   });
 
   it("gives every listed courier a name an operator would recognise", () => {

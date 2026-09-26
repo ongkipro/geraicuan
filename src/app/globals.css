@@ -106,9 +106,8 @@
   --text-3xl--line-height:1.5;
   --text-h1:2rem;
   --text-h1--line-height:1.25;
-  /* §2.3 content width (owner 2026-09-26): centred in the main area; 1120px, 1400px from 2xl. */
+  /* §2.3 content width (owner 2026-09-26): centred in the main area, 1120px at every breakpoint. */
   --container-content:70rem;
-  --container-content-wide:87.5rem;
   --font-sans:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-heading:var(--font-inter),ui-sans-serif,system-ui,sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;

@@ -5,8 +5,8 @@
  * - `COD`: the courier collects goods plus shipping, grossed up for Mengantar's
  *   fee (formula version 2), computed and never typed.
  * - `COD_ONGKIR`: the goods were paid outside GeraiCUAN; the courier collects
- *   only a shipping charge the operator may raise above break-even (formula
- *   version 3).
+ *   ongkir + biaya COD (formula version 3), computed and never typed since
+ *   D-28 (T-237). Rows recorded earlier may hold a charge raised above it.
  *
  * Stored as `shipment_drafts.is_cod` plus `shipment_drafts.cod_shipping_only`
  * (migration 0050), so every row written before the method existed, and every

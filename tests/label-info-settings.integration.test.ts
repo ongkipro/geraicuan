@@ -209,6 +209,8 @@ describe("label sheet with the Informasi label choice", () => {
   it("never offers the Mengantar pickup identity as a field", () => {
     expect([...LABEL_FIELD_KEYS]).toEqual([
       "senderAddress", "senderPhone", "recipientName", "recipientPhone", "recipientAddressDetail", "returnWarning",
+      // T-243: brand switches; still nothing for the pickup identity.
+      "courierLogo", "geraiLogo", "labelNote",
     ]);
   });
 

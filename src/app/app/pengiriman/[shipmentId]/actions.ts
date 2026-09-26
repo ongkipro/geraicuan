@@ -10,12 +10,13 @@ import {
   CodTotalsUnavailableError,
 } from "@/db/cod-totals-repository";
 import { db, dbPool } from "@/db/client";
-import { OrderBatchUnavailableError } from "@/db/order-batch-repository";
+import { OrderBatchUnavailableError, OrderCourierDisabledError } from "@/db/order-batch-repository";
 import { TenantContextDeniedError } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { characterClassError } from "@/lib/field-character-classes";
 import { formatIdr } from "@/lib/label-format";
 import { COD_FORMULA_RETIRED_MESSAGE } from "@/lib/mengantar-cod-fee";
+import { courierDisplayName } from "@/lib/mengantar-couriers";
 import {
   MengantarOrderPayloadError,
   MengantarOrderTransportUnavailableError,
@@ -53,6 +54,18 @@ const PAYLOAD_ERROR_MESSAGES: Record<string, string> = {
     "Area tujuan draf ini belum pernah diverifikasi ke Mengantar. Verifikasi ulang tujuan di bawah, lalu konfirmasi kembali.",
   ORDER_WEIGHT_UNCONVERTIBLE:
     "Berat paket tidak dapat dikonversi ke satuan penyedia. Perbarui berat paket pada draf kiriman.",
+  ORDER_COURIER_UNDOCUMENTED:
+    "Ekspedisi ini bisa dicek tarifnya, tetapi belum bisa dipesan lewat API Mengantar. Pilih ekspedisi lain.",
+  ORDER_SERVICE_UNDOCUMENTED:
+    "Layanan ini belum bisa dipesan lewat API Mengantar. Pilih layanan lain dari ekspedisi yang sama.",
+  ORDER_CARGO_DANGEROUS_GOODS:
+    "Barang berbahaya tidak dapat dikirim dengan layanan kargo. Pilih layanan reguler.",
+  ORDER_PICKUP_TIME_UNAVAILABLE:
+    "Jadwal penjemputan belum bisa dikirim ke Mengantar. Buat kiriman baru dengan Drop di outlet.",
+  ORDER_PICKUP_SLOT_UNAVAILABLE:
+    "Jadwal penjemputan kiriman ini sudah lewat atau di luar 09.00–18.00 WIB. Buat kiriman baru dan pilih jadwal lagi.",
+  ORDER_PICKUP_VOLUME_MISSING:
+    "Penjemputan terjadwal perlu kendaraan (Motor/Mobil/Truk). Buat kiriman baru dan pilih kendaraan.",
 };
 
 /** T-186: the server's own refusal of a COD Ongkir charge, with the exact figure. */
@@ -64,6 +77,8 @@ function codOngkirRefusalMessage(error: CodOngkirChargeRefusedError) {
     case "MISSING":
     case "INVALID":
       return `Isi ongkir yang ditagih kurir dalam rupiah bulat.${minimum}`;
+    case "NOT_COMPUTED":
+      return `Nilai COD Ongkir dihitung otomatis (ongkir + biaya COD) dan tidak dapat diubah: ${formatIdr(error.breakEvenIdr ?? 0)}. Muat ulang lalu konfirmasi lagi.`;
     case "ALREADY_RECORDED":
       return `Ongkir COD kiriman ini sudah tercatat ${formatIdr(error.recordedChargeIdr ?? 0)} dan tidak dapat diubah. Konfirmasi ulang dengan nilai itu.`;
     case "NOT_COD_ONGKIR":
@@ -168,6 +183,11 @@ export async function confirmShipmentIssuance(
   } catch (error) {
     if (error instanceof OrderRateLimitedError) {
       return { error: "Terlalu banyak konfirmasi. Tunggu beberapa menit lalu coba lagi." };
+    }
+    if (error instanceof OrderCourierDisabledError) {
+      return {
+        error: `Kurir ${courierDisplayName(error.courier)} sedang dinonaktifkan di Pengaturan › Mitra kurir. Pilih layanan kurir lain, atau aktifkan kembali kurirnya.`,
+      };
     }
     if (error instanceof CodOngkirChargeRefusedError) {
       return { error: codOngkirRefusalMessage(error) };

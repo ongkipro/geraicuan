@@ -7,7 +7,7 @@ import { formatWibDateTime } from "@/lib/label-format";
 import { cn } from "@/lib/utils";
 
 import { CopyValueButton } from "./copy-button";
-import type { TrackingEntry } from "./detail-model";
+import type { AttentionSignal, TrackingEntry } from "./detail-model";
 
 /**
  * T-213 building blocks measured from `detail-kiriman.html` (card: 24px padding, 18/700 title,
@@ -51,7 +51,7 @@ export function DefinitionGrid({ items }: { items: readonly DefinitionItem[] }) 
 
 export type IdentityItem = { copy?: string; label: string; mono?: boolean; value: string };
 
-/** Nomor kiriman · Resi · Penerima · Telepon, each copyable (Mengantar identity strip). */
+/** Nomor kiriman · Resi · Penerima · Telepon, each copyable (Mengantar identity strip); number and resi 18px mono bold (spec 10 §2.4). */
 export function IdentityStrip({ items }: { items: readonly IdentityItem[] }) {
   return (
     <Card aria-label="Identitas kiriman" role="region" size="default">
@@ -61,7 +61,7 @@ export function IdentityStrip({ items }: { items: readonly IdentityItem[] }) {
             <div className="flex min-w-0 flex-col gap-0.5" key={item.label}>
               <dt className="text-xs text-muted-foreground">{item.label}</dt>
               <dd className="flex min-w-0 items-center gap-1">
-                <span className={cn("min-w-0 text-sm font-semibold wrap-anywhere", item.mono && "font-mono", !item.copy && "font-medium text-muted-foreground")}>
+                <span className={cn("min-w-0 text-sm font-semibold wrap-anywhere tabular-nums", item.mono && "font-mono text-lg font-bold", !item.copy && "font-medium text-muted-foreground")}>
                   {item.value}
                 </span>
                 {item.copy ? <CopyValueButton label={item.label} value={item.copy} /> : null}
@@ -151,10 +151,36 @@ export function TrackingTimeline({ entries }: { entries: readonly TrackingEntry[
   );
 }
 
+/**
+ * T-238 "Perlu perhatian": Mengantar's own attention fields as small badges in the status card.
+ * Tenant Admin only (they come from the provider observation); nothing renders without one.
+ */
+export function AttentionSignals({ signals }: { signals: readonly AttentionSignal[] }) {
+  if (signals.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5 border-t pt-2">
+      <h3 className="text-xs font-medium text-muted-foreground">Catatan dari Mengantar</h3>
+      <ul aria-label="Catatan dari Mengantar" className="flex flex-wrap gap-1.5">
+        {signals.map((signal) => (
+          <li
+            className={cn(
+              "rounded-md border px-2 py-0.5 text-xs font-medium wrap-anywhere",
+              signal.urgent ? "border-warn/40 bg-warn-surface text-warn" : "bg-muted text-muted-foreground",
+            )}
+            key={signal.key}
+          >
+            {signal.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** Back link above the eyebrow (spec 10 §4.9), 13px/600 primary as in the reference. */
 export function BackToQueue({ href }: { href: string }) {
   return (
-    <Link className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary underline-offset-4 hover:underline" href={href}>
+    <Link className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-primary underline-offset-4 hover:underline md:min-h-6" href={href}>
       <ArrowLeft aria-hidden="true" className="size-4" />
       Kembali ke histori kiriman
     </Link>

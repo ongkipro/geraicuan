@@ -47,7 +47,7 @@ export default async function NewContactPage({ searchParams }: { searchParams: N
     <>
       <PageHeader
         back={(
-          <Link className="inline-flex min-h-6 items-center gap-1.5 text-sm font-semibold text-primary underline-offset-4 hover:underline" href={contactListHref(role)}>
+          <Link className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-primary underline-offset-4 hover:underline md:min-h-6" href={contactListHref(role)}>
             <ArrowLeft aria-hidden="true" className="size-4" />Kembali ke daftar {label.toLowerCase()}
           </Link>
         )}

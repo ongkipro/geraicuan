@@ -6,6 +6,7 @@ import {
   FileText,
   History,
   LayoutDashboard,
+  Megaphone,
   Printer,
   ScrollText,
   Search,
@@ -22,6 +23,7 @@ import {
  * (the navigation module stays free of React so server code and tests can import it).
  */
 export const NAV_ICONS: Record<string, LucideIcon> = {
+  announcements: Megaphone,
   dashboard: LayoutDashboard,
   "shipment-new": CirclePlus,
   shipments: FileText,
@@ -38,4 +40,5 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   "platform-tenants": Building2,
   "platform-registrations": UserPlus,
   "platform-audit": ScrollText,
+  "platform-announcements": Megaphone,
 };

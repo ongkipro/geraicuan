@@ -2,30 +2,30 @@
 
 import { CircleAlert, CircleCheck, FileText, Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { InvoiceMediaCards, InvoicePreview } from "@/app/app/invoice/invoice-media";
 import { DEFAULT_INVOICE_MEDIUM, INVOICE_MEDIA, InvoiceSheet, type InvoiceMedium } from "@/app/app/invoice/invoice-sheet";
 import { IssueInvoiceButton } from "@/app/app/invoice/issue-invoice-button";
 import { printGroup } from "@/app/app/invoice/print-group";
+import { useGeraiBrand } from "@/app/app/brand/gerai-brand";
 import { recordLabelPrint, type LabelPrintActionState } from "@/app/app/label/[shipmentId]/actions";
+import { LabelPreviewFrame } from "@/app/app/label/[shipmentId]/label-preview-frame";
 import { LabelPrintContext } from "@/app/app/label/[shipmentId]/label-print-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { formatWibDateTime } from "@/lib/label-format";
-import { DEFAULT_LABEL_SIZE, LABEL_SIZES, readStoredLabelSize, writeStoredLabelSize, type LabelSize } from "@/lib/label-size";
+import { cn } from "@/lib/utils";
+import { LABEL_SIZES, readStoredLabelSize, writeStoredLabelSize, type LabelSize } from "@/lib/label-size";
 
 const browserStorage = () => (typeof window === "undefined" ? undefined : window.localStorage);
 const subscribeToStorage = (onChange: () => void) => {
   window.addEventListener("storage", onChange);
   return () => window.removeEventListener("storage", onChange);
 };
-
-/** `.label-sheet` is 100 mm wide at every size (label.css, T-176); CSS px are 96 per inch. */
-const LABEL_SHEET_WIDTH_PX = (100 * 96) / 25.4;
 
 const SIZE_OPTIONS: { description: string; size: LabelSize }[] = [
   { description: "Label paket 10 × 10 cm dan bukti pengirim 10 × 5 cm, dipotong di garis putus-putus.", size: "10x15" },
@@ -75,32 +75,18 @@ export function LabelPrintPanel({
 }) {
   const router = useRouter();
   const [state, action] = useActionState(recordLabelPrint, {} as LabelPrintActionState);
+  // T-243: the gerai's default size (Informasi label) unless this operator chose one here.
+  const { defaultLabelSize } = useGeraiBrand();
   const remembered = useSyncExternalStore(
     subscribeToStorage,
-    () => readStoredLabelSize(browserStorage, operatorId),
-    () => DEFAULT_LABEL_SIZE,
+    () => readStoredLabelSize(browserStorage, operatorId, defaultLabelSize),
+    () => defaultLabelSize,
   );
   const [chosen, setChosen] = useState<LabelSize | null>(null);
   const size = chosen ?? remembered;
   const lastPrintToken = useRef<string | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
-  const preview = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
   const [medium, setMedium] = useState<InvoiceMedium>(DEFAULT_INVOICE_MEDIUM);
-
-  useEffect(() => {
-    const region = preview.current;
-    if (!region) return;
-    const fit = () => {
-      const style = getComputedStyle(region);
-      const available = region.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      setZoom(Math.min(1, Math.max(available, 0) / LABEL_SHEET_WIDTH_PX));
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(region);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (state.printed || state.blocked || state.error) resultRef.current?.focus();
@@ -183,8 +169,12 @@ export function LabelPrintPanel({
                 ) : state.blocked ? (
                   <Alert role="status">
                     <CircleAlert aria-hidden="true" />
-                    <AlertTitle>{state.blocked === "AWAITING_UPSTREAM_PAYMENT" ? "Menunggu pelunasan Mengantar" : "Label belum tersedia"}</AlertTitle>
-                    <AlertDescription>Label dapat dicetak setelah Mengantar menerbitkan nomor resi.</AlertDescription>
+                    <AlertTitle>{state.blocked === "CANCELLED"
+                      ? "Kiriman dibatalkan — label tidak dapat dicetak"
+                      : state.blocked === "AWAITING_UPSTREAM_PAYMENT" ? "Menunggu pelunasan Mengantar" : "Label belum tersedia"}</AlertTitle>
+                    <AlertDescription>{state.blocked === "CANCELLED"
+                      ? "Mengantar melaporkan pesanan ini dibatalkan."
+                      : "Label dapat dicetak setelah Mengantar menerbitkan nomor resi."}</AlertDescription>
                   </Alert>
                 ) : (
                   <Alert role="alert" variant="destructive">
@@ -221,19 +211,17 @@ export function LabelPrintPanel({
         ) : null}
         {history}
       </div>
-      <div className="grid min-w-0 gap-6 print:block">
+      {/* T-243: a lone label preview stays beside the size cards while the history scrolls. */}
+      <div className={cn("grid min-w-0 gap-6 print:static print:block", !invoice && "lg:sticky lg:top-20")}>
         <div className="label-print-group grid min-w-0 gap-2 print:block">
-          <p aria-hidden="true" className="label-hide text-xs font-medium tracking-wide text-muted-foreground uppercase">Pratinjau kertas termal</p>
           <LabelPrintContext.Provider value={{ printedAt: state.printed?.printedAt ?? null, size }}>
-            <div
-              aria-label={`Pratinjau label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
-              className="label-preview [&>.label-sheet]:[zoom:var(--label-preview-zoom,1)] print:[&>.label-sheet]:[zoom:1]"
-              ref={preview}
-              role="region"
-              style={{ "--label-preview-zoom": zoom } as CSSProperties}
+            <LabelPreviewFrame
+              label={`Pratinjau label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
+              size={size}
+              title="Pratinjau kertas termal"
             >
               {children}
-            </div>
+            </LabelPreviewFrame>
           </LabelPrintContext.Provider>
         </div>
         {invoice ? (

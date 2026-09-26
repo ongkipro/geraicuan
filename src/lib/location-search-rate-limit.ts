@@ -98,3 +98,34 @@ export async function withLocationSearchConcurrencyGuard<T>(
     if (unlockError && !workFailed) throw unlockError;
   }
 }
+
+// T-245: the local wilayah suggestion search costs one indexed read and no provider call, so it
+// spends no durable counter (a row write per keystroke would cost more than the search). This
+// in-memory window only stops a runaway client.
+// lazy: process-local — one Node process serves the CMS today; if replicas are added and abuse is
+// observed, move it to the durable `shipment_rate_limits` pattern above.
+const MAX_WILAYAH_SEARCHES_PER_WINDOW = 120;
+const WILAYAH_SEARCH_WINDOW_MS = 60 * 1000;
+const MAX_TRACKED_WILAYAH_SEARCHERS = 10_000;
+const wilayahSearchWindows = new Map<string, { count: number; start: number }>();
+
+export function allowWilayahSearch(
+  context: Pick<TenantContext, "tenantId" | "userId">,
+  now = Date.now(),
+): boolean {
+  const key = `${context.tenantId}:${context.userId}`;
+  const current = wilayahSearchWindows.get(key);
+  if (!current || now - current.start >= WILAYAH_SEARCH_WINDOW_MS) {
+    if (wilayahSearchWindows.size >= MAX_TRACKED_WILAYAH_SEARCHERS) {
+      for (const [staleKey, window] of wilayahSearchWindows) {
+        if (now - window.start >= WILAYAH_SEARCH_WINDOW_MS) wilayahSearchWindows.delete(staleKey);
+      }
+      if (wilayahSearchWindows.size >= MAX_TRACKED_WILAYAH_SEARCHERS) wilayahSearchWindows.clear();
+    }
+    wilayahSearchWindows.set(key, { count: 1, start: now });
+    return true;
+  }
+  if (current.count >= MAX_WILAYAH_SEARCHES_PER_WINDOW) return false;
+  current.count += 1;
+  return true;
+}

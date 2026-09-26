@@ -60,7 +60,7 @@ describe("no native select remains in src", () => {
 });
 
 describe("Buat kiriman pickup schedule posts pickupDate and pickupSlot unchanged", () => {
-  // 17.00 WIB: today's slots have passed, so tomorrow at 08.00 is the first choice.
+  // 17.00 WIB: today's slots have passed, so tomorrow at 09.00 is the first choice (D-27).
   const html = renderToStaticMarkup(createElement(ShipmentCreateForm, {
     gerai: { name: "Gerai Uji", phone: "081234567890" },
     nowIso: "2026-09-26T10:00:00.000Z",
@@ -87,7 +87,7 @@ describe("Buat kiriman pickup schedule posts pickupDate and pickupSlot unchanged
     const date = controls.filter((control) => control.name === "pickupDate");
     const slot = controls.filter((control) => control.name === "pickupSlot");
     expect(date).toEqual([expect.objectContaining({ tag: "input", value: "2026-09-27" })]);
-    expect(slot).toEqual([expect.objectContaining({ tag: "input", value: "08:00" })]);
+    expect(slot).toEqual([expect.objectContaining({ tag: "input", value: "09:00" })]);
     expect(date[0].attributes).toContain('type="hidden"');
 
     const formData = new FormData();
@@ -99,7 +99,7 @@ describe("Buat kiriman pickup schedule posts pickupDate and pickupSlot unchanged
     })) formData.set(name, value);
     const result = validateShipmentDraft(formData, new Date("2026-09-26T10:00:00.000Z"));
     expect(result.ok ? null : result.errors).toBeNull();
-    expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" });
+    expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "09:00" });
   });
 });
 

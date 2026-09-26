@@ -244,6 +244,14 @@ describe("store setup is the only caller allowed to reach a pending tenant", () 
     "src/app/app/pengaturan/outlet/page.tsx",
     "src/app/app/pengaturan/page.tsx",
     "src/app/app/pengaturan/pickup/page.tsx",
+    // T-243: serves the gerai's own logo bytes (tenant_brand_settings only), which the
+    // Pengaturan (store setup) previews for a pending gerai; it reads no shipment row.
+    "src/app/app/brand/logo/route.ts",
+    // T-244: Info terbaru reads platform announcements and the member's own read receipts,
+    // which a gerai awaiting approval must also see; no shipment row.
+    "src/app/app/info/page.tsx",
+    // T-244: marks those announcements read for the caller only; no shipment row.
+    "src/app/app/info/actions.ts",
   ]);
 
   function walk(directory: string): string[] {

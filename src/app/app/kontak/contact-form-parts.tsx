@@ -1,10 +1,12 @@
 "use client";
 
 import { CircleAlert } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { FieldError } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CONTACT_CATEGORIES, CONTACT_CATEGORY_LABELS, contactCategoryLabel } from "@/lib/contact-category";
 import { CONTACT_ROLE_EFFECTS, CONTACT_ROLES, contactRoleLabel, type ContactRole } from "@/lib/contact-role-filter";
 
 /** Spec 10 §4.11: every field keeps room for its inline error so the form does not jump. */
@@ -73,5 +75,31 @@ export function RoleOptions({
       </div>
       <FieldMessage error={error} id="roles-error" />
     </fieldset>
+  );
+}
+
+const NO_CATEGORY = "none";
+
+/**
+ * T-241 "Peran / kategori" (ref pengirim.html): the fixed list plus "Tanpa kategori". Radix Select
+ * has no empty item value, so "none" stands in for it and the hidden `category` field posts "".
+ */
+export function CategorySelect({ defaultValue, error }: { defaultValue: string | null | undefined; error?: string }) {
+  const [value, setValue] = useState(defaultValue || NO_CATEGORY);
+  return (
+    <Field className="gap-2" data-invalid={Boolean(error)}>
+      <FieldLabel htmlFor="category">Peran / kategori <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel>
+      <input name="category" type="hidden" value={value === NO_CATEGORY ? "" : value} />
+      <Select onValueChange={setValue} value={value}>
+        <SelectTrigger aria-describedby="category-error" aria-invalid={Boolean(error)} className="w-full text-left *:data-[slot=select-value]:flex-1" id="category">
+          <SelectValue>{value === NO_CATEGORY ? "Tanpa kategori" : contactCategoryLabel(value)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent position="popper">
+          <SelectItem value={NO_CATEGORY}>Tanpa kategori</SelectItem>
+          {CONTACT_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{CONTACT_CATEGORY_LABELS[category]}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <FieldMessage error={error} id="category-error" />
+    </Field>
   );
 }

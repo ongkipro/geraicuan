@@ -4,6 +4,7 @@ import { ArrowLeft, CircleAlert, Printer } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { GeraiBrandProvider, NO_GERAI_BRAND } from "@/app/app/brand/gerai-brand";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
 import { loadBatchPrint } from "@/app/app/label/cetak/batch-data";
 import { BatchPrintPanel } from "@/app/app/label/cetak/batch-print-panel";
@@ -17,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
-import { loadTenantLabelFields } from "@/db/tenant-settings-repository";
+import { loadPrintBrand, loadTenantLabelFields } from "@/db/tenant-settings-repository";
 import { LABEL_SIZES } from "@/lib/label-size";
 
 export const metadata: Metadata = { title: "Pratinjau cetak", robots: { index: false } };
@@ -34,9 +35,11 @@ function BackToList() {
 export default async function BatchPrintPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const principal = await requireTenantPrincipal();
   const query = parseBatchPrintQuery(await searchParams);
-  const { fields, items } = query.numbers.length === 0
-    ? { fields: undefined, items: [] }
+  const { brand, fields, items } = query.numbers.length === 0
+    ? { brand: NO_GERAI_BRAND, fields: undefined, items: [] }
     : await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => ({
+      // T-243: gerai logo and catatan resi on every sheet, logo on every nota.
+      brand: await loadPrintBrand(tx, context),
       // PR-86: every sheet applies the gerai's Informasi label choice for the batch size.
       fields: await loadTenantLabelFields(tx, context),
       items: await loadBatchPrint(tx, context, query),
@@ -104,7 +107,7 @@ export default async function BatchPrintPage({ searchParams }: { searchParams: P
               {skipped.map((item) => (
                 <li key={item.tenantNumber}>
                   <span className="font-mono">{item.tenantNumber}</span>
-                  {item.reason === "NOT_ISSUED" ? " — resi belum terbit" : " — tidak ditemukan"}
+                  {item.reason === "NOT_ISSUED" ? " — resi belum terbit" : item.reason === "CANCELLED" ? " — kiriman dibatalkan" : " — tidak ditemukan"}
                 </li>
               ))}
               {query.invalid.map((entry) => (
@@ -114,12 +117,14 @@ export default async function BatchPrintPage({ searchParams }: { searchParams: P
           </AlertDescription>
         </Alert>
       ) : null}
+      <GeraiBrandProvider value={brand}>
       <BatchPrintPanel
         attempts={labels.map((item) => ({ attemptId: randomUUID(), shipmentId: item.label.shipmentId }))}
         invoices={invoices}
         labels={labels.length > 0 ? labels.map((item) => <LabelSheet fields={fields} key={item.label.shipmentId} label={item.label} />) : null}
         size={query.size}
       />
+      </GeraiBrandProvider>
     </>
   );
 }

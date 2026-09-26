@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BatchPrintDialog, BatchSelectionProvider, SelectPageCheckbox, SelectRowCheckbox } from "@/app/app/label/batch-selection";
-import { AWB_SUFFIX_ERROR, LABEL_PAGE_SIZE, labelIndexHref, parseLabelQuery } from "@/app/app/label/label-query";
+import { AWB_SUFFIX_ERROR, LABEL_PAGE_SIZE, labelIndexHref, labelTileShareBase, parseLabelQuery } from "@/app/app/label/label-query";
 import { ListPagination } from "@/app/app/pengiriman/_list/list-pagination";
 import { AdjustedFilterAlert, PeriodFilter, rangeIssueMessages } from "@/app/app/pengiriman/_list/period-filter";
 import { type SearchValue } from "@/app/app/pengiriman/_list/search-params";
@@ -12,7 +12,7 @@ import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
-import { StatusBadge } from "@/components/app/status-badge";
+import { ShipmentStatusBadge, shipmentStatusIcon, StatusBadge } from "@/components/app/status-badge";
 import { StatusTiles } from "@/components/app/status-tiles";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,9 +21,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { db } from "@/db/client";
 import { loadLabelIndexPage, type LabelIndexPage, type LabelPrintStateFilter } from "@/db/label-print-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { loadTenantBrand } from "@/db/tenant-settings-repository";
 import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatWibDateTime } from "@/lib/label-format";
-import { shipmentLabelHref, shipmentNumberFromReference } from "@/lib/shipment-number";
+import { shipmentDetailHref, shipmentLabelHref, shipmentNumberFromReference } from "@/lib/shipment-number";
 
 export const metadata: Metadata = { title: "Cetak resi", robots: { index: false } };
 
@@ -31,11 +32,14 @@ const PRINT_STATE_TILES = [
   { hint: "Siap dicetak", label: "Semua resi", metricId: "LBL-ALL", value: "semua" },
   { hint: "Perlu dicetak", label: "Belum dicetak", metricId: "LBL-UNPRINTED", value: "belum" },
   { hint: "Minimal sekali", label: "Sudah dicetak", metricId: "LBL-PRINTED", value: "sudah" },
+  // T-238 (owner): resi Mengantar cancelled after issuance; listed, never printable.
+  { hint: "Tidak dapat dicetak", label: "Dibatalkan", metricId: "LBL-CANCELLED", value: "batal" },
 ] as const satisfies readonly { hint: string; label: string; metricId: keyof LabelIndexPage["summary"]; value: LabelPrintStateFilter }[];
 
-const EMPTY_PAGE: LabelIndexPage = { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0 } };
+const EMPTY_PAGE: LabelIndexPage = { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 } };
 
-function PrintCountBadge({ count }: { count: number }) {
+function PrintCountBadge({ cancelled, count }: { cancelled?: boolean; count: number }) {
+  if (cancelled) return <ShipmentStatusBadge status="CANCELLED" />;
   return count === 0
     ? <StatusBadge label="Belum dicetak" tone="warning" />
     : <StatusBadge icon={Printer} label={`${count}× dicetak`} tone="success" />;
@@ -58,6 +62,9 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
         status: "issued",
       }));
 
+  // T-243: the batch dialog preselects the gerai's default label size (Informasi label).
+  const { defaultLabelSize } = await withTenantContext(db, principal.userId, principal.tenantId, loadTenantBrand);
+
   // The repository lists the newest 100; they are paged here, 20 at a time.
   const totalPages = Math.max(1, Math.ceil(data.rows.length / LABEL_PAGE_SIZE));
   const page = Math.min(query.page, totalPages);
@@ -65,7 +72,8 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
   const selectedCount = data.summary[PRINT_STATE_TILES.find((tile) => tile.value === query.printState)!.metricId];
   const filtered = Boolean(query.awbSuffix) || query.printState !== "semua";
   // PR-87: rows are selected by shipment number; a row without a resi is never listed here.
-  const selectable = rows.flatMap((row) => (row.awb ? [{ ...row, awb: row.awb, number: Number(shipmentNumberFromReference(row.publicReference)) }] : []));
+  // A cancelled resi (T-238) is never selectable.
+  const selectable = rows.flatMap((row) => (row.awb && row.status !== "CANCELLED" ? [{ ...row, awb: row.awb, number: Number(shipmentNumberFromReference(row.publicReference)) }] : []));
 
   return (
     <>
@@ -79,20 +87,19 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
         range={range}
       />
 
-      {/* Three tiles fill one row, as in the reference (StatusTiles lays out six). */}
-      <div className="md:[&>nav>ul]:grid-cols-3">
-        <StatusTiles
-          label="Ringkasan status cetak resi"
-          tiles={PRINT_STATE_TILES.map((tile) => ({
-            count: data.summary[tile.metricId],
-            hint: tile.hint,
-            href: labelIndexHref({ awbSuffix: query.awbSuffix, printState: tile.value }, carry),
-            key: tile.metricId,
-            label: tile.label,
-            selected: query.printState === tile.value,
-          }))}
-        />
-      </div>
+      <StatusTiles
+        label="Ringkasan status cetak resi"
+        total={labelTileShareBase(data.summary)}
+        tiles={PRINT_STATE_TILES.map((tile) => ({
+          count: data.summary[tile.metricId],
+          hint: tile.hint,
+          href: labelIndexHref({ awbSuffix: query.awbSuffix, printState: tile.value }, carry),
+          icon: tile.value === "batal" ? shipmentStatusIcon("CANCELLED") ?? undefined : undefined,
+          key: tile.metricId,
+          label: tile.label,
+          selected: query.printState === tile.value,
+        }))}
+      />
 
       <BatchSelectionProvider numbers={selectable.map((row) => row.number)}>
       <Card aria-label="Daftar resi" className="gap-0 py-0" role="region">
@@ -120,7 +127,7 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
             </div>
             <Button type="submit" variant="outline">Cari</Button>
           </form>
-          {selectable.length > 0 ? <BatchPrintDialog /> : null}
+          {selectable.length > 0 ? <BatchPrintDialog defaultSize={defaultLabelSize} /> : null}
         </div>
 
         {rows.length === 0 ? (
@@ -156,7 +163,7 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
                   {rows.map((row) => (
                     <TableRow key={row.shipmentId}>
                       <TableCell className="w-10 align-top">
-                        {row.awb ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} /> : null}
+                        {row.awb && row.status !== "CANCELLED" ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} /> : null}
                       </TableCell>
                       <TableCell className="align-top">
                         <span className="block font-semibold">{carrierText(row.providerService, row.courier)}</span>
@@ -174,15 +181,21 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
                         {paymentText({ ...row, declaredValueIdr: null })}
                       </TableCell>
                       <TableCell className="align-top">
-                        <PrintCountBadge count={row.printCount} />
+                        <PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} />
                       </TableCell>
                       <TableCell className="align-top text-right">
-                        <Button asChild variant="outline">
-                          <Link aria-label={`${row.printCount === 0 ? "Cetak" : "Cetak ulang"} label ${row.awb}`} href={shipmentLabelHref(row.publicReference)}>
-                            <Printer aria-hidden="true" />
-                            {row.printCount === 0 ? "Cetak" : "Cetak ulang"}
-                          </Link>
-                        </Button>
+                        {row.status === "CANCELLED" ? (
+                          <Button asChild variant="outline">
+                            <Link aria-label={`Detail kiriman ${row.publicReference}`} href={shipmentDetailHref(row.publicReference)}>Detail</Link>
+                          </Button>
+                        ) : (
+                          <Button asChild variant="outline">
+                            <Link aria-label={`${row.printCount === 0 ? "Cetak" : "Cetak ulang"} label ${row.awb}`} href={shipmentLabelHref(row.publicReference)}>
+                              <Printer aria-hidden="true" />
+                              {row.printCount === 0 ? "Cetak" : "Cetak ulang"}
+                            </Link>
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -194,11 +207,11 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
               <RecordList label="Daftar resi">
                 {rows.map((row) => (
                   <RecordItem
-                    detail={row.awb ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} visibleLabel /> : undefined}
-                    href={shipmentLabelHref(row.publicReference)}
+                    detail={row.awb && row.status !== "CANCELLED" ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} visibleLabel /> : undefined}
+                    href={row.status === "CANCELLED" ? shipmentDetailHref(row.publicReference) : shipmentLabelHref(row.publicReference)}
                     key={row.shipmentId}
                     meta={<>{carrierText(row.providerService, row.courier)} · <span className="font-mono">{row.publicReference}</span></>}
-                    status={<PrintCountBadge count={row.printCount} />}
+                    status={<PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} />}
                     subtitle={<span className="font-semibold">{row.recipientName} · {areaText(row.destinationAreaLabel)}</span>}
                     time={row.issuedAt ? <time dateTime={row.issuedAt.toISOString()}>{formatWibDateTime(row.issuedAt)}</time> : "—"}
                     title={<span className="font-mono">{row.awb}</span>}

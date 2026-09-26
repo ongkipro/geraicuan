@@ -21,6 +21,7 @@ import {
   withProviderAccountSerialization,
 } from "@/lib/mengantar-order";
 import type { MengantarTransportScopeBinding } from "@/lib/mengantar-order";
+import { mengantarDocumentedOrderCourier } from "@/lib/mengantar-couriers";
 import { enforceUnpaidRecoveryRateLimit } from "@/lib/order-rate-limit";
 
 export type MengantarPayUnpaidRequest = {
@@ -75,7 +76,8 @@ export class MengantarUnpaidRecoveryUnknownError extends Error {
 }
 
 /**
- * DATA-13: `pay-unpaid` takes the Mengantar `batch`, which is not the order id.
+ * DATA-13: `pay-unpaid` takes the Mengantar `batch_id` (an object id, documented;
+ * T-237), which is neither the order id nor the readable `batch` code.
  * A row accepted before T-223 has no stored batch, so nothing is sent for it:
  * sending the order id instead was the bug. Subclasses the repository's
  * unavailable error so every caller already maps it to a safe refusal.
@@ -93,14 +95,17 @@ type ValidatedRecoveryTransportBinding = {
   transport: MengantarPayUnpaidTransport;
 };
 
+/**
+ * D-26 (T-237): the documented `POST /order/pay-unpaid` response —
+ * `{"success": true, "data": 2, "cnote_no": ["DMP00097790689", "DMP00097790690"]}`
+ * (api-public.mengantar.com/docs, read 2026-09-26): `data` is the number of
+ * orders paid and `cnote_no` their AWBs. Nothing is echoed back, so the batch and
+ * courier are correlated from the request alone. The earlier parser read an
+ * assumed `data: {batch_id, courier, cnote_no}` object that the docs never show.
+ */
 type PayUnpaidEnvelope = {
   success?: unknown;
   data?: unknown;
-};
-
-type PayUnpaidData = {
-  batch_id?: unknown;
-  courier?: unknown;
   cnote_no?: unknown;
 };
 
@@ -136,56 +141,34 @@ export function normalizeMengantarPayUnpaidResponse(
   const envelope = response as PayUnpaidEnvelope;
   if (
     envelope.success !== true
-    || !envelope.data
-    || typeof envelope.data !== "object"
-    || Array.isArray(envelope.data)
+    || typeof envelope.data !== "number"
+    || !Number.isSafeInteger(envelope.data)
+    || envelope.data < 0
+    || !Array.isArray(envelope.cnote_no)
+    || envelope.cnote_no.length !== envelope.data
   ) {
     throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_SCHEMA_UNKNOWN");
   }
-
-  const data = envelope.data as PayUnpaidData;
-  if (
-    typeof data.batch_id !== "string"
-    || typeof data.courier !== "string"
-    || !Array.isArray(data.cnote_no)
-  ) {
-    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_SCHEMA_UNKNOWN");
+  // One order per batch (orders are submitted one per request): exactly one paid.
+  if (envelope.data !== 1) {
+    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_ORDER_CORRELATION_UNKNOWN");
   }
 
-  let providerBatchId: string;
-  let courier: string;
   let cnoteNo: string;
   try {
-    providerBatchId = normalizeMengantarProviderIdentifier(
-      data.batch_id,
-      "PAY_UNPAID_BATCH_IDENTIFIER_UNSAFE",
-    );
-    courier = normalizeMengantarProviderIdentifier(
-      data.courier,
-      "PAY_UNPAID_COURIER_IDENTIFIER_UNSAFE",
-    );
-    const [candidate] = data.cnote_no;
     cnoteNo = normalizeMengantarProviderIdentifier(
-      candidate,
+      envelope.cnote_no[0],
       "PAY_UNPAID_CNOTE_UNSAFE",
     );
   } catch {
     throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_IDENTIFIER_UNSAFE");
   }
-  if (providerBatchId !== expectedProviderBatchId.trim()) {
-    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_BATCH_CORRELATION_UNKNOWN");
-  }
-  if (
-    !courier
-    || courier.toUpperCase() !== expectedCourier.trim().toUpperCase()
-  ) {
-    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_COURIER_CORRELATION_UNKNOWN");
-  }
-  if (data.cnote_no.length !== 1) {
-    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_ORDER_CORRELATION_UNKNOWN");
-  }
 
-  return { providerBatchId, courier, cnoteNo };
+  return {
+    providerBatchId: expectedProviderBatchId.trim(),
+    courier: expectedCourier.trim(),
+    cnoteNo,
+  };
 }
 
 async function markUnknown(
@@ -289,9 +272,11 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
 
     try {
       const providerBatchId = recovery.providerBatchId!;
+      // The documented `courier` spelling ("Sap", not the catalogue's "SAP").
+      const courier = preparedWithBinding.prepared.scope.courier;
       const request = Object.freeze({
         batch_id: providerBatchId,
-        courier: preparedWithBinding.prepared.scope.courier,
+        courier: mengantarDocumentedOrderCourier(courier) ?? courier,
       });
       const response = await withProviderAccountSerialization(
         input.lockPool,

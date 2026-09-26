@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, PackageSearch, Plus, Settings2 } from "lucide-react";
+import { ArrowRight, ChevronDown, Megaphone, PackageSearch, Plus, Settings2 } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import { FilterBar } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { countUnreadAnnouncements } from "@/db/announcement-repository";
 import { db } from "@/db/client";
 import { listOutletReadiness, listOutletReadinessSummary, OutletSettingsDeniedError } from "@/db/outlet-readiness-repository";
 import {
@@ -82,6 +83,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   if (principal.scope !== "tenant") redirect("/login/tenant");
   const { role, tenantId, userId } = principal;
   const isAdmin = role === "TENANT_ADMIN";
+  // T-244: one line to Info terbaru while this member has unread announcements (a failed count hides it).
+  const unreadInfo = await withTenantContext(db, userId, tenantId, (tx, context) => countUnreadAnnouncements(tx, context.userId), { allowPendingApproval: true }).catch(() => 0);
+  const infoNotice = unreadInfo > 0 ? (
+    <Alert className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5" data-testid="dashboard-info-notice" role="status">
+      <Megaphone aria-hidden="true" className="size-4 text-primary" />
+      <span className="font-semibold">{unreadInfo} info baru</span>
+      <Link className={arrowLink} href="/app/info">Lihat info terbaru<ArrowRight aria-hidden="true" /></Link>
+    </Alert>
+  ) : null;
 
   // PR-60: a gerai awaiting approval sees its setup steps, not shipment figures; every shipment
   // read below stays behind the default approval refusal.
@@ -94,6 +104,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return (
       <>
         <PageHeader description="Pengiriman terbuka setelah gerai disetujui." eyebrow="Utama" title="Dasbor" />
+        {infoNotice}
         {first(params.persetujuan) === "diperlukan" ? (
           <Alert data-testid="tenant-approval-refused" role="status">
             <AlertTitle>Pengiriman belum terbuka</AlertTitle>
@@ -171,6 +182,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return (
       <>
         {header}
+        {infoNotice}
         {readiness}
         <DataCard>
           <EmptyState description="Ringkasan, grafik dan rekap kurir tampil setelah kiriman pertama dibuat." icon={PackageSearch} title="Belum ada kiriman" />
@@ -205,6 +217,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <>
       {header}
+      {infoNotice}
       {readiness}
 
       <FilterBar
@@ -213,7 +226,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         label="Filter dasbor"
         summary={`${period.periodLabel} · ${period.timezoneLabel} · ${period.presetLabel}${outlet ? ` · ${outlet.name}` : ""}`}
       >
-        <DateRangePicker endDate={range.lastIncludedDate} label={period.periodLabel} presetId={range.presetId} startDate={range.startDate} />
+        <DateRangePicker endDate={range.lastIncludedDate} presetId={range.presetId} startDate={range.startDate} />
         <OutletSelect outlets={outlets} value={outlet?.id} />
       </FilterBar>
 

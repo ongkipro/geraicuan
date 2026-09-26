@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, CheckCircle2, CircleAlert, Loader2, Pencil, Plus } from "lucide-react";
+import { Archive, CheckCircle2, CircleAlert, Loader2, Pencil, Plus, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
@@ -9,14 +9,16 @@ import { DestinationAreaPicker, type DestinationAreaOutlet } from "@/app/app/_sh
 import {
   addContactAddressAction,
   archiveContactAction,
+  setPrimaryContactAddressAction,
   updateContactAction,
   updateContactAddressAction,
   type ContactAddressState,
   type ContactArchiveState,
   type ContactIdentityState,
+  type ContactPrimaryAddressState,
 } from "@/app/app/kontak/[contactId]/actions";
-import { ErrorSummary, FieldMessage, RoleOptions } from "@/app/app/kontak/contact-form-parts";
-import { DataCard } from "@/components/app/data-card";
+import { CategorySelect, ErrorSummary, FieldMessage, RoleOptions } from "@/app/app/kontak/contact-form-parts";
+import { ContactSection } from "@/app/app/kontak/contact-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -30,15 +32,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/character-class-input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { CONTACT_ROLE_NAME_CONFLICT_MESSAGE, CONTACT_ROLES_CARD, type ContactRole } from "@/lib/contact-role-filter";
+import type { ContactRole } from "@/lib/contact-role-filter";
 import { partyNameClass } from "@/lib/field-character-classes";
 import { areaDisplayCase } from "@/lib/label-format";
 
-export type DetailContact = { id: string; isRecipient: boolean; isSender: boolean; name: string; phone: string };
+export type DetailContact = { category: string | null; id: string; isRecipient: boolean; isSender: boolean; name: string; phone: string };
 export type DetailAddress = {
   address: string;
   destinationAreaId: string | null;
@@ -88,18 +89,24 @@ function useIdentityAction() {
   return { action, errors: state.errors ?? {}, pending, state, summaryRef };
 }
 
-/** Name and phone. `updateContactAction` saves identity and roles together, so the roles ride along unchanged. */
-export function ContactIdentityCard({ contact }: { contact: DetailContact }) {
+/**
+ * T-246 "Data kontak": name, phone, kategori and the roles in one form with one save.
+ * `updateContactAction` always saved identity and roles together (it validates both), so one
+ * form posting every field keeps its contract; the two-card split only duplicated the button.
+ */
+export function ContactDataSection({ contact }: { contact: DetailContact }) {
   const { action, errors, pending, state, summaryRef } = useIdentityAction();
   const values = state.values;
   return (
-    <DataCard title="Kontak">
+    <ContactSection id="data-kontak" title="Data kontak">
       <form action={action} aria-busy={pending} className="grid gap-2" id="form-kontak" noValidate>
         <input name="contactId" type="hidden" value={contact.id} />
-        {contact.isSender ? <input name="roleSender" type="hidden" value="on" /> : null}
-        {contact.isRecipient ? <input name="roleRecipient" type="hidden" value="on" /> : null}
-        <ErrorSummary errors={{ contactName: errors.contactName, contactPhone: errors.contactPhone }} ref={summaryRef} title="Periksa data kontak" />
-        <div className="grid gap-x-4 md:grid-cols-2">
+        <ErrorSummary
+          errors={{ category: errors.category, contactName: errors.contactName, contactPhone: errors.contactPhone, roles: errors.roles }}
+          ref={summaryRef}
+          title="Periksa data kontak"
+        />
+        <div className="grid gap-x-4 md:grid-cols-2 xl:grid-cols-3">
           <Field className="gap-2" data-invalid={Boolean(errors.contactName)}>
             <FieldLabel htmlFor="contactName">Nama lengkap</FieldLabel>
             <CharacterClassInput
@@ -130,26 +137,11 @@ export function ContactIdentityCard({ contact }: { contact: DetailContact }) {
             />
             <FieldMessage error={errors.contactPhone} id="contactPhone-error" />
           </Field>
+          <div className="md:col-span-2 xl:col-span-1">
+            <CategorySelect defaultValue={values ? values.category : contact.category} error={errors.category} key={values ? `v-${values.category}` : `s-${contact.category}`} />
+          </div>
         </div>
-        <Outcome state={state} />
-        <div className="flex justify-end"><SaveButton idle="Simpan kontak" /></div>
-      </form>
-    </DataCard>
-  );
-}
-
-/** Which menus the contact appears in. Name and phone ride along unchanged; `card` phrases errors for this card. */
-export function ContactRolesCard({ contact }: { contact: DetailContact }) {
-  const { action, errors, pending, state } = useIdentityAction();
-  const values = state.values;
-  const nameConflict = errors.roles === CONTACT_ROLE_NAME_CONFLICT_MESSAGE;
-  return (
-    <DataCard title="Peran">
-      <form action={action} aria-busy={pending} className="grid gap-2" id="form-peran" noValidate>
-        <input name="contactId" type="hidden" value={contact.id} />
-        <input name="contactName" type="hidden" value={contact.name} />
-        <input name="contactPhone" type="hidden" value={contact.phone} />
-        <input name="card" type="hidden" value={CONTACT_ROLES_CARD} />
+        <p className="text-sm font-medium text-foreground">Peran</p>
         {/* Keyed on the submitted values: a form action resets the checkboxes to their defaults. */}
         <RoleOptions
           defaults={{
@@ -159,11 +151,10 @@ export function ContactRolesCard({ contact }: { contact: DetailContact }) {
           error={errors.roles}
           key={values ? `${values.roleSender}-${values.roleRecipient}` : "stored"}
         />
-        {nameConflict ? <a className="text-sm font-medium text-primary underline-offset-4 hover:underline" href="#contactName">Ubah nama di kartu Kontak</a> : null}
         <Outcome state={state} />
-        <div className="flex justify-end"><SaveButton idle="Simpan peran" /></div>
+        <div className="flex justify-end"><SaveButton idle="Simpan data kontak" /></div>
       </form>
-    </DataCard>
+    </ContactSection>
   );
 }
 
@@ -218,16 +209,19 @@ function AddressForm({
         />
         <FieldMessage error={errors.addressLabel} id={`${prefix}-label-error`} />
       </Field>
-      <DestinationAreaPicker
-        canManageSettings={canManageSettings}
-        defaultArea={address?.destinationAreaId && address.destinationAreaLabel ? { areaId: address.destinationAreaId, areaLabel: address.destinationAreaLabel } : null}
-        defaultQuery={state.areaQuery}
-        defaultSelection={state.selectedArea}
-        error={errors.areaLabel}
-        key={state.selectedArea ? `${state.selectedArea.areaId}:${state.selectedArea.query}` : state.areaQuery ? `${state.areaQuery.query}:invalid` : "area"}
-        label="Kecamatan tujuan Mengantar"
-        outlets={outlets}
-      />
+      {/* The picker renders its error only when present; keep the same inline error space as the fields around it. */}
+      <div className="pb-5 has-data-[slot=field-error]:pb-0">
+        <DestinationAreaPicker
+          canManageSettings={canManageSettings}
+          defaultArea={address?.destinationAreaId && address.destinationAreaLabel ? { areaId: address.destinationAreaId, areaLabel: address.destinationAreaLabel } : null}
+          defaultQuery={state.areaQuery}
+          defaultSelection={state.selectedArea}
+          error={errors.areaLabel}
+          key={state.selectedArea ? `${state.selectedArea.areaId}:${state.selectedArea.query}` : state.areaQuery ? `${state.areaQuery.query}:invalid` : "area"}
+          label="Kecamatan tujuan Mengantar"
+          outlets={outlets}
+        />
+      </div>
       <Field className="mt-2 gap-2" data-invalid={Boolean(errors.addressText)}>
         <FieldLabel htmlFor={`${prefix}-text`}>Alamat lengkap &amp; patokan</FieldLabel>
         <CharacterClassTextarea
@@ -289,6 +283,26 @@ function AddressDialog({
   );
 }
 
+/** T-241 "Jadikan utama" (ref pengirim-detail.html "Jadikan Pickup Utama"): one small form per address. */
+function MakePrimaryButton({ address, contactId }: { address: DetailAddress; contactId: string }) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<ContactPrimaryAddressState, FormData>(setPrimaryContactAddressAction, {});
+  useEffect(() => {
+    if (state.success) router.refresh();
+  }, [router, state]);
+  return (
+    <form action={action}>
+      <input name="contactId" type="hidden" value={contactId} />
+      <input name="addressId" type="hidden" value={address.id} />
+      <Button aria-label={`Jadikan ${address.label} alamat utama`} disabled={pending} type="submit" variant="ghost">
+        {pending ? <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <Star aria-hidden="true" />}
+        Jadikan utama
+      </Button>
+      {state.error ? <span className="block text-xs text-destructive" role="alert">{state.error}</span> : null}
+    </form>
+  );
+}
+
 /** Ref kontak-detail.html "Daftar alamat": primary first with "Utama", each with Edit; add behind a dialog. */
 export function ContactAddressesCard({
   addresses,
@@ -307,7 +321,7 @@ export function ContactAddressesCard({
 }) {
   const full = addresses.length >= MAX_ACTIVE_ADDRESSES;
   return (
-    <DataCard
+    <ContactSection
       action={archived ? undefined : (
         <span className="flex flex-col items-end gap-1">
           <AddressDialog
@@ -315,12 +329,13 @@ export function ContactAddressesCard({
             contactId={contact.id}
             contactName={contact.name}
             outlets={outlets}
-            trigger={<Button disabled={full} size="sm" variant="outline"><Plus aria-hidden="true" />Tambah alamat</Button>}
+            trigger={<Button disabled={full} variant="outline"><Plus aria-hidden="true" />Tambah alamat</Button>}
           />
           {full ? <span className="text-xs text-muted-foreground">Batas {MAX_ACTIVE_ADDRESSES} alamat aktif tercapai</span> : null}
         </span>
       )}
       count={addresses.length}
+      id="alamat-kontak"
       title="Alamat"
     >
       {outletsUnavailable ? (
@@ -331,17 +346,19 @@ export function ContactAddressesCard({
         </Alert>
       ) : null}
       {addresses.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Belum ada alamat untuk kontak ini.</p>
+        <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Belum ada alamat untuk kontak ini.</p>
       ) : (
-        <ul className="grid gap-3" id="alamat">
+        <ul className="grid gap-3 md:grid-cols-2" id="alamat">
           {addresses.map((address) => (
-            <li className="grid gap-2 rounded-lg border p-4 data-[primary=true]:bg-muted/50" data-primary={address.isPrimary} key={address.id}>
+            <li className="grid content-start gap-2 rounded-xl border bg-card p-4 data-[primary=true]:border-primary/40" data-primary={address.isPrimary} key={address.id}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold wrap-anywhere">{address.label}</span>
                   {address.isPrimary ? <Badge variant="outline">Utama</Badge> : null}
                 </span>
                 {archived ? null : (
+                  <span className="-mr-2 flex items-center gap-1">
+                  {address.isPrimary ? null : <MakePrimaryButton address={address} contactId={contact.id} />}
                   <AddressDialog
                     address={address}
                     canManageSettings={canManageSettings}
@@ -349,11 +366,12 @@ export function ContactAddressesCard({
                     contactName={contact.name}
                     outlets={outlets}
                     trigger={(
-                      <Button aria-label={`Edit alamat ${address.label}`} size="sm" variant="ghost">
+                      <Button aria-label={`Edit alamat ${address.label}`} variant="ghost">
                         <Pencil aria-hidden="true" />Edit
                       </Button>
                     )}
                   />
+                  </span>
                 )}
               </div>
               <p className="text-sm wrap-anywhere">{areaDisplayCase(address.address)}</p>
@@ -364,7 +382,7 @@ export function ContactAddressesCard({
           ))}
         </ul>
       )}
-    </DataCard>
+    </ContactSection>
   );
 }
 
@@ -372,10 +390,11 @@ export function ContactAddressesCard({
 export function ContactArchiveZone({ contact, role }: { contact: DetailContact; role: ContactRole }) {
   const [state, action, pending] = useActionState<ContactArchiveState, FormData>(archiveContactAction, {});
   return (
-    <Card className="border border-danger/30 bg-tile-danger px-6 max-md:px-4">
-      <div className="grid gap-3">
-        <h2 className="text-base font-semibold text-danger">Zona hati-hati</h2>
-        <p className="text-sm text-muted-foreground">Kontak yang diarsipkan tidak muncul lagi saat membuat kiriman. Kiriman lama tetap menyimpan datanya.</p>
+    <ContactSection
+      description="Kontak yang diarsipkan tidak muncul lagi saat membuat kiriman. Kiriman lama tetap menyimpan datanya."
+      id="zona-hati-hati"
+      title="Zona hati-hati"
+    >
         {state.error ? (
           <Alert role="alert" variant="destructive">
             <CircleAlert aria-hidden="true" />
@@ -385,7 +404,8 @@ export function ContactArchiveZone({ contact, role }: { contact: DetailContact; 
         ) : null}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button className="w-fit" variant="destructive"><Archive aria-hidden="true" />Arsipkan kontak</Button>
+            {/* Destructive outline: quiet at rest, the consequence is named in the dialog. */}
+            <Button className="w-fit border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive" variant="outline"><Archive aria-hidden="true" />Arsipkan kontak</Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -407,7 +427,6 @@ export function ContactArchiveZone({ contact, role }: { contact: DetailContact; 
             </form>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
-    </Card>
+    </ContactSection>
   );
 }

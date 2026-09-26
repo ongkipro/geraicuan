@@ -273,10 +273,15 @@ describe("T-157 outlet pickup points", () => {
          AND privilege_type = 'UPDATE' ORDER BY column_name`,
     );
     expect(grants.rows.map(({ column_name }) => column_name)).toEqual([
+      // T-243 (0065): the internal notes; never the outlet, tenant or provider pickup id.
+      "driver_access_note",
       "is_default",
       "origin_area_id",
       "origin_area_label",
+      "pic_name",
+      "pic_phone",
       "pickup_address_label",
+      "pickup_schedule",
       "updated_at",
     ]);
   });

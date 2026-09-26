@@ -152,7 +152,7 @@ beforeAll(async () => {
        insurance_amount_idr, shipping_source_field, insurance_source_field,
        delivery_estimate, cod_eligible
      ) VALUES
-       ($1, $2, $3, 'JNE REG', 'IDR', 10000, 500, 'price', 'insurance_fee', '1-2 hari', true),
+       ($1, $2, $3, 'JNE', 'IDR', 10000, 500, 'price', 'insurance_fee', '1-2 hari', true),
        ($4, $2, $3, 'JNE OKE', 'IDR', 8000, NULL, 'price', NULL, '2-3 hari', false)`,
     [eligibleServiceId, tenantA, snapshotId, blockedServiceId],
   );
@@ -181,7 +181,7 @@ describe("T22 guarded queue-detail issuance", () => {
       services: expect.arrayContaining([
         expect.objectContaining({
           estimateServiceId: eligibleServiceId,
-          providerService: "JNE REG",
+          providerService: "JNE",
           shippingAmountIdr: 10000,
           insuranceAmountIdr: 500,
           codEligible: true,
@@ -333,7 +333,7 @@ describe("T22 guarded queue-detail issuance", () => {
          id, tenant_id, snapshot_id, provider_service, currency, shipping_amount_idr,
          insurance_amount_idr, shipping_source_field, insurance_source_field,
          delivery_estimate, cod_eligible
-       ) VALUES ($1, $2, $3, 'JNE REG', 'IDR', 10000, NULL, 'price', NULL, '1-2 hari', true)`,
+       ) VALUES ($1, $2, $3, 'JNE', 'IDR', 10000, NULL, 'price', NULL, '1-2 hari', true)`,
       [legacyServiceId, tenantA, legacySnapshotId],
     );
     // Written the way the previous release wrote it: the additive formula, version 1.
@@ -407,7 +407,7 @@ describe("T22 guarded queue-detail issuance", () => {
          id, tenant_id, batch_id, shipment_id, estimate_snapshot_id, estimate_service_id, position,
          provider_service, destination_area_id, destination_area_label, currency,
          shipping_amount_idr, is_cod, provider_cod_amount_idr
-       ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE REG', 'fixture-destination', 'Tujuan sintetis', 'IDR', 10000, true, 113663)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'JNE', 'fixture-destination', 'Tujuan sintetis', 'IDR', 10000, true, 113663)`,
       [legacyOrderId, tenantA, legacyBatchId, legacyShipmentId, legacySnapshotId, legacyServiceId],
     );
     await adminPool.query("UPDATE shipments SET status = 'SUBMISSION_QUEUED' WHERE id = $1", [legacyShipmentId]);

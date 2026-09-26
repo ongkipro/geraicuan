@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import type { PgSelect } from "drizzle-orm/pg-core";
 
 import {
@@ -197,8 +197,9 @@ function reportFilter(
  */
 const deliveredPredicate = eq(shipments.status, "DELIVERED");
 const returnedPredicate = inArray(shipments.status, [...RTS_STATUSES]);
-const failedPredicate = eq(shipments.status, "FAILED");
-const countWhere = (predicate: ReturnType<typeof eq>) =>
+// T-238 (owner): CANCELLED counts as "Gagal", like the Dasbor's SHP-OUTCOME-FAILED.
+const failedPredicate = inArray(shipments.status, ["FAILED", "CANCELLED"]);
+const countWhere = (predicate: SQL | undefined) =>
   sql<number>`count(*) filter (where ${predicate})::int`.mapWith(Number);
 /** Spec 19 RPT-SHP-COD-VALUE-IDR: what the courier collects, COD provider orders only. */
 const codValueExpression = sql`${shipmentCodTotals.providerCodAmountIdr}`;

@@ -37,14 +37,14 @@ Every change touching routes, handlers, actions, data models, or navigation must
 
 ### Current Repository Inventory (2026-09-26)
 
-- **36 `page.tsx` files**:
+- **41 `page.tsx` files**:
   - 8 Public & Authentication pages (`/`, `/login/tenant`, `/login/super-admin`, `/daftar`, `/verifikasi-email`, `/verifikasi-email/konfirmasi`, `/lupa-password`, `/atur-ulang-password`).
-  - 23 Authenticated Tenant CMS pages reached from 12 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
-  - 5 Authenticated Platform CMS pages (Ringkasan, Tenant, Detail tenant, Pendaftaran, Audit).
-- **3 `route.ts` Route Handlers**: Better Auth (`/api/auth/[...all]`), the report CSV export (`/app/laporan/pengiriman/export.csv`), and the closed provider webhook (`/api/webhooks/mengantar`, always 404).
-- **24 files declaring Server Actions** (`"use server"`), exporting 45 Server Actions (`export async function`).
-- **6 `layout.tsx` files**, **28 `loading.tsx`** (23 tenant, 5 platform), **20 `error.tsx`** (19 tenant, 1 platform), **5 `not-found.tsx`** (Section 10).
-- **36 repository and data-layer modules** in `src/db/`.
+  - 27 Authenticated Tenant CMS pages reached from 13 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
+  - 6 Authenticated Platform CMS pages (Ringkasan, Tenant, Detail tenant, Pendaftaran, Audit, Info terbaru).
+- **4 `route.ts` Route Handlers**: Better Auth (`/api/auth/[...all]`), the report CSV export (`/app/laporan/pengiriman/export.csv`), the gerai logo (`/app/brand/logo`, T-243), and the provider webhook (`/api/webhooks/mengantar`, 404 unless `MENGANTAR_WEBHOOK_ENABLED=1` and a secret are set — T-238, D-30).
+- **26 files declaring Server Actions** (`"use server"`), exporting 56 Server Actions (`export async function`).
+- **6 `layout.tsx` files**, **31 `loading.tsx`** (26 tenant, 5 platform), **22 `error.tsx`** (21 tenant, 1 platform), **7 `not-found.tsx`** (Section 10).
+- **41 repository and data-layer modules** in `src/db/` (T-238 added `mengantar-webhook-repository.ts` and `provider-tracking-repository.ts`; T-241 added `contact-shipment-repository.ts`; T-244 added `announcement-repository.ts`; T-245 added `wilayah-repository.ts`).
 - These counts are checked against the filesystem by `tests/system-map-inventory.integration.test.ts` (T-199, re-enabled by T-224); a drifted number fails the suite.
 - **Apex landing site**: standalone Astro static site in `apps/landing` for `https://geraicuan.com` (not part of the Next.js route tree).
 
@@ -66,7 +66,7 @@ Every change touching routes, handlers, actions, data models, or navigation must
 | **COMMITTED** | The route's own files and the owners named in its row are unchanged since git HEAD (`5552d2b`). |
 | **WORKTREE** | The route's own files or a named owner changed (or are new) in the working tree since HEAD; local tests pass, release integration and final review (T-219) are pending. A row changed since the last commit never claims COMMITTED. |
 | **RELEASE-GATED** | Code exists, but live upstream mutation (live provider order creation or real payment collection) is gated behind explicit authorization and environment switches (T-153). No row carries it alone today: the gated pages are also WORKTREE, and their rows name the gate. |
-| **CLOSED** | Endpoint exists on the router but refuses all incoming traffic (`/api/webhooks/mengantar` returns 404 until a verified provider push contract exists). |
+| **CLOSED** | Endpoint exists on the router but refuses all incoming traffic by default (`/api/webhooks/mengantar` returns an empty 404 until the deployment sets `MENGANTAR_WEBHOOK_ENABLED=1` and `MENGANTAR_WEBHOOK_SECRET`; T-238 built the documented signed contract, D-30 keeps it off until the account's webhook is enabled). |
 
 ---
 
@@ -102,7 +102,7 @@ flowchart TD
         TenantShell --> Recipients[Penerima /app/kontak/penerima]
         Senders --> NewContact[Kontak baru /app/kontak/baru]
         Recipients --> NewContact
-        Senders --> ContactDetail[Detail kontak /app/kontak/:id]
+        Senders --> ContactDetail[Detail kontak /app/kontak/:peran/:nomor]
         Recipients --> ContactDetail
         TenantShell --> TrackAwb[Cek resi /app/cek-resi]
         TenantShell --> QuickRate[Cek tarif /app/cek-tarif]
@@ -112,6 +112,7 @@ flowchart TD
         Settings --> LabelInfo[Informasi label /app/pengaturan/label]
         Settings --> Pickup[Titik pickup /app/pengaturan/pickup]
         Settings --> Outlet[Outlet /app/pengaturan/outlet]
+        Settings --> Couriers[Mitra kurir /app/pengaturan/kurir]
         Settings --> Connection[Koneksi Mengantar /app/pengaturan/koneksi]
         Settings --> Members[Anggota dan akses /app/anggota]
     end
@@ -128,7 +129,8 @@ flowchart TD
         AuthRoute[Better Auth /api/auth/*] --> TenantShell
         AuthRoute --> PlatformShell
         Report --> CsvExport[CSV /app/laporan/pengiriman/export.csv]
-        ClosedWebhook[Webhook /api/webhooks/mengantar] -. always 404 .-x History
+        Settings --> LogoRoute[Logo gerai /app/brand/logo - both roles]
+        ClosedWebhook[Webhook /api/webhooks/mengantar] -. 404 unless enabled .-x History
     end
 ```
 
@@ -151,7 +153,7 @@ flowchart TD
 |---|---|---|
 | Tenant frame | `src/app/app/layout.tsx` → `AppShell` (`src/components/app/app-shell.tsx`) | Guard `requireCmsScope("tenant", { allowPendingApproval: true })`; anyone else → `/login/tenant?notice=session-required\|access-unavailable`. 64px primary top bar (`SiteHeader`), sidebar on the canvas (full ≥ 1024px, icon rail 768–1023px, Sheet < 768px), 1120px content column. A `PROVISIONING` gerai gets the approval notice above every page. |
 | **Focused layout** (D11) | `AppShell` `FOCUSED_ROUTES = {"/app/pengiriman/baru"}` | No sidebar; the top bar holds the brand, the 3-step stepper (`FlowStepper`: Isi data · Cek tarif · Terbitkan resi) and a close ✕ to `/app/pengiriman`; the content column is centred; the summary rail stays sticky (mobile: bottom bar). |
-| Settings frame | `src/app/app/pengaturan/layout.tsx` → `SettingsFrame` | Guard `requireTenantAdmin()` (Operator → `/app`). Page header "Pengaturan" + settings sub-menu (`SETTINGS_NAV_ITEMS`, `src/app/app/pengaturan/_components/settings-nav.tsx`: Profil gerai, Informasi label, Titik pickup, Outlet, Koneksi Mengantar, Anggota & akses). `/app/anggota` is outside this directory and renders `SettingsFrame` itself; its guard-only `anggota/layout.tsx` (T-236) redirects an Operator before that frame's skeleton renders. |
+| Settings frame | `src/app/app/pengaturan/layout.tsx` → `SettingsFrame` | Guard `requireTenantAdmin()` (Operator → `/app`). Page header "Pengaturan" + settings sub-menu (`SETTINGS_NAV_ITEMS`, `src/app/app/pengaturan/_components/settings-nav.tsx`: Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir, Koneksi Mengantar, Anggota & akses). `/app/anggota` is outside this directory and renders `SettingsFrame` itself; its guard-only `anggota/layout.tsx` (T-236) redirects an Operator before that frame's skeleton renders. |
 | Platform frame | `src/app/platform/layout.tsx` → `AppShell` scope `platform` | Guard `resolvePlatformAccess()`; anyone else → `/login/super-admin?notice=…`. |
 | Root document | `src/app/layout.tsx` | Fonts, tokens (`globals.css`), `TooltipProvider`. Public pages render `AuthShell` (`src/app/login/_components/auth-shell.tsx`). |
 
@@ -169,19 +171,20 @@ The account menu in the sidebar footer (`AppSidebar`) holds "Anggota & akses" (T
 
 ### Tenant Navigation Registry (`src/lib/cms-shell-navigation.ts`)
 
-The Tenant CMS sidebar lists **12 navigation items** in 6 groups, in the order of `navigationGroups` (`tenantCmsNavigation`), rendered by `src/components/app/app-sidebar.tsx`. Every item has its own icon (`NAV_ICONS` in `src/components/app/nav-icons.ts`, keyed by the item `key`) in a 40×40 box; Dasbor sits alone without its "Utama" label; the other groups show an uppercase label. Items with `roles` are hidden from an Operator (the page guards refuse them too).
+The Tenant CMS sidebar lists **13 navigation items** in 6 groups, in the order of `navigationGroups` (`tenantCmsNavigation`), rendered by `src/components/app/app-sidebar.tsx`. Every item has its own icon (`NAV_ICONS` in `src/components/app/nav-icons.ts`, keyed by the item `key`) in a 40×40 box; Info terbaru and Dasbor sit at the top without their "Utama" label (T-244: Info terbaru above Dasbor, with an unread-count `SidebarMenuBadge` from the tenant layout and a dot on the icon rail; login still lands on `/app`); the other groups show an uppercase label. Items with `roles` are hidden from an Operator (the page guards refuse them too).
 
 **Active match rule.** The current item is the one whose `href` is the longest match of the path: `/app` matches only exactly, every other `href` matches itself or any sub-path (`routeMatches`). Before matching, `/app/anggota` resolves as `/app/pengaturan`, and a contact page outside the role lists resolves as `/app/kontak/<role>`: `/app/kontak/baru` takes the role from `peran`, `/app/kontak/[contactId]` from `dari`, each defaulting to `pengirim` (`contactNavigationPath`). A path matching no item marks nothing current (today: `/app/invoice/[shipmentNumber]`).
 
 | Group | Icon | Navigation Item (in order) | Path | Accessible Roles | Also Current For |
 |---|---|---|---|---|---|
-| **Utama** | `LayoutDashboard` | Dasbor | `/app` | Admin, Operator | — (exact match only) |
+| **Utama** | `Megaphone` | Info terbaru | `/app/info` | Admin, Operator | — |
+| | `LayoutDashboard` | Dasbor | `/app` | Admin, Operator | — (exact match only) |
 | **Pengiriman** | `CirclePlus` | Buat kiriman | `/app/pengiriman/baru` | Admin, Operator | — (focused layout hides the sidebar) |
 | | `FileText` | Histori kiriman | `/app/pengiriman` | Admin, Operator | `/app/pengiriman/[shipmentId]` |
 | | `Undo2` | Retur (RTS) | `/app/pengiriman/rts` | Admin, Operator | — |
 | | `Printer` | Cetak resi | `/app/label` | Admin, Operator | `/app/label/[shipmentId]`, `/app/label/cetak` |
-| **Data** | `User` | Pengirim | `/app/kontak/pengirim` | Admin, Operator | `/app/kontak/baru?peran=pengirim` (or no `peran`), `/app/kontak/[contactId]?dari=pengirim` |
-| | `Users` | Penerima | `/app/kontak/penerima` | Admin, Operator | `/app/kontak/baru?peran=penerima`, `/app/kontak/[contactId]?dari=penerima` |
+| **Data** | `User` | Pengirim | `/app/kontak/pengirim` | Admin, Operator | `/app/kontak/baru?peran=pengirim` (or no `peran`), `/app/kontak/pengirim/[nomor]` |
+| | `Users` | Penerima | `/app/kontak/penerima` | Admin, Operator | `/app/kontak/baru?peran=penerima`, `/app/kontak/penerima/[nomor]` |
 | **Cek** | `Search` | Cek resi | `/app/cek-resi` | Admin, Operator | — |
 | | `Calculator` | Cek tarif | `/app/cek-tarif` | Admin, Operator | — |
 | **Laporan** | `FileChartColumn` | Laporan pengiriman | `/app/laporan/pengiriman` | **Admin only** | — |
@@ -190,7 +193,7 @@ The Tenant CMS sidebar lists **12 navigation items** in 6 groups, in the order o
 
 ### Platform Navigation Registry (`src/lib/cms-shell-navigation.ts`, `platformNavigationGroups`)
 
-One group, "Platform". `platformCmsNavigation` matches `/platform` exactly and every other item as itself or a sub-path, falling back to Ringkasan. Icons from `NAV_ICONS` (`LayoutDashboard`, `Building2`, `UserPlus`, `ScrollText`). Access is enforced separately by `resolvePlatformAccess`, which owns no menu.
+One group, "Platform". `platformCmsNavigation` matches `/platform` exactly and every other item as itself or a sub-path, falling back to Ringkasan. Icons from `NAV_ICONS` (`LayoutDashboard`, `Building2`, `UserPlus`, `ScrollText`, `Megaphone`). Access is enforced separately by `resolvePlatformAccess`, which owns no menu.
 
 | Navigation Item (in order) | Path | Accessible Roles | Active Match Rule |
 |---|---|---|---|
@@ -198,6 +201,7 @@ One group, "Platform". `platformCmsNavigation` matches `/platform` exactly and e
 | **Gerai** | `/platform/tenant` | Super Admin only | `/platform/tenant` and `/platform/tenant/[tenantId]` |
 | **Pendaftaran** | `/platform/pendaftaran` | Super Admin only | `/platform/pendaftaran` and sub-paths |
 | **Audit** | `/platform/audit` | Super Admin only | `/platform/audit` and sub-paths |
+| **Info terbaru** | `/platform/info` | Super Admin only | `/platform/info` and sub-paths |
 
 ---
 
@@ -218,7 +222,7 @@ All render `AuthShell` (spec 17 UX-v3.10; polish is T-225). No route-level `load
 
 ---
 
-## 5. Tenant CMS Pages (23 Routes)
+## 5. Tenant CMS Pages (27 Routes)
 
 Guards (verified in code):
 
@@ -229,46 +233,49 @@ Guards (verified in code):
 
 "Boundaries" names the nearest `loading.tsx` / `error.tsx` / `not-found.tsx` (Section 10). Every `notFound()` without a dedicated file falls through to the framework 404.
 
-### 5.1 Dasbor (1 Route)
+### 5.1 Utama (2 Routes)
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app` | `src/app/app/page.tsx` | T+P (Admin, Operator) | See today's situation and what needs action: KPI cards, Hasil pengiriman, Grafik kiriman, Kiriman terbaru, Rekap per kurir. | `listOutletReadinessSummary`, `loadTenantDashboardMetrics`, `loadTenantDashboardPeriodSummary`, `loadTenantDashboardOutcomeSummary`, `loadTenantDashboardCourierRecap`, `loadTenantDashboardPeriodTrend`, `loadTenantDashboardShipments` (`tenant-dashboard-repository.ts`); pending gerai: `listOutletReadiness` | None (links: Buat kiriman, Siapkan outlet, Laporan pengiriman) | Boundaries `app/loading`, `app/error`; pending gerai → setup steps (+ refused banner on `persetujuan=diperlukan`); no outlet ready alert; no shipments; filtered-empty; invalid outlet; per-region error (`settle`) | `dasbor.html` | WORKTREE |
+| `/app/info` | `src/app/app/info/page.tsx` | T+P (Admin, Operator) | Info terbaru (T-244, PR-91, D-31): read the Admin platform's published announcements, pinned first then newest; category, WIB date, plain-text body with "Baca selengkapnya". Viewing marks the shown rows read for this member only. | `listTenantAnnouncements` (`announcement-repository.ts`); layout badge `countUnreadAnnouncements` | `markAnnouncementsReadAction` (once per view, idempotent) | Boundaries `app/loading`, `app/error`; empty ("Belum ada info"); unread cards "Baru"; pinned "Disematkan"; long body collapsed | — | WORKTREE |
+| `/app` | `src/app/app/page.tsx` | T+P (Admin, Operator) | See today's situation and what needs action: KPI cards, Hasil pengiriman, Grafik kiriman, Kiriman terbaru, Rekap per kurir. | `listOutletReadinessSummary`, `loadTenantDashboardMetrics`, `loadTenantDashboardPeriodSummary`, `loadTenantDashboardOutcomeSummary`, `loadTenantDashboardCourierRecap`, `loadTenantDashboardPeriodTrend`, `loadTenantDashboardShipments` (`tenant-dashboard-repository.ts`); `countUnreadAnnouncements` (T-244 "N info baru" line, shown only when unread > 0); pending gerai: `listOutletReadiness` | None (links: Buat kiriman, Siapkan outlet, Laporan pengiriman, Info terbaru) | Boundaries `app/loading`, `app/error`; pending gerai → setup steps (+ refused banner on `persetujuan=diperlukan`); no outlet ready alert; no shipments; filtered-empty; invalid outlet; per-region error (`settle`) | `dasbor.html` | WORKTREE |
 
 ### 5.2 Pengiriman (7 Routes)
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app/pengiriman/baru` | `src/app/app/pengiriman/baru/page.tsx` | T+P (pending gerai sees a read-only notice) | Create a shipment and issue its resi in one focused page: Isi data → Cek tarif → Terbitkan resi. Issuance is RELEASE-GATED (sanctioned order fixture, T-153). | `listReadyShipmentOutlets`, `listOutletPickupPoints`, tenant name/WhatsApp, `loadShipmentFlowDraft`, `loadLatestEstimateSnapshot`, `shipmentCodFormulaRetired` | `saveShipmentDraft`, `searchSenderShipmentContacts`, `searchRecipientShipmentContacts`, `selectShipmentContact`, `searchMengantarDestinationAreas`, `loadShipmentEstimate` (auto once), `verifyShipmentDraftDestinationArea`, `confirmShipmentIssuance` (shared `IssuancePanel`) | Boundaries own `loading`/`error`; pending approval notice; no ready outlet (admin: link to settings); field errors + summary; estimate loading/failure + retry; issuance pending/outcomes; draft already processed → links to detail/label | `buat-kiriman.html` | WORKTREE |
+| `/app/pengiriman/baru` | `src/app/app/pengiriman/baru/page.tsx` | T+P (pending gerai sees a read-only notice) | Create a shipment and issue its resi in one focused page: Isi data → Cek tarif → Terbitkan resi. Issuance is RELEASE-GATED (sanctioned order fixture, T-153). | `listReadyShipmentOutlets`, `listOutletPickupPoints`, tenant name/WhatsApp, `loadShipmentFlowDraft`, `loadLatestEstimateSnapshot`, `shipmentCodFormulaRetired`, `loadTenantDisabledCouriers` (Mitra kurir filter on the offered services, T-243) | `saveShipmentDraft`, `searchSenderShipmentContacts`, `searchRecipientShipmentContacts`, `selectShipmentContact`, `searchWilayahDestinationAreas`, `resolveWilayahDestinationArea`, `searchMengantarDestinationAreas` (shared `DestinationAreaPicker`, T-245), `loadShipmentEstimate` (auto once), `verifyShipmentDraftDestinationArea`, `confirmShipmentIssuance` (shared `IssuancePanel`) | Boundaries own `loading`/`error`; pending approval notice; no ready outlet (admin: link to settings); field errors + summary; estimate loading/failure + retry; issuance pending/outcomes; draft already processed → links to detail/label | `buat-kiriman.html` | WORKTREE |
 | `/app/pengiriman` | `src/app/app/pengiriman/page.tsx` | T | Histori kiriman: find a shipment and act on it; Tenant Admin pulls statuses from Mengantar. | `loadShipmentQueuePage` (`shipment-queue-repository.ts`); admin: `loadProviderDeliveryStatusBasis`, `listTenantOutlets` | `pullMengantarStatus` (admin, `StatusPull`) | Boundaries own `loading`/`error`; adjusted-filter alert; empty; filtered-empty (status or `cari`); stale filters admin-only; freshness line; pull result | `histori-kiriman.html` | WORKTREE |
-| `/app/pengiriman/[shipmentId]` | `src/app/app/pengiriman/[shipmentId]/page.tsx` | T | Detail kiriman: identity strip, route, tracking timeline, parcel and payment, parties; rail with one next action. Recovery/reconciliation are RELEASE-GATED fixtures. | `resolveShipmentRoute` (`resolveShipmentRouteKey`), `loadShipmentDetailView` (`detail-data.ts`: `loadShipmentDetail`, `loadShipmentFlowDraft`, `listOutletPickupPoints`, `shipmentCodFormulaRetired`, provider snapshots/observations) | `confirmShipmentIssuance` + `verifyShipmentDraftDestinationArea` (`IssuancePanel`), `recoverShipmentUnpaidPayment`, `reconcileShipmentUnknownSubmission`, `checkStaleShipmentOperation`; links to label, `?invoice=1`, draft | Boundaries own `loading`/`error`/`not-found`; UUID or `GC-…` → canonical number redirect; per-status rail (Diestimasi, Menunggu pembayaran, Perlu rekonsiliasi, Resi terbit, Bermasalah); retired COD formula refusal | `detail-kiriman.html` | WORKTREE |
-| `/app/pengiriman/rts` | `src/app/app/pengiriman/rts/page.tsx` | T | Retur: follow returns and courier problems. | `loadRtsShipmentsPage` (`rts-repository.ts`); admin: `listTenantOutlets` | `pullMengantarStatus` (admin) | Boundaries own `loading`/`error`; adjusted-filter alert; empty; filtered-empty | `retur-rts.html` | WORKTREE |
-| `/app/label` | `src/app/app/label/page.tsx` | T | Cetak resi: list issued shipments, print one, or select several for the print-format modal (PR-87). | `loadLabelIndexPage` (`label-print-repository.ts`) | None (row "Cetak" → `/app/label/[n]`; "Cetak terpilih (N)" → `/app/label/cetak`) | Boundaries own `loading`/`error`; invalid AWB suffix; empty; filtered-empty | `cetak-resi.html` | WORKTREE |
-| `/app/label/[shipmentId]` | `src/app/app/label/[shipmentId]/page.tsx` | T | Print the masked thermal label (10×15 / 10×10); with `invoice=1` print label then invoice as two ordered steps. | `resolveShipmentRoute`, `loadPrintableLabel`, `listPrintEvents`, `loadShipmentInvoice` (with `invoice=1`), `loadTenantLabelFields` (Informasi label, PR-86) | `recordLabelPrint`, `issueShipmentInvoice` (`IssueInvoiceButton`) | Boundaries own `loading`/`error`/`not-found`; not issued / awaiting upstream payment (blocked alert); ready; print history | `label-detail.html` | WORKTREE |
-| `/app/label/cetak` | `src/app/app/label/cetak/page.tsx` | T | Batch print view for selected shipments: labels, invoices or both. | `loadBatchPrint` (`batch-data.ts`: `resolveShipmentRouteKey`, `loadPrintableLabel`, `loadShipmentInvoice` — read-only; missing invoices are issued only by the explicit button), `loadTenantLabelFields` (Informasi label, PR-86) | `recordBatchLabelPrints`, `issueBatchInvoices` | Boundaries own `loading`/`error`; nothing printable (empty); invalid numbers dropped; per-shipment unavailable | — (no spec 17 row; PR-87 modal target) | WORKTREE |
+| `/app/pengiriman/[shipmentId]` | `src/app/app/pengiriman/[shipmentId]/page.tsx` | T | Detail kiriman: identity strip, route, tracking timeline, parcel and payment, parties; rail with one next action. Recovery/reconciliation are RELEASE-GATED fixtures. | `resolveShipmentRoute` (`resolveShipmentRouteKey`), `loadShipmentDetailView` (`detail-data.ts`: `loadShipmentDetail`, `loadShipmentFlowDraft`, `listOutletPickupPoints`, `shipmentCodFormulaRetired`, provider snapshots/observations, `listProviderHistoryEvents` — T-238 courier history for both roles, return resi, admin-only "Catatan dari Mengantar"), `loadTenantDisabledCouriers` (issuance step only: Mitra kurir filter, T-243) | `confirmShipmentIssuance` + `verifyShipmentDraftDestinationArea` (`IssuancePanel`), `recoverShipmentUnpaidPayment`, `reconcileShipmentUnknownSubmission`, `checkStaleShipmentOperation`; links to label, `?invoice=1`, draft | Boundaries own `loading`/`error`/`not-found`; UUID or `GC-…` → canonical number redirect; per-status rail (Diestimasi, Menunggu pembayaran, Perlu rekonsiliasi, Resi terbit, Bermasalah); retired COD formula refusal | `detail-kiriman.html` | WORKTREE |
+| `/app/pengiriman/rts` | `src/app/app/pengiriman/rts/page.tsx` | T | Retur: follow returns and courier problems; the return resi (`cnote_no_rts`, T-238) under the resi. | `loadRtsShipmentsPage` (`rts-repository.ts`); admin: `listTenantOutlets` | `pullMengantarStatus` (admin) | Boundaries own `loading`/`error`; adjusted-filter alert; empty; filtered-empty | `retur-rts.html` | WORKTREE |
+| `/app/label` | `src/app/app/label/page.tsx` | T | Cetak resi: list issued shipments, print one, or select several for the print-format modal (PR-87). | `loadLabelIndexPage` (`label-print-repository.ts`), `loadTenantBrand` (default size preselected in the modal, T-243) | None (row "Cetak" → `/app/label/[n]`; "Cetak terpilih (N)" → `/app/label/cetak`) | Boundaries own `loading`/`error`; invalid AWB suffix; empty; filtered-empty | `cetak-resi.html` | WORKTREE |
+| `/app/label/[shipmentId]` | `src/app/app/label/[shipmentId]/page.tsx` | T | Print the masked thermal label (10×15 / 10×10); with `invoice=1` print label then invoice as two ordered steps. | `resolveShipmentRoute`, `loadPrintableLabel`, `listPrintEvents`, `loadShipmentInvoice` (with `invoice=1`), `loadTenantLabelFields` (Informasi label, PR-86), `loadPrintBrand` (gerai logo, catatan resi, default size — `GeraiBrandProvider`, T-243) | `recordLabelPrint`, `issueShipmentInvoice` (`IssueInvoiceButton`) | Boundaries own `loading`/`error`/`not-found`; not issued / awaiting upstream payment (blocked alert); ready; print history | `label-detail.html` | WORKTREE |
+| `/app/label/cetak` | `src/app/app/label/cetak/page.tsx` | T | Batch print view for selected shipments: labels, invoices or both. | `loadBatchPrint` (`batch-data.ts`: `resolveShipmentRouteKey`, `loadPrintableLabel`, `loadShipmentInvoice` — read-only; missing invoices are issued only by the explicit button), `loadTenantLabelFields` (Informasi label, PR-86), `loadPrintBrand` (T-243) | `recordBatchLabelPrints`, `issueBatchInvoices` | Boundaries own `loading`/`error`; nothing printable (empty); invalid numbers dropped; per-shipment unavailable | — (no spec 17 row; PR-87 modal target) | WORKTREE |
 
 ### 5.3 Invoice (1 Route)
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app/invoice/[shipmentNumber]` | `src/app/app/invoice/[shipmentNumber]/page.tsx` | T | Print or reprint the nota alone (80 mm / A4, UX-v3.9); issuing is never automatic here. | `parseShipmentRouteKey`, `resolveShipmentRouteKey`, `loadShipmentInvoice` (`shipment-invoice-repository.ts`), `loadPrintableLabel` | `issueShipmentInvoice` ("Terbitkan invoice") | Boundaries own `loading`/`error`/`not-found`; non-canonical key → redirect; not issued ("Invoice terbit setelah resi terbit"); invoice absent; issued | `label-detail.html` (layout) | WORKTREE |
+| `/app/invoice/[shipmentNumber]` | `src/app/app/invoice/[shipmentNumber]/page.tsx` | T | Print or reprint the nota alone (80 mm / A4, UX-v3.9); issuing is never automatic here. | `parseShipmentRouteKey`, `resolveShipmentRouteKey`, `loadShipmentInvoice` (`shipment-invoice-repository.ts`), `loadPrintableLabel`; the nota's logo is the version recorded at issuance (`shipment_invoices.logo_sha256` → `/app/brand/logo?sha=`, T-247), not `loadPrintBrand` | `issueShipmentInvoice` ("Terbitkan invoice") | Boundaries own `loading`/`error`/`not-found`; non-canonical key → redirect; not issued ("Invoice terbit setelah resi terbit"); invoice absent; issued | `label-detail.html` (layout) | WORKTREE |
 
-### 5.4 Data kontak (4 Routes + 1 Redirect)
+### 5.4 Data kontak (6 Routes + 1 Redirect)
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app/kontak/pengirim` | `src/app/app/kontak/pengirim/page.tsx` | T (via `ContactDirectory`) | Reuse sender contacts: tabs Aktif/Diarsipkan/Semua, live search, WhatsApp/salin. | `loadContactDirectoryPage` (role sender, `contact-repository.ts`) | `searchContacts` (live search; term never in the URL) | Boundaries own `loading`/`error`; empty; no results; archived-empty; page past the end → last page | `pengirim.html` | WORKTREE |
+| `/app/kontak/pengirim` | `src/app/app/kontak/pengirim/page.tsx` | T (via `ContactDirectory`) | Reuse sender contacts: tabs Aktif/Diarsipkan/Semua, live search; columns Nama + kategori · WhatsApp · Alamat utama · Kiriman (CON-SHP-COUNT, % terkirim) · Status · Aksi (T-241). | `loadContactDirectoryPage` (role sender, `contact-repository.ts`; `loadContactShipmentCounts`, `contact-shipment-repository.ts`) | `searchContacts` (live search; term never in the URL) | Boundaries own `loading`/`error`; empty; no results; archived-empty; page past the end → last page | `pengirim.html` | WORKTREE |
 | `/app/kontak/penerima` | `src/app/app/kontak/penerima/page.tsx` | T (via `ContactDirectory`) | Same for recipient contacts. | `loadContactDirectoryPage` (role recipient) | `searchContacts` | As Pengirim | `penerima.html` | WORKTREE |
 | `/app/kontak` | `next.config.ts` redirect | T (target pages) | Old bookmark: `peran=penerima` → Penerima, else → Pengirim (308, query kept). | — | — | Redirect | — | COMMITTED |
-| `/app/kontak/baru` | `src/app/app/kontak/baru/page.tsx` | T | Create a sender/recipient contact. | `listReadyShipmentOutlets` (destination search account) | `saveContact`, `searchMengantarDestinationAreas` (`DestinationAreaPicker`) | Boundaries own `loading`/`error`; validation + summary; no ready outlet; success → detail `tersimpan=1` | `kontak-baru.html` | WORKTREE |
-| `/app/kontak/[contactId]` | `src/app/app/kontak/[contactId]/page.tsx` | T (archive: Tenant Admin only, enforced in `archiveContact`) | Edit contact, roles and addresses; archive. | `getContact`, `listContactAddresses`, `listReadyShipmentOutlets` | `updateContactAction`, `addContactAddressAction`, `updateContactAddressAction`, `archiveContactAction`, `searchMengantarDestinationAreas` | Boundaries own `loading`/`error`/`not-found`; non-UUID/unknown → 404; missing `dari` → redirect; saved (`tersimpan=1`); archived read-only (`diarsipkan=1`); Operator view | `kontak-detail.html` | WORKTREE |
+| `/app/kontak/baru` | `src/app/app/kontak/baru/page.tsx` | T | Create a sender/recipient contact. | `listReadyShipmentOutlets` (destination search account) | `saveContact`, `searchWilayahDestinationAreas`, `resolveWilayahDestinationArea`, `searchMengantarDestinationAreas` (`DestinationAreaPicker`) | Boundaries own `loading`/`error`; validation + summary; no ready outlet; success → detail `tersimpan=1` | `kontak-baru.html` | WORKTREE |
+| `/app/kontak/pengirim/[nomor]` | `src/app/app/kontak/pengirim/[nomor]/page.tsx` | T (via `ContactDetail`, `contact-detail.tsx`; archive: Tenant Admin only, enforced in `archiveContact`) | T-241 sender detail by per-tenant contact number: header, 4 KPI (CON-SHP-*), addresses (Jadikan utama), Kontak (kategori) and Peran cards, Riwayat kiriman, archive. | `getContactByNumber`, `listContactAddresses`, `loadContactShipmentSummary`, `loadContactShipmentHistory`, `listReadyShipmentOutlets` | `updateContactAction`, `addContactAddressAction`, `updateContactAddressAction`, `setPrimaryContactAddressAction`, `archiveContactAction`, `searchWilayahDestinationAreas`, `resolveWilayahDestinationArea`, `searchMengantarDestinationAreas` | Boundaries own `loading`/`error`/`not-found`; malformed/unknown/other-tenant number → 404; role not held → redirect to the held role; saved (`tersimpan=1`); archived read-only (`diarsipkan=1`); no shipments; Operator view | `pengirim-detail.html` | WORKTREE |
+| `/app/kontak/penerima/[nomor]` | `src/app/app/kontak/penerima/[nomor]/page.tsx` | As above | Same for a recipient contact (party role RECIPIENT). | As above | As above | As above | `penerima-detail.html` | WORKTREE |
+| `/app/kontak/[contactId]` | `src/app/app/kontak/[contactId]/page.tsx` | T | Legacy UUID detail URL: `permanentRedirect` (308 digest) to `/app/kontak/<peran>/<n>` (T-241; `dari` kept when still held). The `/app` loading boundary streams the response, so the redirect arrives as HTTP 200 with a meta refresh + client replace, not a raw 308 header. | `getContact` | — | non-UUID/unknown/other tenant → "Kontak tidak ditemukan" (`notFound()`, streamed); Redirect | — | WORKTREE |
 
 ### 5.5 Cek (2 Routes)
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app/cek-resi` | `src/app/app/cek-resi/page.tsx` | T | Track by shipment number or resi (posted, never in the URL). | None on render | `lookupShipmentTracking` | Boundaries own `loading`/`error`; not found; rate limited; result timeline | `cek-resi.html` | WORKTREE |
-| `/app/cek-tarif` | `src/app/app/cek-tarif/page.tsx` | T | Compare courier rates before creating a shipment. | `listReadyShipmentOutlets` | `checkShippingRates`, `searchMengantarDestinationAreas` | Boundaries own `loading`/`error`; no ready outlet; unsupported route (empty); provider error | `cek-tarif.html` | WORKTREE |
+| `/app/cek-resi` | `src/app/app/cek-resi/page.tsx` | T | Track by shipment number or resi (posted, never in the URL); timeline includes the courier history and the return resi (T-238). | None on render | `lookupShipmentTracking` | Boundaries own `loading`/`error`; idle placeholder; pending skeleton; not found; invalid; rate limited; unavailable; result facts + timeline (T-242) | `cek-resi.html` | WORKTREE |
+| `/app/cek-tarif` | `src/app/app/cek-tarif/page.tsx` | T | Compare courier rates before creating a shipment; the gerai's switched-off couriers (Mitra kurir, T-243) are filtered in `checkShippingRates`. | `listReadyShipmentOutlets` | `checkShippingRates`, `searchWilayahDestinationAreas`, `resolveWilayahDestinationArea`, `searchMengantarDestinationAreas` | Boundaries own `loading`/`error`; no ready outlet; idle placeholder; pending skeleton; stale re-check; unsupported route (empty); provider error + Coba lagi; result highlights + courier chips (T-242) | `cek-tarif.html` | WORKTREE |
 
 ### 5.6 Laporan (Tenant Admin Only — 2 Routes)
 
@@ -281,16 +288,17 @@ Guards (verified in code):
 
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
-| `/app/pengaturan` | `src/app/app/pengaturan/page.tsx` | A+P | Profil gerai: name (read-only), gerai WhatsApp (T-233), the one-time shipment prefix lock. | `loadTenantProfile` (`tenant-settings-repository.ts`), `loadTenantShipmentPrefix` | `saveTenantContact`, `saveShipmentPrefix` (confirm dialog) | Boundaries own `loading`, `pengaturan/error`; `?outlet=` → redirect to Outlet; WhatsApp invalid/saved; locked prefix | `pengaturan.html` | WORKTREE |
-| `/app/pengaturan/label` | `src/app/app/pengaturan/label/page.tsx` | A+P | Informasi label (PR-86, T-229): per-size switches (sender address/phone, recipient name/phone/address detail, return warning) with a live preview of the real `LabelSheet`; one Simpan for both sizes. | `loadTenantLabelFields`, `loadTenantProfile` (`tenant-settings-repository.ts`) | `saveLabelSettings` | Boundaries own `loading`, `pengaturan/error`; saved / refused alert; no row = defaults | `pengaturan.html`, Mengantar analysis §9.12 | WORKTREE |
-| `/app/pengaturan/pickup` | `src/app/app/pengaturan/pickup/page.tsx` | A+P | Titik pickup per outlet: add from Mengantar, set default, remove. | `loadSettingsOutlets` (`listOutletReadiness`), `listOutletPickupPoints` | `loadMengantarPickupOptions`, `addOutletPickupPoint`, `setDefaultOutletPickupPoint`, `removeOutletPickupPoint` | Boundaries own `loading`, `pengaturan/error`; no outlet; no pickup point; provider error; delete confirm | `pengaturan.html` | WORKTREE |
+| `/app/pengaturan` | `src/app/app/pengaturan/page.tsx` | A+P | Profil gerai: name (read-only), gerai WhatsApp (T-233), Logo gerai (upload/ganti/hapus, grayscale label preview) and Brand gerai (catatan resi, kategori usaha, email CS, website) (T-243), the one-time shipment prefix lock. | `loadTenantProfile`, `loadTenantBrand` (`tenant-settings-repository.ts`), `loadTenantShipmentPrefix` | `saveTenantContact`, `uploadGeraiLogo`, `removeGeraiLogo` (confirm dialog), `saveGeraiProfile`, `saveShipmentPrefix` (confirm dialog) | Boundaries own `loading`, `pengaturan/error`; `?outlet=` → redirect to Outlet; WhatsApp invalid/saved; no logo / logo / refused upload (SVG, type, size, dimensions); profile field errors; locked prefix | `pengaturan.html` | WORKTREE |
+| `/app/pengaturan/label` | `src/app/app/pengaturan/label/page.tsx` | A+P | Informasi label (PR-86, T-229, T-243): size option cards, per-size switches (sender address/phone, recipient name/phone/address detail, return warning, Logo kurir, Logo gerai, Catatan resi), the gerai default label size, and a sticky live preview of the real `LabelSheet` (`LabelPreviewFrame`: Data contoh badge, paper size caption, Pas layar/100%/150%; phone: "Lihat pratinjau" jump link); one Simpan. | `loadTenantLabelFields`, `loadTenantProfile`, `loadPrintBrand` (`tenant-settings-repository.ts`) | `saveLabelSettings` | Boundaries own `loading`, `pengaturan/error`; saved / refused alert; no row = defaults; logo/catatan switch disabled until the gerai has one | `pengaturan.html`, Mengantar analysis §9.12 | WORKTREE |
+| `/app/pengaturan/pickup` | `src/app/app/pengaturan/pickup/page.tsx` | A+P | Titik pickup per outlet: add from Mengantar, set default, remove; internal notes per point (PIC, WhatsApp PIC, jadwal rutin, instruksi akses driver — "Catatan internal, tidak dikirim ke Mengantar", T-243). | `loadSettingsOutlets` (`listOutletReadiness`), `listOutletPickupPoints` | `loadMengantarPickupOptions`, `addOutletPickupPoint`, `setDefaultOutletPickupPoint`, `removeOutletPickupPoint`, `savePickupPointNotes` (dialog) | Boundaries own `loading`, `pengaturan/error`; no outlet; no pickup point; provider error; delete confirm | `pengaturan.html` | WORKTREE |
 | `/app/pengaturan/outlet` | `src/app/app/pengaturan/outlet/page.tsx` | A+P | Outlet readiness checklist (pickup point, Mengantar connection). | `loadSettingsOutlets` (`listOutletReadiness`) | None | Boundaries own `loading`, `pengaturan/error`; no outlet; missing configuration | `pengaturan.html` | WORKTREE |
+| `/app/pengaturan/kurir` | `src/app/app/pengaturan/kurir/page.tsx` | A+P | Mitra kurir (T-243): one switch per Mengantar courier (logo + name; Ninja never listed, D-29); switched-off couriers are left out of Cek tarif and Buat kiriman. | `loadTenantDisabledCouriers` (`tenant-settings-repository.ts`) | `saveCourierPreferences` | Boundaries own `loading`, `pengaturan/error`; saved / refused alert; all-off refused | `pengaturan.html` (Mitra Kurir tab) | WORKTREE |
 | `/app/pengaturan/koneksi` | `src/app/app/pengaturan/koneksi/page.tsx` | A+P | Koneksi Mengantar: platform default or the gerai's own API key. | `loadSettingsOutlets` (`listOutletReadiness`) | `savePrivateMengantarCredential`, `switchMengantarToPlatformDefault` (confirm dialog) | Boundaries own `loading`, `pengaturan/error`; no outlet; `PRIVATE_ONLY` tenants cannot switch | `pengaturan.html` | WORKTREE |
 | `/app/anggota` | `src/app/app/anggota/page.tsx` | A (`requireTenantAdmin({})`, active gerai) | Anggota & akses: invite, change role, deactivate. | `listTenantMembers` (`member-governance-repository.ts`) | `inviteMemberAction`, `changeMemberRoleAction`, `deactivateMemberAction` | Boundaries own `loading`/`error`; last admin protected; member not found; inactive members | `anggota.html` | WORKTREE |
 
 ---
 
-## 6. Platform CMS Pages (Super Admin Only — 5 Routes)
+## 6. Platform CMS Pages (Super Admin Only — 6 Routes)
 
 Guard: the platform layout's `resolvePlatformAccess`, and again in the page through `loadPlatformView` / `requirePlatformPrincipal` (`src/app/platform/_components/platform-view.ts`). Monitoring pages read inside `withPlatformContext` and record a monitoring-access audit event (`recordPlatformMonitoringAccess`) on every view; each region degrades alone (`settle`).
 
@@ -301,6 +309,7 @@ Guard: the platform layout's `resolvePlatformAccess`, and again in the page thro
 | `/platform/tenant/[tenantId]` | `src/app/platform/tenant/[tenantId]/page.tsx` | Super Admin | Tenant detail: KPIs, outlets, submissions, finance read-only, audit, prefix, Zona berbahaya. | `loadPlatformView("tenant-detail")`: `readTenantDetail`, `readPlatformCounts`, `readPlatformTenantFinanceSummary`, `listAuditEvents`; `loadPlatformTenantShipmentPrefix` | `submitPlatformTenantLifecycle` (suspend/reactivate, typed name), `unlockShipmentPrefix` | Boundaries own `loading`/`not-found`, `platform/error`; non-UUID/unknown → 404; per-region error | `platform-tenant.html` | WORKTREE |
 | `/platform/pendaftaran` | `src/app/platform/pendaftaran/page.tsx` | Super Admin (`requirePlatformPrincipal`) | Approve or reject self-service registrations. | `listRegistrationQueue` (`tenant-registration-repository.ts`), `listAuditEvents` (decision history, ≤ 500 scanned), `readPlatformClock` | `reviewRegistration` | Boundaries own `loading`, `platform/error`; empty queue; region error | `platform-pendaftaran.html` | WORKTREE |
 | `/platform/audit` | `src/app/platform/audit/page.tsx` | Super Admin | Audit trail: time, action sentence, actor, tenant, result. | `loadPlatformView("audit")`: `listAuditEvents` | None | Boundaries own `loading`, `platform/error`; empty; no match; adjusted filters | `platform-audit.html` | WORKTREE |
+| `/platform/info` | `src/app/platform/info/page.tsx` | Super Admin (`requirePlatformPrincipal`) | Info terbaru (T-244, D-31): write platform announcements every gerai reads — list with status Draf/Tayang/Disematkan, create/edit in a dialog (judul, kategori, isi, sematkan; Tayangkan or Simpan draf), unpublish with confirmation. | `listPlatformAnnouncements` in `withPlatformContext` | `saveAnnouncement`, `unpublishAnnouncement` | Boundaries `platform/loading`, `platform/error`; empty; field errors; denied | — | WORKTREE |
 
 ---
 
@@ -325,15 +334,17 @@ All query parameters are validated by route-specific parsers that reject or cano
 | `kurir` | Courier code the tenant has used (`loadAnalyticsFilterOptions`) | Laporan pengiriman, platform | Unknown → filter rejected (Laporan) / dropped (platform) |
 | `basis` | Parsed by `parseTenantAnalyticsQuery` but never set by the v3 report; the export link deletes it (`report-logic.ts`) | Laporan pengiriman | Unknown → notice |
 | `q` | AWB suffix `^[a-z0-9]{3,24}$`i (`parseLabelQuery`); tenant search 2–80 chars (platform) | `/app/label`, `/platform/tenant` | Label: invalid → error text and an empty list, never a guess |
-| `cetak` | `semua` (default), `belum`, `sudah` | `/app/label` | Unknown → `semua` |
+| `cetak` | `semua` (default), `belum`, `sudah`, `batal` (T-238: cancelled resi) | `/app/label` | Unknown → `semua` |
 | `n` | Comma list of tenant shipment numbers (`^[1-9][0-9]{4,9}$`, ≤ 50, deduplicated) (`parseBatchPrintQuery`) | `/app/label/cetak` | Invalid entries dropped and listed, never guessed |
 | `ukuran` | `10x15` (default), `10x10` | `/app/label/cetak` | Unknown → default |
 | `isi` | `label` (default), `invoice`, `keduanya` | `/app/label/cetak` | Unknown → `label` |
 | `invoice` | `1` | `/app/label/[shipmentId]` | Anything else → label only |
 | `draft` | Shipment UUID | `/app/pengiriman/baru`; `/app?draft=<uuid>` redirects there | Non-UUID or foreign → fresh form |
 | `peran` | `pengirim` (default), `penerima` | `/app/kontak/baru` (also the legacy `/app/kontak` redirect) | Unknown → `pengirim` |
-| `dari` (Kontak) | `pengirim`, `penerima` | `/app/kontak/[contactId]` | Absent/unknown → redirect to the contact's first role |
-| `tersimpan`, `diarsipkan` | `1` | `/app/kontak/[contactId]` | Success notice only |
+| `dari` (Kontak) | `pengirim`, `penerima` | `/app/kontak/[contactId]` (legacy redirect only, T-241) | Absent/unknown/not held → the contact's first role |
+| `tersimpan`, `diarsipkan` | `1` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Success notice only |
+| `riwayat` | `cod`, `non-cod` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Absent/unknown → Semua (T-241) |
+| `halaman` (Riwayat kiriman) | positive integer | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Invalid → 1; past the end → last page |
 | `persetujuan` | `diperlukan` | `/app` | Refused banner for a pending gerai |
 | `tenant` | Known tenant UUID | Platform pages | Unknown → global scope + notice |
 | `hasil` | `SUCCESS`, `DENIED` | `/platform/audit` | Unknown → dropped + notice |
@@ -345,17 +356,18 @@ Client-only state (not in the URL): the label size per operator in `localStorage
 
 ---
 
-## 8. Route Handlers and HTTP Surfaces (3 Endpoints)
+## 8. Route Handlers and HTTP Surfaces (4 Endpoints)
 
 | Endpoint | Source File | Method & Caller | Auth & Security Contract | Maturity |
 |---|---|---|---|---|
 | `/api/auth/[...all]` | `src/app/api/auth/[...all]/route.ts` | GET, POST, PATCH, PUT, DELETE via `toNextJsHandler(auth)`; auth forms, sign-out, email/reset links | Better Auth (`src/lib/auth.ts`): scope header `x-geraicuan-login-scope`, rate limits, `HttpOnly` session cookies; host routing refuses the other surface. | COMMITTED |
 | `/app/laporan/pengiriman/export.csv` | `src/app/app/laporan/pengiriman/export.csv/route.ts` | GET from the Laporan "Ekspor CSV" link | `requireCmsScope("tenant")` (401 without session), Tenant Admin only (403); invalid or rejected filters → 400; streams the filtered report (recipient phone and street excluded). | COMMITTED |
-| `/api/webhooks/mengantar` | `src/app/api/webhooks/mengantar/route.ts` | Intended POST from Mengantar | Refuses every request with 404 until a verified, signed, replay-safe push contract exists (`tests/provider-webhook-boundary.integration.test.ts`). | CLOSED |
+| `/app/brand/logo` | `src/app/app/brand/logo/route.ts` | GET from `<img>` on the label sheet, Informasi label preview and Profil gerai (`?v=` = first 16 hex of the SHA-256, cache busting only); T-247: the invoice asks for its issuance version with `?sha=<64 hex>` (`tenant_logo_versions`, `Cache-Control: private, max-age=31536000, immutable`; malformed/unknown/other tenant's sha → 404) | `requireCmsScope("tenant", { allowPendingApproval })` (401 without session); both roles; the tenant comes from the session, never the URL, so another tenant's logo is unreachable (404); 404 without a logo; bytes as stored (type sniffed at upload), `Cache-Control: private, no-cache`, `ETag` = SHA-256 (304 on `If-None-Match`), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` (`tests/gerai-brand-t243.integration.test.ts`). | WORKTREE |
+| `/api/webhooks/mengantar` | `src/app/api/webhooks/mengantar/route.ts` | POST from Mengantar (documented contract: `x-timestamp`, `x-signature` = HMAC-SHA256 hex of `{x-timestamp}.{raw body}`) | Closed by default: empty 404 without `MENGANTAR_WEBHOOK_ENABLED=1` + `MENGANTAR_WEBHOOK_SECRET` (`tests/provider-webhook-boundary.integration.test.ts`). When enabled (T-238): 16 KB body bound, 5-minute window, constant-time compare → 401/400/413; `record_mengantar_webhook_event` (SECURITY DEFINER, 0063) resolves the AWB on the platform account, appends a WEBHOOK observation idempotently and applies the same transition rules; 204, or 500 so Mengantar retries (`tests/mengantar-webhook.integration.test.ts`, `tests/mengantar-tracking-t238.integration.test.ts`). | CLOSED |
 
 ---
 
-## 9. Mutation Ownership Map (24 Server Action Files, 45 Actions)
+## 9. Mutation Ownership Map (26 Server Action Files, 56 Actions)
 
 Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enforce Invariants/Idempotency -> Write -> Record Audit/Ledger -> Revalidate/Redirect`. Every exported action is remotely callable, including those only called by other actions.
 
@@ -365,11 +377,14 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 | `searchSenderShipmentContacts` | `src/app/app/actions.ts` | `/app/pengiriman/baru` | None (bounded contact search) | Tenant Admin or Operator; tenant-scoped |
 | `searchRecipientShipmentContacts` | `src/app/app/actions.ts` | `/app/pengiriman/baru` | None (bounded contact search) | Tenant Admin or Operator; tenant-scoped |
 | `selectShipmentContact` | `src/app/app/actions.ts` | `/app/pengiriman/baru` | None (reads one contact and address) | Tenant Admin or Operator; tenant-scoped |
+| `markAnnouncementsReadAction` | `src/app/app/info/actions.ts` | `/app/info` | Inserts the caller's own `platform_announcement_reads` rows (idempotent, `ON CONFLICT DO NOTHING`); revalidates the tenant layout so the badge clears | Tenant Admin or Operator (pending gerai allowed); ≤ 100 UUIDs; RLS: own `user_id`, published announcements only; no UPDATE/DELETE grant |
 | `verifyShipmentDraftDestinationArea` | `src/app/app/actions.ts` | `/app/pengiriman/baru`, `/app/pengiriman/[shipmentId]` (`IssuancePanel`) | Destination area verification on the draft | Tenant Admin or Operator; re-verifies against Mengantar, rate-limited |
-| `searchMengantarDestinationAreas` | `src/app/app/location-actions.ts` | `/app/pengiriman/baru`, `/app/kontak/baru`, `/app/kontak/[contactId]`, `/app/cek-tarif` | None (Mengantar location search) | Tenant Admin or Operator; cached and rate-limited |
+| `searchMengantarDestinationAreas` | `src/app/app/location-actions.ts` | `/app/pengiriman/baru`, `/app/kontak/baru`, `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]`, `/app/cek-tarif` | None (Mengantar location search) | Tenant Admin or Operator; cached and rate-limited |
 | `validateMengantarDestinationAreaSelection` | `src/app/app/location-actions.ts` | Server-side only: `saveShipmentDraft`, `verifyShipmentDraftDestinationArea`, contact actions, `checkShippingRates` | None (validates a district against Mengantar) | Tenant Admin or Operator; rate-limited |
+| `searchWilayahDestinationAreas` | `src/app/app/location-actions.ts` | `DestinationAreaPicker`: `/app/pengiriman/baru`, `/app/kontak/baru`, `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]`, `/app/cek-tarif` | None (reads the tenant-neutral `wilayah_areas` reference; no provider call, no durable rate-limit write; T-245, D-32) | Tenant Admin or Operator; in-memory 120/min per tenant+actor |
+| `resolveWilayahDestinationArea` | `src/app/app/location-actions.ts` | `DestinationAreaPicker` (same routes) | None (≤ 3 guarded Mengantar area searches for one picked suggestion; returns provider options only; T-245, D-32) | Tenant Admin or Operator; each attempt spends the location-search rate limit and takes the per-actor lock |
 | `loadShipmentEstimate` | `src/app/app/estimate-actions.ts` | `/app/pengiriman/baru` (`EstimateLoader`) | Estimate snapshot | Tenant Admin or Operator; validates pickup and destination |
-| `confirmShipmentIssuance` | `src/app/app/pengiriman/[shipmentId]/actions.ts` | `/app/pengiriman/baru`, `/app/pengiriman/[shipmentId]` | `shipments`, provider batch/order snapshot, ledger, COD totals | Tenant Admin or Operator; approval, idempotency, sanctioned order fixture gate (RELEASE-GATED) |
+| `confirmShipmentIssuance` | `src/app/app/pengiriman/[shipmentId]/actions.ts` | `/app/pengiriman/baru`, `/app/pengiriman/[shipmentId]` | `shipments`, provider batch/order snapshot, ledger, COD totals | Tenant Admin or Operator; approval, idempotency, sanctioned order fixture gate (RELEASE-GATED); a switched-off courier's service (Mitra kurir) is refused in the issuance transaction (`OrderCourierDisabledError`, T-247) |
 | `reconcileShipmentUnknownSubmission` | `src/app/app/pengiriman/[shipmentId]/reconciliation-actions.ts` | `/app/pengiriman/[shipmentId]` | `shipments`, reconciliation record | **Tenant Admin only**; sanctioned fixture gate |
 | `checkStaleShipmentOperation` | `src/app/app/pengiriman/[shipmentId]/stale-operation-actions.ts` | `/app/pengiriman/[shipmentId]` | Clears a stale operation lock | Tenant Admin or Operator |
 | `recoverShipmentUnpaidPayment` | `src/app/app/pengiriman/[shipmentId]/unpaid-recovery-actions.ts` | `/app/pengiriman/[shipmentId]` | `shipments`, recovery record, ledger | **Tenant Admin only**; sanctioned fixture gate |
@@ -377,13 +392,14 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 | `recordLabelPrint` | `src/app/app/label/[shipmentId]/actions.ts` | `/app/label/[shipmentId]` | Appends `label_print_events` | Tenant Admin or Operator; idempotent per request |
 | `recordBatchLabelPrints` | `src/app/app/label/cetak/actions.ts` | `/app/label/cetak` | One `recordLabelPrint` per shipment (≤ 50) | Same guard as `recordLabelPrint` |
 | `issueBatchInvoices` | `src/app/app/label/cetak/actions.ts` | `/app/label/cetak` | Explicit "Terbitkan N invoice": issues the missing invoices of the batch (idempotent, ≤ 50) | Tenant principal; numbers re-validated |
-| `issueShipmentInvoice` | `src/app/app/invoice/actions.ts` | `/app/invoice/[shipmentNumber]`, `/app/label/[shipmentId]` | Inserts one `shipment_invoices` row per shipment (`ON CONFLICT DO NOTHING`, DATA-14) | Tenant Admin or Operator, active gerai; another tenant's number → `NOT_FOUND`; no resi → `NOT_ISSUED`; no provider call |
+| `issueShipmentInvoice` | `src/app/app/invoice/actions.ts` | `/app/invoice/[shipmentNumber]`, `/app/label/[shipmentId]` | Inserts one `shipment_invoices` row per shipment (`ON CONFLICT DO NOTHING`, DATA-14) | Tenant Admin or Operator, active gerai; another tenant's number → `NOT_FOUND`; no resi → `NOT_ISSUED`; Mengantar cancelled → `CANCELLED` (decided in the insert statement, T-247); records the logo version (`logo_sha256`); no provider call |
 | `searchContacts` | `src/app/app/kontak/actions.ts` | `/app/kontak/pengirim`, `/app/kontak/penerima` | None (scoped text search) | Tenant Admin or Operator; tenant-scoped |
 | `saveContact` | `src/app/app/kontak/actions.ts` | `/app/kontak/baru` | Inserts `contacts`, `contact_addresses` | Tenant Admin or Operator; phone and role normalized; destination validated |
-| `updateContactAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/[contactId]` | Updates `contacts` | Tenant Admin or Operator |
-| `addContactAddressAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/[contactId]` | Inserts `contact_addresses` | Tenant Admin or Operator; location authority |
-| `updateContactAddressAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/[contactId]` | Updates `contact_addresses` | Tenant Admin or Operator |
-| `archiveContactAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/[contactId]` | Sets `archived_at` on `contacts`; redirect `?diarsipkan=1` | **Tenant Admin only** (`archiveContact` refuses others) |
+| `updateContactAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Updates `contacts` | Tenant Admin or Operator |
+| `addContactAddressAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Inserts `contact_addresses` | Tenant Admin or Operator; location authority |
+| `updateContactAddressAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Updates `contact_addresses` | Tenant Admin or Operator |
+| `setPrimaryContactAddressAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Moves `contact_addresses.is_primary` to one active address (T-241) | Tenant Admin or Operator; tenant-scoped, active contact only |
+| `archiveContactAction` | `src/app/app/kontak/[contactId]/actions.ts` | `/app/kontak/pengirim/[nomor]`, `/app/kontak/penerima/[nomor]` | Sets `archived_at` on `contacts`; redirect `/app/kontak/<peran>/<n>?diarsipkan=1` | **Tenant Admin only** (`archiveContact` refuses others) |
 | `checkShippingRates` | `src/app/app/cek-tarif/actions.ts` | `/app/cek-tarif` | None (provider estimate) | Tenant Admin or Operator; ready outlet origin |
 | `lookupShipmentTracking` | `src/app/app/cek-resi/actions.ts` | `/app/cek-resi` | None (reads tracking) | Tenant Admin or Operator; rate-limited |
 | `loadMengantarPickupOptions` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/pickup` | None (provider pickup addresses) | **Tenant Admin only**; outlet credential |
@@ -394,13 +410,20 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 | `removeOutletPickupPoint` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/pickup` | Deletes an `outlet_pickup_points` row | **Tenant Admin only**; not the sole default |
 | `saveShipmentPrefix` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | Sets and locks `shipment_prefix` (2–3 characters since D-21) | **Tenant Admin only**; one-time lock |
 | `saveTenantContact` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | `tenants.contact_whatsapp` through definer `set_tenant_contact_whatsapp` (0058), audit `TENANT_CONTACT_UPDATED` on change | **Tenant Admin only** (action + function); own tenant only; `normalizePartyPhone` |
-| `saveLabelSettings` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/label` | Upserts both `tenant_label_settings` rows (0059) | **Tenant Admin only** (action, repository, RLS); complete form only |
+| `saveLabelSettings` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/label` | Upserts both `tenant_label_settings` rows (0059; brand switches 0065) and, when sent, `tenant_brand_settings.default_label_size` | **Tenant Admin only** (action, repository, RLS); complete form only |
+| `saveGeraiProfile` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | Upserts `tenant_brand_settings` catatan resi, kategori, email CS, website (0065) | **Tenant Admin only** (action, repository, RLS); `parseGeraiProfile` (https only, ≤ 60-character catatan) |
+| `uploadGeraiLogo` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | `tenant_brand_settings.logo_*` (bytes, sniffed mime, SHA-256, time) and a kept `tenant_logo_versions` row (T-247) | **Tenant Admin only**; PNG/JPEG/WebP by magic bytes, ≤ 200 KB, ≤ 1000 × 1000 px, SVG refused (action, repository, DB CHECK) |
+| `removeGeraiLogo` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan` | Clears `tenant_brand_settings.logo_*`; kept `tenant_logo_versions` rows stay (issued invoices name them, T-247) | **Tenant Admin only**; confirmation required |
+| `saveCourierPreferences` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/kurir` | `tenant_brand_settings.disabled_couriers` | **Tenant Admin only**; complete form; at least one courier on |
+| `savePickupPointNotes` | `src/app/app/pengaturan/actions.ts` | `/app/pengaturan/pickup` | `outlet_pickup_points` notes columns (0065) | **Tenant Admin only**; own tenant and outlet; phone normalised; never sent to Mengantar |
 | `inviteMemberAction` | `src/app/app/anggota/actions.ts` | `/app/anggota` | Invitation / membership | **Tenant Admin only** |
 | `changeMemberRoleAction` | `src/app/app/anggota/actions.ts` | `/app/anggota` | `memberships.role` | **Tenant Admin only**; last admin protected |
 | `deactivateMemberAction` | `src/app/app/anggota/actions.ts` | `/app/anggota` | Suspends a membership | **Tenant Admin only**; last admin protected |
 | `submitPlatformTenantLifecycle` | `src/app/platform/tenant/actions.ts` | `/platform/tenant`, `/platform/tenant/[tenantId]` | Creates, suspends or reactivates a tenant; audit | **Super Admin only** |
 | `unlockShipmentPrefix` | `src/app/platform/tenant/shipment-prefix-actions.ts` | `/platform/tenant/[tenantId]` | Unlocks the shipment prefix; audit | **Super Admin only** |
 | `reviewRegistration` | `src/app/platform/pendaftaran/actions.ts` | `/platform/pendaftaran` | Tenant `PROVISIONING` → `ACTIVE` / `ARCHIVED`; audit | **Super Admin only**; verified owner email required |
+| `saveAnnouncement` | `src/app/platform/info/actions.ts` | `/platform/info` | Creates or edits `platform_announcements` (publish now or draft, pin) through definer `save_platform_announcement` (0066); audit `ANNOUNCEMENT_SAVED` / `ANNOUNCEMENT_PUBLISHED` / `ANNOUNCEMENT_UNPUBLISHED` in the same statement | **Super Admin only** (action `resolvePlatformAccess` + function re-check); runtime role has no INSERT/UPDATE grant; `parseAnnouncementForm` (title ≤ 120, body ≤ 2,000 plain text) |
+| `unpublishAnnouncement` | `src/app/platform/info/actions.ts` | `/platform/info` | `published_at` → NULL through definer `unpublish_platform_announcement` (0066); audit `ANNOUNCEMENT_UNPUBLISHED` | **Super Admin only** (action + function) |
 | `registerStore` | `src/app/daftar/actions.ts` | `/daftar` | Tenant, user, membership, outlet, unlocked shipment prefix (self-service, `register_tenant_self_service_with_prefix`) | Anonymous; rate-limited per IP and email |
 | `resendVerificationEmail` | `src/app/verifikasi-email/actions.ts` | `/verifikasi-email`, `/login/tenant` | Verification token + email | Anonymous; rate-limited |
 | `confirmEmailVerification` | `src/app/verifikasi-email/actions.ts` | `/verifikasi-email/konfirmasi` | Marks the sign-up email verified | Token + sign-up password; tenant host; rate-limited (T-198) |
@@ -419,10 +442,10 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 ### Layouts, Loading, Error and Not-Found Boundaries
 
 - **Layouts (6)**: `src/app/layout.tsx` (root document), `src/app/app/layout.tsx` (tenant frame, `requireCmsScope("tenant", { allowPendingApproval: true })`), `src/app/app/pengaturan/layout.tsx` (settings frame, `requireTenantAdmin`), `src/app/app/anggota/layout.tsx` and `src/app/app/laporan/layout.tsx` (guard only, T-236: `requireTenantAdmin({})` / `requireReportAdmin()` above the segment's `loading.tsx`, so an Operator is redirected to `/app` before an admin skeleton renders), `src/app/platform/layout.tsx` (platform frame, `resolvePlatformAccess`).
-- **Tenant Loading Boundaries (23)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `invoice/[shipmentNumber]/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/penerima/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `label/cetak/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/label/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
-- **Tenant Error Boundaries (19)**: `error.tsx` beside every tenant loading boundary above (`src/app/app/error.tsx` included) **except** the four settings sub-pages (`pengaturan/label`, `pengaturan/pickup`, `pengaturan/outlet`, `pengaturan/koneksi`), which share `src/app/app/pengaturan/error.tsx` so the settings sub-menu stays while a page fails.
+- **Tenant Loading Boundaries (26)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `invoice/[shipmentNumber]/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/pengirim/[nomor]/loading.tsx`, `kontak/penerima/loading.tsx`, `kontak/penerima/[nomor]/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `label/cetak/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/label/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/kurir/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
+- **Tenant Error Boundaries (21)**: `error.tsx` beside every tenant loading boundary above (`src/app/app/error.tsx` included) **except** the five settings sub-pages (`pengaturan/label`, `pengaturan/pickup`, `pengaturan/outlet`, `pengaturan/kurir`, `pengaturan/koneksi`), which share `src/app/app/pengaturan/error.tsx` so the settings sub-menu stays while a page fails.
 - **Platform Boundaries (6)**: `src/app/platform/loading.tsx`, `src/app/platform/error.tsx`, `src/app/platform/tenant/loading.tsx`, `src/app/platform/tenant/[tenantId]/loading.tsx`, `src/app/platform/pendaftaran/loading.tsx`, `src/app/platform/audit/loading.tsx`; every platform page fails into `src/app/platform/error.tsx`.
-- **Dedicated Not-Found Boundaries (5)**: `src/app/app/pengiriman/[shipmentId]/not-found.tsx`, `src/app/app/label/[shipmentId]/not-found.tsx`, `src/app/app/invoice/[shipmentNumber]/not-found.tsx`, `src/app/app/kontak/[contactId]/not-found.tsx`, `src/app/platform/tenant/[tenantId]/not-found.tsx`. Any other `notFound()` falls through to the framework 404.
+- **Dedicated Not-Found Boundaries (7)**: `src/app/app/pengiriman/[shipmentId]/not-found.tsx`, `src/app/app/label/[shipmentId]/not-found.tsx`, `src/app/app/invoice/[shipmentNumber]/not-found.tsx`, `src/app/app/kontak/[contactId]/not-found.tsx`, `src/app/app/kontak/pengirim/[nomor]/not-found.tsx`, `src/app/app/kontak/penerima/[nomor]/not-found.tsx` (both re-export the legacy route's), `src/app/platform/tenant/[tenantId]/not-found.tsx`. Any other `notFound()` falls through to the framework 404.
 - **Public pages** have no route-level `loading`, `error` or `not-found` file.
 
 ### Development-Only UI Audit Scenarios (`src/lib/ui-audit-scenario.ts`)
@@ -449,12 +472,12 @@ A rendered count keeps its metric ID in code (`metricId` / `SHIPMENT_QUEUE_SUMMA
 | Retur (`/app/pengiriman/rts`) | `tests/shipment-lists-render.integration.test.ts`, `tests/rts-repository.integration.test.ts`, `tests/shipment-status-copy.integration.test.ts`, `tests/mengantar-status-pull-action.integration.test.ts` |
 | Cetak resi, Label, batch (`/app/label/**`) | `tests/label-info-settings.integration.test.ts` (Informasi label on the sheet), `tests/shipment-lists-render.integration.test.ts`, `tests/label-render.integration.test.ts`, `tests/label-thermal.integration.test.ts`, `tests/label-print.integration.test.ts`, `tests/label-print-actions.integration.test.ts`, `tests/label-batch-print.integration.test.ts` |
 | Invoice (`/app/invoice/[shipmentNumber]`, `invoice=1`) | `tests/shipment-invoice.integration.test.ts`, `tests/invoice-print.integration.test.ts` |
-| Pengirim, Penerima, Kontak baru/detail (`/app/kontak/**`) | `tests/contact-lookup-screens.integration.test.ts`, `tests/contact-directory.integration.test.ts`, `tests/contact-actions.integration.test.ts`, `tests/location-search-actions.integration.test.ts` |
+| Pengirim, Penerima, Kontak baru/detail (`/app/kontak/**`) | `tests/contact-numbers-t241.integration.test.ts` (numbers, legacy redirect, attribution, detail render), `tests/contact-lookup-screens.integration.test.ts`, `tests/contact-directory.integration.test.ts`, `tests/contact-actions.integration.test.ts`, `tests/location-search-actions.integration.test.ts` |
 | Cek resi, Cek tarif | `tests/contact-lookup-screens.integration.test.ts`, `tests/tracking-lookup.integration.test.ts`, `tests/quick-rate-actions.integration.test.ts` |
 | Laporan pengiriman (+ CSV), Riwayat cetak resi | `tests/report-pages-render.integration.test.ts`, `tests/shipment-report.integration.test.ts`, `tests/shipment-report-courier-performance.integration.test.ts`, `tests/print-history-report.integration.test.ts`, `tests/analytics-filters.integration.test.ts` |
-| Pengaturan (profil, informasi label, pickup, outlet, koneksi), Anggota | `tests/settings-screens-t217.integration.test.ts`, `tests/native-select-replacement-t234.integration.test.ts` (role option cards), `tests/label-info-settings.integration.test.ts`, `tests/shipment-invoice.integration.test.ts` (gerai WhatsApp), `tests/outlet-settings-actions.integration.test.ts`, `tests/outlet-pickup-points.integration.test.ts`, `tests/outlet-readiness.integration.test.ts`, `tests/member-governance.integration.test.ts`, `tests/member-governance-actions.integration.test.ts` |
+| Pengaturan (profil, informasi label, pickup, outlet, mitra kurir, koneksi), Anggota | `tests/gerai-brand-t243.integration.test.ts` (logo, brand, Mitra kurir, pickup notes, label/invoice brand), `tests/settings-screens-t217.integration.test.ts`, `tests/native-select-replacement-t234.integration.test.ts` (role option cards), `tests/label-info-settings.integration.test.ts`, `tests/shipment-invoice.integration.test.ts` (gerai WhatsApp), `tests/outlet-settings-actions.integration.test.ts`, `tests/outlet-pickup-points.integration.test.ts`, `tests/outlet-readiness.integration.test.ts`, `tests/member-governance.integration.test.ts`, `tests/member-governance-actions.integration.test.ts` |
 | Platform pages | `tests/platform-public-render.integration.test.ts`, `tests/platform-monitoring.integration.test.ts`, `tests/platform-monitoring-filters.integration.test.ts`, `tests/platform-tenant-actions.integration.test.ts`, `tests/platform-tenant-lifecycle.integration.test.ts` |
-| Route handlers | `tests/provider-webhook-boundary.integration.test.ts` (webhook), `tests/report-pages-render.integration.test.ts` (CSV link), `tests/auth-session-boundary.integration.test.ts` (auth) |
+| Route handlers | `tests/gerai-brand-t243.integration.test.ts` (logo: auth, no cross-tenant, headers), `tests/provider-webhook-boundary.integration.test.ts`, `tests/mengantar-webhook.integration.test.ts` (webhook), `tests/report-pages-render.integration.test.ts` (CSV link), `tests/auth-session-boundary.integration.test.ts` (auth) |
 | Tenant isolation posture | `tests/tenant-isolation.integration.test.ts`, `tests/tenant-isolation-posture.integration.test.ts` |
 | Deployment & environment docs | `tests/deploy-environment-documentation.integration.test.ts` |
 | This map's inventory (Sections 0, 1, 3–6, 8–10) | `tests/system-map-inventory.integration.test.ts` |
@@ -480,19 +503,19 @@ Browser evidence for v3 screens is recorded per task in `TASKS.md` (T-210–T-23
 Run these read-only commands before committing:
 
 ```bash
-# 1. Verify Page Count (Must equal 36)
+# 1. Verify Page Count (Must equal 41)
 find src/app -name 'page.tsx' | wc -l
 
-# 2. Verify Route Handler Count (Must equal 3)
+# 2. Verify Route Handler Count (Must equal 4)
 find src/app -name 'route.ts' | wc -l
 
-# 3. Verify Server Action Files Count (Must equal 24)
+# 3. Verify Server Action Files Count (Must equal 26)
 grep -rlE "^\s*[\"']use server[\"'];?\s*$" src | wc -l
 
-# 4. Verify Exported Server Actions (Must equal 42)
+# 4. Verify Exported Server Actions (Must equal 54)
 grep -rlE "^\s*[\"']use server[\"'];?\s*$" src | xargs grep -h '^export async function' | wc -l
 
-# 5. Verify boundaries (6 layouts, 28 loading, 20 error, 5 not-found)
+# 5. Verify boundaries (6 layouts, 31 loading, 22 error, 7 not-found)
 for f in layout loading error not-found; do echo "$f $(find src/app -name "$f.tsx" | wc -l)"; done
 
 # 6. This map's counts, lists and navigation against the filesystem (DB-free)
@@ -506,7 +529,7 @@ If any command reports a mismatch against the inventory in Section 0, synchroniz
 ## 14. Key System Invariants and Non-Negotiables
 
 1. **Masking-first product**: the label prints the gerai's identity (sender masking, PR-71); Mengantar's `cnote_no` is the only AWB. The tenant shipment number (`10013`, shown `GC-10013`) is an internal reference; `/app/pengiriman/10013`, `/app/label/10013` and `/app/invoice/10013` are canonical and a UUID or prefixed key redirects there (PR-44).
-2. **Only issuance and the status pull move a shipment**: `confirmShipmentIssuance` and `pullMengantarStatus`; the UI never sets a status. The webhook stays closed.
+2. **Only issuance and the status pull move a shipment**: `confirmShipmentIssuance` and `pullMengantarStatus` (and the webhook, once enabled, through the same transition rules); the UI never sets a status. The webhook stays closed by default (D-30).
 3. **Live provider mutation is gated** (T-153): order creation, unpaid recovery and reconciliation run only behind the sanctioned fixtures until the request contract is verified; handover type, pickup date/slot and pickup vehicle are stored (migrations 0054, 0057; DATA-15) but not sent to Mengantar.
 4. **Invoice is immutable** (DATA-14): one `shipment_invoices` row per issued shipment, insert-only grants, derived number `INV-<public reference>`; a reprint renders the stored snapshot; it is a charge document, not payment evidence.
 5. **Exact COD arithmetic**: COD fee 3.33% grossed up (`ceil((goods + shipping) × 10000 / 9667)`, formula v2); COD Ongkir collects only the shipping; merchandise margin and omset stay withdrawn.

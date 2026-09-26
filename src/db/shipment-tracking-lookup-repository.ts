@@ -10,6 +10,7 @@ import {
   shipments,
   type shipmentStatuses,
 } from "@/db/schema";
+import { listProviderHistoryEvents } from "@/db/provider-tracking-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 
@@ -28,12 +29,16 @@ export type ShipmentTrackingLookup = {
   courier: string | null;
   declaredValueIdr: number;
   destinationAreaLabel: string;
+  /** T-238: the courier's tracking history, newest first; both roles. */
+  historyEvents: { description: string; occurredAt: Date }[];
   observation: { observedAt: Date; providerStatus: string } | null;
   /** T-190: never reduced to COD for a COD Ongkir shipment. */
   paymentMethod: PaymentMethod;
   providerCodAmountIdr: number | null;
   providerService: string | null;
   publicReference: string;
+  /** T-238: the return resi (`cnote_no_rts`) once a stored pull has seen it. */
+  returnAwb: string | null;
   status: (typeof shipmentStatuses)[number];
   updatedAt: Date;
 };
@@ -72,6 +77,7 @@ export async function lookupShipmentByTrackingKey(
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       providerService: providerOrderSnapshots.providerService,
       publicReference: shipments.publicReference,
+      returnAwb: providerOrderSnapshots.returnCnoteNo,
       shipmentId: shipments.id,
       status: shipments.status,
       updatedAt: shipments.updatedAt,
@@ -121,16 +127,20 @@ export async function lookupShipmentByTrackingKey(
     )
     .limit(1);
 
+  const historyEvents = await listProviderHistoryEvents(tx, context, row.shipmentId);
+
   return {
     awb: row.awb?.trim() || null,
     courier: row.courier,
     declaredValueIdr: row.declaredValueIdr,
     destinationAreaLabel: row.destinationAreaLabel,
+    historyEvents,
     observation: observation ?? null,
     paymentMethod: paymentMethodOf(row.isCod, row.codShippingOnly),
     providerCodAmountIdr: row.providerCodAmountIdr,
     providerService: row.providerService,
     publicReference: row.publicReference,
+    returnAwb: row.returnAwb?.trim() || null,
     status: row.status,
     updatedAt: row.updatedAt,
   };

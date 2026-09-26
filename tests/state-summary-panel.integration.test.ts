@@ -81,6 +81,8 @@ const shipmentFixtures: ShipmentFixture[] = [
   { sequence: 10, status: "AWAITING_UPSTREAM_PAYMENT" },
   { sequence: 11, status: "SUBMISSION_QUEUED" },
   { sequence: 12, status: "RTS_RECEIVED" },
+  // T-238: a resi Mengantar cancelled after issuance (order ISSUED, AWB kept).
+  { sequence: 15, status: "CANCELLED" },
   // T-163: outside every range the range tests below ask for, so a count that
   // ignores the period cannot pass them.
   { createdAt: "2026-06-01T03:00:00Z", sequence: 13, status: "DELIVERED" },
@@ -164,7 +166,7 @@ async function seedShipment(fixture: ShipmentFixture) {
     );
   }
 
-  const issued = fixture.status === "ISSUED";
+  const issued = fixture.status === "ISSUED" || fixture.status === "CANCELLED";
   const unpaid = fixture.status === "AWAITING_UPSTREAM_PAYMENT";
   if (!issued && !unpaid) return;
 
@@ -319,21 +321,33 @@ describe("Histori kiriman panel counts", () => {
     // Bound to the fixtures, so widening or narrowing an entry's status list is
     // a failure rather than a silently agreeing tautology.
     expect(page.summary).toEqual({
-      "QUE-ALL": 14,
-      "QUE-NEEDS-AWB": 2,
+      "QUE-ALL": 15,
       "QUE-AWAITING-PICKUP": 3,
       "QUE-IN-TRANSIT": 1,
       "QUE-DELIVERED": 2,
+      "QUE-CANCELLED": 1,
       "QUE-ATTENTION": 4,
     });
-    // Two shipments belong to no entry but "Semua kiriman".
+    // Four shipments belong to no entry but "Semua kiriman": the draft and the estimate
+    // (their tile left the panel, owner 2026-09-26), the queued one and the received return.
     const named =
-      page.summary["QUE-NEEDS-AWB"] +
       page.summary["QUE-AWAITING-PICKUP"] +
       page.summary["QUE-IN-TRANSIT"] +
       page.summary["QUE-DELIVERED"] +
+      page.summary["QUE-CANCELLED"] +
       page.summary["QUE-ATTENTION"];
-    expect(page.summary["QUE-ALL"] - named).toBe(2);
+    expect(page.summary["QUE-ALL"] - named).toBe(4);
+    // The cancelled shipment is never "Perlu perhatian".
+    const attention = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
+      loadShipmentQueuePage(tx, context, { page: 1, pageSize: 20, status: "NEEDS_ATTENTION" }));
+    expect(attention.rows.map((row) => row.status)).not.toContain("CANCELLED");
+    // "Siap dilanjutkan" is still a filter, only its tile is gone.
+    const ready = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
+      loadShipmentQueuePage(tx, context, { page: 1, pageSize: 20, status: "READY_TO_PROGRESS" }));
+    expect(ready.totalCount).toBe(2);
+    expect(SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => entry.value)).toEqual([
+      "ALL", "ISSUED", "IN_TRANSIT", "DELIVERED", "CANCELLED", "NEEDS_ATTENTION",
+    ]);
   });
 
   it("counts only the reading tenant's shipments", async () => {
@@ -351,18 +365,24 @@ describe("Cetak resi panel counts", () => {
     const all = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua" }),
     );
-    expect(all.summary).toEqual({ "LBL-ALL": 3, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 });
+    expect(all.summary).toEqual({ "LBL-ALL": 3, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1, "LBL-CANCELLED": 1 });
+    // A cancelled resi is never in the printable list.
+    expect(all.rows.map((row) => row.status)).not.toContain("CANCELLED");
 
     for (const [printState, metricId] of [
       ["semua", "LBL-ALL"],
       ["belum", "LBL-UNPRINTED"],
       ["sudah", "LBL-PRINTED"],
+      ["batal", "LBL-CANCELLED"],
     ] as const) {
       const filtered = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
         loadLabelIndexPage(tx, context, { status: "issued", printState }),
       );
       expect(filtered.rows, printState).toHaveLength(all.summary[metricId]);
     }
+    const cancelled = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
+      loadLabelIndexPage(tx, context, { status: "issued", printState: "batal" }));
+    expect(cancelled.rows.map((row) => [row.status, row.awb])).toEqual([["CANCELLED", "PANEL-AWB-15"]]);
 
     // A shipment printed twice is still one "Sudah dicetak" row.
     const printed = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
@@ -375,7 +395,7 @@ describe("Cetak resi panel counts", () => {
     const other = await withTenantContext(appDb, adminB, tenantB, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua" }),
     );
-    expect(other.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0 });
+    expect(other.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 });
   });
 });
 
@@ -458,9 +478,10 @@ describe("list pages respect the PR-53 range", () => {
     const inSeptember = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadShipmentQueuePage(tx, context, { page: 1, pageSize: 50, range: september, status: "ALL" }),
     );
-    expect(inSeptember.totalCount).toBe(12);
-    expect(inSeptember.rows).toHaveLength(12);
-    expect(inSeptember.summary["QUE-ALL"]).toBe(12);
+    // 13 since T-238 added the cancelled fixture (sequence 15).
+    expect(inSeptember.totalCount).toBe(13);
+    expect(inSeptember.rows).toHaveLength(13);
+    expect(inSeptember.summary["QUE-ALL"]).toBe(13);
     expect(inSeptember.summary["QUE-DELIVERED"]).toBe(1);
     expect(inSeptember.summary["QUE-AWAITING-PICKUP"]).toBe(2);
 
@@ -505,13 +526,13 @@ describe("list pages respect the PR-53 range", () => {
     const inSeptember = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua", range: september }),
     );
-    expect(inSeptember.summary).toEqual({ "LBL-ALL": 2, "LBL-PRINTED": 1, "LBL-UNPRINTED": 1 });
+    expect(inSeptember.summary).toEqual({ "LBL-ALL": 2, "LBL-PRINTED": 1, "LBL-UNPRINTED": 1, "LBL-CANCELLED": 1 });
     expect(inSeptember.rows).toHaveLength(2);
 
     const inJune = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua", range: june }),
     );
-    expect(inJune.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0 });
+    expect(inJune.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 });
     expect(inJune.rows).toHaveLength(1);
 
     for (const [printState, metricId] of [

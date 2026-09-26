@@ -19,7 +19,7 @@ import * as schema from "@/db/schema";
 import { checkShipmentStaleOperation } from "@/db/shipment-stale-operation-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import {
-  buildMengantarOrderPayload,
+  buildMengantarOrderRequest,
   MengantarOrderPayloadError,
   orchestrateFixtureBackedMengantarOrders,
   ORDER_CONFLICT_MAX_ATTEMPTS,
@@ -409,7 +409,7 @@ describe("fixture-backed Mengantar order orchestration", () => {
       })
       .from(schema.providerOrderSnapshots)
       .where(eq(schema.providerOrderSnapshots.shipmentId, confirmation.shipmentId));
-    const payload = buildMengantarOrderPayload(prepared.orders);
+    const payload = buildMengantarOrderRequest(prepared.orders[0]);
 
     expect(prepared.orders[0]).toMatchObject({
       destinationAreaId: "fixture-destination",
@@ -419,8 +419,8 @@ describe("fixture-backed Mengantar order orchestration", () => {
       destinationAreaId: "fixture-destination",
       destinationAreaLabel: "Fixture destination",
     });
-    expect(payload).toHaveLength(1);
-    expect(payload[0]?.destination_id).toBe("fixture-destination");
+    expect(payload.orders).toHaveLength(1);
+    expect(payload.orders[0]?.customerAddressDataId).toBe("fixture-destination");
   });
 
   it("carries the stored PR-47 operational fields into the provider payload", async () => {
@@ -447,11 +447,11 @@ describe("fixture-backed Mengantar order orchestration", () => {
     );
     if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
 
-    expect(buildMengantarOrderPayload(prepared.orders)[0]).toMatchObject({
-      is_hazardous: true,
-      receiver_landmark: "Seberang masjid",
-      shipping_instruction: "Titip ke satpam",
-      // 1000 g stays 1 kg under the explicit floor-and-round rule.
+    expect(buildMengantarOrderRequest(prepared.orders[0]).orders[0]).toMatchObject({
+      isDangerousGoods: true,
+      destinationMark: "Seberang masjid",
+      deliveryInstruction: "Titip ke satpam",
+      // D-26: the documented unit is kg, exact from the stored grams.
       weight: 1,
     });
   });
@@ -477,7 +477,7 @@ describe("fixture-backed Mengantar order orchestration", () => {
     if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
 
     expect(prepared.orders[0].destinationAreaVerifiedAt).toBeNull();
-    expect(() => buildMengantarOrderPayload(prepared.orders)).toThrow(
+    expect(() => buildMengantarOrderRequest(prepared.orders[0]!)).toThrow(
       MengantarOrderPayloadError,
     );
   });
@@ -497,10 +497,10 @@ describe("fixture-backed Mengantar order orchestration", () => {
     );
     if (!prepared?.orders[0]) throw new Error("Expected one prepared order.");
 
-    expect(buildMengantarOrderPayload(prepared.orders)[0]?.cod_amount).toBe(111_596);
-    expect(() => buildMengantarOrderPayload([
+    expect(buildMengantarOrderRequest(prepared.orders[0]).orders[0]?.COD).toBe(111_596);
+    expect(() => buildMengantarOrderRequest(
       { ...prepared.orders[0], providerCodAmountIdr: null },
-    ])).toThrow(MengantarOrderPayloadError);
+    )).toThrow(MengantarOrderPayloadError);
   });
 
   it("B4: rejects an unverified-area batch without claiming it, calling transport, or crashing the run", async () => {
@@ -581,7 +581,7 @@ describe("fixture-backed Mengantar order orchestration", () => {
       {
         async submit(payload) {
           goodSubmissions += 1;
-          expect(payload[0]?.destination_id).toBe("fixture-destination");
+          expect(payload.orders[0]?.customerAddressDataId).toBe("fixture-destination");
           return { success: true, data: fixture.paid.response.data.slice(0, 1) };
         },
       },
@@ -866,17 +866,17 @@ describe("fixture-backed Mengantar order orchestration", () => {
       seedEstimatedShipment(3, tenantA, outletA, "SAP"),
       seedEstimatedShipment(4, tenantA, outletA2, "JT", false, "private"),
     ]);
-    const payloads: MengantarOrderRequest[][] = [];
+    const payloads: MengantarOrderRequest["orders"][] = [];
     const resolvedScopes: Array<{ outletId: string; credentialSource: string }> = [];
     const platformTransport: MengantarOrderTransport = {
       async submit(payload) {
-        payloads.push([...payload]);
+        payloads.push([...payload.orders]);
         return { success: true, data: fixture.paid.response.data.slice(0, 1) };
       },
     };
     const privateTransport: MengantarOrderTransport = {
       async submit(payload) {
-        payloads.push([...payload]);
+        payloads.push([...payload.orders]);
         return { success: true, data: fixture.paid.response.data.slice(1, 2) };
       },
     };
@@ -937,10 +937,10 @@ describe("fixture-backed Mengantar order orchestration", () => {
   });
   it("submits same-group dynamic orders sequentially under one account lock and maps each AWB", async () => {
     const confirmations = await Promise.all([
-      seedEstimatedShipment(5, tenantA, outletA, "Ninja"),
-      seedEstimatedShipment(6, tenantA, outletA, "Ninja"),
+      seedEstimatedShipment(5, tenantA, outletA, "SiCepat"),
+      seedEstimatedShipment(6, tenantA, outletA, "SiCepat"),
     ]);
-    const payloads: MengantarOrderRequest[][] = [];
+    const payloads: MengantarOrderRequest["orders"][] = [];
     const accountLockHeld: boolean[] = [];
     let active = 0;
     let maxActive = 0;
@@ -951,7 +951,7 @@ describe("fixture-backed Mengantar order orchestration", () => {
     const transport: MengantarOrderTransport = {
       async submit(payload) {
         const callIndex = payloads.length;
-        payloads.push([...payload]);
+        payloads.push([...payload.orders]);
         active += 1;
         maxActive = Math.max(maxActive, active);
 
@@ -1039,7 +1039,7 @@ describe("fixture-backed Mengantar order orchestration", () => {
     let calls = 0;
     const transport: MengantarOrderTransport = {
       async submit(payload) {
-        payloadSizes.push(payload.length);
+        payloadSizes.push(payload.orders.length);
         calls += 1;
         return calls === 1
           ? { success: true, data: fixture.paid.response.data.slice(0, 1) }
@@ -1090,8 +1090,8 @@ describe("fixture-backed Mengantar order orchestration", () => {
 
 
   it("serializes dynamic courier submissions with a PostgreSQL account lock", async () => {
-    const firstConfirmation = await seedEstimatedShipment(10, tenantA, outletA, "Ninja");
-    const secondConfirmation = await seedEstimatedShipment(11, tenantA, outletA2, "Ninja");
+    const firstConfirmation = await seedEstimatedShipment(10, tenantA, outletA, "SiCepat");
+    const secondConfirmation = await seedEstimatedShipment(11, tenantA, outletA2, "SiCepat");
     let active = 0;
     let maxActive = 0;
     let releaseFirst!: () => void;
@@ -1161,6 +1161,8 @@ describe("fixture-backed Mengantar order orchestration", () => {
     // Identity values from the sanitized GET /order capture (`_id`, `ORDER_ID`)
     // and the batch shape from the stored-record contract capture (`batch`).
     let capturedIdentity: { _id: string; ORDER_ID: string; batch: string };
+    // Shape of the documented example's `batch_id` (an object id), sanitized.
+    const DOCUMENTED_BATCH_ID = "000000000000000000000237";
 
     beforeAll(async () => {
       const orders = JSON.parse(await readFile(
@@ -1183,7 +1185,10 @@ describe("fixture-backed Mengantar order orchestration", () => {
           ? new Response(JSON.stringify({ success: false, message: "Sedang ada proses pembuatan order" }), { status })
           : new Response(JSON.stringify({
               success: true,
-              data: [{ ...capturedIdentity, isPaid: true, cnote_no: "SANITIZED-CNOTE-0409" }],
+              // T-237: the documented response carries `batch_id` beside `batch`, in the item and the envelope.
+              data: [{ ...capturedIdentity, batch_id: DOCUMENTED_BATCH_ID, isPaid: true, cnote_no: "SANITIZED-CNOTE-0409" }],
+              batch: capturedIdentity.batch,
+              batch_id: DOCUMENTED_BATCH_ID,
             }), { status, headers: { "content-type": "application/json" } });
       };
       const transport: MengantarOrderTransport = {
@@ -1212,7 +1217,7 @@ describe("fixture-backed Mengantar order orchestration", () => {
       return row;
     }
 
-    it("retries a 409 with bounded backoff, then reads `_id` and `batch` from the accepted response", async () => {
+    it("retries a 409 with bounded backoff, then reads `_id` and `batch_id` from the accepted response", async () => {
       const confirmation = await seedEstimatedShipment(14, tenantA, outletA, "JNE");
       const http = httpTransport([409, 409, 200]);
 
@@ -1227,7 +1232,8 @@ describe("fixture-backed Mengantar order orchestration", () => {
       expect(await snapshot()).toEqual({
         status: "ISSUED",
         providerOrderId: capturedIdentity._id,
-        providerBatchId: capturedIdentity.batch,
+        // `batch_id` is what pay-unpaid takes (D-26); the readable `batch` code is not stored.
+        providerBatchId: DOCUMENTED_BATCH_ID,
         cnoteNo: "SANITIZED-CNOTE-0409",
         safeResponseCode: "ORDER_ACCEPTED",
       });
@@ -1283,13 +1289,14 @@ describe("fixture-backed Mengantar order orchestration", () => {
       });
     });
 
-    it("fails a response whose `batch` and `batch_id` disagree closed", async () => {
+    it("fails a response whose item and envelope `batch_id` disagree closed", async () => {
       const confirmation = await seedEstimatedShipment(17, tenantA, outletA, "JNE");
       const result = await orchestrateFixtureBackedMengantarOrders(input([confirmation], {
         async submit() {
           return {
             success: true,
-            data: [{ ...capturedIdentity, batch_id: "SANITIZED-OTHER-BATCH", isPaid: true, cnote_no: "SANITIZED-CNOTE-0411" }],
+            data: [{ ...capturedIdentity, batch_id: DOCUMENTED_BATCH_ID, isPaid: true, cnote_no: "SANITIZED-CNOTE-0411" }],
+            batch_id: "SANITIZED-OTHER-BATCH",
           };
         },
       }));

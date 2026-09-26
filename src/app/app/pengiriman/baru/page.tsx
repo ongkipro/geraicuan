@@ -19,10 +19,12 @@ import { listReadyShipmentOutlets } from "@/db/outlet-readiness-repository";
 import { tenants } from "@/db/schema";
 import { loadShipmentFlowDraft } from "@/db/shipment-draft-repository";
 import { withTenantContext } from "@/db/tenant-context";
+import { loadTenantDisabledCouriers } from "@/db/tenant-settings-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { paymentMethodOf } from "@/lib/payment-method";
 import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture";
 import { gramsToKilogramLabel } from "@/lib/shipment-draft-logic";
+import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { shipmentDetailHref, shipmentLabelHref } from "@/lib/shipment-number";
 
@@ -112,7 +114,9 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
       : false;
     // Every point of the draft's outlet (ready or not), so a saved draft always shows its origin.
     const draftPoints = draft ? points.filter((point) => point.outletId === draft.outletId) : [];
-    return { codFormulaRetired, draft, draftPoints, gerai: gerai ?? { name: "", phone: null }, outlets, snapshot };
+    // T-243: Mitra kurir — the gerai's switched-off couriers are never offered.
+    const disabledCouriers = await loadTenantDisabledCouriers(tx, context);
+    return { codFormulaRetired, disabledCouriers, draft, draftPoints, gerai: gerai ?? { name: "", phone: null }, outlets, snapshot };
   });
 
   // Step 1 — the form.
@@ -230,7 +234,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
               codFormulaRetired: data.codFormulaRetired,
               declaredValueIdr: draft.declaredValueIdr,
               paymentMethod,
-              services: data.snapshot.services,
+              services: filterTenantCourierServices(data.snapshot.services, data.disabledCouriers),
             }),
             paymentMethod,
             shipmentId: draft.id,

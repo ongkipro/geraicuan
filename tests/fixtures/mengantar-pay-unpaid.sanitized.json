@@ -1,36 +1,31 @@
 {
   "contract": "Mengantar POST /order/pay-unpaid sanitized fixture",
+  "source": "Hand-written to the documented shape of api-public.mengantar.com/docs (Pay Unpaid Order, read 2026-09-26): request `{courier, batch_id}`, response `{success, data: <number of orders paid>, cnote_no: [...]}`. The response echoes neither batch nor courier. Evidence D, not L. Identifiers are sanitized placeholders.",
   "issued": {
+    "request": { "courier": "JNE", "batch_id": "SANITIZED-BATCH-UNPAID" },
     "response": {
       "success": true,
-      "data": {
-        "batch_id": "SANITIZED-BATCH-UNPAID",
-        "courier": "JNE",
-        "cnote_no": ["SANITIZED-CNOTE-RECOVERED-0001"]
-      }
+      "data": 1,
+      "cnote_no": ["SANITIZED-CNOTE-RECOVERED-0001"]
     }
   },
   "ambiguous": {
+    "request": { "courier": "JNE", "batch_id": "SANITIZED-BATCH-UNPAID" },
     "response": {
       "success": true,
-      "data": {
-        "batch_id": "SANITIZED-BATCH-UNPAID",
-        "courier": "JNE",
-        "cnote_no": [
-          "SANITIZED-CNOTE-AMBIGUOUS-0001",
-          "SANITIZED-CNOTE-AMBIGUOUS-0002"
-        ]
-      }
+      "data": 2,
+      "cnote_no": [
+        "SANITIZED-CNOTE-AMBIGUOUS-0001",
+        "SANITIZED-CNOTE-AMBIGUOUS-0002"
+      ]
     }
   },
-  "wrongBatch": {
+  "countMismatch": {
+    "request": { "courier": "JNE", "batch_id": "SANITIZED-BATCH-UNPAID" },
     "response": {
       "success": true,
-      "data": {
-        "batch_id": "SANITIZED-OTHER-BATCH",
-        "courier": "JNE",
-        "cnote_no": ["SANITIZED-CNOTE-UNMAPPED-0001"]
-      }
+      "data": 2,
+      "cnote_no": ["SANITIZED-CNOTE-UNMAPPED-0001"]
     }
   }
 }

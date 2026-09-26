@@ -41,9 +41,10 @@ export function ContactDirectorySkeleton({ title }: { title: string }) {
 }
 
 export function ContactFormSkeleton({ detail = false, title }: { detail?: boolean; title: string }) {
+  if (detail) return <ContactDetailSkeleton title={title} />;
   return (
     <div aria-busy="true" aria-label={`Memuat ${title.toLowerCase()}`} className="contents" role="status">
-      <HeaderSkeleton action={detail} back title={title} />
+      <HeaderSkeleton action={false} back title={title} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="grid gap-6 lg:col-span-2">
           {[2, 1, 3].map((rows, index) => (
@@ -58,6 +59,29 @@ export function ContactFormSkeleton({ detail = false, title }: { detail?: boolea
           <Rows count={3} />
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** T-246: the detail page's final shape — white surface, bordered KPI cards, flat sections. */
+function ContactDetailSkeleton({ title }: { title: string }) {
+  return (
+    <div aria-busy="true" aria-label={`Memuat ${title.toLowerCase()}`} className="flex flex-col gap-6 [main:has(&)]:bg-card!" role="status">
+      <HeaderSkeleton back title={title} />
+      <div className="grid gap-4 *:border sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((index) => (
+          <Card className="px-5" key={index}>
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-8 w-20" />
+          </Card>
+        ))}
+      </div>
+      {[2, 3, 4].map((rows, index) => (
+        <div className="grid gap-4 border-t pt-6" key={index}>
+          <Skeleton className="h-5 w-32" />
+          <Rows count={rows} />
+        </div>
+      ))}
     </div>
   );
 }

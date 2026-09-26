@@ -269,7 +269,7 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
         label="Periode gerai"
         summary={`${range.periodLabel} · ${range.timezoneLabel}`}
       >
-        <DateRangePicker endDate={view.filters.range.lastIncludedDate} label={range.presetLabel} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
+        <DateRangePicker endDate={view.filters.range.lastIncludedDate} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
       </FilterBar>
       {counts ? (
         <section aria-label="Ringkasan gerai" className="grid grid-cols-2 gap-4 lg:grid-cols-4">

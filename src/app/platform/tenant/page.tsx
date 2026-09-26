@@ -67,7 +67,7 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
           <span className="sr-only">Cari nama gerai</span>
           <Input defaultValue={filters.query ?? ""} maxLength={80} minLength={2} name="q" placeholder="Cari nama gerai…" type="search" />
         </label>
-        <DateRangePicker endDate={filters.range.lastIncludedDate} label={range.presetLabel} presetId={filters.range.presetId} startDate={filters.range.startDate} />
+        <DateRangePicker endDate={filters.range.lastIncludedDate} presetId={filters.range.presetId} startDate={filters.range.startDate} />
       </FilterBar>
       {!view.usage ? (
         <RegionError title="Daftar gerai" />

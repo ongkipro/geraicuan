@@ -44,7 +44,7 @@ export function DataCard({
         </CardHeader>
       ) : null}
       <CardContent className={cn(flush ? "px-0" : "flex flex-col gap-4")}>{children}</CardContent>
-      {footer ? <CardFooter className={cn(flush && "justify-between")}>{footer}</CardFooter> : null}
+      {footer ? <CardFooter className={cn(flush && "flex-wrap justify-between")}>{footer}</CardFooter> : null}
     </Card>
   );
 }

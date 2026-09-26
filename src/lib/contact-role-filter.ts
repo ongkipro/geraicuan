@@ -2,8 +2,8 @@
  * T-188: Pengirim and Penerima are separate menus over one `contacts` table,
  * layered on the existing `is_sender` / `is_recipient` flags — a dual-role
  * contact is listed under both. The role is the list route's own segment
- * (`/app/kontak/pengirim`, `/app/kontak/penerima`), `peran` on the create form
- * and `dari` on a contact detail. No "server-only" here: server pages, client
+ * (`/app/kontak/pengirim`, `/app/kontak/penerima`) and of a contact detail
+ * (`/app/kontak/<peran>/<n>`, T-241), and `peran` on the create form. No "server-only" here: server pages, client
  * components and the shell navigation all read these.
  */
 export type ContactRole = "pengirim" | "penerima";
@@ -55,8 +55,18 @@ export function contactListHref(role: ContactRole) {
   return `/app/kontak/${role}`;
 }
 
-export function contactDetailHref(contactId: string, role: ContactRole) {
-  return `/app/kontak/${contactId}?dari=${role}`;
+/**
+ * T-241: a contact detail is `/app/kontak/<peran>/<n>` — the per-tenant contact number, never a
+ * name or phone (spec 10 §11: no PII in the URL). The role segment is the menu it was opened from.
+ */
+export function contactDetailHref(contactNumber: number, role: ContactRole) {
+  return `/app/kontak/${role}/${contactNumber}`;
+}
+
+/** `/app/kontak/<peran>/<n>`: a positive integer without a leading zero or sign; anything else is not a contact. */
+export function parseContactNumber(raw: string): number | null {
+  if (!/^[1-9][0-9]{0,8}$/.test(raw)) return null;
+  return Number(raw);
 }
 
 /** The role a contact is shown under: the requested one when it still holds it, else its first role. */

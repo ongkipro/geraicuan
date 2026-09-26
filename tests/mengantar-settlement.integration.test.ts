@@ -143,7 +143,11 @@ describe("Mengantar settlement contract", () => {
     const page = normalizeMengantarOrderPage(orders.list);
     expect(page.pageLength).toBe(5);
     // T-223: this capture carries no `lastHistory`/`pod_code`, so the new evidence fields are null.
-    const noHistory = { lastHistoryDesc: null, lastHistoryAt: null, podCode: null };
+    // T-238: nor `history`, `cnote_no_rts` or the attention fields.
+    const noHistory = {
+      lastHistoryDesc: null, lastHistoryAt: null, podCode: null,
+      returnCnoteNo: null, lastUndeliveredCode: null, isBreach: null, claimStatus: null, ticketStatus: null, historyEvents: [],
+    };
     expect(page.orders).toEqual([
       { cnoteNo: "SANITIZED-CNOTE-0005", status: "DELIVERED", ...noHistory },
       { cnoteNo: "SANITIZED-CNOTE-0003", status: "RTS", ...noHistory },

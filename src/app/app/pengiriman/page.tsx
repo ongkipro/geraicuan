@@ -22,7 +22,7 @@ import { CourierLogo } from "@/components/app/courier-logo";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
-import { ShipmentStatusBadge, shipmentStatusTone } from "@/components/app/status-badge";
+import { ShipmentStatusBadge, shipmentStatusIcon, shipmentStatusTone } from "@/components/app/status-badge";
 import { StatusTiles } from "@/components/app/status-tiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,8 +53,8 @@ const TILE_HINTS: Record<(typeof SHIPMENT_QUEUE_SUMMARY_ENTRIES)[number]["metric
   "QUE-ATTENTION": "Kendala/pelunasan",
   "QUE-AWAITING-PICKUP": "Tunggu dijemput",
   "QUE-DELIVERED": "Sampai penerima",
+  "QUE-CANCELLED": "Dibatalkan Mengantar",
   "QUE-IN-TRANSIT": "Sedang diantar",
-  "QUE-NEEDS-AWB": "Belum punya resi",
 };
 
 export default async function ShipmentHistoryPage({ searchParams }: { searchParams: Promise<Record<string, SearchValue>> }) {
@@ -122,10 +122,13 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
 
       <StatusTiles
         label="Ringkasan status kiriman"
+        // Spec 19 QUE-SHARE: every tile is a subset of QUE-ALL.
+        total={data.summary["QUE-ALL"]}
         tiles={SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => ({
           count: data.summary[entry.metricId],
           hint: TILE_HINTS[entry.metricId],
           href: shipmentQueueHref(entry.value, 1, carry),
+          icon: shipmentStatusIcon(entry.value) ?? undefined,
           key: entry.metricId,
           label: entry.label,
           selected: query.status === entry.value,
@@ -190,12 +193,13 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-40">Nomor kiriman</TableHead>
-                    <TableHead className="w-50">Status / Pembayaran</TableHead>
-                    <TableHead>Penerima</TableHead>
-                    <TableHead className="hidden w-50 lg:table-cell">Ekspedisi / Resi</TableHead>
-                    <TableHead className="hidden w-45 xl:table-cell">Paket</TableHead>
-                    <TableHead className="hidden w-35 lg:table-cell">Aktivitas</TableHead>
+                    {/* Owner 2026-09-26: proportional widths so no single column (Penerima) soaks up the spare space. */}
+                    <TableHead className="w-[14%]">Nomor kiriman</TableHead>
+                    <TableHead className="w-[18%]">Status / Pembayaran</TableHead>
+                    <TableHead className="w-[22%]">Penerima</TableHead>
+                    <TableHead className="hidden w-[16%] lg:table-cell">Ekspedisi / Resi</TableHead>
+                    <TableHead className="hidden w-[18%] xl:table-cell">Paket</TableHead>
+                    <TableHead className="hidden w-[12%] lg:table-cell">Aktivitas</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

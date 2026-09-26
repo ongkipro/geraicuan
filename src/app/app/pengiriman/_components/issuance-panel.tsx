@@ -25,15 +25,14 @@ import { CourierLogo } from "@/components/app/courier-logo";
 import { formatIdr } from "@/components/app/money";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
-import { COD_FORMULA_RETIRED_MESSAGE, codOngkirBreakEvenIdr } from "@/lib/mengantar-cod-fee";
+import { COD_FORMULA_RETIRED_MESSAGE } from "@/lib/mengantar-cod-fee";
 import { courierDisplayName, mengantarCourierOfService } from "@/lib/mengantar-couriers";
 import type { PaymentMethod } from "@/lib/payment-method";
 import {
-  COD_ONGKIR_FIELD_NAME,
-  evaluateCodOngkirCharge,
+  codOngkirAmount,
   issuanceCharges,
+  MENGANTAR_COD_FEE_RATE_LABEL,
   issuanceGate,
   type IssuanceCharges,
 } from "@/lib/shipment-draft-logic";
@@ -42,8 +41,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * T-211: the one issuance step ("Pilih layanan & terbitkan"), shared by Buat kiriman and the
- * shipment detail (T-213). `IssuanceProvider` owns the server action, the chosen service, the
- * COD Ongkir charge and the physical-check consent; the pieces below read it and may be laid
+ * shipment detail (T-213). `IssuanceProvider` owns the server action, the chosen service and
+ * the physical-check consent (the COD Ongkir amount is computed, D-28); the pieces below read it and may be laid
  * out anywhere (a section card, a rail, a bottom bar) because every control submits through the
  * provider's form by its `form` attribute. Field names are the action's own, so server
  * validation is unchanged.
@@ -52,7 +51,7 @@ import { cn } from "@/lib/utils";
 type IssuanceContextValue = {
   charges: IssuanceCharges | null;
   codFormulaRetired: boolean;
-  codOngkir: { basisIdr: number | null; value: string };
+  codOngkir: ReturnType<typeof codOngkirAmount>;
   confirmDisabled: boolean;
   consented: boolean;
   eligibleCount: number;
@@ -65,7 +64,6 @@ type IssuanceContextValue = {
   pending: boolean;
   selected: ShipmentEstimateOption | null;
   selectService: (id: string) => void;
-  setCodOngkirValue: (value: string) => void;
   setConsented: (value: boolean) => void;
   shipmentId: string;
   state: ShipmentIssuanceActionState;
@@ -115,17 +113,14 @@ export function IssuanceProvider({
     {} as DestinationAreaVerificationState,
   );
   const [selectedId, setSelectedId] = useState("");
-  // The consent and the COD Ongkir charge belong to one service; choosing another resets them.
+  // The consent belongs to one service; choosing another resets it.
   const [consentFor, setConsentFor] = useState<string | null>(null);
-  const [chargeFor, setChargeFor] = useState<{ id: string; value: string } | null>(null);
   const isCod = paymentMethod !== "NON_COD";
   const selected = options.find((option) => option.estimateServiceId === selectedId) ?? null;
   const eligibleCount = options.filter((option) => !isCod || option.codEligible).length;
-  const basisIdr = paymentMethod === "COD_ONGKIR" ? selected?.shippingDeductedIdr ?? null : null;
-  const breakEven = basisIdr === null ? null : codOngkirBreakEvenIdr(basisIdr);
-  const chargeValue = chargeFor?.id === selectedId ? chargeFor.value : breakEven === null ? "" : String(breakEven);
-  const chargeState = basisIdr === null ? null : evaluateCodOngkirCharge(chargeValue, basisIdr);
-  const codOngkirBlocked = paymentMethod === "COD_ONGKIR" && selected !== null && chargeState?.kind !== "valid";
+  // D-28: ongkir + biaya COD, computed from the chosen service; the server records the same figure.
+  const codOngkir = paymentMethod === "COD_ONGKIR" ? codOngkirAmount(selected?.shippingDeductedIdr) : null;
+  const codOngkirBlocked = paymentMethod === "COD_ONGKIR" && selected !== null && codOngkir === null;
   const consented = selected !== null && consentFor === selectedId;
   const gate = issuanceGate({
     codFormulaRetired,
@@ -137,7 +132,6 @@ export function IssuanceProvider({
     selected: selected !== null,
   });
   const charges = issuanceCharges({
-    codOngkirChargeIdr: chargeState?.kind === "valid" ? chargeState.chargeIdr : null,
     declaredValueIdr,
     option: selected,
     paymentMethod,
@@ -146,7 +140,7 @@ export function IssuanceProvider({
   const value: IssuanceContextValue = {
     charges,
     codFormulaRetired,
-    codOngkir: { basisIdr, value: chargeValue },
+    codOngkir,
     confirmDisabled: gate.confirmDisabled,
     consented,
     eligibleCount,
@@ -159,7 +153,6 @@ export function IssuanceProvider({
     pending,
     selected,
     selectService: setSelectedId,
-    setCodOngkirValue: (next) => setChargeFor({ id: selectedId, value: next }),
     setConsented: (checked) => setConsentFor(checked ? selectedId : null),
     shipmentId,
     state,
@@ -331,40 +324,28 @@ export function IssuanceServiceChooser({ context }: {
         </div>
       </div>
 
-      {paymentMethod === "COD_ONGKIR" && selected ? <CodOngkirChargeField /> : null}
+      {paymentMethod === "COD_ONGKIR" && selected ? <CodOngkirAmountRow /> : null}
     </div>
   );
 }
 
-/** T-186: the COD Ongkir charge — starts at break-even, never below it. */
-function CodOngkirChargeField() {
-  const issuance = useIssuance();
-  const { basisIdr, value } = issuance.codOngkir;
+/** D-28: the COD Ongkir amount — ongkir + biaya COD, computed and read-only. */
+function CodOngkirAmountRow() {
+  const { codOngkir } = useIssuance();
   const id = useId();
-  if (basisIdr === null) {
+  if (codOngkir === null) {
     return <p className="text-sm text-destructive" role="alert">Ongkir yang dipotong Mengantar untuk layanan ini tidak tersedia. Muat ulang tarif.</p>;
   }
-  const breakEven = codOngkirBreakEvenIdr(basisIdr);
-  const state = evaluateCodOngkirCharge(value, basisIdr);
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted p-4">
-      <label className="text-sm font-medium" htmlFor={`${id}-charge`}>Ongkir ditagih kurir ke penerima (Rp)</label>
-      <Input
-        aria-describedby={`${id}-hint${state.kind === "invalid" ? ` ${id}-error` : ""}`}
-        aria-invalid={state.kind === "invalid"}
-        className="font-bold tabular-nums sm:max-w-56"
-        form={issuance.formId}
-        id={`${id}-charge`}
-        inputMode="numeric"
-        name={COD_ONGKIR_FIELD_NAME}
-        onChange={(event) => issuance.setCodOngkirValue(event.target.value.replace(/[^\d.]/g, ""))}
-        value={value}
-      />
+      <p className="text-sm font-medium" id={`${id}-label`}>Nilai COD Ongkir ditagih kurir ke penerima</p>
+      <output aria-describedby={`${id}-hint`} aria-labelledby={`${id}-label`} className="text-base font-bold tabular-nums">
+        {formatIdr(codOngkir.chargeIdr)}
+      </output>
       <p className="text-xs text-muted-foreground" id={`${id}-hint`}>
-        Titik impas {breakEven === null ? "—" : formatIdr(breakEven)} · ongkir dipotong Mengantar {formatIdr(basisIdr)}
-        {state.kind === "valid" ? ` · selisih diterima penjual ${formatIdr(state.sellerDifferenceIdr)}` : ""}
+        Dihitung otomatis: ongkir dipotong Mengantar {formatIdr(codOngkir.shippingIdr)} + biaya COD {MENGANTAR_COD_FEE_RATE_LABEL} {formatIdr(codOngkir.codFeeIdr)}
+        {codOngkir.roundingIdr > 0 ? ` + pembulatan ${formatIdr(codOngkir.roundingIdr)}` : ""}
       </p>
-      {state.kind === "invalid" ? <p className="text-xs text-destructive" id={`${id}-error`}>{state.message}</p> : null}
     </div>
   );
 }

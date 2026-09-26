@@ -3,6 +3,7 @@
 #
 #   docker build -t geraicuan-app .                 app: tenant and platform hosts, port 3000
 #   docker build --target ops -t geraicuan-ops .    one-off jobs: `pnpm db:migrate`,
+#                                                   `pnpm wilayah:import`,
 #                                                   `pnpm ops:bootstrap-super-admin`
 #
 # No secret is needed or accepted at build time. The origins below are public
@@ -45,6 +46,10 @@ FROM deps AS ops
 COPY drizzle.config.ts ./
 COPY drizzle ./drizzle
 COPY scripts/bootstrap-super-admin.mjs ./scripts/bootstrap-super-admin.mjs
+# T-245: `pnpm wilayah:import` after migrate — the vendored reference and its loader, offline.
+COPY scripts/wilayah-import.mjs ./scripts/wilayah-import.mjs
+COPY src/lib/wilayah.ts ./src/lib/wilayah.ts
+COPY data/wilayah ./data/wilayah
 USER node
 CMD ["pnpm", "db:migrate"]
 

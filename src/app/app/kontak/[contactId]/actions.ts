@@ -11,6 +11,7 @@ import {
   ContactArchiveDeniedError,
   ContactUnavailableError,
   hasActiveContactAddressMutationTarget,
+  setPrimaryContactAddress,
   updateContact,
   updateContactAddress,
 } from "@/db/contact-repository";
@@ -22,10 +23,12 @@ import {
   type TenantTransaction,
 } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { parseContactCategory } from "@/lib/contact-category";
 import { contactAddressErrors, contactIdentityErrors } from "@/lib/contact-directory";
 import {
   CONTACT_ROLE_NAME_CONFLICT_MESSAGE,
   CONTACT_ROLES_CARD,
+  contactDetailHref,
   DEFAULT_CONTACT_ROLE,
   parseContactRole,
 } from "@/lib/contact-role-filter";
@@ -41,10 +44,10 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_AREA_LENGTH = 160;
 
-type IdentityField = "contactName" | "contactPhone" | "roles";
+type IdentityField = "category" | "contactName" | "contactPhone" | "roles";
 type AddressField = "addressLabel" | "addressText" | "areaId" | "areaLabel";
 
-type IdentityValues = Partial<Record<"contactName" | "contactPhone" | "roleRecipient" | "roleSender", string>>;
+type IdentityValues = Partial<Record<"category" | "contactName" | "contactPhone" | "roleRecipient" | "roleSender", string>>;
 type AddressValues = Partial<Record<"addressLabel" | "addressText" | "areaId" | "areaLabel", string>>;
 
 export type ContactIdentityState = {
@@ -69,6 +72,14 @@ export type ContactAddressState = {
 };
 
 export type ContactArchiveState = { error?: string };
+
+export type ContactPrimaryAddressState = { error?: string; success?: boolean };
+
+/** T-241: detail pages live at `/app/kontak/<peran>/<n>`; refresh both role routes after a change. */
+function revalidateContactPages() {
+  revalidatePath("/app/kontak/pengirim/[nomor]", "page");
+  revalidatePath("/app/kontak/penerima/[nomor]", "page");
+}
 
 function readText(formData: FormData, field: string) {
   const value = formData.get(field);
@@ -101,6 +112,7 @@ async function requireTenantPrincipal() {
 
 function identityValues(formData: FormData): IdentityValues {
   return {
+    ...(formData.has("category") ? { category: readText(formData, "category") } : {}),
     contactName: readText(formData, "contactName"),
     contactPhone: readText(formData, "contactPhone"),
     roleRecipient: formData.get("roleRecipient") === "on" ? "on" : "",
@@ -124,6 +136,9 @@ function validateIdentity(formData: FormData) {
   const isRecipient = formData.get("roleRecipient") === "on";
   const isSender = formData.get("roleSender") === "on";
   const errors: Partial<Record<IdentityField, string>> = contactIdentityErrors(name, rawPhone, { isSender });
+  // T-241: only the Kontak card posts `category`; the Peran card leaves the stored one untouched.
+  const category = formData.has("category") ? parseContactCategory(formData.get("category")) : undefined;
+  if (formData.has("category") && category === undefined) errors.category = "Pilih kategori dari daftar.";
   if (!isSender && !isRecipient) errors.roles = "Pilih minimal satu peran kontak.";
   else if (
     formData.get("card") === CONTACT_ROLES_CARD
@@ -140,7 +155,7 @@ function validateIdentity(formData: FormData) {
 
   if (Object.keys(errors).length > 0 || !phone) return { errors, ok: false as const };
   return {
-    input: { isRecipient, isSender, name, phone },
+    input: { category, isRecipient, isSender, name, phone },
     ok: true as const,
   };
 }
@@ -270,7 +285,7 @@ export async function updateContactAction(
     if (error instanceof ContactUnavailableError) return { message: "Kontak tidak tersedia atau sudah diarsipkan." };
     throw error;
   }
-  revalidatePath(`/app/kontak/${contactId}`);
+  revalidateContactPages();
   return { message: "Perubahan kontak tersimpan. Kiriman lama tetap memakai data saat kiriman dibuat.", success: true };
 }
 
@@ -345,7 +360,7 @@ export async function addContactAddressAction(
     }
     throw error;
   }
-  revalidatePath(`/app/kontak/${contactId}`);
+  revalidateContactPages();
   return { message: "Alamat tersimpan dan siap dipakai pada draf berikutnya.", success: true };
 }
 
@@ -426,7 +441,7 @@ export async function updateContactAddressAction(
     }
     throw error;
   }
-  revalidatePath(`/app/kontak/${contactId}`);
+  revalidateContactPages();
   return { message: "Perubahan alamat tersimpan. Data pada kiriman lama tidak berubah.", success: true };
 }
 
@@ -437,8 +452,9 @@ export async function archiveContactAction(
   const principal = await requireTenantPrincipal();
   const contactId = requireContactId(formData);
 
+  let contactNumber: number;
   try {
-    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+    contactNumber = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
       archiveContact(tx, context, contactId),
     );
   } catch (error) {
@@ -453,5 +469,25 @@ export async function archiveContactAction(
   // T-188: stay under the menu the contact was opened from.
   const requestedRole = formData.get("dari");
   const role = parseContactRole(typeof requestedRole === "string" ? requestedRole : null) ?? DEFAULT_CONTACT_ROLE;
-  redirect(`/app/kontak/${contactId}?dari=${role}&diarsipkan=1`);
+  redirect(`${contactDetailHref(contactNumber, role)}?diarsipkan=1`);
+}
+
+/** T-241 "Jadikan utama": the address the Buat kiriman search offers first for this contact. */
+export async function setPrimaryContactAddressAction(
+  _previousState: ContactPrimaryAddressState,
+  formData: FormData,
+): Promise<ContactPrimaryAddressState> {
+  const principal = await requireTenantPrincipal();
+  const contactId = requireContactId(formData);
+  const addressId = requireAddressId(formData);
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      setPrimaryContactAddress(tx, context, contactId, addressId),
+    );
+  } catch (error) {
+    if (error instanceof ContactUnavailableError) return { error: "Alamat tidak tersedia atau kontak sudah diarsipkan." };
+    throw error;
+  }
+  revalidateContactPages();
+  return { success: true };
 }

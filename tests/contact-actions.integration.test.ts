@@ -128,11 +128,14 @@ vi.mock("@/db/contact-repository", () => ({
     if (contactId === mocks.crossTenantContactId) throw new errors.ContactUnavailableError();
     if (mocks.archiveFailure === "unavailable") throw new errors.ContactUnavailableError();
     mocks.archived.push(contactId);
+    return 7;
   }),
   createContact: vi.fn(async (_tx, _context, input) => {
     mocks.created.push(input);
     return CONTACT_ID;
   }),
+  // T-241: the create action reads the allocated number back in the same transaction.
+  getContact: vi.fn(async (_tx, _context, contactId) => ({ contactNumber: 7, id: contactId })),
   hasActiveContactAddressMutationTarget: vi.fn(async (_tx, _context, contactId) => (
     contactId !== mocks.crossTenantContactId
   )),
@@ -504,6 +507,7 @@ describe("contact Server Actions", () => {
     await expect(saveContact({}, validCreateForm())).resolves.toEqual({
       message: "Kontak tersimpan dan siap dipakai pada draf baru.",
       successId: CONTACT_ID,
+      successNumber: 7,
       successRole: "pengirim",
     });
     // T-188: success returns to the list the form was opened from while the
@@ -523,9 +527,12 @@ describe("contact Server Actions", () => {
     expect(mocks.created).toHaveLength(1);
     expect(mocks.updated).toHaveLength(1);
     expect(mocks.added).toHaveLength(1);
+    // T-241: both numbered detail routes, once per successful action.
     expect(mocks.revalidated).toEqual([
-      `/app/kontak/${CONTACT_ID}`,
-      `/app/kontak/${CONTACT_ID}`,
+      "/app/kontak/pengirim/[nomor]",
+      "/app/kontak/penerima/[nomor]",
+      "/app/kontak/pengirim/[nomor]",
+      "/app/kontak/penerima/[nomor]",
     ]);
   });
 
@@ -660,14 +667,37 @@ describe("contact Server Actions", () => {
 
     mocks.archiveFailure = "";
     await expect(archiveContactAction({}, archiveForm())).rejects.toThrow(
-      `REDIRECT:/app/kontak/${CONTACT_ID}?dari=pengirim&diarsipkan=1`,
+      "REDIRECT:/app/kontak/pengirim/7?diarsipkan=1",
     );
     expect(mocks.archived).toEqual([CONTACT_ID]);
     // T-188: archiving stays under the menu the contact was opened from.
     const fromRecipients = archiveForm();
     fromRecipients.set("dari", "penerima");
     await expect(archiveContactAction({}, fromRecipients)).rejects.toThrow(
-      `REDIRECT:/app/kontak/${CONTACT_ID}?dari=penerima&diarsipkan=1`,
+      "REDIRECT:/app/kontak/penerima/7?diarsipkan=1",
     );
+  });
+
+  it("refuses a tampered kategori with zero writes and saves a listed one (T-241)", async () => {
+    const { saveContact } = await import("@/app/app/kontak/actions");
+    const { updateContactAction } = await import("@/app/app/kontak/[contactId]/actions");
+    const tampered = validCreateForm();
+    tampered.set("category", "SKOR_MENGANTAR");
+    expect((await saveContact({}, tampered)).errors).toMatchObject({ category: "Pilih kategori dari daftar." });
+    expect(mocks.created).toEqual([]);
+    const listed = validCreateForm();
+    listed.set("category", "RESELLER");
+    await expect(saveContact({}, listed)).resolves.toMatchObject({ successNumber: 7 });
+    expect(mocks.created).toEqual([expect.objectContaining({ category: "RESELLER" })]);
+
+    const identity = validIdentityForm();
+    identity.set("category", "BUKAN_KATEGORI");
+    expect((await updateContactAction({}, identity)).errors).toMatchObject({ category: "Pilih kategori dari daftar." });
+    expect(mocks.updated).toEqual([]);
+    identity.set("category", "");
+    await expect(updateContactAction({}, identity)).resolves.toMatchObject({ success: true });
+    // Without the field (the Peran card) the stored kategori is left alone: `undefined`, not `null`.
+    await updateContactAction({}, validIdentityForm());
+    expect(mocks.updated.map((call) => (call.input as { category?: unknown }).category)).toEqual([null, undefined]);
   });
 });

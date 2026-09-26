@@ -126,6 +126,12 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     label: "Gagal",
     tone: "danger",
   },
+  // T-238 (owner 2026-09-26): only Mengantar sets it; GeraiCUAN has no cancel action yet (D-30).
+  CANCELLED: {
+    guidance: "Mengantar melaporkan pesanan ini dibatalkan. Label tidak dapat dicetak; buat kiriman baru bila paket tetap dikirim.",
+    label: "Dibatalkan",
+    tone: "neutral",
+  },
 };
 
 export const SHIPMENT_STATUS_OPTIONS: readonly {
@@ -165,13 +171,6 @@ export const SHIPMENT_QUEUE_SUMMARY_ENTRIES = [
     value: "ALL",
   },
   {
-    description: "Draf dan estimasi yang belum punya nomor resi.",
-    label: SHIPMENT_STATUS_PRESENTATION.READY_TO_PROGRESS.label,
-    metricId: "QUE-NEEDS-AWB",
-    statuses: ["DRAFT", "ESTIMATED"],
-    value: "READY_TO_PROGRESS",
-  },
-  {
     description: "Resi sudah terbit dan paket belum tercatat bergerak.",
     label: SHIPMENT_STATUS_PRESENTATION.ISSUED.label,
     metricId: "QUE-AWAITING-PICKUP",
@@ -191,6 +190,15 @@ export const SHIPMENT_QUEUE_SUMMARY_ENTRIES = [
     metricId: "QUE-DELIVERED",
     statuses: ["DELIVERED"],
     value: "DELIVERED",
+  },
+  // Owner 2026-09-26: "Siap dilanjutkan" left the tiles (still a status-select filter and a
+  // Dasbor link); "Dibatalkan" took its place. Never part of "Perlu perhatian".
+  {
+    description: "Mengantar melaporkan pesanan dibatalkan; label tidak dapat dicetak.",
+    label: SHIPMENT_STATUS_PRESENTATION.CANCELLED.label,
+    metricId: "QUE-CANCELLED",
+    statuses: ["CANCELLED"],
+    value: "CANCELLED",
   },
   {
     description: SHIPMENT_STATUS_PRESENTATION.NEEDS_ATTENTION.guidance,

@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { OrderConfirmation } from "@/db/order-batch-repository";
+import { OrderCourierDisabledError, type OrderConfirmation } from "@/db/order-batch-repository";
 import { UnpaidRecoveryUnavailableError } from "@/db/unpaid-recovery-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -54,7 +54,7 @@ type OrderFixture = {
 type RecoveryFixture = {
   issued: { response: unknown };
   ambiguous: { response: unknown };
-  wrongBatch: { response: unknown };
+  countMismatch: { response: unknown };
 };
 
 let orderFixture: OrderFixture;
@@ -202,7 +202,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await adminPool.query(
-    "TRUNCATE shipment_rate_limits, rate_limits, provider_unpaid_recoveries, provider_order_snapshots, provider_batches, shipment_cod_totals, shipment_estimate_services, shipment_estimate_snapshots, shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
+    "TRUNCATE tenant_brand_settings, shipment_rate_limits, rate_limits, provider_unpaid_recoveries, provider_order_snapshots, provider_batches, shipment_cod_totals, shipment_estimate_services, shipment_estimate_snapshots, shipment_parties, shipment_drafts, shipments, outlets, memberships, tenants, users CASCADE",
   );
   await adminPool.query(
     `INSERT INTO users (id, name, email) VALUES
@@ -415,6 +415,78 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
     expect(snapshot?.status).toBe("AWAITING_UPSTREAM_PAYMENT");
   });
 
+  it("T-247 (M1): refuses to pay an unpaid order Mengantar has since cancelled", async () => {
+    const { batchId, confirmation } = await createAwaitingBatch(22, adminA, tenantA, outletA);
+    // The pull/webhook transition (AWAITING_UPSTREAM_PAYMENT → CANCELLED) writes only the
+    // shipment; the order snapshot still reads unpaid, which is what the gate used to trust.
+    await adminPool.query("UPDATE shipments SET status = 'CANCELLED' WHERE id = $1", [confirmation.shipmentId]);
+    let payCalls = 0;
+    const transport: MengantarPayUnpaidTransport = {
+      async payUnpaid() {
+        payCalls += 1;
+        return recoveryFixture.issued.response;
+      },
+    };
+
+    await expect(orchestrateFixtureBackedMengantarUnpaidRecovery(
+      recoveryInput(batchId, adminA, tenantA, transport),
+    )).rejects.toBeInstanceOf(UnpaidRecoveryUnavailableError);
+    expect(payCalls).toBe(0);
+    expect(await adminDb.select().from(schema.providerUnpaidRecoveries)).toEqual([]);
+
+    // A recovery already queued before the cancellation is refused the same way.
+    await adminPool.query("UPDATE shipments SET status = 'AWAITING_UPSTREAM_PAYMENT' WHERE id = $1", [confirmation.shipmentId]);
+    await withTenantContext(appDb, adminA, tenantA, async (tx, context) => {
+      const { prepareUnpaidRecoveries } = await import("@/db/unpaid-recovery-repository");
+      await prepareUnpaidRecoveries(tx, context, batchId);
+    });
+    await adminPool.query("UPDATE shipments SET status = 'CANCELLED' WHERE id = $1", [confirmation.shipmentId]);
+    await expect(orchestrateFixtureBackedMengantarUnpaidRecovery(
+      recoveryInput(batchId, adminA, tenantA, transport),
+    )).rejects.toBeInstanceOf(UnpaidRecoveryUnavailableError);
+    expect(payCalls).toBe(0);
+    const [queued] = await adminDb.select({ status: schema.providerUnpaidRecoveries.status }).from(schema.providerUnpaidRecoveries);
+    expect(queued?.status).toBe("PAYMENT_QUEUED");
+  });
+
+  it("T-247 (L1): refuses a switched-off courier's service at issuance, even posted directly", async () => {
+    // Mitra kurir: JNE off. The estimate service id is what the form posts; nothing in the UI
+    // stands between a forged post and the order, so the server must refuse it.
+    await adminPool.query(
+      "INSERT INTO tenant_brand_settings (tenant_id, disabled_couriers, updated_by_user_id) VALUES ($1, ARRAY['JNE'], $2)",
+      [tenantA, adminA],
+    );
+    const confirmation = await seedEstimatedShipment(23, tenantA, outletA);
+    let submitted = 0;
+    const refused = orchestrateFixtureBackedMengantarOrders({
+      db: appDb,
+      lockPool: appPool,
+      principalId: operatorA,
+      tenantId: tenantA,
+      confirmations: [confirmation],
+      resolveTransport: async (scope) => {
+        const binding = orderBinding(scope);
+        return { ...binding, transport: { async submit() { submitted += 1; return orderFixture.unpaid.response; } } };
+      },
+    });
+    await expect(refused).rejects.toBeInstanceOf(OrderCourierDisabledError);
+    await expect(refused).rejects.toMatchObject({ courier: "JNE" });
+    expect(submitted).toBe(0);
+    expect(await adminDb.select().from(schema.providerBatches)).toEqual([]);
+
+    // Switched back on, the same confirmation goes through.
+    await adminPool.query("UPDATE tenant_brand_settings SET disabled_couriers = '{}' WHERE tenant_id = $1", [tenantA]);
+    const accepted = await orchestrateFixtureBackedMengantarOrders({
+      db: appDb,
+      lockPool: appPool,
+      principalId: operatorA,
+      tenantId: tenantA,
+      confirmations: [confirmation],
+      resolveTransport: async (scope) => orderBinding(scope),
+    });
+    expect(accepted.batches).toHaveLength(1);
+  });
+
   it("recovers only the known unpaid order from a partially unknown batch", async () => {
     const confirmations = await Promise.all([
       seedEstimatedShipment(6, tenantA, outletA),
@@ -585,13 +657,13 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
     expect(payCalls).toBe(1);
   });
 
-  it("fails closed when the provider response identifies another batch", async () => {
+  it("fails closed when the documented count and AWB list disagree (nothing echoes the batch, T-237)", async () => {
     const { batchId } = await createAwaitingBatch(5, adminA, tenantA, outletA);
     let payCalls = 0;
     const transport: MengantarPayUnpaidTransport = {
       async payUnpaid() {
         payCalls += 1;
-        return recoveryFixture.wrongBatch.response;
+        return recoveryFixture.countMismatch.response;
       },
     };
 
@@ -616,7 +688,7 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
       .from(schema.providerUnpaidRecoveries);
     expect(recovery).toEqual({
       status: "PAYMENT_UNKNOWN",
-      safeResponseCode: "PAY_UNPAID_BATCH_CORRELATION_UNKNOWN",
+      safeResponseCode: "PAY_UNPAID_RESPONSE_SCHEMA_UNKNOWN",
     });
     expect(payCalls).toBe(1);
   });
@@ -628,12 +700,10 @@ describe("fixture-backed Mengantar unpaid recovery", () => {
     const { batchId } = await createAwaitingBatch(9, adminA, tenantA, outletA);
     const issued = recoveryFixture.issued.response as {
       success: true;
-      data: { batch_id: string; courier: string; cnote_no: string[] };
+      data: number;
+      cnote_no: string[];
     };
-    const response = {
-      success: true,
-      data: { ...issued.data, cnote_no: [unsafeCnote] },
-    };
+    const response = { ...issued, cnote_no: [unsafeCnote] };
     const result = await orchestrateFixtureBackedMengantarUnpaidRecovery(
       recoveryInput(batchId, adminA, tenantA, {
         async payUnpaid() {

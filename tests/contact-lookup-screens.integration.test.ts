@@ -17,6 +17,7 @@ vi.mock("@/app/app/kontak/actions", () => ({ saveContact: vi.fn(), searchContact
 vi.mock("@/app/app/kontak/[contactId]/actions", () => ({
   addContactAddressAction: vi.fn(),
   archiveContactAction: vi.fn(),
+  setPrimaryContactAddressAction: vi.fn(),
   updateContactAction: vi.fn(),
   updateContactAddressAction: vi.fn(),
 }));
@@ -24,11 +25,13 @@ vi.mock("@/app/app/cek-resi/actions", () => ({ lookupShipmentTracking: vi.fn() }
 vi.mock("@/app/app/cek-tarif/actions", () => ({ checkShippingRates: vi.fn() }));
 vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: vi.fn() }));
 
-const { contactDirectoryHref, pageCount, parseContactDirectoryQuery } = await import("@/app/app/kontak/contact-directory-query");
+const { contactDirectoryHref, contactHistoryHref, pageCount, parseContactDirectoryQuery, parseContactHistoryQuery, shareText } = await import("@/app/app/kontak/contact-directory-query");
+const { contactDetailHref, parseContactNumber } = await import("@/lib/contact-role-filter");
+const { contactCategoryLabel, parseContactCategory } = await import("@/lib/contact-category");
 const { ContactDirectoryList, contactAreaLine } = await import("@/app/app/kontak/contact-directory-list");
 const { ContactCreateForm } = await import("@/app/app/kontak/baru/contact-create-form");
-const { ContactArchiveZone, ContactAddressesCard } = await import("@/app/app/kontak/[contactId]/contact-detail-cards");
-const { trackingSummaryLine, trackingTimeline } = await import("@/app/app/cek-resi/tracking-result-model");
+const { ContactArchiveZone, ContactAddressesCard, ContactDataSection } = await import("@/app/app/kontak/[contactId]/contact-detail-cards");
+const { trackingTimeline } = await import("@/app/app/cek-resi/tracking-result-model");
 const { TrackingLookup, TrackingResultCard } = await import("@/app/app/cek-resi/tracking-lookup");
 const { RateCheck, RateResults, rateView } = await import("@/app/app/cek-tarif/rate-check");
 const { DestinationAreaPicker } = await import("@/app/app/_shared/destination-area-picker");
@@ -40,12 +43,16 @@ const contact = {
   address: "JL. RIAU NO. 27",
   addressCount: 2,
   archived: false,
+  category: "PIC_UTAMA",
+  contactNumber: 55,
+  deliveredCount: 5,
   destinationAreaLabel: "Citarum, Bandung Wetan, Kota Bandung, Jawa Barat, 40115",
   id: "71000000-0000-4000-8000-000000000055",
   isRecipient: true,
   isSender: true,
   name: "Butik Kirana",
   phone: "081290000055",
+  shipmentCount: 6,
 };
 
 describe("contact directory query", () => {
@@ -79,11 +86,19 @@ describe("ContactDirectoryList", () => {
     expect(html).toContain('aria-current="page" class=');
     expect(html).toMatch(/Aktif <span[^>]*>\(1\)<\/span>/);
     expect(html).toContain("Diarsipkan <span");
-    for (const header of ["Nama pengirim", "Nomor telepon", "Alamat utama", "Aksi"]) expect(html).toContain(`>${header}</th>`);
+    for (const header of ["Nama pengirim", "WhatsApp", "Alamat utama", "Kiriman", "Status", "Aksi"]) expect(html).toContain(`>${header}</th>`);
     expect(html).toContain("Juga penerima");
+    expect(html).toContain(">PIC Utama</span>");
     expect(html).toContain("+1 alamat");
+    // T-241: CON-SHP-COUNT with CON-SHP-DELIVERED-SHARE, and the status column.
+    expect(html).toContain("6 kiriman");
+    expect(html).toContain("83,3% terkirim");
+    expect(html).toContain("Aktif</span>");
     expect(html).toContain('href="https://wa.me/6281290000055"');
-    expect(html).toContain('href="/app/kontak/71000000-0000-4000-8000-000000000055?dari=pengirim"');
+    // T-241: the detail URL carries the per-tenant number only — no uuid, name or phone.
+    expect(html).toContain('href="/app/kontak/pengirim/55"');
+    expect(html).not.toContain(contact.id);
+    expect(html).not.toMatch(/href="\/app\/kontak\/[^"]*(?:Butik|0812)/);
     expect(html).toContain('data-slot="record-list"');
     expect(html).toContain('role="search"');
     // The directory card itself adds no filled primary (the header's "<Peran> baru" is the one).
@@ -129,7 +144,7 @@ describe("Kontak baru and detail", () => {
     const props = {
       archived: false,
       canManageSettings: true,
-      contact: { id: contact.id, isRecipient: true, isSender: false, name: "Andi", phone: "0812" },
+      contact: { category: null, id: contact.id, isRecipient: true, isSender: false, name: "Andi", phone: "0812" },
       outlets: [],
       outletsUnavailable: false,
     };
@@ -137,6 +152,11 @@ describe("Kontak baru and detail", () => {
     const one = render(createElement(ContactAddressesCard, { ...props, addresses: [address] }));
     expect(one).toContain(">Utama</span>");
     expect(one).toContain('aria-label="Edit alamat Rumah"');
+    // T-241: "Jadikan utama" only on an address that is not already primary.
+    expect(one).not.toContain("Jadikan utama");
+    const two = render(createElement(ContactAddressesCard, { ...props, addresses: [address, { ...address, id: "y", isPrimary: false, label: "Kantor" }] }));
+    expect(two).toContain('aria-label="Jadikan Kantor alamat utama"');
+    expect(two).not.toContain('aria-label="Jadikan Rumah alamat utama"');
     expect(one).toContain("Tambah alamat");
     const full = render(createElement(ContactAddressesCard, { ...props, addresses: Array.from({ length: 20 }, (_, index) => ({ ...address, id: `a${index}`, label: `L${index}` })) }));
     expect(full).toContain("Batas 20 alamat aktif tercapai");
@@ -145,10 +165,68 @@ describe("Kontak baru and detail", () => {
   });
 
   it("names the contact on the archive action", () => {
-    const html = render(createElement(ContactArchiveZone, { contact: { id: contact.id, isRecipient: true, isSender: false, name: "Andi", phone: "0812" }, role: "penerima" }));
+    const html = render(createElement(ContactArchiveZone, { contact: { category: null, id: contact.id, isRecipient: true, isSender: false, name: "Andi", phone: "0812" }, role: "penerima" }));
     expect(html).toContain("Zona hati-hati");
     expect(html).toContain("Arsipkan kontak");
     expect(filledPrimaries(html)).toBe(0);
+  });
+
+  // T-246 (owner: "bg white … kecuali card atas biar gak rancu"): below the KPI cards the detail
+  // page is flat sections on white — no card chrome, no pink block, one save for name, phone,
+  // kategori and roles (updateContactAction always took them together).
+  it("renders the detail regions as flat sections with one Data kontak save", () => {
+    const detailContact = { category: null, id: contact.id, isRecipient: true, isSender: true, name: "Andi", phone: "0812" };
+    const zone = render(createElement(ContactArchiveZone, { contact: detailContact, role: "penerima" }));
+    expect(zone).toContain('data-slot="contact-section"');
+    expect(zone).not.toContain('data-slot="card"');
+    expect(zone).not.toContain("bg-tile-danger");
+    expect(zone).toContain('data-variant="outline"');
+    const data = render(createElement(ContactDataSection, { contact: detailContact }));
+    expect(data).toContain('data-slot="contact-section"');
+    expect(data).not.toContain('data-slot="card"');
+    expect(data.match(/type="submit"/g)).toHaveLength(1);
+    expect(data).toContain("Simpan data kontak");
+    for (const name of ["contactName", "contactPhone", "category", "roleSender", "roleRecipient"]) expect(data).toContain(`name="${name}"`);
+    const addresses = render(createElement(ContactAddressesCard, {
+      addresses: [{ address: "Jl. A", destinationAreaId: "a", destinationAreaLabel: "Dago", id: "x", isPrimary: true, label: "Rumah" }],
+      archived: false, canManageSettings: true, contact: detailContact, outlets: [], outletsUnavailable: false,
+    }));
+    expect(addresses).not.toContain('data-slot="card"');
+    expect(addresses).toMatch(/<li class="[^"]*\bborder\b[^"]*\bbg-card\b/);
+  });
+});
+
+describe("T-241 contact URLs, history query and kategori", () => {
+  it("addresses a contact by its per-tenant number and rejects anything else", () => {
+    expect(contactDetailHref(12, "penerima")).toBe("/app/kontak/penerima/12");
+    expect(parseContactNumber("12")).toBe(12);
+    for (const bad of ["0", "012", "-1", "1.5", "abc", "12a", "1234567890", contact.id]) expect(parseContactNumber(bad)).toBeNull();
+  });
+
+  it("keeps the history tab and page in the URL, the defaults out of it", () => {
+    expect(parseContactHistoryQuery({})).toEqual({ page: 1, payment: "all" });
+    expect(parseContactHistoryQuery({ halaman: "2", riwayat: "non-cod" })).toEqual({ page: 2, payment: "noncod" });
+    expect(parseContactHistoryQuery({ halaman: "x", riwayat: "semua" })).toEqual({ page: 1, payment: "all" });
+    expect(contactHistoryHref("pengirim", 7, "all")).toBe("/app/kontak/pengirim/7");
+    expect(contactHistoryHref("pengirim", 7, "cod", 3)).toBe("/app/kontak/pengirim/7?riwayat=cod&halaman=3");
+    expect(shareText(1, 3)).toBe("33,3%");
+    expect(shareText(0, 0)).toBeNull();
+  });
+
+  it("parses kategori: empty is none, an unknown code is invalid", () => {
+    expect(parseContactCategory("")).toBeNull();
+    expect(parseContactCategory(null)).toBeNull();
+    expect(parseContactCategory("DROPSHIPPER")).toBe("DROPSHIPPER");
+    expect(parseContactCategory("Skor Mengantar")).toBeUndefined();
+    expect(contactCategoryLabel("PIC_UTAMA")).toBe("PIC Utama");
+    expect(contactCategoryLabel(null)).toBeNull();
+  });
+
+  it("offers the optional kategori on the create form, posted as `category`", () => {
+    const html = render(createElement(ContactCreateForm, { canManageSettings: true, outlets: [], role: "pengirim" }));
+    expect(html).toContain("Peran / kategori");
+    expect(html).toContain('type="hidden" name="category" value=""');
+    expect(html).toContain("Tanpa kategori");
   });
 });
 
@@ -158,22 +236,22 @@ describe("Cek resi", () => {
     courier: "lion",
     declaredValueIdr: 250_000,
     destinationAreaLabel: "PANAKKUKANG, MAKASSAR",
+    historyEvents: [] as { description: string; occurredAtIso: string }[],
     observation: { observedAtIso: "2026-09-25T03:13:00Z", providerStatus: "ON PROCESS" },
     paymentMethod: "COD" as const,
     providerCodAmountIdr: 119_479,
     providerService: "lion REGPACK",
     publicReference: "GC-10058",
+    returnAwb: null as string | null,
     status: "IN_TRANSIT" as const,
     updatedAtIso: "2026-09-25T02:45:00Z",
   };
 
-  it("builds a newest-first timeline with its source, and the service · payment line", () => {
+  it("builds a newest-first timeline with its source", () => {
     const timeline = trackingTimeline(result);
     expect(timeline.map((entry) => entry.source)).toEqual(["Mengantar", "GeraiCUAN"]);
     expect(timeline[1].title).toBe("Dalam perjalanan");
     expect(trackingTimeline({ ...result, observation: null })).toHaveLength(1);
-    expect(trackingSummaryLine(result)).toMatch(/· COD Rp\s?119\.479$/);
-    expect(trackingSummaryLine({ ...result, paymentMethod: "NON_COD", providerService: null })).toMatch(/^Belum ada layanan · Non-COD Rp\s?250\.000$/);
   });
 
   it("renders the result card with the resi in mono, the status badge and WIB times", () => {
@@ -245,6 +323,17 @@ describe("DestinationAreaPicker", () => {
     for (const name of ["areaId", "areaLabel", "areaQuery", "areaOutletId"]) expect(html).toContain(`type="hidden" name="${name}" value=""`);
     expect(html).toContain('type="hidden" name="areaSelectionChanged" value="0"');
     expect(html).toContain('role="combobox"');
+  });
+
+  it("T-247 (L11): asks for the outlet first when there are several and none is chosen", () => {
+    const outlets = [{ id: "o1", name: "Outlet Utama" }, { id: "o2", name: "Outlet Kedua" }];
+    const html = render(createElement(DestinationAreaPicker, { outlets }));
+    expect(html).toContain("Pilih outlet dulu");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*role="combobox"|<button[^>]*role="combobox"[^>]*disabled=""/);
+    // Cek tarif passes its own (empty) outlet choice the same way.
+    expect(render(createElement(DestinationAreaPicker, { fixedOutletId: "", outlets }))).toContain("Pilih outlet dulu");
+    // One outlet is chosen for the user; the normal search prompt shows.
+    expect(render(createElement(DestinationAreaPicker, { outlets: outlets.slice(0, 1) }))).not.toContain("Pilih outlet dulu");
   });
 
   it("shows a stored area and posts the outlet when asked to", () => {

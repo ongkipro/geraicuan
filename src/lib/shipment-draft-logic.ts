@@ -3,8 +3,6 @@
 import {
   BASIS_POINTS,
   codOngkirBreakEvenIdr,
-  codOngkirSellerDifferenceIdr,
-  MAX_COD_AMOUNT_IDR,
   MENGANTAR_COD_FEE_BASIS_POINTS,
   mengantarCodFeeIdr,
   shippingMengantarDeductsIdr,
@@ -233,41 +231,24 @@ export function parseRupiahInput(value: string) {
   return Number.isSafeInteger(amount) ? amount : null;
 }
 
-export type CodOngkirChargeState =
-  | { kind: "valid"; chargeIdr: number; sellerDifferenceIdr: number; mengantarCodFeeIdr: number }
-  | { kind: "invalid"; message: string };
-
 /**
- * The one rule the COD Ongkir field applies as the operator types, and the
- * message it shows. `calculateCodOngkirAmounts` and the database apply the
- * same break-even; this only decides what the screen says.
+ * D-28 (T-237): the COD Ongkir amount, computed — never typed. The courier collects
+ * ongkir + biaya COD (goods value 0; the goods were paid at the gerai): the version 3
+ * break-even `ceil(ongkir × 10000 / 9667)` over the shipping Mengantar deducts, so
+ * `ongkir + round_half_up(3.33% × amount) + rounding = amount` with rounding ≥ 0.
+ * The server records the same figure (`computedCodOngkirChargeIdr`). Null when the
+ * service has no usable shipping amount.
  */
-export function evaluateCodOngkirCharge(
-  input: string,
-  shippingDeductedIdr: number,
-): CodOngkirChargeState {
-  const breakEvenIdr = codOngkirBreakEvenIdr(shippingDeductedIdr);
-  if (breakEvenIdr === null) {
-    return { kind: "invalid", message: "Ongkir layanan ini tidak dapat dipakai untuk COD Ongkir." };
-  }
-  const charge = parseRupiahInput(input);
-  if (charge === null || charge > MAX_COD_AMOUNT_IDR) {
-    return {
-      kind: "invalid",
-      message: `Isi ongkir dalam rupiah bulat tanpa desimal, minimal ${formatDraftIdr(breakEvenIdr)}.`,
-    };
-  }
-  if (charge < breakEvenIdr) {
-    return {
-      kind: "invalid",
-      message: `Ongkir tidak boleh di bawah titik impas ${formatDraftIdr(breakEvenIdr)}. ${formatDraftIdr(charge)} kurang ${formatDraftIdr(breakEvenIdr - charge)} dan membuat penjual rugi.`,
-    };
-  }
+export function codOngkirAmount(shippingDeductedIdr: number | null | undefined) {
+  if (shippingDeductedIdr === null || shippingDeductedIdr === undefined) return null;
+  const chargeIdr = codOngkirBreakEvenIdr(shippingDeductedIdr);
+  if (chargeIdr === null) return null;
+  const codFeeIdr = mengantarCodFeeIdr(chargeIdr);
   return {
-    chargeIdr: charge,
-    kind: "valid",
-    mengantarCodFeeIdr: mengantarCodFeeIdr(charge),
-    sellerDifferenceIdr: codOngkirSellerDifferenceIdr(charge, shippingDeductedIdr),
+    chargeIdr,
+    codFeeIdr,
+    roundingIdr: chargeIdr - shippingDeductedIdr - codFeeIdr,
+    shippingIdr: shippingDeductedIdr,
   };
 }
 
@@ -304,12 +285,15 @@ export function isPickupVehicle(value: unknown): value is PickupVehicle {
 }
 
 /**
- * One-hour pickup windows 08.00–17.00 WIB (owner, T-234), stored by their start ("08:00").
- * GeraiCUAN's own schedule: Mengantar's documented POST /time window is 09:00–18:00
- * (unverified, spec 05 DATA-13) and nothing here is sent to Mengantar until T-153.
- * The DB CHECK also accepts the legacy "17:00" start held by drafts saved before T-234.
+ * One-hour pickup windows 09.00–18.00 WIB (D-27, following Mengantar `POST /time`), stored by
+ * their start ("09:00"): starts 09:00–17:00. The docs list the accepted `time` values as
+ * "9:00, 10:00, …, 17:00, 18:00" (api-public.mengantar.com/docs, read 2026-09-26); an
+ * 18:00 start would be an 18.00–19.00 window outside 09.00–18.00, so it is not offered (and
+ * the 0061 CHECK would refuse it). A draft saved with the D-25 "08:00" start stays valid and
+ * is shown as saved (the CHECK still accepts 08); a new selection cannot pick it, and the
+ * slot is re-picked when the pickup is sent (T-153).
  */
-export const PICKUP_SLOTS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"] as const;
+export const PICKUP_SLOTS = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"] as const;
 export type PickupSlot = (typeof PICKUP_SLOTS)[number];
 /** A same-day slot must start at least this far ahead. */
 export const PICKUP_LEAD_MINUTES = 90;
@@ -439,7 +423,7 @@ export function issuanceGate(input: {
       : !input.selected
         ? "Pilih layanan terlebih dahulu."
         : input.codOngkirBlocked
-          ? "Periksa ongkir COD yang ditagih kurir."
+          ? "Nilai COD Ongkir layanan ini tidak dapat dihitung. Muat ulang tarif."
           : !input.consented
             ? input.physicalCheck
               ? "Centang “Paket sudah dicek fisik” terlebih dahulu."
@@ -471,11 +455,10 @@ export type IssuanceCharges = {
 /**
  * T-211: the "Rincian komponen biaya" lines and the big total of the Buat kiriman rail for one
  * chosen service. COD adds up exactly (goods + ongkir + Mengantar's 3,33% + rounding = total,
- * T-193); COD Ongkir's total is the charge the courier collects; Non-COD's is the ongkir.
+ * T-193); COD Ongkir's total is ongkir + biaya COD, computed (D-28); Non-COD's is the ongkir.
  * Null when no service is chosen or a COD service carries no honest breakdown.
  */
 export function issuanceCharges(input: {
-  codOngkirChargeIdr: number | null;
   declaredValueIdr: number;
   option: IssuanceChargeOption | null;
   paymentMethod: "COD" | "COD_ONGKIR" | "NON_COD";
@@ -497,13 +480,16 @@ export function issuanceCharges(input: {
     };
   }
   if (input.paymentMethod === "COD_ONGKIR") {
+    const amount = codOngkirAmount(option.shippingDeductedIdr);
     return {
-      note: "Barang sudah dibayar; kurir hanya menagih ongkir.",
+      note: "Barang sudah dibayar; kurir menagih ongkir + biaya COD (dihitung otomatis).",
       rows: [
         { amountIdr: input.declaredValueIdr, label: "Nilai barang (sudah dibayar)" },
-        { amountIdr: option.shippingDeductedIdr ?? null, label: "Ongkir dipotong Mengantar" },
+        { amountIdr: amount?.shippingIdr ?? null, label: "Ongkir dipotong Mengantar" },
+        { amountIdr: amount?.codFeeIdr ?? null, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` },
+        ...(amount && amount.roundingIdr > 0 ? [{ amountIdr: amount.roundingIdr, label: "Pembulatan" }] : []),
       ],
-      total: { amountIdr: input.codOngkirChargeIdr, label: "Ongkir ditagih kurir" },
+      total: { amountIdr: amount?.chargeIdr ?? null, label: "Nilai COD Ongkir" },
     };
   }
   return {

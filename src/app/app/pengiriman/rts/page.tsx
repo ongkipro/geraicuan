@@ -93,13 +93,12 @@ export default async function RtsPage({ searchParams }: { searchParams: Promise<
 
       <PeriodFilter clearHref={rtsHref(query.status)} hidden={{ status: query.status === "ALL" ? undefined : query.status }} range={range} />
 
-      {/* Five tiles fill one row, as in the reference (StatusTiles lays out six). */}
-      <div className="lg:[&>nav>ul]:grid-cols-5">
-        <StatusTiles
-          label="Ringkasan status retur"
-          tiles={tiles.map((tile) => ({ ...tile, href: rtsHref(tile.key, 1, carry), selected: tile.key === query.status }))}
-        />
-      </div>
+      <StatusTiles
+        label="Ringkasan status retur"
+        // Spec 19 RTS-SHARE: every tile is a subset of RTS-ALL.
+        total={data.summary.totalRtsCount}
+        tiles={tiles.map((tile) => ({ ...tile, href: rtsHref(tile.key, 1, carry), selected: tile.key === query.status }))}
+      />
 
       <Card aria-label="Daftar retur" className="gap-0 py-0" role="region">
         <div className="flex flex-wrap items-center gap-3 border-b p-4">
@@ -148,6 +147,9 @@ export default async function RtsPage({ searchParams }: { searchParams: Promise<
                           {row.awb ?? row.publicReference}
                         </Link>
                         {row.awb ? <span className="block font-mono text-xs text-muted-foreground">{row.publicReference}</span> : null}
+                        {row.returnAwb ? (
+                          <span className="block text-xs text-muted-foreground">Resi retur <span className="font-mono font-semibold break-all text-foreground">{row.returnAwb}</span></span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="max-w-52 align-top whitespace-normal">
                         <RecipientCell areaLabel={row.destinationAreaLabel} name={row.recipientName} />
@@ -181,7 +183,10 @@ export default async function RtsPage({ searchParams }: { searchParams: Promise<
                     detail={row.latestEventNotes ? <p className="text-xs text-muted-foreground">{row.latestEventNotes}</p> : undefined}
                     href={shipmentDetailHref(row.publicReference, carry)}
                     key={row.shipmentId}
-                    meta={<>{carrierText(row.providerService) ?? "—"} · <span className="font-mono">{row.publicReference}</span></>}
+                    meta={<>
+                      {carrierText(row.providerService) ?? "—"} · <span className="font-mono">{row.publicReference}</span>
+                      {row.returnAwb ? <> · Resi retur <span className="font-mono break-all">{row.returnAwb}</span></> : null}
+                    </>}
                     status={<ShipmentStatusBadge status={row.status as ShipmentStatus} />}
                     subtitle={<span className="font-semibold">{row.recipientName} · {areaText(row.destinationAreaLabel)}</span>}
                     time={<DateTimeText value={row.latestEventAt ?? row.updatedAt} />}

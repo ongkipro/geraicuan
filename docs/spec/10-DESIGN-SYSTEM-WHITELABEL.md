@@ -112,7 +112,7 @@ Browser sweep (T-228, 19 routes × 1440/1024/390): smallest visible text 13px, l
 |---|---|
 | Spacing scale | 4 · 8 · 12 · 16 · 24 · 32 · 48 px only |
 | Page padding | 32px desktop, 16px below 768px |
-| Content width | max 1120px, left-aligned in the main area |
+| Content width | max 1120px at every breakpoint, centred in the main area (owner 2026-09-26; the 1400px 2xl step was dropped as too wide) |
 | Section gap | 24px between regions; 16px between fields |
 | Card | **no border, radius 16px (`rounded-2xl`), `shadow-card`**, padding 24px (16px below 768px) |
 | Inner tile | `--tile` or a pastel tint, no border, radius 10px (`rounded-xl`), padding 16px |
@@ -152,7 +152,7 @@ Inside one card: toolbar row (search, status tabs or facet, secondary actions) �
 Line 1 identity link (16/600) + status badge right · line 2 who/where (15px) · line 3 courier · resi (13px muted, resi mono) · line 4 value left (15/600) + time right (13px muted). After 10 rows: "Tampilkan N lainnya".
 
 ### 4.6 Status tiles (queue filters)
-One white card holding up to 6 borderless pastel tiles in one row (2 columns on phone; radius 10): label 15/500 · count 26/700 · one short line 13px muted. Tint by meaning (`--tile` neutral, `--tile-info`, `--tile-ok`, `--tile-warn`, `--tile-danger`), from the tile's `tone` or its shipment-status key via the §4.12 mapping. Selected: 2px `--primary` ring + check.
+One white card holding up to 6 borderless pastel tiles in one row (2 columns on phone; radius 10): label 15/500 · count 26/700 · one short line 13px muted. Tint by meaning (`--tile` neutral, `--tile-info`, `--tile-ok`, `--tile-warn`, `--tile-danger`), from the tile's `tone` or its shipment-status key via the §4.12 mapping; the icon chip is the §4.12 status icon (Dibatalkan `Ban`, Terkirim `PackageCheck`). Selected: 2px `--primary` ring + check. **Columns follow the tile count inside `StatusTiles` (T-246), never a page override:** 6 tiles → 2 / 3 from `md` / 6 from `xl`; 5 → 2 / 3 / 5 from `xl`; 4 → 2 / 4 from `md`. A label is never truncated: it wraps, and the tiles of one row share their row tracks (CSS subgrid) so every count stays on one line (at 1024 px six columns had left 68 px and cut "Dalam perjalanan" to "Dalam …").
 
 ### 4.7 KPI card
 White borderless card: label 15px muted + icon 20px primary in a 40px `--accent` circle chip at the right → value 30/700 navy → delta pill (neutral; arrow + "Naik/Turun n (x%)") + "vs periode sebelumnya" 13px.
@@ -161,10 +161,10 @@ White borderless card: label 15px muted + icon 20px primary in a 40px `--accent`
 Focused layout (§3, D11). Two columns from 1024px: form + sticky summary rail (360px) inside the centred 1120px column. Stepper in the top bar (3 steps). Numbered section cards (white, borderless, radius 16, `shadow-card`) (number chip 24px, title 16/600, status badge right). Option cards (payment, handover, size): 1px `--input`; selected `--accent` + `--primary` border + radio. Mobile: rail hidden, sticky bottom bar (total + primary).
 
 ### 4.9 Detail
-Two columns from 1024px: main + right rail (status, next action, timeline). Below 1024px the rail comes first. Back link above the H1.
+Two columns from 1024px: main + right rail (status, next action, timeline). Below 1024px the rail comes first. Back link above the H1: 13px/600 `--primary` with a 16px arrow, 24px tall from `md` and 44px on touch (T-246: one anatomy on shipment, label, invoice and contact pages). Resi and shipment number in the identity strip 18px mono bold (§2.4). Paired outline actions in the rail wrap instead of shrinking below their label.
 
 ### 4.10 Settings
-Left sub-menu (Profil gerai, Titik pickup, Outlet, Koneksi Mengantar, Anggota & akses) + content column (max 760px) of cards.
+Left sub-menu (Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir, Koneksi Mengantar, Anggota & akses) + content column (max 760px) of cards. Mitra kurir rows reuse the colour courier logos (`public/couriers/*.svg`) with one `Switch` each (T-243), as borderless inner tiles with the switch centred on the row; a courier switched off shows its logo grayscale at 50 % beside "Tidak ditawarkan" (T-246). Pickup notes and contact addresses are inner tiles too — no bordered or dashed box inside a card.
 
 ### 4.11 Component appearance rules
 - Primary buttons are solid and reserved for the next safe action; secondary actions outline/ghost; dangerous actions use destructive wording that names the shipment/object and consequence, behind an AlertDialog.
@@ -172,6 +172,9 @@ Left sub-menu (Profil gerai, Titik pickup, Outlet, Koneksi Mengantar, Anggota & 
 - Inputs keep a visible label above the field and reserve inline error space; an error summary at the top links to invalid fields.
 - Mengantar-authoritative facts (resi, provider status, settled amounts) are labelled as such and never mixed with GeraiCUAN estimates without a label ("Estimasi", "Tarif resmi").
 - Screen styling never rescales the printed thermal label.
+
+### 4.11a Contact detail surface (T-246, owner 2026-09-26: "bg white untuk halaman kecuali card atas biar gak rancu")
+The one page-level exception to §1.4: on `/app/kontak/<peran>/<n>` the content area is white (`bg-card`, set by the page's own wrapper through `main:has()`, not by the shell). Only the four KPI cards keep card chrome, with a 1px `--border` added so they still read as cards on white. Every region below is a flat section: title 18/700 + count badge, optional one-line description, action right, and a hairline `--border` above it (24px either side). Addresses are white items with a 1px border (the primary one `--primary` at 40 %), two columns from `md`. Name, phone, kategori and roles are one "Data kontak" form with one save. Zona hati-hati is a quiet section with a destructive-outline "Arsipkan kontak" behind the AlertDialog (Tenant Admin only).
 
 ### 4.12 Shipment status presentation (one mapping, `src/lib/shipment-queue.ts` → `StatusBadge`)
 | Status | Label | Tone | Icon (lucide) |
@@ -189,6 +192,7 @@ Left sub-menu (Profil gerai, Titik pickup, Outlet, Koneksi Mengantar, Anggota & 
 | RTS_IN_TRANSIT | Retur dalam perjalanan | info | `Truck` |
 | RTS_RECEIVED | Retur diterima | success | `PackageCheck` |
 | FAILED | Gagal | danger | `CircleX` |
+| CANCELLED | Dibatalkan | neutral | `Ban` |
 Labels come from `SHIPMENT_STATUS_PRESENTATION`; the tone/icon table is implemented once in `StatusBadge`. No page maps statuses itself.
 
 ### 4.13 Queue columns (Histori kiriman, desktop)
@@ -210,7 +214,7 @@ Below 768px: record cards (§4.5).
 | Card, Badge, Alert, Separator, Skeleton, Tooltip, Popover, Dialog, AlertDialog, Sheet, DropdownMenu, Command, Calendar, Chart, Table, Sidebar | shadcn primitives | tokens only |
 | `AppShell`, `AppSidebar`, `SiteHeader` | composed from `sidebar-07`/`sidebar-16` | §3 |
 | `PageHeader`, `FilterBar`, `DataCard`, `RecordList`, `StatusTiles`, `StatusBadge`, `KpiCard`, `HelpHint`, `CourierLogo`, `EmptyState`, `Money` | new in `src/components/app/` | §4; one implementation each |
-| `DateRangePicker` | shadcn Calendar + Popover | presets Hari ini, 7 hari, 30 hari, Bulan ini |
+| `DateRangePicker` | shadcn Calendar + Popover | presets Hari ini, Kemarin, 7 hari terakhir, 30 hari terakhir, Bulan ini (T-240); trigger names the preset, the filter-row summary line states the dates |
 
 ### 5.1 Component state contract
 | Component | Required states | Interaction / accessibility |
@@ -240,6 +244,8 @@ Landmarks and one H1 per page; every control labelled; focus visible (2px `--pri
 
 ## 10. Thermal label (unchanged, T-176)
 `label-sheet.tsx` and its print CSS keep their geometry: 10×15 cm (10×10 package + 10×5 sender stub) or 10×10 cm, pure black on white, Code 128 barcode, text ≥ 7pt. Screen chrome around the preview follows this document; the sheet itself is exempt from §2.
+- **Brand on the sheet (T-243).** The head row carries the courier's black print logo (`public/couriers/print/<courier>.svg`, 6.5 mm high, service name beside it; bold text when a courier has no print file) and, right of the GeraiCUAN mark, the gerai logo in a fixed box (≤ 20 × 7 mm, `grayscale(1) contrast(1.15)`). The catatan resi takes the sender row's second 7 pt line. All three are inline styles; `label.css` and every row height are unchanged at 10 × 15 and 10 × 10, and nothing replaces a courier-required field.
+- **Preview frame (T-243).** `LabelPreviewFrame` shows the sheet as paper on a neutral desk (edge + shadow), a caption with the exact size ("10 × 15 cm · skala 1:1 saat dicetak · tampil N%"), and a `ToggleGroup` zoom (Pas layar / 100% / 150%; the desk scrolls, the page never does). Informasi label adds a "Data contoh" badge, sticks beside the switches from `lg`, and stacks below them on phones behind a "Lihat pratinjau" jump link. Controls outside the sheet keep the 13 px floor and keyboard access.
 
 ## 11. Screening standard (per screen, before it is done)
 Side-by-side browser comparison with its reference HTML at 1440 and 390, section by section; measured: overflow ≤ 0, every text size on §2.2, controls ≥ 40/44px, one filled primary per page, no raw hex/arbitrary px in page code, no meta sentences from §1.5. Plus (GeraiOS §6): the screen's primary action completed with the keyboard only; pending, error and denied states shown; reflow at 200% zoom without hidden primary actions; no sensitive data in the URL, client errors or console. Screenshots stored with the task evidence.
@@ -274,7 +280,7 @@ Functional facts from the study used elsewhere: Mengantar's own order form has a
 
 ## 14. Invoice sheet (PR-80)
 
-80 mm roll: printable width 72 mm, body 11 pt sans, resi 14 pt mono bold, total 13 pt bold `tabular-nums`, rules 0.5 pt, black only. A4: 16 px body, two columns, same blocks. Anatomy: spec 17 UX-v3.9. Print CSS lives beside the label print CSS (`label.css` pattern), one `@page` per medium.
+80 mm roll: printable width 72 mm, body 11 pt sans, resi 14 pt mono bold, total 13 pt bold `tabular-nums`, rules 0.5 pt, black only. A4: 16 px body, two columns, same blocks. Anatomy: spec 17 UX-v3.9. Print CSS lives beside the label print CSS (`label.css` pattern), one `@page` per medium. When the gerai has a logo it prints grayscale at the top of the gerai block (`.invoice-logo`, T-243).
 
 ## 15. Sign-in and sign-up (PR-83)
 

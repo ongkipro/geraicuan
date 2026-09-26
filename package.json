@@ -11,6 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "ops:bootstrap-super-admin": "node scripts/bootstrap-super-admin.mjs",
     "db:seed-local": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed-local-dev-users.mjs",
+    "wilayah:import": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/wilayah-import.mjs",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:migration-upgrade": "node scripts/verify-migration-upgrade.mjs"
   },

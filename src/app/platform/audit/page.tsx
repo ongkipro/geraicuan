@@ -43,7 +43,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
     <>
       <PageHeader eyebrow="Platform" title="Audit" />
       <FilterBar clearHref={changed ? "/platform/audit" : undefined} label="Filter audit" summary={`${range.periodLabel} · ${range.timezoneLabel}`}>
-        <DateRangePicker endDate={filters.range.lastIncludedDate} label={range.presetLabel} presetId={filters.range.presetId} startDate={filters.range.startDate} />
+        <DateRangePicker endDate={filters.range.lastIncludedDate} presetId={filters.range.presetId} startDate={filters.range.startDate} />
         <FilterSelect
           allLabel="Semua gerai"
           label="Gerai"

@@ -20,11 +20,17 @@ const AUDIT_STATES: Partial<Record<string, TrackingLookupState>> = {
       courier: "JNE",
       declaredValueIdr: 250_000,
       destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN",
+      // T-238 courier lines (sanitized), so the audit shows the full newest-first timeline.
+      historyEvents: [
+        { description: "Paket tiba di gudang transit JAKARTA", occurredAtIso: "2026-09-14T16:40:00Z" },
+        { description: "Paket dijemput kurir dari gerai", occurredAtIso: "2026-09-14T09:10:00Z" },
+      ],
       observation: { observedAtIso: "2026-09-14T17:00:00Z", providerStatus: "ON PROCESS" },
       paymentMethod: "COD",
       providerCodAmountIdr: 270_000,
       providerService: "JNE REG",
       publicReference: "GC-10013",
+      returnAwb: null,
       status: "IN_TRANSIT",
       updatedAtIso: "2026-09-14T17:05:00Z",
     },
@@ -38,11 +44,13 @@ const AUDIT_STATES: Partial<Record<string, TrackingLookupState>> = {
       courier: "SAP",
       declaredValueIdr: 250_000,
       destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN",
+      historyEvents: [],
       observation: { observedAtIso: "2026-09-14T17:00:00Z", providerStatus: "ON PROCESS" },
       paymentMethod: "COD_ONGKIR",
       providerCodAmountIdr: 20_000,
       providerService: "SAP REG",
       publicReference: "GC-10014",
+      returnAwb: null,
       status: "IN_TRANSIT",
       updatedAtIso: "2026-09-14T17:05:00Z",
     },
@@ -50,6 +58,14 @@ const AUDIT_STATES: Partial<Record<string, TrackingLookupState>> = {
   "resi-lookup-limited": { kind: "limited", query: "GC-10013" },
   "resi-lookup-missing": { kind: "missing", query: "GC-99999" },
 };
+
+/** The rail (ref "Tips Pencarian"), without the reference's unverified update-latency claim. */
+const TIPS = [
+  <><strong className="font-semibold text-foreground">Nomor kiriman GeraiCUAN</strong> (awalan <span className="font-mono">GC-</span>) paling cepat ditemukan.</>,
+  <><strong className="font-semibold text-foreground">Nomor resi kurir</strong> (AWB) juga bisa, misalnya <span className="font-mono break-all">11LP1700187536</span>.</>,
+  <>Perjalanan paket memuat riwayat kurir dan status terakhir dari <strong className="font-semibold text-foreground">Mengantar</strong>; sumber tiap baris tertulis di sampingnya.</>,
+  <>Hanya kiriman milik gerai ini yang dapat dilacak.</>,
+];
 
 /** Spec 17 `/app/cek-resi` (ref cek-resi.html): lookup + result in the main column, tips in the rail. */
 export default async function TrackingLookupPage() {
@@ -62,7 +78,7 @@ export default async function TrackingLookupPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Cek"
+        description="Lacak kiriman gerai dengan nomor kiriman atau nomor resi kurir."
         title="Cek resi"
       />
       <div className="grid items-start gap-6 lg:grid-cols-3">
@@ -71,10 +87,13 @@ export default async function TrackingLookupPage() {
         </div>
         <aside aria-label="Tips pencarian">
           <DataCard title="Tips pencarian">
-            <ul className="grid list-disc gap-2 pl-5 text-sm text-muted-foreground">
-              <li>Nomor kiriman GeraiCUAN (awalan <span className="font-mono">GC-</span>) paling cepat ditemukan.</li>
-              <li>Nomor resi kurir juga bisa dipakai, misalnya <span className="font-mono">11LP1700187536</span>.</li>
-              <li>Hanya kiriman milik gerai ini yang dapat dilacak.</li>
+            <ul className="grid gap-3 text-sm text-muted-foreground">
+              {TIPS.map((tip, index) => (
+                <li className="grid grid-cols-[0.5rem_minmax(0,1fr)] gap-x-2" key={index}>
+                  <span aria-hidden="true" className="mt-2 size-1.5 rounded-full bg-primary" />
+                  <span>{tip}</span>
+                </li>
+              ))}
             </ul>
           </DataCard>
         </aside>

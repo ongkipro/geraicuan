@@ -1,6 +1,6 @@
 "use client";
 
-import { Link2, MapPin, Store, Tag, User, UsersRound } from "lucide-react";
+import { Link2, MapPin, Store, Tag, Truck, User, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -12,6 +12,7 @@ export const SETTINGS_NAV_ITEMS = [
   { href: "/app/pengaturan/label", icon: Tag, label: "Informasi label" },
   { href: "/app/pengaturan/pickup", icon: MapPin, label: "Titik pickup" },
   { href: "/app/pengaturan/outlet", icon: Store, label: "Outlet" },
+  { href: "/app/pengaturan/kurir", icon: Truck, label: "Mitra kurir" },
   { href: "/app/pengaturan/koneksi", icon: Link2, label: "Koneksi Mengantar" },
   { href: "/app/anggota", icon: UsersRound, label: "Anggota & akses" },
 ] as const;

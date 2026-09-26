@@ -50,19 +50,19 @@ describe("PR-72 product weight in kg becomes grams exactly", () => {
   });
 });
 
-describe("PR-70 pickup schedule: 08.00–17.00 WIB (T-234), ≥ 90 minutes ahead today", () => {
+describe("PR-70 pickup schedule: 09.00–18.00 WIB (D-27, T-237), ≥ 90 minutes ahead today", () => {
   it("keeps same-day slots starting at least 90 minutes from now (WIB)", () => {
     expect(jakartaDateKey(TEN_AM_WIB)).toBe("2026-09-26");
     // 10.00 now → 11.00 is only 60 minutes ahead; 12.00 is the first bookable slot.
     expect(availablePickupSlots("2026-09-26", TEN_AM_WIB)[0]).toBe("12:00");
     expect(availablePickupSlots("2026-09-27", TEN_AM_WIB)).toEqual(
-      ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"],
+      ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"],
     );
     expect(availablePickupSlots("2026-09-25", TEN_AM_WIB)).toEqual([]);
-    expect(pickupSlotLabel("08:00")).toBe("08.00–09.00 WIB");
-    expect(pickupSlotLabel("16:00")).toBe("16.00–17.00 WIB");
-    // A legacy pre-T-234 draft's 17:00 start still reads correctly.
+    expect(pickupSlotLabel("09:00")).toBe("09.00–10.00 WIB");
     expect(pickupSlotLabel("17:00")).toBe("17.00–18.00 WIB");
+    // A legacy D-25 draft's 08:00 start still reads correctly.
+    expect(pickupSlotLabel("08:00")).toBe("08.00–09.00 WIB");
   });
 
   it("drops today once its last slot has passed and offers a 7-day window", () => {
@@ -70,20 +70,21 @@ describe("PR-70 pickup schedule: 08.00–17.00 WIB (T-234), ≥ 90 minutes ahead
     const options = pickupDateOptions(evening);
     expect(options[0].value).toBe("2026-09-27");
     expect(pickupDateOptions(TEN_AM_WIB)).toHaveLength(7);
-    // The last slot starts 16.00: today stays until 14.30 WIB and drops a minute later.
-    expect(pickupDateOptions(new Date("2026-09-26T07:30:00.000Z"))[0].value).toBe("2026-09-26");
-    expect(availablePickupSlots("2026-09-26", new Date("2026-09-26T07:30:00.000Z"))).toEqual(["16:00"]);
-    expect(pickupDateOptions(new Date("2026-09-26T07:31:00.000Z"))[0].value).toBe("2026-09-27");
+    // The last slot starts 17.00: today stays until 15.30 WIB and drops a minute later.
+    expect(pickupDateOptions(new Date("2026-09-26T08:30:00.000Z"))[0].value).toBe("2026-09-26");
+    expect(availablePickupSlots("2026-09-26", new Date("2026-09-26T08:30:00.000Z"))).toEqual(["17:00"]);
+    expect(pickupDateOptions(new Date("2026-09-26T08:31:00.000Z"))[0].value).toBe("2026-09-27");
   });
 
   it("checks a date inside the window and a still-bookable slot", () => {
     expect(checkPickupSchedule("2026-09-26", "12:00", TEN_AM_WIB)).toBeNull();
     expect(checkPickupSchedule("2026-09-26", "11:00", TEN_AM_WIB)).toBe("slot");
     expect(checkPickupSchedule("2026-09-26", "18:00", TEN_AM_WIB)).toBe("slot");
-    expect(checkPickupSchedule("2026-09-27", "08:00", TEN_AM_WIB)).toBeNull();
+    expect(checkPickupSchedule("2026-09-27", "09:00", TEN_AM_WIB)).toBeNull();
+    expect(checkPickupSchedule("2026-09-27", "17:00", TEN_AM_WIB)).toBeNull();
     expect(checkPickupSchedule("2026-09-27", "07:00", TEN_AM_WIB)).toBe("slot");
-    // 17:00 is no longer offered (16.00–17.00 is the last window).
-    expect(checkPickupSchedule("2026-09-27", "17:00", TEN_AM_WIB)).toBe("slot");
+    // D-27: 08:00 (D-25) can no longer be picked; saved 08:00 drafts stay valid in the DB.
+    expect(checkPickupSchedule("2026-09-27", "08:00", TEN_AM_WIB)).toBe("slot");
     expect(checkPickupSchedule("2026-10-03", "09:00", TEN_AM_WIB)).toBe("date");
     expect(checkPickupSchedule("2026-09-25", "09:00", TEN_AM_WIB)).toBe("date");
     expect(checkPickupSchedule("bukan-tanggal", "09:00", TEN_AM_WIB)).toBe("date");
@@ -117,10 +118,10 @@ function draftForm(extra: Record<string, string>) {
 
 describe("PR-70 server validation of the handover", () => {
   it("stores a pickup with its date and slot", () => {
-    const result = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" }), TEN_AM_WIB);
-    expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" });
-    const late = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00" }), TEN_AM_WIB);
-    expect(late.ok ? null : late.errors.pickupSlot).toMatch(/08\.00–17\.00 WIB/);
+    const result = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00" }), TEN_AM_WIB);
+    expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00" });
+    const early = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" }), TEN_AM_WIB);
+    expect(early.ok ? null : early.errors.pickupSlot).toMatch(/09\.00–18\.00 WIB/);
   });
 
   it("refuses a slot under 90 minutes away and an unknown type", () => {
@@ -157,7 +158,7 @@ describe("issuance gate (moved from the old issuance panel)", () => {
   it("says the one unmet guard, in order", () => {
     expect(issuanceGate(base)).toMatchObject({ message: "Pilih layanan terlebih dahulu.", submitDisabled: true });
     expect(issuanceGate({ ...base, selected: true }).message).toMatch(/Paket sudah dicek fisik/);
-    expect(issuanceGate({ ...base, codOngkirBlocked: true, selected: true }).message).toMatch(/ongkir COD/);
+    expect(issuanceGate({ ...base, codOngkirBlocked: true, selected: true }).message).toMatch(/Nilai COD Ongkir/);
     expect(issuanceGate({ ...base, fixtureEnabled: false, selected: true }).message).toBe("Penerbitan dikunci untuk data ini.");
     expect(issuanceGate({ ...base, consented: true, selected: true })).toEqual({ confirmDisabled: false, message: null, submitDisabled: false });
     expect(issuanceGate({ ...base, codFormulaRetired: true, consented: true, selected: true })).toMatchObject({ message: null, submitDisabled: true });
@@ -172,14 +173,14 @@ describe("rail charges", () => {
     shippingDeductedIdr: 30_000,
   };
   it("adds COD lines up to the total the courier collects", () => {
-    const charges = issuanceCharges({ codOngkirChargeIdr: null, declaredValueIdr: 170_000, option, paymentMethod: "COD" })!;
+    const charges = issuanceCharges({ declaredValueIdr: 170_000, option, paymentMethod: "COD" })!;
     expect(charges.rows.reduce((sum, row) => sum + (row.amountIdr ?? 0), 0)).toBe(charges.total.amountIdr);
     expect(charges.total).toEqual({ amountIdr: 209_476, label: "Total tagihan COD" });
   });
-  it("shows the COD Ongkir charge and the Non-COD ongkir as their totals", () => {
-    expect(issuanceCharges({ codOngkirChargeIdr: 31_050, declaredValueIdr: 170_000, option, paymentMethod: "COD_ONGKIR" })!.total.amountIdr).toBe(31_050);
-    expect(issuanceCharges({ codOngkirChargeIdr: null, declaredValueIdr: 170_000, option, paymentMethod: "NON_COD" })!.total.amountIdr).toBe(32_500);
-    expect(issuanceCharges({ codOngkirChargeIdr: null, declaredValueIdr: 1, option: null, paymentMethod: "NON_COD" })).toBeNull();
+  it("shows the computed COD Ongkir amount (D-28) and the Non-COD ongkir as their totals", () => {
+    expect(issuanceCharges({ declaredValueIdr: 170_000, option, paymentMethod: "COD_ONGKIR" })!.total.amountIdr).toBe(31_034);
+    expect(issuanceCharges({ declaredValueIdr: 170_000, option, paymentMethod: "NON_COD" })!.total.amountIdr).toBe(32_500);
+    expect(issuanceCharges({ declaredValueIdr: 1, option: null, paymentMethod: "NON_COD" })).toBeNull();
   });
 });
 
@@ -211,10 +212,17 @@ describe("PR-90 pickup vehicle (T-232, D-19)", () => {
     expect(handoverSummary({ handoverType: "DROP_OFF", pickupDate: null, pickupSlot: null, pickupVehicle: null })).toBe("Drop di outlet");
   });
 
-  it("is not part of the Mengantar order payload", async () => {
-    const { readFile } = await import("node:fs/promises");
-    const source = await readFile(new URL("../src/lib/mengantar-order.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/pickupVehicle|pickup_vehicle/);
+  it("D-26: is sent only as the documented scheduled-pickup `volume`", async () => {
+    const { buildMengantarOrderRequest } = await import("@/lib/mengantar-order");
+    const source = {
+      courier: "JNE", declaredValueIdr: 1, destinationAreaId: "A", destinationAreaLabel: "A", destinationAreaVerifiedAt: new Date(),
+      isCod: false, isHazardous: false, packageContent: "Kain", pickupAddressId: "P", providerCodAmountIdr: null, providerService: "JNE",
+      quantity: 1, recipientAddress: "Jl", recipientAddressLandmark: null, recipientName: "B", recipientPhone: "081234567890",
+      senderAddress: "Jl", senderName: "G", senderPhone: "081234567891", shipmentId: "S", shippingInstruction: null, weightGrams: 1_000,
+      handoverType: "PICKUP" as const, pickupVehicle: "MOTOR" as const, pickupDate: "2026-09-27", pickupSlot: "09:00",
+    };
+    expect(buildMengantarOrderRequest(source, { pickupTimeId: "T" }).pickup).toMatchObject({ volume: "volumeMotor" });
+    expect(buildMengantarOrderRequest({ ...source, handoverType: "DROP_OFF", pickupVehicle: null }).pickup).toEqual({ type: "dropOff", address_id: "P" });
   });
 });
 

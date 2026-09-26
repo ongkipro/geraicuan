@@ -37,6 +37,7 @@ in `.delivery/current.json` describes that run rather than this tree.
 - Phase 18: UI v3 rebuilt from zero (ADR-0001). T-209 committed; T-210 foundation and screens T-211–T-218 in progress (uncommitted); T-219 screening/review open.
 - Phase 19: T-220 docs and T-221 invoice data/action done (tests re-run by the coordinator); T-223 Mengantar precision in progress; T-222, T-224, T-225, T-226 open.
 - Provider: `POST /order` still blocked (T-153); the AdsBookCMS-shape probe is deferred by the owner (D-16).
+- T-245 (D-32, 2026-09-26): local wilayah suggestions (kecamatan, kelurahan/desa, kode pos) with one guarded Mengantar lookup per pick; migration `0067` and the full import are on the dev (55461) and isolated test databases only. **Release gate open:** `pg_trgm` on the production Coolify PostgreSQL is not confirmed by the owner (RELEASE.md "Before every deploy" step 6).
 - The review attestations below are historical (pre-v3).
 ## COD money and the thermal label — T-175, T-176, T-177, T-178, T-91, T-150, T-151, T-174 (2026-09-17)
 

@@ -5,7 +5,6 @@ import {
   CalendarDays,
   Car,
   CircleAlert,
-  CircleCheck,
   Clock,
   Info,
   Loader2,
@@ -29,7 +28,7 @@ import {
   type ShipmentContactSelection,
   type ShipmentDraftActionState,
 } from "@/app/app/actions";
-import { searchMengantarDestinationAreas } from "@/app/app/location-actions";
+import { DestinationAreaPicker } from "@/app/app/_shared/destination-area-picker";
 import { SearchPicker } from "@/app/app/pengiriman/_components/search-picker";
 import { OptionCard } from "@/components/app/option-card";
 import { Button } from "@/components/ui/button";
@@ -37,7 +36,6 @@ import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/cha
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { MengantarDestinationAreaOption } from "@/lib/mengantar-locations";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
 import {
   availablePickupSlots,
@@ -227,17 +225,6 @@ export function ShipmentCreateForm({
       : { mode: "empty" });
   }
 
-  async function searchAreas(query: string) {
-    const result = await searchMengantarDestinationAreas(outletId, query);
-    return {
-      degrade: result.error === "rate_limited" || result.error === "busy",
-      error: result.error,
-      items: result.options,
-      message: result.message,
-      success: result.success,
-    };
-  }
-
   const fieldAnchor = (field: string) =>
     field === "form" ? "shipment-draft-errors"
       : field.startsWith("destinationArea") || field === "recipientContactSelection" ? "destination-search"
@@ -282,14 +269,7 @@ export function ShipmentCreateForm({
       <input name="destinationMode" type="hidden" value={destination.mode} />
       <input name="destinationAreaId" type="hidden" value={destination.mode === "empty" ? "" : destination.areaId} />
       <input name="destinationAreaLabel" type="hidden" value={destination.mode === "empty" ? "" : destination.areaLabel} />
-      {destination.mode === "manual" ? (
-        <>
-          <input name="areaId" type="hidden" value={destination.areaId} />
-          <input name="areaLabel" type="hidden" value={destination.areaLabel} />
-          <input name="areaQuery" type="hidden" value={destination.query} />
-          <input name="areaOutletId" type="hidden" value={destination.outletId} />
-        </>
-      ) : null}
+      {/* T-245: the shared DestinationAreaPicker posts areaId/areaLabel/areaQuery/areaOutletId (read in manual mode only). */}
       {recipientContact ? (
         <>
           <input name="recipientContactId" type="hidden" value={recipientContact.contactId} />
@@ -655,36 +635,19 @@ export function ShipmentCreateForm({
                   value={recipient.address}
                 />
               </FormField>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" htmlFor="destination-search" id="destination-label">Kecamatan tujuan<Required /></label>
-                <SearchPicker<MengantarDestinationAreaOption>
-                  cacheScope={outletId}
-                  disabled={!outletId}
-                  itemKey={(option) => option.areaId}
-                  label="Cari kecamatan tujuan"
-                  onSelect={(option, query) => setDestination({ ...option, mode: "manual", outletId, query })}
-                  placeholder="Contoh: Coblong Bandung"
-                  renderItem={(option) => <span className="wrap-anywhere">{option.areaLabel}</span>}
-                  search={searchAreas}
-                  trigger={(
-                    <button
-                      aria-describedby={destinationError ? "destination-error" : undefined}
-                      aria-labelledby="destination-label destination-search"
-                      className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-left text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-invalid:border-destructive max-md:h-11"
-                      data-invalid={Boolean(destinationError) || undefined}
-                      id="destination-search"
-                      type="button"
-                    >
-                      <span className={cn("truncate", !destinationLabel && "text-muted-foreground")}>
-                        {destinationLabel ?? "Cari kecamatan, kota atau kode pos"}
-                      </span>
-                      {destinationLabel ? <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-ok" /> : <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
-                    </button>
-                  )}
-                />
-                {destinationLabel ? <p className="text-xs text-ok">Kecamatan dari database Mengantar; dicek ulang saat disimpan.</p> : null}
-                <FieldError id="destination-error" message={destinationError} />
-              </div>
+              <DestinationAreaPicker
+                defaultArea={destination.mode === "contact" ? { areaId: destination.areaId, areaLabel: destination.areaLabel } : null}
+                description={destinationLabel ? "Area dari database Mengantar; dicek ulang saat disimpan." : "Ketik kecamatan, kelurahan, kota atau kode pos, lalu pilih."}
+                disabled={!outletId}
+                error={destinationError}
+                fixedOutletId={outletId}
+                id="destination-search"
+                // Remount on a new outlet or a new recipient contact: both replace the destination.
+                key={`${outletId}:${recipientContact?.addressId ?? ""}`}
+                onSelectionChange={(selection) => setDestination(selection ? { ...selection, mode: "manual" } : { mode: "empty" })}
+                outlets={outlets.map((outlet) => ({ id: outlet.id, name: outlet.name }))}
+                required
+              />
             </div>
           </SectionCard>
 
@@ -725,7 +688,7 @@ export function ShipmentCreateForm({
                   <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sm border bg-card px-2 text-xs md:min-h-0 md:py-0.5">
                     <input checked={codOngkir} className="size-4 accent-primary" onChange={(event) => setCodOngkir(event.target.checked)} type="checkbox" />
                     <span className="font-semibold text-foreground">COD Ongkir</span>
-                    <span className="text-muted-foreground">(kurir hanya menagih ongkir)</span>
+                    <span className="text-muted-foreground">(kurir menagih ongkir + biaya COD)</span>
                   </label>
                 ) : null}
               </div>
@@ -747,7 +710,7 @@ export function ShipmentCreateForm({
               {cod ? (
                 <p className="flex items-center justify-between gap-3 text-xs">
                   <span className="text-muted-foreground">
-                    {codOngkir ? `Ongkir ditagih diatur saat memilih layanan · biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` : `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL} dari total tagihan`}
+                    {codOngkir ? `Nilai COD = ongkir + biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}, dihitung otomatis` : `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL} dari total tagihan`}
                   </span>
                   <span className="font-semibold text-muted-foreground">Setelah cek tarif</span>
                 </p>

@@ -27,7 +27,7 @@ export function PeriodFilter({
       label="Filter periode"
       summary={`${periodLabel} · ${timezoneLabel} · ${presetLabel}`}
     >
-      <DateRangePicker endDate={range.lastIncludedDate} label={periodLabel} presetId={range.presetId} startDate={range.startDate} />
+      <DateRangePicker endDate={range.lastIncludedDate} presetId={range.presetId} startDate={range.startDate} />
     </FilterBar>
   );
 }

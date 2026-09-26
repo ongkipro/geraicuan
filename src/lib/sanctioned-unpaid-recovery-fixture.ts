@@ -12,16 +12,15 @@ const FIXTURE_FLAG = "GERAICUAN_ENABLE_SANCTIONED_UNPAID_RECOVERY_FIXTURE";
 const FIXTURE_PATH = "tests/fixtures/mengantar-pay-unpaid.sanitized.json";
 const SAFE_PROVIDER_VALUE = /^[A-Z0-9-]{1,160}$/;
 
+/** Documented shape (T-237): request `{courier, batch_id}`, response `{success, data: <count>, cnote_no}`. */
 type PayUnpaidFixture = {
   contract: string;
   issued: {
+    request: { batch_id: string; courier: string };
     response: {
       success: true;
-      data: {
-        batch_id: string;
-        courier: string;
-        cnote_no: [string];
-      };
+      data: 1;
+      cnote_no: [string];
     };
   };
 };
@@ -58,18 +57,20 @@ async function loadPayUnpaidFixture(): Promise<PayUnpaidFixture> {
       throw new SanctionedUnpaidRecoveryFixtureUnavailableError();
     }
     const fixture = value as Partial<PayUnpaidFixture>;
-    const data = fixture.issued?.response?.data;
-    const cnoteNo = data?.cnote_no?.[0];
+    const request = fixture.issued?.request;
+    const response = fixture.issued?.response;
+    const cnoteNo = response?.cnote_no?.[0];
     if (
       fixture.contract !== "Mengantar POST /order/pay-unpaid sanitized fixture"
-      || fixture.issued?.response?.success !== true
-      || !data
-      || typeof data.batch_id !== "string"
-      || !SAFE_PROVIDER_VALUE.test(data.batch_id)
-      || typeof data.courier !== "string"
-      || !SAFE_PROVIDER_VALUE.test(data.courier)
-      || !Array.isArray(data.cnote_no)
-      || data.cnote_no.length !== 1
+      || response?.success !== true
+      || response.data !== 1
+      || !request
+      || typeof request.batch_id !== "string"
+      || !SAFE_PROVIDER_VALUE.test(request.batch_id)
+      || typeof request.courier !== "string"
+      || !SAFE_PROVIDER_VALUE.test(request.courier)
+      || !Array.isArray(response.cnote_no)
+      || response.cnote_no.length !== 1
       || typeof cnoteNo !== "string"
       || !SAFE_PROVIDER_VALUE.test(cnoteNo)
     ) {
@@ -85,7 +86,8 @@ async function loadPayUnpaidFixture(): Promise<PayUnpaidFixture> {
 export const resolveSanctionedUnpaidRecoveryFixtureTransport:
   MengantarPayUnpaidTransportLookup = async (scope) => {
     const fixture = await loadPayUnpaidFixture();
-    const data = fixture.issued.response.data;
+    const expected = fixture.issued.request;
+    const response = fixture.issued.response;
     const binding: MengantarPayUnpaidTransportBinding = {
       tenantId: scope.tenantId,
       outletId: scope.outletId,
@@ -98,19 +100,16 @@ export const resolveSanctionedUnpaidRecoveryFixtureTransport:
       transport: {
         async payUnpaid(request) {
           if (
-            request.batch_id !== data.batch_id
+            request.batch_id !== expected.batch_id
             || request.courier.trim().toUpperCase()
-              !== data.courier.trim().toUpperCase()
+              !== expected.courier.trim().toUpperCase()
           ) {
             throw new SanctionedUnpaidRecoveryFixtureUnavailableError();
           }
           return {
             success: true,
-            data: {
-              batch_id: data.batch_id,
-              courier: data.courier,
-              cnote_no: [...data.cnote_no],
-            },
+            data: response.data,
+            cnote_no: [...response.cnote_no],
           };
         },
       },

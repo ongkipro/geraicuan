@@ -31,6 +31,12 @@ Cross-tenant list/read/update/delete, upstream retry, queued batch, and label/re
 - Every repository read carries `tenant_id` in the statement itself. `outlet-pickup-points.integration.test.ts` asserts the emitted SQL contains `"outlet_pickup_points"."tenant_id" = $n`, because RLS masks a deleted application predicate: a cross-tenant read returns the same empty result either way.
 - A pickup address is provider-opaque and shared across tenants on the platform-default account, so ownership is decided only by the row's own tenant and outlet. `resolveShipmentPickupPoint` refuses an id that is not one of that outlet's points before any shipment row is written.
 
+## TEN-3c — Tenant-neutral wilayah reference (T-245, D-32, DATA-22)
+
+- `wilayah_areas` is public Kemendagri reference data (kecamatan, kelurahan/desa, upstream kode pos). It has **no `tenant_id` by design** and holds no tenant content, so it is outside TEN-2's tenant-scoped set, like the platform tables. It is not a destination authority and no tenant table references it.
+- FORCE RLS with `wilayah_areas_read` (every row readable) and an owner-only write policy; the runtime role `geraicuan_app` has SELECT only, and INSERT/UPDATE/DELETE fail `42501` (`tests/wilayah-t245.integration.test.ts`, `scripts/verify-migration-upgrade.mjs` 0067 probes). Rows are written only by `npm run wilayah:import` as the migration/owner role.
+- Reads need an authenticated tenant principal (`searchWilayahDestinationAreas`, `resolveWilayahDestinationArea` call `requireCmsScope("tenant")`); nothing tenant-specific is read or cached with them. The provider lookup a pick triggers runs through the tenant-scoped Mengantar path unchanged (outlet authorised for the tenant, account authority rechecked).
+
 ## TEN-4 — Shipment numbers (PR-44, T-147)
 
 - Numbers are unique per tenant only; `GC-10013` may exist in several tenants. Route resolution filters by the context tenant in the application and again by RLS; a number or UUID from another tenant is 404, never a redirect. A repository test proves the application predicate alone hides the row with RLS bypassed.

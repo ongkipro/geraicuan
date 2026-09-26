@@ -1,0 +1,40 @@
+{
+  "datasetVersion": "kepmendagri-2430+wilayah@0d1237a+kodepos@ba84971",
+  "decree": "Kepmendagri No. 300.2.2-2430 Tahun 2025 (per the upstream README at this commit; the db/wilayah.sql header still cites 300.2.2-2138)",
+  "note": "Suggestion data only (D-32): a Mengantar area id from a live provider search remains the sole destination authority. Kode pos is an upstream hint, never authority.",
+  "sources": [
+    {
+      "repository": "https://github.com/cahyadsn/wilayah",
+      "commit": "0d1237a5eef926629c69d287cf2282006144f4fa",
+      "path": "db/wilayah.sql",
+      "sha256": "c4c3396d9380d4edee072af1d9dff83573b574d7cd00a6562cf82e200e954031",
+      "licence": "MIT, Copyright (c) 2017-2025 Cahya DSN (LICENSE-wilayah.txt)"
+    },
+    {
+      "repository": "https://github.com/cahyadsn/wilayah_kodepos",
+      "commit": "ba8497156c5cc9bcbfc527f7b8875d403eda2354",
+      "path": "json/wilayah_kodepos.min.json",
+      "sha256": "29e89d294704af6b7fcdd4f3f23a2304988bde86688b878a4d8b5bbed6436d63",
+      "licence": "MIT, Copyright (c) 2024 Cahya DSN (LICENSE-wilayah_kodepos.txt)"
+    }
+  ],
+  "files": {
+    "wilayah.tsv.gz": {
+      "sha256": "c04bef6540e01d9d7aa82b45c803335c74522624c68059b3a701c44c64604d03",
+      "contentSha256": "1ab77872e9efe6c54f9ca47a4fab41e2e783cf22bc7a814c583a55a40d2086e3",
+      "lines": 91599
+    },
+    "kodepos.tsv.gz": {
+      "sha256": "2661b02c28ebbfc555ce627a324616675f9c8af082f71788637a08368c26f031",
+      "contentSha256": "f2f8d327463652fbfa393459f9e1301fbbeb6318004d86cb62d9136b7aae7929",
+      "lines": 83762
+    }
+  },
+  "expected": {
+    "provinces": 38,
+    "regencies": 514,
+    "districts": 7285,
+    "villages": 83762
+  },
+  "villagesWithoutPostal": 0
+}

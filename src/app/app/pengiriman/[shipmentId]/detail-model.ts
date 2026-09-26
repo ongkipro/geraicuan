@@ -84,6 +84,9 @@ export function detailNextStep(input: DetailNextStepInput): DetailNextStep {
         : { kind: "none", message: "Jangan buat kiriman pengganti. Minta pemilik gerai memulihkan pembayaran." };
     case "FAILED":
       return { href: "/app/pengiriman/baru", kind: "new-draft" };
+    case "CANCELLED":
+      // T-238: never printable; the invoice (if issued) stays readable from its own page.
+      return { kind: "none", message: "Kiriman dibatalkan Mengantar. Label tidak dapat dicetak." };
     default:
       return { kind: "none", message: "Tidak ada tindakan lanjutan untuk status ini." };
   }
@@ -102,6 +105,53 @@ export type StatusObservation = {
   providerStatus: string;
 };
 
+/** T-238: one courier tracking event (`provider_order_history_events`), readable by both roles. */
+export type HistoryEvent = { description: string; occurredAt: Date };
+
+/** T-238: the live-observed attention fields of the newest observation (Tenant Admin only). */
+export type AttentionEvidence = {
+  claimStatus: string | null;
+  isBreach: boolean | null;
+  lastUndeliveredCode: string | null;
+  podCode: string | null;
+  ticketStatus: string | null;
+};
+
+const CLAIM_STATUS_LABELS: Readonly<Record<string, string>> = {
+  statusApproved: "disetujui",
+  statusDisapproved: "ditolak",
+  statusPending: "menunggu",
+};
+
+export type AttentionSignal = { key: string; label: string; urgent: boolean };
+
+/**
+ * "Perlu perhatian" signals from Mengantar's own order fields, in the vocabulary
+ * captured live (tests/fixtures/mengantar-order-contract.shape.json): `isBreach`,
+ * `lastUndeliveredCode`, `claimStatus`, `ticketStatus` (`none` is no ticket) and
+ * `pod_code`. Raw codes are shown as Mengantar sends them; nothing is guessed.
+ */
+export function attentionSignals(evidence: AttentionEvidence | null): AttentionSignal[] {
+  if (!evidence) return [];
+  const signals: AttentionSignal[] = [];
+  if (evidence.isBreach === true) signals.push({ key: "breach", label: "Melewati batas waktu kirim", urgent: true });
+  if (evidence.lastUndeliveredCode) {
+    signals.push({ key: "undelivered", label: `Gagal antar terakhir: ${evidence.lastUndeliveredCode}`, urgent: true });
+  }
+  if (evidence.claimStatus) {
+    signals.push({
+      key: "claim",
+      label: `Klaim ${CLAIM_STATUS_LABELS[evidence.claimStatus] ?? evidence.claimStatus}`,
+      urgent: evidence.claimStatus === "statusPending",
+    });
+  }
+  if (evidence.ticketStatus && evidence.ticketStatus.toLowerCase() !== "none") {
+    signals.push({ key: "ticket", label: `Tiket: ${evidence.ticketStatus}`, urgent: evidence.ticketStatus.toLowerCase() !== "closed" });
+  }
+  if (evidence.podCode) signals.push({ key: "pod", label: `Kode POD: ${evidence.podCode}`, urgent: false });
+  return signals;
+}
+
 export type TrackingEntry = {
   at: Date;
   detail: string | null;
@@ -110,19 +160,29 @@ export type TrackingEntry = {
 };
 
 /**
- * "Detail pelacakan", newest first: Mengantar status observations (their own `lastHistory` time
- * and description when stored, else the pull time), then the local lifecycle facts (resi issued,
- * shipment created). A pull that saw nothing new is not a new event, so repeats collapse into
- * their earliest sighting.
+ * "Detail pelacakan", newest first: the courier's tracking history (T-238, both roles), Mengantar
+ * status observations (their own `lastHistory` time and description when stored, else the pull
+ * time; Tenant Admin only), then the local lifecycle facts (resi issued, shipment created). A pull
+ * that saw nothing new is not a new event, so repeats collapse into their earliest sighting, and a
+ * history event an observation already shows is not shown twice.
  */
 export function buildTrackingTimeline(input: {
   awb: string | null;
   createdAt: Date;
+  historyEvents?: readonly HistoryEvent[];
   issuedAt: Date | null;
   observations: readonly StatusObservation[];
 }): TrackingEntry[] {
   const chronological = [...input.observations].sort((a, b) => a.observedAt.getTime() - b.observedAt.getTime());
   const entries: TrackingEntry[] = [];
+  const shownByObservation = new Set(input.observations.flatMap((observation) =>
+    observation.lastHistoryAt && observation.lastHistoryDesc
+      ? [`${observation.lastHistoryAt.getTime()}|${observation.lastHistoryDesc.trim()}`]
+      : []));
+  for (const event of input.historyEvents ?? []) {
+    if (shownByObservation.has(`${event.occurredAt.getTime()}|${event.description}`)) continue;
+    entries.push({ at: event.occurredAt, detail: null, key: `hist-${event.occurredAt.getTime()}-${entries.length}`, title: event.description });
+  }
   let previous: string | null = null;
   for (const observation of chronological) {
     const title = observation.mappedStatus

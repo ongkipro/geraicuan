@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { GeraiBrandProvider } from "@/app/app/brand/gerai-brand";
 import { awbBarcodeFits } from "@/app/app/label/[shipmentId]/label-barcode";
 import { LabelPrintPanel } from "@/app/app/label/[shipmentId]/label-print-panel";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
@@ -19,7 +20,7 @@ import { db } from "@/db/client";
 import { LabelUnavailableError, listPrintEvents, loadPrintableLabel } from "@/db/label-print-repository";
 import { loadShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { withTenantContext } from "@/db/tenant-context";
-import { loadTenantLabelFields } from "@/db/tenant-settings-repository";
+import { loadPrintBrand, loadTenantLabelFields } from "@/db/tenant-settings-repository";
 import { formatWibDateTime, recipientDensity } from "@/lib/label-format";
 
 export const metadata: Metadata = { title: "Label kiriman", robots: { index: false } };
@@ -54,7 +55,9 @@ export default async function LabelDetailPage({
       const invoice = withInvoice ? await loadShipmentInvoice(tx, context, shipmentId) : null;
       // PR-86: the gerai's Informasi label choice, per size; the sheet applies the chosen size's.
       const fields = await loadTenantLabelFields(tx, context);
-      return { events, fields, invoice, kind: "ready" as const, label };
+      // T-243: gerai logo, catatan resi and default size for the sheet and the nota.
+      const brand = await loadPrintBrand(tx, context);
+      return { brand, events, fields, invoice, kind: "ready" as const, label };
     } catch (error) {
       if (!(error instanceof LabelUnavailableError)) throw error;
       if (error.reason === "NOT_FOUND") return { kind: "not-found" as const };
@@ -62,6 +65,30 @@ export default async function LabelDetailPage({
     }
   });
   if (detail.kind === "not-found") notFound();
+
+  if (detail.kind === "blocked" && detail.reason === "CANCELLED") {
+    // T-238 (owner): Mengantar cancelled the order; the print action refuses it too.
+    return (
+      <>
+        <PageHeader back={<BackToList />} eyebrow="Pengiriman" title="Label kiriman" />
+        <Alert role="alert" variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Kiriman dibatalkan — label tidak dapat dicetak</AlertTitle>
+          <AlertDescription className="grid gap-3">
+            <p>Mengantar melaporkan pesanan ini dibatalkan. Invoice yang sudah terbit tetap dapat dibuka.</p>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild variant="outline">
+                <Link href={`/app/pengiriman/${routeKey}`}>Buka detail kiriman</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/app/invoice/${routeKey}`}><FileText aria-hidden="true" />Invoice</Link>
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </>
+    );
+  }
 
   if (detail.kind === "blocked") {
     const awaiting = detail.reason === "AWAITING_UPSTREAM_PAYMENT";
@@ -86,7 +113,7 @@ export default async function LabelDetailPage({
     );
   }
 
-  const { events, fields, invoice, label } = detail;
+  const { brand, events, fields, invoice, label } = detail;
   const labelHref = `/app/label/${routeKey}`;
   const recipientLayout = recipientDensity({
     addressLength: label.recipient.address.length,
@@ -147,6 +174,7 @@ export default async function LabelDetailPage({
         </Alert>
       )}
 
+      <GeraiBrandProvider value={brand}>
       <LabelPrintPanel
         both={withInvoice ? { invoice, shipmentNumber: routeKey } : undefined}
         history={
@@ -182,6 +210,7 @@ export default async function LabelDetailPage({
       >
         <LabelSheet fields={fields} label={label} />
       </LabelPrintPanel>
+      </GeraiBrandProvider>
     </>
   );
 }

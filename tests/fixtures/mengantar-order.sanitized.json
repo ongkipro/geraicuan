@@ -1,16 +1,23 @@
 {
   "contract": "Mengantar POST /order sanitized fixture",
+  "source": "Hand-written to the documented response shape of api-public.mengantar.com/docs (Create Order example, read 2026-09-26): `data[]` items carry `_id`, `ORDER_ID`, `batch`, `batch_id`, `cnote_no`, `isPaid`, and the envelope repeats `batch`, `batch_id`, `courier`, `errors`. Evidence D (documented), not L: no documented-shape order has been accepted live (T-153). Identifiers are sanitized placeholders.",
   "paid": {
     "response": {
       "success": true,
       "data": [
         {
-          "order_id": "SANITIZED-ORDER-0001",
+          "_id": "SANITIZED-ORDER-0001",
+          "ORDER_ID": "SANITIZED-ORDERCODE-0001",
+          "batch": "SANITIZED-BATCHCODE-0001",
+          "batch_id": "SANITIZED-BATCH-0001",
           "isPaid": true,
           "cnote_no": "SANITIZED-CNOTE-0001"
         },
         {
-          "order_id": "SANITIZED-ORDER-0002",
+          "_id": "SANITIZED-ORDER-0002",
+          "ORDER_ID": "SANITIZED-ORDERCODE-0002",
+          "batch": "SANITIZED-BATCHCODE-0002",
+          "batch_id": "SANITIZED-BATCH-0002",
           "isPaid": true,
           "cnote_no": "SANITIZED-CNOTE-0002"
         }
@@ -22,18 +29,36 @@
       "success": true,
       "data": [
         {
-          "order_id": "SANITIZED-ORDER-UNPAID",
-          "batch": "SANITIZED-BATCH-UNPAID",
+          "_id": "SANITIZED-ORDER-UNPAID",
+          "ORDER_ID": "SANITIZED-ORDERCODE-UNPAID",
+          "batch": "SANITIZED-BATCHCODE-UNPAID",
+          "batch_id": "SANITIZED-BATCH-UNPAID",
           "isPaid": false,
           "cnote_no": null
         }
-      ]
+      ],
+      "batch": "SANITIZED-BATCHCODE-UNPAID",
+      "batch_id": "SANITIZED-BATCH-UNPAID",
+      "courier": "JNE",
+      "errors": []
     }
   },
   "ambiguous": {
     "response": {
       "success": true,
       "data": []
+    }
+  },
+  "pickupTime": {
+    "response": {
+      "success": true,
+      "data": {
+        "isSunday": false,
+        "status": "empty",
+        "_id": "SANITIZED-TIME-0001",
+        "date": "SANITIZED-DATE",
+        "time": "SANITIZED-TIME"
+      }
     }
   }
 }

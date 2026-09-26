@@ -26,6 +26,12 @@ import {
   OrderRateLimitedError,
   enforceOrderRateLimit,
 } from "@/lib/order-rate-limit";
+import {
+  mengantarCourierOfService,
+  mengantarDocumentedOrderCourier,
+  mengantarOrderableService,
+} from "@/lib/mengantar-couriers";
+import { checkPickupSchedule } from "@/lib/shipment-draft-logic";
 import { toBillableWeightKg } from "@/lib/shipment-draft";
 import {
   createShipmentCorrelationId,
@@ -33,43 +39,80 @@ import {
   type ShipmentTelemetrySink,
 } from "@/lib/shipment-telemetry";
 
-export type MengantarOrderRequest = {
-  pickup_address_id: string;
-  sender_name: string;
-  sender_phone: string;
-  sender_address: string;
-  receiver_name: string;
-  receiver_phone: string;
-  receiver_address: string;
-  destination_id: string;
-  courier: string;
-  service: string;
+/**
+ * D-26 (T-237): the documented `POST {BASE_URL}/api/public/{API_KEY}/order` body
+ * (api-public.mengantar.com/docs, "Create Order", read 2026-09-26; Content-Type
+ * application/json). Every key below is spelled as the docs' body table and
+ * example spell it — evidence D in spec 05 DATA-13, not yet L: no documented-shape
+ * order has been accepted live (T-153; `scripts/probe-mengantar-order-documented.mjs`
+ * is the one owner-approved probe, not yet run).
+ *
+ * Deliberately not sent: `assignee` (optional, no GeraiCUAN concept), `dropShipper`
+ * (needs a saved Mengantar dropshipper; D-30 keeps masking on our label only),
+ * `customProducts`, `dontIncludeSubdistrict`, and insurance and a service code,
+ * which the documented body has no key for.
+ */
+export type MengantarOrderPickup =
+  | { type: "dropOff"; address_id: string }
+  | {
+      type: "scheduledPickup";
+      address_id: string;
+      /** From `POST /time` — only a live call returns one. */
+      time_id: string;
+      volume: "volumeMotor" | "volumeMobil" | "volumeTruck";
+    };
+
+export type MengantarOrderItem = {
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  /** The area `_id` from `/address/search` (TD-16). */
+  customerAddressDataId: string;
+  parcelContent: string;
+  /** "Total weight in kg": the stored grams ÷ 1000, exact. */
   weight: number;
   quantity: number;
-  item_name: string;
-  goods_value: number;
+  /** "Required for non-COD orders"; never sent with `COD`. */
+  goodsValue?: number;
   /**
-   * T-186 / PR-64 COD Ongkir is sent as `is_cod: true` with `cod_amount` = the
-   * shipping charge the courier collects (the recorded version 3 COD total) and
-   * `goods_value` = the declared goods value, which is not collected. This is
-   * PROVISIONAL behind D-5, like the PR-47 keys below: how Mengantar represents a
-   * shipping-only COD is not verified (T-153 — `POST /order` refuses every shape
-   * tried), and no provider key for it is documented, so none is invented here.
-   * A COD amount below the goods value is exactly what T-153 must confirm.
+   * "COD value = Goods Value + Shipping Fee + COD Fee (required if goodsValue is
+   * empty)": the recorded COD total — formula version 2 for COD, version 3
+   * (ongkir + biaya COD, goods 0; D-28) for COD Ongkir.
    */
-  is_cod: boolean;
-  cod_amount: number;
-  // PR-47 field parity with Mengantar's own order form. These key spellings are
-  // provisional until T-153 reconciles the request against the provider's
-  // current documentation; they are grouped here so that reconciliation is a
-  // single edit.
-  shipping_instruction: string | null;
-  receiver_landmark: string | null;
-  is_hazardous: boolean;
+  COD?: number;
+  deliveryInstruction?: string;
+  destinationMark?: string;
+  isDangerousGoods: boolean;
+  /** "Cargo service flag": set only for a `…Cargo` service key. */
+  cargo?: true;
+};
+
+export type MengantarOrderRequest = {
+  courier: string;
+  pickup: MengantarOrderPickup;
+  orders: MengantarOrderItem[];
+};
+
+/**
+ * D-27: the documented `POST /time` body — `{address_id, date, time}` with `date`
+ * "mm-dd-yyyy" and `time` one of "9:00, 10:00, …, 18:00"; "pickup schedule must
+ * be at least 90 minutes from current time" (docs, Add Time). Its response
+ * `data._id` is the `time_id` of a scheduled pickup.
+ */
+export type MengantarPickupTimeRequest = {
+  address_id: string;
+  date: string;
+  time: string;
 };
 
 export type MengantarOrderTransport = {
-  submit(orders: readonly MengantarOrderRequest[]): Promise<unknown>;
+  submit(body: Readonly<MengantarOrderRequest>): Promise<unknown>;
+  /**
+   * `POST /time`. Absent on every transport that cannot reserve a slot — no live
+   * one exists (T-153) — so a scheduled pickup is refused before anything is
+   * claimed.
+   */
+  reservePickupTime?(request: Readonly<MengantarPickupTimeRequest>): Promise<unknown>;
 };
 
 export type MengantarTransportScopeBinding = {
@@ -109,6 +152,8 @@ export type FixtureOrderOrchestrationInput = {
   telemetrySink?: ShipmentTelemetrySink;
   /** Backoff between HTTP 409 retries; injectable so tests do not wait. */
   sleep?: (ms: number) => Promise<void>;
+  /** Clock for the D-27 pickup-slot re-check; injectable for tests. */
+  now?: () => Date;
 };
 
 export type FixtureOrderOrchestrationResult = {
@@ -118,7 +163,7 @@ export type FixtureOrderOrchestrationResult = {
     submitted: boolean;
     status: "SUBMISSION_QUEUED" | "SUBMISSION_UNKNOWN" | "COMPLETED";
     /**
-     * Set when `buildMengantarOrderPayload` refused an order in this batch
+     * Set when `buildMengantarOrderRequest` refused an order in this batch
      * before anything was claimed or sent. The batch stays queued and
      * resumable (see `submitPreparedBatch`); the caller surfaces this code to
      * the operator instead of crashing the confirmation.
@@ -255,54 +300,159 @@ export class MengantarOrderPayloadError extends Error {
   }
 }
 
-export function buildMengantarOrderPayload(
-  orders: readonly ProviderOrderSource[],
-): MengantarOrderRequest[] {
-  return orders.map((order) => {
-    // A COD order with no COD total would ship goods and collect nothing. The
-    // old `?? 0` turned exactly that into a silently valid submission.
-    if (
-      order.isCod
-      && (order.providerCodAmountIdr === null || order.providerCodAmountIdr <= 0)
-    ) {
-      throw new MengantarOrderPayloadError("ORDER_COD_AMOUNT_MISSING");
-    }
-    // A stored area id is a provider identifier that can be renamed or retired
-    // between saving a contact and issuing its shipment.
-    if (!order.destinationAreaVerifiedAt) {
-      throw new MengantarOrderPayloadError("ORDER_DESTINATION_AREA_UNVERIFIED");
-    }
+const PICKUP_VOLUMES = {
+  MOBIL: "volumeMobil",
+  MOTOR: "volumeMotor",
+  TRUK: "volumeTruck",
+} as const;
 
-    let weight: number;
-    try {
-      weight = toBillableWeightKg(order.weightGrams);
-    } catch {
-      throw new MengantarOrderPayloadError("ORDER_WEIGHT_UNCONVERTIBLE");
-    }
-
-    return {
-      pickup_address_id: order.pickupAddressId,
-      sender_name: order.senderName,
-      sender_phone: order.senderPhone,
-      sender_address: order.senderAddress,
-      receiver_name: order.recipientName,
-      receiver_phone: order.recipientPhone,
-      receiver_address: order.recipientAddress,
-      destination_id: order.destinationAreaId,
-      courier: order.courier,
-      service: order.providerService,
-      weight,
-      quantity: order.quantity,
-      item_name: order.packageContent,
-      goods_value: order.declaredValueIdr,
-      is_cod: order.isCod,
-      cod_amount: order.isCod ? order.providerCodAmountIdr! : 0,
-      shipping_instruction: order.shippingInstruction,
-      receiver_landmark: order.recipientAddressLandmark,
-      is_hazardous: order.isHazardous,
-    };
-  });
+/**
+ * The documented `courier` and whether the service is the courier's cargo
+ * service. The body has no service key: a courier's own key (`JNE`, `SAP`…) is
+ * its regular service and `<courier>Cargo` sets the documented `cargo` flag. Any
+ * other variant (`SAPLite`) has no documented way to be ordered, and a courier the
+ * docs do not list (spx, paxel, or a removed courier such as Ninja — D-29) has no documented
+ * `courier` value: both are refused before anything is claimed.
+ */
+function documentedCourierAndCargo(order: ProviderOrderSource) {
+  const courier = mengantarCourierOfService(order.providerService);
+  const documented = courier ? mengantarDocumentedOrderCourier(courier) : null;
+  if (!courier || !documented || courier.toLowerCase() !== order.courier.trim().toLowerCase()) {
+    throw new MengantarOrderPayloadError("ORDER_COURIER_UNDOCUMENTED");
+  }
+  // One rule with Cek tarif's "Belum bisa dipesan" (T-242).
+  const orderable = mengantarOrderableService(order.providerService);
+  if (!orderable) throw new MengantarOrderPayloadError("ORDER_SERVICE_UNDOCUMENTED");
+  return { cargo: orderable.cargo, courier: orderable.documented };
 }
+
+/**
+ * D-26: one documented `POST /order` body for one stored shipment, built from the
+ * draft, the party snapshots and the recorded COD total. Refuses (nothing claimed,
+ * nothing sent) instead of guessing:
+ * - COD with no positive recorded total (`ORDER_COD_AMOUNT_MISSING`);
+ * - an area never re-verified (`ORDER_DESTINATION_AREA_UNVERIFIED`);
+ * - weight outside the stored range (`ORDER_WEIGHT_UNCONVERTIBLE`);
+ * - an undocumented courier or service (`ORDER_COURIER_UNDOCUMENTED` — spx and
+ *   paxel are quoted by the estimate but absent from the documented `courier`
+ *   list; `ORDER_SERVICE_UNDOCUMENTED` — SAPLite);
+ * - dangerous goods on a cargo service (`ORDER_CARGO_DANGEROUS_GOODS`);
+ * - a scheduled pickup without a `POST /time` id (`ORDER_PICKUP_TIME_UNAVAILABLE`)
+ *   or without a vehicle, which the docs require as `volume`
+ *   (`ORDER_PICKUP_VOLUME_MISSING`).
+ * A draft with no recorded handover (pre-T-211) is sent as `dropOff`, the type
+ * that needs neither a slot nor a vehicle. // lazy: ask the operator instead if a
+ * pre-T-211 draft is ever issued live.
+ */
+export function buildMengantarOrderRequest(
+  order: ProviderOrderSource,
+  options: { pickupTimeId?: string | null } = {},
+): MengantarOrderRequest {
+  // A COD order with no COD total would ship goods and collect nothing.
+  if (
+    order.isCod
+    && (order.providerCodAmountIdr === null || order.providerCodAmountIdr <= 0)
+  ) {
+    throw new MengantarOrderPayloadError("ORDER_COD_AMOUNT_MISSING");
+  }
+  // A stored area id is a provider identifier that can be renamed or retired
+  // between saving a contact and issuing its shipment.
+  if (!order.destinationAreaVerifiedAt) {
+    throw new MengantarOrderPayloadError("ORDER_DESTINATION_AREA_UNVERIFIED");
+  }
+  try {
+    // The stored-range check only; the documented unit is exact kilograms.
+    toBillableWeightKg(order.weightGrams);
+  } catch {
+    throw new MengantarOrderPayloadError("ORDER_WEIGHT_UNCONVERTIBLE");
+  }
+  const { cargo, courier } = documentedCourierAndCargo(order);
+  // Docs (Create Order): "Dangerous goods cannot be combined with cargo service".
+  if (cargo && order.isHazardous) {
+    throw new MengantarOrderPayloadError("ORDER_CARGO_DANGEROUS_GOODS");
+  }
+
+  let pickup: MengantarOrderPickup;
+  if (order.handoverType === "PICKUP") {
+    const timeId = options.pickupTimeId?.trim();
+    if (!timeId) throw new MengantarOrderPayloadError("ORDER_PICKUP_TIME_UNAVAILABLE");
+    if (!order.pickupVehicle) throw new MengantarOrderPayloadError("ORDER_PICKUP_VOLUME_MISSING");
+    pickup = {
+      type: "scheduledPickup",
+      address_id: order.pickupAddressId,
+      time_id: timeId,
+      volume: PICKUP_VOLUMES[order.pickupVehicle],
+    };
+  } else {
+    pickup = { type: "dropOff", address_id: order.pickupAddressId };
+  }
+
+  const item: MengantarOrderItem = {
+    customerName: order.recipientName,
+    customerPhone: order.recipientPhone,
+    customerAddress: order.recipientAddress,
+    customerAddressDataId: order.destinationAreaId,
+    parcelContent: order.packageContent,
+    weight: order.weightGrams / 1000,
+    quantity: order.quantity,
+    ...(order.isCod
+      ? { COD: order.providerCodAmountIdr! }
+      : { goodsValue: order.declaredValueIdr }),
+    ...(order.shippingInstruction ? { deliveryInstruction: order.shippingInstruction } : {}),
+    ...(order.recipientAddressLandmark ? { destinationMark: order.recipientAddressLandmark } : {}),
+    isDangerousGoods: order.isHazardous,
+    ...(cargo ? { cargo: true as const } : {}),
+  };
+  return { courier, pickup, orders: [item] };
+}
+
+/**
+ * D-27: the `POST /time` request for a scheduled pickup, from the stored WIB date
+ * and slot. The slot is re-checked at send time with the same rule the form uses
+ * (09:00–17:00 starts, ≥ 90 minutes ahead, date inside the window), so a legacy
+ * "08:00" draft or a slot that has passed is refused
+ * (`ORDER_PICKUP_SLOT_UNAVAILABLE`) and re-picked on a new shipment.
+ */
+export function mengantarPickupTimeRequest(
+  order: Pick<ProviderOrderSource, "pickupAddressId" | "pickupDate" | "pickupSlot">,
+  now: Date,
+): MengantarPickupTimeRequest {
+  const { pickupDate, pickupSlot } = order;
+  if (!pickupDate || !pickupSlot || checkPickupSchedule(pickupDate, pickupSlot, now) !== null) {
+    throw new MengantarOrderPayloadError("ORDER_PICKUP_SLOT_UNAVAILABLE");
+  }
+  const [year, month, day] = pickupDate.split("-");
+  return {
+    address_id: order.pickupAddressId,
+    date: `${month}-${day}-${year}`,
+    // The docs list "9:00", not "09:00".
+    time: `${Number(pickupSlot.slice(0, 2))}:00`,
+  };
+}
+
+/** The `time_id` in a documented `POST /time` response, checked against the request. */
+export function normalizeMengantarPickupTimeResponse(
+  response: unknown,
+  request: Readonly<MengantarPickupTimeRequest>,
+) {
+  const envelope = response as { success?: unknown; data?: unknown } | null;
+  const data = envelope?.data as { _id?: unknown; time?: unknown; address?: { _id?: unknown } } | undefined;
+  if (!envelope || envelope.success !== true || !data || typeof data !== "object" || Array.isArray(data)) {
+    throw new MengantarOrderSubmissionUnknownError("PICKUP_TIME_RESPONSE_SCHEMA_UNKNOWN");
+  }
+  const timeId = normalizeMengantarProviderIdentifier(data._id, "PICKUP_TIME_RESPONSE_SCHEMA_UNKNOWN");
+  const echoedTime = typeof data.time === "string" ? data.time.replace(/^0/, "") : null;
+  if (
+    echoedTime !== request.time
+    || (data.address?._id !== undefined && data.address._id !== request.address_id)
+  ) {
+    throw new MengantarOrderSubmissionUnknownError("PICKUP_TIME_CORRELATION_UNKNOWN");
+  }
+  return timeId;
+}
+
+/** Stands in for the `time_id` while a batch is only being validated, before any claim. */
+const PICKUP_TIME_NOT_YET_RESERVED = "time-not-yet-reserved";
 
 type ProviderResponseItem = {
   _id?: unknown;
@@ -341,7 +491,31 @@ function optionalIdentity(value: unknown) {
   );
 }
 
-function normalizeResponseItem(value: unknown): NormalizedProviderResponseItem {
+/**
+ * D-26: where a `POST /order` response carries `batch_id`. The documented example
+ * carries `batch` ("26013014BBQFMM", a readable code) and `batch_id`
+ * ("697c58034fa61abe7c700da6", an object id) both at the top level and inside
+ * each `data[]` item. `pay-unpaid` documents `batch_id` with an object-id example
+ * ("6332f5b98c3ea4bc8e15f72d"), so `batch_id` is what is stored as
+ * `provider_batch_id`; `batch` alone (the pre-docs assumption of T-223) is not.
+ */
+export function mengantarBatchIdLocation(response: unknown): "both" | "envelope" | "item" | "none" {
+  if (!response || typeof response !== "object" || Array.isArray(response)) return "none";
+  const envelope = response as { batch_id?: unknown; data?: unknown };
+  const first = Array.isArray(envelope.data) ? envelope.data[0] as { batch_id?: unknown } | undefined : undefined;
+  const inItem = first !== null && typeof first === "object" && first.batch_id !== undefined && first.batch_id !== null;
+  const inEnvelope = envelope.batch_id !== undefined && envelope.batch_id !== null;
+  return inItem ? inEnvelope ? "both" : "item" : inEnvelope ? "envelope" : "none";
+}
+
+function sameOrAbsent(left: string | null, right: string | null) {
+  return left === null || right === null || left === right;
+}
+
+function normalizeResponseItem(
+  value: unknown,
+  envelopeBatch: { batch: string | null; batchId: string | null },
+): NormalizedProviderResponseItem {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
   }
@@ -355,8 +529,8 @@ function normalizeResponseItem(value: unknown): NormalizedProviderResponseItem {
         item.cnote_no,
         "ORDER_RESPONSE_CNOTE_UNSAFE",
       );
-  // DATA-13: stored Mengantar records carry `_id` and `ORDER_ID` (L); the
-  // `order_id`/`id` pair is the older assumed shape, kept as a fallback.
+  // D-26: the documented item carries `_id` and `ORDER_ID` (D, and L on stored
+  // records); the `order_id`/`id` pair is the older assumed shape, kept as a fallback.
   const mongoId = optionalIdentity(item._id);
   const orderCode = optionalIdentity(item.ORDER_ID);
   const legacyId = optionalIdentity(item.order_id);
@@ -369,14 +543,16 @@ function normalizeResponseItem(value: unknown): NormalizedProviderResponseItem {
   ) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_IDENTITY_AMBIGUOUS");
   }
+  // `batch` and `batch_id` are two different identifiers of one batch; each must
+  // agree between the item and the envelope when both carry it.
   const batch = optionalIdentity(item.batch);
   const batchId = optionalIdentity(item.batch_id);
-  if (batch && batchId && batch !== batchId) {
+  if (!sameOrAbsent(batch, envelopeBatch.batch) || !sameOrAbsent(batchId, envelopeBatch.batchId)) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_IDENTITY_AMBIGUOUS");
   }
   return {
     providerOrderId,
-    providerBatchId: batch ?? batchId,
+    providerBatchId: batchId ?? envelopeBatch.batchId,
     isPaid: item.isPaid,
     cnoteNo,
   };
@@ -389,14 +565,23 @@ export function normalizeMengantarOrderResponse(
   if (!response || typeof response !== "object" || Array.isArray(response)) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
   }
-  const envelope = response as { data?: unknown; success?: unknown };
+  const envelope = response as {
+    batch?: unknown;
+    batch_id?: unknown;
+    data?: unknown;
+    success?: unknown;
+  };
   if (envelope.success !== true || !Array.isArray(envelope.data)) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
   }
   if (envelope.data.length !== expectedOrders.length) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_CARDINALITY_MISMATCH");
   }
-  const normalized = envelope.data.map(normalizeResponseItem);
+  const envelopeBatch = {
+    batch: optionalIdentity(envelope.batch),
+    batchId: optionalIdentity(envelope.batch_id),
+  };
+  const normalized = envelope.data.map((item) => normalizeResponseItem(item, envelopeBatch));
   if (
     new Set(normalized.map((item) => item.providerOrderId)).size !== normalized.length
   ) {
@@ -459,12 +644,26 @@ async function submitPreparedBatch(
   // This must not throw past the caller: one unsubmittable batch (e.g. an
   // old draft whose destination was never re-verified) must not abort the
   // batches that follow it in the same confirmation run.
-  let payloads: { order: PreparedProviderBatch["orders"][number]; payload: MengantarOrderRequest[] }[];
+  const now = (input.now ?? (() => new Date()))();
+  let payloads: {
+    order: PreparedProviderBatch["orders"][number];
+    pickupTime: MengantarPickupTimeRequest | null;
+  }[];
   try {
-    payloads = batch.orders.map((order) => ({
-      order,
-      payload: buildMengantarOrderPayload([order]),
-    }));
+    payloads = batch.orders.map((order) => {
+      let pickupTime: MengantarPickupTimeRequest | null = null;
+      if (order.handoverType === "PICKUP") {
+        if (!transport.reservePickupTime) {
+          throw new MengantarOrderPayloadError("ORDER_PICKUP_TIME_UNAVAILABLE");
+        }
+        pickupTime = mengantarPickupTimeRequest(order, now);
+      }
+      // Validation only: the real `time_id` is reserved after the claim.
+      buildMengantarOrderRequest(order, {
+        pickupTimeId: pickupTime ? PICKUP_TIME_NOT_YET_RESERVED : null,
+      });
+      return { order, pickupTime };
+    });
   } catch (error) {
     if (error instanceof MengantarOrderPayloadError) {
       return {
@@ -498,17 +697,26 @@ async function submitPreparedBatch(
   }
 
   try {
-    for (const { order, payload } of payloads) {
+    for (const { order, pickupTime } of payloads) {
       // DATA-13: Mengantar answers 409 to concurrent creation on one account for
       // every courier, not only the dynamic-AWB ones, so every submission is
       // serialized per account and a 409 is retried inside the lock.
       const response = await withProviderAccountSerialization(
         input.lockPool,
         batch.providerAccountKey,
-        () => submitWithConflictRetry(
-          () => transport.submit(payload),
-          input.sleep ?? defaultSleep,
-        ),
+        async () => {
+          const pickupTimeId = pickupTime
+            ? normalizeMengantarPickupTimeResponse(
+                await transport.reservePickupTime!(Object.freeze({ ...pickupTime })),
+                pickupTime,
+              )
+            : null;
+          const payload = buildMengantarOrderRequest(order, { pickupTimeId });
+          return submitWithConflictRetry(
+            () => transport.submit(payload),
+            input.sleep ?? defaultSleep,
+          );
+        },
       );
       const [result] = normalizeMengantarOrderResponse(response, [order]);
       await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>

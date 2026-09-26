@@ -5,13 +5,18 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 
 import { issueShipmentInvoice } from "@/app/app/invoice/actions";
+import type { IssueShipmentInvoiceResult } from "@/db/shipment-invoice-repository";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-const REFUSALS = {
-  NOT_FOUND: "Kiriman tidak ditemukan.",
-  NOT_ISSUED: "Invoice terbit setelah resi terbit.",
-} as const;
+/** A refusal code in words; a switch rather than a status-keyed map (the one status-label map lives in shipment-queue). */
+function refusalMessage(code: Extract<IssueShipmentInvoiceResult, { ok: false }>["code"]) {
+  switch (code) {
+    case "CANCELLED": return "Mengantar melaporkan kiriman ini dibatalkan, jadi invoice tidak diterbitkan.";
+    case "NOT_FOUND": return "Kiriman tidak ditemukan.";
+    case "NOT_ISSUED": return "Invoice terbit setelah resi terbit.";
+  }
+}
 
 /**
  * PR-76: issues the shipment's one invoice (the action returns the existing one on a
@@ -43,7 +48,7 @@ export function IssueInvoiceButton({
             try {
               const result = await issueShipmentInvoice(shipmentNumber);
               if (result.ok) router.refresh();
-              else setError(REFUSALS[result.code]);
+              else setError(refusalMessage(result.code));
             } catch {
               setError("Invoice belum dapat diterbitkan. Coba lagi.");
             }

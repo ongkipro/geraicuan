@@ -56,6 +56,8 @@ export type RtsShipmentRow = {
   recipientPhone: string;
   providerService: string | null;
   awb: string | null;
+  /** T-238: Mengantar `cnote_no_rts`, once a status pull has seen it. */
+  returnAwb: string | null;
   latestEventNotes: string | null;
   latestEventAt: Date | null;
 };
@@ -193,6 +195,7 @@ export async function loadRtsShipmentsPage(
       providerService: providerOrderSnapshots.providerService,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       awb: providerOrderSnapshots.cnoteNo,
+      returnAwb: providerOrderSnapshots.returnCnoteNo,
       // One subquery, so the note and its timestamp can only ever come from the
       // same event row. Two independent subqueries could disagree on a
       // created_at tie, which bulk webhook ingestion would produce.

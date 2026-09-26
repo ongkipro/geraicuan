@@ -129,7 +129,7 @@ export async function loadShipmentEstimate(
       weightGrams: prepared.draft.weightGrams,
     };
     const services = prepared.useSanctionedFixture
-      ? await loadSanctionedEstimateFixture()
+      ? await loadSanctionedEstimateFixture({ weightGrams: estimateRequest.weightGrams })
       : await fetchMengantarEstimate({
           ...prepared.resolved.credentials,
           originAreaId: prepared.resolved.originAreaId,

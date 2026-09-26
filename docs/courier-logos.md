@@ -12,14 +12,13 @@ set to the `viewBox` size so `h-6 w-auto` keeps the aspect ratio. None contain
 scripts, `<image>`, base64 rasters or external references;
 `tests/courier-logo.integration.test.ts` enforces that.
 
-Retrieved 2026-09-25.
+Retrieved 2026-09-25. `ninja.svg` was deleted on 2026-09-26 (D-29, owner "ninja hapus aja"): a historical Ninja shipment shows the plain name "Ninja".
 
 | File | Source | Licence / usage note | Redrawn |
 | --- | --- | --- | --- |
 | `jne.svg` | Official site header: https://www.jne.co.id/cfind/source/images/logo.svg | Trademark of its owner; nominative use. | No |
 | `jt.svg` | Wikimedia Commons, https://commons.wikimedia.org/wiki/File:J%26T_Express_logo.svg (official site https://jet.co.id serves only a PNG) | Commons licence: "Public domain", with a "trademarked" restriction; described as own work based on the official-website logo. Nominative use. | No (Commons vector, cleaned) |
 | `sicepat.svg` | Official site header: https://fe-cft.cdn.sicepat.express/web-company-v3/public/company-logo.svg | Trademark of its owner; nominative use. | No |
-| `ninja.svg` | Mark and "ninja" wordmark from Wikimedia Commons https://commons.wikimedia.org/wiki/File:Ninjavan.svg ("Own work", CC BY-SA 4.0); layout from the official Ninja Xpress logo (https://www.ninjaxpress.co, raster only) | Mengantar's `Ninja` is Ninja Xpress (Ninja Van's Indonesian brand). Commons vector is CC BY-SA 4.0 — this derivative carries the same licence and attribution; the mark remains Ninja Van's trademark. | Partly: "van" removed, "xpress" set as SVG text (Arial/Helvetica bold) to match the Ninja Xpress lockup |
 | `sap.svg` | Official site header: https://www.sapx.id/assets/frontend-3.0/img/logo/sapx-logo.svg | Trademark of its owner; nominative use. | No |
 | `idexpress.svg` | Official site header: https://idexpress.com/images/logo.svg | Trademark of its owner; nominative use. | No |
 | `anteraja.svg` | No vector published by the owner (https://anteraja.id serves `logo-anteraja.png` only); reference: that PNG and the owner's `anteraja-logo.png` | Trademark of its owner; nominative use. Brand pink `#EC0B78` sampled from the official PNG. | Yes: hand-drawn approximation of the loop-and-arrow mark plus "anteraja" as SVG text (rounded/Arial bold fallback). Replace with an official vector if AnterAja provides one. |

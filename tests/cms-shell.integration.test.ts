@@ -30,7 +30,8 @@ describe("tenant CMS shell contract", () => {
     );
 
     expect(operatorLabels).toEqual([
-      "Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Pengirim", "Penerima", "Cek resi", "Cek tarif",
+      // T-244: Info terbaru sits above Dasbor for both roles.
+      "Info terbaru", "Dasbor", "Buat kiriman", "Histori kiriman", "Retur (RTS)", "Cetak resi", "Pengirim", "Penerima", "Cek resi", "Cek tarif",
     ]);
     expect(operatorLabels).not.toContain("Laporan pengiriman");
     expect(operatorLabels).not.toContain("Pengaturan");
@@ -44,6 +45,7 @@ describe("tenant CMS shell contract", () => {
 
   it.each([
     ["/app", "Dasbor"],
+    ["/app/info", "Info terbaru"],
     ["/app/pengiriman", "Histori kiriman"],
     ["/app/pengiriman/baru", "Buat kiriman"],
     ["/app/pengiriman/3b4f", "Histori kiriman"],
@@ -185,12 +187,14 @@ describe("platform CMS shell contract", () => {
 
     expect(groups.map((group) => group.label)).toEqual(["Platform"]);
     // T-182 (PR-61) adds the approval queue.
-    expect(items.map((item) => item.label)).toEqual(["Ringkasan", "Gerai", "Pendaftaran", "Audit"]);
+    // T-244 adds Info terbaru (platform announcements).
+    expect(items.map((item) => item.label)).toEqual(["Ringkasan", "Gerai", "Pendaftaran", "Audit", "Info terbaru"]);
     expect(items.map((item) => item.href)).toEqual([
       "/platform",
       "/platform/tenant",
       "/platform/pendaftaran",
       "/platform/audit",
+      "/platform/info",
     ]);
     expect(items.map((item) => item.href).join(" ")).not.toContain("[tenantId]");
     expect(items.map((item) => item.href).join(" ")).not.toMatch(
@@ -204,6 +208,7 @@ describe("platform CMS shell contract", () => {
     ["/platform/tenant/10000000-0000-4000-8000-000000000471", "Gerai"],
     ["/platform/pendaftaran", "Pendaftaran"],
     ["/platform/audit", "Audit"],
+    ["/platform/info", "Info terbaru"],
   ])("marks exactly one platform current destination for %s", (pathname, label) => {
     const current = platformItemsFor(pathname).filter((item) => item.current);
 

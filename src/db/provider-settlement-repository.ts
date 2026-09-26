@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import {
   outlets,
   providerBatches,
+  providerOrderHistoryEvents,
   providerOrderSnapshots,
   providerOrderStatusObservations,
   providerSettlementItems,
@@ -201,7 +202,9 @@ async function applyProviderDeliveryTransitions(
     // The match join already proved the shipment is this tenant's; a row missing
     // here means it moved out from under the pull, so decide nothing about it.
     if (!current) continue;
-    const decision = decideProviderDeliveryTransition(observation.status, current.status);
+    const decision = decideProviderDeliveryTransition(observation.status, current.status, {
+      returnCnoteNo: observation.returnCnoteNo,
+    });
     decisions.set(observation.shipmentId, { ...decision, fromStatus: current.status });
     if (decision.outcome === "UNRECOGNISED") unrecognised.add(decision.normalizedStatus);
     if (decision.outcome === "REFUSED") refusedCount += 1;
@@ -331,9 +334,17 @@ export async function recordProviderSettlementPull(
         lastHistoryDesc: row.lastHistoryDesc ?? null,
         lastHistoryAt: row.lastHistoryAt ?? null,
         podCode: row.podCode ?? null,
+        cnoteNoRts: row.returnCnoteNo ?? null,
+        lastUndeliveredCode: row.lastUndeliveredCode ?? null,
+        isBreach: row.isBreach ?? null,
+        claimStatus: row.claimStatus ?? null,
+        ticketStatus: row.ticketStatus ?? null,
       };
     }));
   }
+
+  const historyEventCount = await recordProviderHistoryEvents(tx, context, [...statusByShipment.values()]);
+  await recordReturnConsignments(tx, context, [...statusByShipment.values()]);
 
   return {
     pullId: pull.id,
@@ -346,7 +357,55 @@ export async function recordProviderSettlementPull(
     appliedTransitionCount: transitions.appliedCount,
     refusedTransitionCount: transitions.refusedCount,
     unrecognisedStatuses: transitions.unrecognisedStatuses,
+    historyEventCount,
   };
+}
+
+const HISTORY_INSERT_CHUNK = 500;
+
+/**
+ * T-238 / DATA-18: the courier's tracking events this pull saw, appended once
+ * each (the table's unique key makes a repeated pull a no-op). Tenant id comes
+ * from the server context; the shipment and outlet from the account-scoped
+ * match. Returns how many were new.
+ */
+async function recordProviderHistoryEvents(tx: TenantTransaction, context: TenantContext, observations: ObservedOrder[]) {
+  const rows = observations.flatMap((observation) => (observation.historyEvents ?? []).map((event) => ({
+    tenantId: context.tenantId,
+    shipmentId: observation.shipmentId,
+    outletId: observation.outletId,
+    occurredAt: event.occurredAt,
+    description: event.description,
+    source: event.source,
+  })));
+  let inserted = 0;
+  for (let index = 0; index < rows.length; index += HISTORY_INSERT_CHUNK) {
+    const written = await tx.insert(providerOrderHistoryEvents)
+      .values(rows.slice(index, index + HISTORY_INSERT_CHUNK))
+      .onConflictDoNothing()
+      .returning({ id: providerOrderHistoryEvents.id });
+    inserted += written.length;
+  }
+  return inserted;
+}
+
+/**
+ * T-238: the return resi (`cnote_no_rts`) onto the order, where both roles read
+ * it. Only a reported value is written; an absent one never clears it, and the
+ * observation row keeps what each pull saw.
+ */
+async function recordReturnConsignments(tx: TenantTransaction, context: TenantContext, observations: ObservedOrder[]) {
+  const reported = observations.filter((observation) => observation.returnCnoteNo);
+  if (reported.length === 0) return;
+  await tx.execute(sql`
+    UPDATE provider_order_snapshots AS snapshot
+    SET return_cnote_no = reported.return_cnote_no
+    FROM (VALUES ${sql.join(reported.map((observation) =>
+      sql`(${observation.shipmentId}::uuid, ${observation.returnCnoteNo}::text)`), sql`, `)}) AS reported(shipment_id, return_cnote_no)
+    WHERE snapshot.tenant_id = ${context.tenantId}
+      AND snapshot.shipment_id = reported.shipment_id
+      AND snapshot.return_cnote_no IS DISTINCT FROM reported.return_cnote_no
+  `);
 }
 
 export type ProviderDeliveryStatusBasis = {

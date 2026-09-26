@@ -17,7 +17,7 @@ const UUID_PATTERN =
 
 export type LabelPrintActionState = {
   printed?: { sequence: number; printedAt: string; token: string };
-  blocked?: "NOT_ISSUED" | "AWAITING_UPSTREAM_PAYMENT";
+  blocked?: "NOT_ISSUED" | "AWAITING_UPSTREAM_PAYMENT" | "CANCELLED";
   error?: string;
   nextAttemptId?: string;
 };

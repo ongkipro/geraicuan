@@ -21,6 +21,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -69,7 +70,15 @@ function initial(name: string) {
  * with its menu stays in the footer. Collapses to an icon rail with tooltips; below 768px it is
  * the Sheet opened from the top bar.
  */
-export function AppSidebar({ account, scope }: { account: ShellAccount; scope: ShellScope }) {
+export function AppSidebar({
+  account,
+  badges,
+  scope,
+}: {
+  account: ShellAccount;
+  badges?: Readonly<Record<string, number>>;
+  scope: ShellScope;
+}) {
   const groups = useShellNavigation(scope);
   const { isMobile, setOpenMobile } = useSidebar();
   const closeOnMobile = () => {
@@ -84,7 +93,7 @@ export function AppSidebar({ account, scope }: { account: ShellAccount; scope: S
       <SidebarContent className="pt-3">
         <nav aria-label="Menu utama">
           {groups.map((group, index) => {
-            // Dasbor sits alone at the top, without its "Utama" label.
+            // Info terbaru and Dasbor sit alone at the top, without their "Utama" label.
             const labelled = !(scope.kind === "tenant" && index === 0);
             return (
               <SidebarGroup className="px-4 py-1.5 group-data-[collapsible=icon]:px-2" key={group.label}>
@@ -92,6 +101,7 @@ export function AppSidebar({ account, scope }: { account: ShellAccount; scope: S
                 <SidebarMenu>
                   {group.items.map((item) => {
                     const Icon = NAV_ICONS[item.key];
+                    const badge = badges?.[item.key] ?? 0;
                     return (
                       <SidebarMenuItem key={item.key}>
                         <SidebarMenuButton
@@ -107,13 +117,25 @@ export function AppSidebar({ account, scope }: { account: ShellAccount; scope: S
                           >
                             <span
                               aria-hidden="true"
-                              className="flex size-10 shrink-0 items-center justify-center rounded-lg group-data-[active=true]/menu-button:bg-primary group-data-[active=true]/menu-button:text-primary-foreground"
+                              className="relative flex size-10 shrink-0 items-center justify-center rounded-lg group-data-[active=true]/menu-button:bg-primary group-data-[active=true]/menu-button:text-primary-foreground"
                             >
                               {Icon ? <Icon /> : null}
+                              {/* T-244: on the icon rail the count badge is hidden, so a dot marks unread. */}
+                              {badge > 0 ? <span className="absolute top-1.5 right-1.5 hidden size-2 rounded-full bg-primary ring-2 ring-sidebar group-data-[collapsible=icon]:block" /> : null}
                             </span>
                             <span>{item.label}</span>
+                            {badge > 0 ? <span className="sr-only">, {badge} belum dibaca</span> : null}
                           </Link>
                         </SidebarMenuButton>
+                        {badge > 0 ? (
+                          <SidebarMenuBadge
+                            aria-hidden="true"
+                            className="top-1/2 right-3 -translate-y-1/2 peer-data-[size=default]/menu-button:top-1/2 rounded-full bg-primary px-1.5 text-primary-foreground peer-hover/menu-button:text-primary-foreground peer-data-active/menu-button:text-primary-foreground"
+                            data-testid={`nav-badge-${item.key}`}
+                          >
+                            {badge > 99 ? "99+" : badge}
+                          </SidebarMenuBadge>
+                        ) : null}
                       </SidebarMenuItem>
                     );
                   })}

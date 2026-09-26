@@ -139,6 +139,11 @@ that also covers migrations `0048`–`0051`).
    window** (recommended, T-194; DEP-3 "Migration order for this release").
 5. Build the ops image for the release commit on the server
    (`docker build --target ops -t geraicuan-ops:<commit> .`).
+6. **`pg_trgm` gate (T-245, D-32; open — not confirmed by the owner).** As the
+   superuser: `SELECT name, installed_version FROM pg_available_extensions WHERE name = 'pg_trgm';`
+   must return a row, and the migration role must be allowed to create it (or the
+   superuser runs `CREATE EXTENSION pg_trgm;` first). No row: do not migrate
+   `0067`; it needs a variant without the trigram index first (spec 15 DEP-3).
 
 ### 2. Backup, migrate, deploy
 1. **Backup** the database (Coolify "backup now", or
@@ -150,6 +155,8 @@ that also covers migrations `0048`–`0051`).
    (default command `pnpm db:migrate`, migration role's `DATABASE_URL`). It must
    end with `[✓] migrations applied successfully!`; re-running it must apply
    nothing (the journal row count stays the same).
+   Then, same container and env file, `pnpm wilayah:import` (T-245): one JSON line
+   with `"rows":91047`; a second run reports 0 added / changed / removed.
 3. **First deploy only:** create the runtime role (DEP-3 SQL) and put its URL in
    `APP_DATABASE_URL`; then create the first Super Admin (section 0, step 6).
 4. **Deploy `geraicuan-app`** at the release commit. In the deployment log the

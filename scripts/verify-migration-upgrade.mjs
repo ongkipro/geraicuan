@@ -63,6 +63,42 @@ if (pickupWindowIndex <= prefixRuleIndex) {
   throw new Error("Expected the 08:00 pickup window upgrade boundary after 0060.");
 }
 
+const trackingIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0063_mengantar_tracking_history"));
+if (trackingIndex <= pickupWindowIndex) {
+  throw new Error("Expected the tracking-history upgrade boundary after 0061.");
+}
+
+const contactNumberIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0064_contact_numbers"));
+if (contactNumberIndex !== trackingIndex + 1) {
+  throw new Error("Expected the contact-number upgrade boundary right after 0063.");
+}
+
+const brandIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0065_gerai_brand_settings"));
+if (brandIndex !== contactNumberIndex + 1) {
+  throw new Error("Expected the gerai-brand upgrade boundary right after 0064.");
+}
+
+const announcementIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0066_platform_announcements"));
+if (announcementIndex <= brandIndex) {
+  throw new Error("Expected the platform-announcement upgrade boundary after 0065.");
+}
+
+const wilayahIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0067_wilayah_reference"));
+if (wilayahIndex !== announcementIndex + 1) {
+  throw new Error("Expected the wilayah-reference upgrade boundary right after 0066.");
+}
+
+const reviewFixIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0068_cancel_unpaid_and_invoice_logo"));
+if (reviewFixIndex !== wilayahIndex + 1) {
+  throw new Error("Expected the review-fix (0068) upgrade boundary right after 0067.");
+}
+
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
 
@@ -1324,7 +1360,7 @@ try {
     WHERE shipment_id = '00000000-0000-0000-0000-000000000903'`);
   const draftsSnapshot = async () => (await client.query("SELECT to_jsonb(d) AS row FROM shipment_drafts d ORDER BY shipment_id")).rows;
   const draftsBefore061 = await draftsSnapshot();
-  await applyMigrations(migrations.slice(pickupWindowIndex));
+  await applyMigrations(migrations.slice(pickupWindowIndex, trackingIndex));
   if (JSON.stringify(await draftsSnapshot()) !== JSON.stringify(draftsBefore061)) {
     throw new Error("0061 changed an existing draft row.");
   }
@@ -1346,6 +1382,450 @@ try {
   if (JSON.stringify(await draftsSnapshot()) !== JSON.stringify(draftsBefore061)) {
     throw new Error("The 0061 probes left a change behind.");
   }
+
+  // 0063 (T-238): an observation recorded by a pull before 0063 — the only kind that exists —
+  // comes through unchanged as source PULL with every new column NULL, and still satisfies the
+  // new source CHECK and the re-created transition CHECK (both validated). The runtime role
+  // gets the append-only history table and one more snapshot column; the webhook function
+  // resolves nothing it should not and refuses invalid input.
+  await client.query(`
+    INSERT INTO provider_order_status_observations (
+      id, tenant_id, pull_id, shipment_id, outlet_id, cnote_no, provider_status,
+      from_status, mapped_status, transition_outcome, last_history_desc, last_history_at, pod_code
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000951', '00000000-0000-0000-0000-000000000901',
+      '00000000-0000-0000-0000-000000000941', '00000000-0000-0000-0000-000000000903',
+      '00000000-0000-0000-0000-000000000902', 'MIGRATION-CNOTE-1', 'RTS',
+      'ISSUED', 'RTS_QUEUED', 'APPLIED', 'Returned to origin', '2026-09-05T09:16:00Z', '402'
+    )`);
+  const observationsSnapshot = async () => (await client.query(
+    "SELECT to_jsonb(o) AS row FROM provider_order_status_observations o ORDER BY id")).rows.map((row) => row.row);
+  const snapshotsText = async () => (await client.query(
+    "SELECT to_jsonb(o) - 'return_cnote_no' AS row FROM provider_order_snapshots o ORDER BY id")).rows;
+  const shipmentsText = async () => (await client.query("SELECT to_jsonb(s) AS row FROM shipments s ORDER BY id")).rows;
+  const shipmentsBefore063 = await shipmentsText();
+  const observationsBefore063 = await observationsSnapshot();
+  const snapshotsBefore063 = await snapshotsText();
+  await applyMigrations(migrations.slice(trackingIndex, contactNumberIndex));
+  const T238_COLUMNS = ["source", "provider_event_at", "cnote_no_rts", "last_undelivered_code", "is_breach", "claim_status", "ticket_status"];
+  const observationsAfter063 = await observationsSnapshot();
+  const withoutNew = observationsAfter063.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !T238_COLUMNS.includes(key))));
+  const newValues = observationsAfter063.map((row) => T238_COLUMNS.map((key) => row[key]));
+  if (
+    JSON.stringify(withoutNew) !== JSON.stringify(observationsBefore063)
+    || JSON.stringify(newValues) !== JSON.stringify([["PULL", null, null, null, null, null, null]])
+    || JSON.stringify(await snapshotsText()) !== JSON.stringify(snapshotsBefore063)
+    || JSON.stringify(await shipmentsText()) !== JSON.stringify(shipmentsBefore063)
+  ) {
+    throw new Error(`0063 changed an existing row: ${JSON.stringify({ observationsBefore063, observationsAfter063 })}`);
+  }
+  const { rows: trackingChecks } = await client.query(`
+    SELECT conname, convalidated, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+    WHERE conrelid = 'provider_order_status_observations'::regclass
+      AND conname IN ('provider_order_status_observations_source_valid', 'provider_order_status_observations_transition_valid')
+    ORDER BY conname`);
+  const { rows: [historyTable] } = await client.query(`
+    SELECT (SELECT relforcerowsecurity FROM pg_class WHERE relname = 'provider_order_history_events') AS forced,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.role_table_grants
+        WHERE table_name = 'provider_order_history_events' AND grantee = 'geraicuan_app') AS grants,
+      (SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.column_privileges
+        WHERE table_name = 'provider_order_snapshots' AND grantee = 'geraicuan_app' AND privilege_type = 'UPDATE') AS snapshot_updatable`);
+  const admin063 = { tenant: "00000000-0000-0000-0000-000000000901", user: "migration-fixture-user" };
+  const historyInsert = await inContext(admin063.user, admin063.tenant, `
+    INSERT INTO provider_order_history_events (tenant_id, shipment_id, outlet_id, occurred_at, description, source)
+    VALUES ('00000000-0000-0000-0000-000000000901', '00000000-0000-0000-0000-000000000903',
+      '00000000-0000-0000-0000-000000000902', '2026-09-05T09:16:00Z', 'Returned to origin', 'LAST_HISTORY')`);
+  const historyUpdate = await inContext(admin063.user, admin063.tenant, "UPDATE provider_order_history_events SET description = 'x'");
+  const webhookRowWithPull = await asOwner(`
+    INSERT INTO provider_order_status_observations (tenant_id, pull_id, shipment_id, outlet_id, cnote_no, provider_status, source, provider_event_at)
+    VALUES ('00000000-0000-0000-0000-000000000901', '00000000-0000-0000-0000-000000000941', '00000000-0000-0000-0000-000000000903',
+      '00000000-0000-0000-0000-000000000902', 'MIGRATION-CNOTE-1', 'DELIVERED', 'WEBHOOK', now())`);
+  const webhookUnknown = await asRuntime(async () => {
+    const { rows: [row] } = await client.query(
+      "SELECT public.record_mengantar_webhook_event(repeat('a', 64), 'MIGRATION-UNKNOWN', 'DELIVERED', 'DELIVERED', true, now()) AS outcome");
+    return { code: row.outcome };
+  });
+  // Owner addition: CANCELLED joins the status CHECK (validated); an unknown status is still refused,
+  // and the cancelled print block has its own INSERT policy.
+  const { rows: [statusCheck] } = await client.query(`
+    SELECT convalidated, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+    WHERE conrelid = 'shipments'::regclass AND conname = 'shipments_status_valid'`);
+  const cancelledStatus = await asOwner("UPDATE shipments SET status = 'CANCELLED' WHERE id = '00000000-0000-0000-0000-000000000903'");
+  const unknownStatus = await asOwner("UPDATE shipments SET status = 'CANCELED' WHERE id = '00000000-0000-0000-0000-000000000903'");
+  const { rows: [printPolicy] } = await client.query(
+    "SELECT count(*)::int AS total FROM pg_policies WHERE tablename = 'print_events' AND policyname = 'print_events_cancelled_block_insert' AND cmd = 'INSERT'");
+  const webhookInvalid = await asRuntime(async () => {
+    await client.query("SELECT public.record_mengantar_webhook_event('short', 'A1', 'DELIVERED', 'DELIVERED', true, now())");
+    return { code: "accepted" };
+  });
+  if (
+    trackingChecks.length !== 2 || !trackingChecks.every((check) => check.convalidated === true)
+    || !trackingChecks[1].definition.includes("'SUPERSEDED'")
+    || historyTable.forced !== true || historyTable.grants !== "INSERT,SELECT"
+    || !historyTable.snapshot_updatable.split(",").includes("return_cnote_no")
+    || historyInsert.code !== "accepted" || historyUpdate.code !== "42501" || webhookRowWithPull.code !== "23514"
+    || webhookUnknown.code !== "NOT_FOUND" || webhookInvalid.code !== "22023"
+    || statusCheck?.convalidated !== true || !statusCheck.definition.includes("'CANCELLED'")
+    || cancelledStatus.code !== "accepted" || unknownStatus.code !== "23514" || printPolicy.total !== 1
+  ) {
+    throw new Error(`0063 did not upgrade cleanly: ${JSON.stringify({ trackingChecks, historyTable, historyInsert, historyUpdate, webhookRowWithPull, webhookUnknown, webhookInvalid, statusCheck, cancelledStatus, unknownStatus, printPolicy })}`);
+  }
+  if (
+    JSON.stringify(await observationsSnapshot()) !== JSON.stringify(observationsAfter063)
+    || JSON.stringify(await shipmentsText()) !== JSON.stringify(shipmentsBefore063)
+    || (await client.query("SELECT count(*)::int AS total FROM provider_order_history_events")).rows[0].total !== 0
+  ) {
+    throw new Error("The 0063 probes left a change behind.");
+  }
+
+  // 0064 (T-241): existing contacts are numbered per tenant by (created_at, id) — a created_at tie
+  // is broken by id — the counters continue from there, a tenant with no contact gets no counter,
+  // and no other contact value changes. New inserts are numbered by the trigger whatever the caller
+  // supplies; the runtime role may set a listed kategori but never move a number or read counters.
+  await client.query(`
+    INSERT INTO contacts (id, tenant_id, name, phone, is_sender, is_recipient, created_at) VALUES
+      ('00000000-0000-0000-0000-000000000963', '00000000-0000-0000-0000-000000000901', 'Kontak Tiga', '081200000963', true, false, '2026-03-01T00:00:00Z'),
+      ('00000000-0000-0000-0000-000000000962', '00000000-0000-0000-0000-000000000901', 'Kontak Dua', '081200000962', false, true, '2026-02-01T00:00:00Z'),
+      ('00000000-0000-0000-0000-000000000961', '00000000-0000-0000-0000-000000000901', 'Kontak Satu', '081200000961', true, true, '2026-02-01T00:00:00Z'),
+      ('00000000-0000-0000-0000-000000000964', '00000000-0000-0000-0000-000000000911', 'Kontak Lain', '081200000964', true, true, '2026-04-01T00:00:00Z')
+  `);
+  const contactsText = async () => (await client.query(
+    "SELECT to_jsonb(c) - 'contact_number' - 'category' AS row FROM contacts c ORDER BY id")).rows;
+  const contactsBefore064 = await contactsText();
+  await applyMigrations(migrations.slice(contactNumberIndex, brandIndex));
+  const { rows: contactNumbers } = await client.query(
+    "SELECT right(id::text, 3) AS id, right(tenant_id::text, 3) AS tenant, contact_number, category FROM contacts ORDER BY tenant_id, contact_number");
+  const { rows: contactCounters } = await client.query(
+    "SELECT right(tenant_id::text, 3) AS tenant, last_number FROM tenant_contact_counters ORDER BY tenant_id");
+  const { rows: contactChecks } = await client.query(`
+    SELECT conname, convalidated FROM pg_constraint
+    WHERE conrelid = 'contacts'::regclass
+      AND conname IN ('contacts_tenant_number_key', 'contacts_contact_number_valid', 'contacts_category_valid')
+    ORDER BY conname`);
+  const { rows: [contactColumn] } = await client.query(
+    "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'contacts' AND column_name = 'contact_number'");
+  const owner064 = (statement) => asOwner(statement);
+  const nextInTenant = await owner064(
+    "INSERT INTO contacts (tenant_id, name, phone, contact_number) VALUES ('00000000-0000-0000-0000-000000000901', 'Kontak Baru', '081200000965', 1) RETURNING contact_number");
+  const firstInEmptyTenant = await owner064(
+    "INSERT INTO contacts (tenant_id, name, phone) VALUES ('00000000-0000-0000-0000-000000000921', 'Kontak Pertama', '081200000966') RETURNING contact_number");
+  const runtimeInsert = await inContext(admin063.user, admin063.tenant,
+    "INSERT INTO contacts (tenant_id, name, phone) VALUES ('00000000-0000-0000-0000-000000000901', 'Kontak Runtime', '081200000967')");
+  const runtimeCategory = await inContext(admin063.user, admin063.tenant,
+    "UPDATE contacts SET category = 'RESELLER' WHERE id = '00000000-0000-0000-0000-000000000961'");
+  const runtimeBadCategory = await inContext(admin063.user, admin063.tenant,
+    "UPDATE contacts SET category = 'SKOR_MENGANTAR' WHERE id = '00000000-0000-0000-0000-000000000961'");
+  const runtimeMoveNumber = await inContext(admin063.user, admin063.tenant,
+    "UPDATE contacts SET contact_number = 9 WHERE id = '00000000-0000-0000-0000-000000000961'");
+  const runtimeCounters = await inContext(admin063.user, admin063.tenant, "SELECT * FROM tenant_contact_counters");
+  if (
+    JSON.stringify(contactNumbers.map((row) => [row.tenant, row.id, row.contact_number, row.category]))
+      !== JSON.stringify([["901", "961", 1, null], ["901", "962", 2, null], ["901", "963", 3, null], ["911", "964", 1, null]])
+    || JSON.stringify(contactCounters) !== JSON.stringify([{ tenant: "901", last_number: 3 }, { tenant: "911", last_number: 1 }])
+    || JSON.stringify(await contactsText()) !== JSON.stringify(contactsBefore064)
+    || contactChecks.length !== 3 || !contactChecks.every((check) => check.convalidated === true)
+    || contactColumn?.is_nullable !== "NO"
+    || nextInTenant.code !== "accepted" || nextInTenant.rows[0]?.contact_number !== 4
+    || firstInEmptyTenant.code !== "accepted" || firstInEmptyTenant.rows[0]?.contact_number !== 1
+    || runtimeInsert.code !== "accepted" || runtimeCategory.code !== "accepted" || runtimeBadCategory.code !== "23514"
+    || runtimeMoveNumber.code !== "42501" || runtimeCounters.code !== "42501"
+  ) {
+    throw new Error(`0064 did not upgrade cleanly: ${JSON.stringify({ contactNumbers, contactCounters, contactChecks, contactColumn, nextInTenant, firstInEmptyTenant, runtimeInsert, runtimeCategory, runtimeBadCategory, runtimeMoveNumber, runtimeCounters })}`);
+  }
+  if (
+    JSON.stringify(await contactsText()) !== JSON.stringify(contactsBefore064)
+    || JSON.stringify((await client.query("SELECT tenant_id, last_number FROM tenant_contact_counters ORDER BY tenant_id")).rows.map((row) => row.last_number)) !== "[3,1]"
+  ) {
+    throw new Error("The 0064 probes left a change behind.");
+  }
+
+  // 0065 (T-243): additive. Existing pickup points keep every value and gain four empty notes;
+  // an existing label-settings row gains the three brand switches ON (the logo and catatan print
+  // only once the gerai has one). The new brand table starts empty with forced RLS: both roles
+  // read, only an active Tenant Admin of the context tenant writes, and the CHECKs refuse an SVG,
+  // an oversized or incomplete logo, a catatan over 60 characters and a non-https website.
+  await client.query(`
+    INSERT INTO tenant_label_settings (tenant_id, label_size, show_sender_phone, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', '10x10', false, 'migration-fixture-user')
+  `);
+  await client.query(`
+    INSERT INTO users (id, name, email, email_verified, status)
+    VALUES ('migration-operator-965', 'Migration Operator', 'migration.operator965@example.test', true, 'ACTIVE')
+  `);
+  await client.query(`
+    INSERT INTO memberships (tenant_id, user_id, role, status)
+    VALUES ('00000000-0000-0000-0000-000000000901', 'migration-operator-965', 'OPERATOR', 'ACTIVE')
+  `);
+  const pickupRows = async () => (await client.query(
+    "SELECT to_jsonb(p) - 'pic_name' - 'pic_phone' - 'pickup_schedule' - 'driver_access_note' AS row FROM outlet_pickup_points p ORDER BY id")).rows;
+  const labelRows = async () => (await client.query(
+    "SELECT to_jsonb(l) - 'show_courier_logo' - 'show_gerai_logo' - 'show_label_note' AS row FROM tenant_label_settings l ORDER BY tenant_id, label_size")).rows;
+  const pickupBefore065 = await pickupRows();
+  const labelBefore065 = await labelRows();
+  if (pickupBefore065.length < 1 || labelBefore065.length < 1) throw new Error("Pre-0065 fixtures missing.");
+  await applyMigrations(migrations.slice(brandIndex, brandIndex + 1));
+  const { rows: [brand065] } = await client.query(`
+    SELECT (SELECT count(*)::int FROM tenant_brand_settings) AS rows,
+      (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relname = 'tenant_brand_settings') AS forced,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.table_privileges
+        WHERE table_name = 'tenant_brand_settings' AND grantee = 'geraicuan_app') AS table_privileges,
+      (SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.column_privileges
+        WHERE table_name = 'tenant_brand_settings' AND grantee = 'geraicuan_app' AND privilege_type = 'UPDATE') AS updatable,
+      (SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.column_privileges
+        WHERE table_name = 'outlet_pickup_points' AND grantee = 'geraicuan_app' AND privilege_type = 'UPDATE'
+          AND column_name IN ('pic_name', 'pic_phone', 'pickup_schedule', 'driver_access_note')) AS pickup_notes_updatable,
+      (SELECT count(*)::int FROM outlet_pickup_points WHERE pic_name IS NOT NULL OR pic_phone IS NOT NULL
+        OR pickup_schedule IS NOT NULL OR driver_access_note IS NOT NULL) AS pickup_notes_filled,
+      (SELECT bool_and(show_courier_logo AND show_gerai_logo AND show_label_note) FROM tenant_label_settings) AS switches_on
+  `);
+  const brand = (userId, statement) => inContext(userId, "00000000-0000-0000-0000-000000000901", statement);
+  const png = "decode('89504e470d0a1a0a0000000d49484452', 'hex')";
+  const sha = `'${"a".repeat(64)}'`;
+  const adminLogo = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, logo_bytes, logo_mime, logo_sha256, logo_updated_at, label_note, website, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', ${png}, 'image/png', ${sha}, now(), 'Terima kasih', 'https://gerai.id/', 'migration-fixture-user')`);
+  const operatorWrite = await brand("migration-operator-965", `INSERT INTO tenant_brand_settings (tenant_id, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', 'migration-operator-965')`);
+  const otherTenant = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000911', 'migration-fixture-user')`);
+  const svgLogo = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, logo_bytes, logo_mime, logo_sha256, logo_updated_at, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', ${png}, 'image/svg+xml', ${sha}, now(), 'migration-fixture-user')`);
+  const halfLogo = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, logo_bytes, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', ${png}, 'migration-fixture-user')`);
+  const bigLogo = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, logo_bytes, logo_mime, logo_sha256, logo_updated_at, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', decode(repeat('00', 204801), 'hex'), 'image/png', ${sha}, now(), 'migration-fixture-user')`);
+  const longNote = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, label_note, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', repeat('x', 61), 'migration-fixture-user')`);
+  const httpSite = await brand("migration-fixture-user", `INSERT INTO tenant_brand_settings (tenant_id, website, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', 'http://gerai.id', 'migration-fixture-user')`);
+  // Owner-written row (committed) so the Operator's read can be observed, then removed.
+  await client.query(`INSERT INTO tenant_brand_settings (tenant_id, label_note, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', 'Catatan migrasi', 'migration-fixture-user')`);
+  const operatorRead = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-operator-965", "00000000-0000-0000-0000-000000000901"]);
+    const { rows } = await client.query("SELECT label_note FROM tenant_brand_settings");
+    return { code: rows.length === 1 && rows[0].label_note === "Catatan migrasi" ? "read" : JSON.stringify(rows) };
+  });
+  const foreignRead = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-fixture-user", "00000000-0000-0000-0000-000000000911"]);
+    const { rows } = await client.query("SELECT tenant_id FROM tenant_brand_settings");
+    return { code: rows.length === 0 ? "hidden" : JSON.stringify(rows) };
+  });
+  const operatorUpdate = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-operator-965", "00000000-0000-0000-0000-000000000901"]);
+    const result = await client.query("UPDATE tenant_brand_settings SET label_note = 'Operator', updated_by_user_id = 'migration-operator-965'");
+    return { code: result.rowCount === 0 ? "no-rows" : "updated" };
+  });
+  await client.query("DELETE FROM tenant_brand_settings WHERE tenant_id = '00000000-0000-0000-0000-000000000901'");
+  const pickupNoteBad = await brand("migration-fixture-user", "UPDATE outlet_pickup_points SET pic_phone = '12345'");
+  const pickupNoteGood = await brand("migration-fixture-user",
+    "UPDATE outlet_pickup_points SET pic_name = 'PIC Gudang', pic_phone = '081234567890', pickup_schedule = 'Senin 11.30', driver_access_note = 'Pintu samping'");
+  if (
+    brand065.rows !== 0 || brand065.forced !== true || brand065.table_privileges !== "INSERT,SELECT"
+    || brand065.updatable !== "business_category,cs_email,default_label_size,disabled_couriers,label_note,logo_bytes,logo_mime,logo_sha256,logo_updated_at,updated_at,updated_by_user_id,website"
+    || brand065.pickup_notes_updatable !== "driver_access_note,pic_name,pic_phone,pickup_schedule"
+    || brand065.pickup_notes_filled !== 0 || brand065.switches_on !== true
+    || JSON.stringify(await pickupRows()) !== JSON.stringify(pickupBefore065)
+    || JSON.stringify(await labelRows()) !== JSON.stringify(labelBefore065)
+    || adminLogo.code !== "accepted" || operatorWrite.code !== "42501" || otherTenant.code !== "42501"
+    || svgLogo.code !== "23514" || halfLogo.code !== "23514" || bigLogo.code !== "23514"
+    || longNote.code !== "23514" || httpSite.code !== "23514"
+    || operatorRead.code !== "read" || foreignRead.code !== "hidden" || operatorUpdate.code !== "no-rows"
+    || pickupNoteBad.code !== "23514" || pickupNoteGood.code !== "accepted"
+  ) {
+    throw new Error(`0065 did not upgrade cleanly: ${JSON.stringify({ brand065, adminLogo, operatorWrite, otherTenant, svgLogo, halfLogo, bigLogo, longNote, httpSite, operatorRead, foreignRead, operatorUpdate, pickupNoteBad, pickupNoteGood })}`);
+  }
+  if (
+    (await client.query("SELECT count(*)::int AS n FROM tenant_brand_settings")).rows[0].n !== 0
+    || JSON.stringify(await pickupRows()) !== JSON.stringify(pickupBefore065)
+    || (await client.query("SELECT count(*)::int AS n FROM outlet_pickup_points WHERE pic_name IS NOT NULL")).rows[0].n !== 0
+  ) {
+    throw new Error("The 0065 probes left a change behind.");
+  }
+  await applyMigrations(migrations.slice(brandIndex + 1, announcementIndex));
+
+  // 0066 (T-244, D-31): Info terbaru. Two new empty tables; the audit CHECK is re-created as a
+  // superset (every existing audit row passes and is unchanged). The runtime role only SELECTs
+  // announcements (published for a gerai member, all in the platform context) and only
+  // SELECT/INSERTs its own read receipts; the two definer functions are the only writers and
+  // refuse anyone but an active Super Admin in the platform context.
+  const auditBefore066 = await auditRows();
+  await applyMigrations(migrations.slice(announcementIndex, announcementIndex + 1));
+  const { rows: [info066] } = await client.query(`
+    SELECT (SELECT count(*)::int FROM platform_announcements) + (SELECT count(*)::int FROM platform_announcement_reads) AS rows,
+      (SELECT bool_and(relrowsecurity AND relforcerowsecurity) FROM pg_class
+        WHERE relname IN ('platform_announcements', 'platform_announcement_reads')) AS forced,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.table_privileges
+        WHERE table_name = 'platform_announcements' AND grantee = 'geraicuan_app') AS announcement_privileges,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.table_privileges
+        WHERE table_name = 'platform_announcement_reads' AND grantee = 'geraicuan_app') AS read_privileges,
+      (SELECT convalidated AND pg_get_constraintdef(oid) LIKE '%ANNOUNCEMENT_UNPUBLISHED%' FROM pg_constraint
+        WHERE conrelid = 'audit_events'::regclass AND conname = 'audit_events_action_valid') AS audit_check
+  `);
+  const platformSave = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', 'migration-platform-admin', true), set_config('app.platform_admin', 'true', true)");
+    const { rows: [row] } = await client.query(
+      "SELECT public.save_platform_announcement(NULL, 'Info migrasi', E'Baris satu\\nBaris dua', 'JADWAL', true, true) AS id");
+    await client.query("RESET ROLE"); // the runtime role cannot read the audit trail; the owner checks it
+    const { rows: [audit] } = await client.query(
+      "SELECT action, actor_role FROM audit_events WHERE target_id = $1::text", [row.id]);
+    return { code: audit?.action === "ANNOUNCEMENT_PUBLISHED" && audit.actor_role === "SUPER_ADMIN" ? "saved" : JSON.stringify(audit) };
+  });
+  const memberSave = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', 'migration-fixture-user', true), set_config('app.tenant_id', '00000000-0000-0000-0000-000000000901', true), set_config('app.platform_admin', 'true', true)");
+    await client.query("SELECT public.save_platform_announcement(NULL, 'x', 'y', 'LAINNYA', false, true)");
+    return { code: "accepted" };
+  });
+  const memberInsert = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901",
+    "INSERT INTO platform_announcements (title, body, category, created_by) VALUES ('x', 'y', 'LAINNYA', 'migration-fixture-user')");
+  const forgedInfoAudit = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901",
+    "INSERT INTO audit_events (actor_id, actor_role, action, target_type, target_id, outcome) VALUES ('migration-fixture-user', 'SUPER_ADMIN', 'ANNOUNCEMENT_PUBLISHED', 'PLATFORM', 'x', 'SUCCESS')");
+  // Owner-written rows (committed) so the member's view can be observed, then removed.
+  await client.query(`INSERT INTO platform_announcements (id, title, body, category, published_at, created_by) VALUES
+    ('00000000-0000-0000-0000-000000000981', 'Tayang', 'Isi', 'FITUR_BARU', now(), 'migration-platform-admin'),
+    ('00000000-0000-0000-0000-000000000982', 'Draf', 'Isi', 'LAINNYA', NULL, 'migration-platform-admin')`);
+  const memberRead = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', 'migration-fixture-user', true), set_config('app.tenant_id', '00000000-0000-0000-0000-000000000901', true), set_config('app.platform_admin', 'true', true)");
+    const { rows } = await client.query("SELECT id::text FROM platform_announcements ORDER BY id");
+    return { code: JSON.stringify(rows.map((row) => row.id)) === '["00000000-0000-0000-0000-000000000981"]' ? "published-only" : JSON.stringify(rows) };
+  });
+  const ownReceipt = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901",
+    "INSERT INTO platform_announcement_reads (user_id, announcement_id) VALUES ('migration-fixture-user', '00000000-0000-0000-0000-000000000981')");
+  const draftReceipt = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901",
+    "INSERT INTO platform_announcement_reads (user_id, announcement_id) VALUES ('migration-fixture-user', '00000000-0000-0000-0000-000000000982')");
+  const foreignReceipt = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901",
+    "INSERT INTO platform_announcement_reads (user_id, announcement_id) VALUES ('migration-platform-admin', '00000000-0000-0000-0000-000000000981')");
+  await client.query("DELETE FROM platform_announcements WHERE id IN ('00000000-0000-0000-0000-000000000981', '00000000-0000-0000-0000-000000000982')");
+  if (
+    info066.rows !== 0 || info066.forced !== true || info066.announcement_privileges !== "SELECT"
+    || info066.read_privileges !== "INSERT,SELECT" || info066.audit_check !== true
+    || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore066)
+    || platformSave.code !== "saved" || memberSave.code !== "42501" || memberInsert.code !== "42501"
+    || forgedInfoAudit.code !== "42501" || memberRead.code !== "published-only"
+    || ownReceipt.code !== "accepted" || draftReceipt.code !== "42501" || foreignReceipt.code !== "42501"
+  ) {
+    throw new Error(`0066 did not upgrade cleanly: ${JSON.stringify({ info066, platformSave, memberSave, memberInsert, forgedInfoAudit, memberRead, ownReceipt, draftReceipt, foreignReceipt })}`);
+  }
+  if (
+    (await client.query("SELECT (SELECT count(*) FROM platform_announcements) + (SELECT count(*) FROM platform_announcement_reads) AS n")).rows[0].n !== "0"
+    || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore066)
+  ) {
+    throw new Error("The 0066 probes left a change behind.");
+  }
+  // T-245: 0067 adds the tenant-neutral wilayah reference. Nothing existing changes; the runtime
+  // role reads it and can never write it, and the table stays empty until `wilayah:import`.
+  const tablesBefore067 = (await client.query(
+    "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'public'")).rows[0].n;
+  await applyMigrations(migrations.slice(wilayahIndex, wilayahIndex + 1));
+  const { rows: [wilayah067] } = await client.query(`
+    SELECT (SELECT count(*)::int FROM wilayah_areas) AS rows,
+      (SELECT count(*)::int FROM information_schema.tables WHERE table_schema = 'public') AS tables,
+      (SELECT extversion FROM pg_extension WHERE extname = 'pg_trgm') IS NOT NULL AS trgm,
+      (SELECT relforcerowsecurity FROM pg_class WHERE relname = 'wilayah_areas') AS forced,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.role_table_grants
+        WHERE table_name = 'wilayah_areas' AND grantee = 'geraicuan_app') AS privileges,
+      (SELECT count(*)::int FROM pg_indexes WHERE tablename = 'wilayah_areas' AND indexdef LIKE '%gin_trgm_ops%') AS trgm_indexes
+  `);
+  await client.query(`INSERT INTO wilayah_areas (code, level, district_code, regency_code, district_name, regency_name,
+    regency_kind, province_name, search_text, name_search, district_search, dataset_version)
+    VALUES ('32.73.02', 3, '32.73.02', '32.73', 'Coblong', 'Kota Bandung', 'KOTA', 'Jawa Barat',
+      ' coblong kota bandung jawa barat', 'coblong', 'coblong', 'migration-probe')`);
+  const wilayahRead = await asRuntime(async () => {
+    const { rows } = await client.query("SELECT code FROM wilayah_areas WHERE search_text LIKE '% cobl%'");
+    return { code: JSON.stringify(rows.map((row) => row.code)) === '["32.73.02"]' ? "read" : JSON.stringify(rows) };
+  });
+  const wilayahInsert = await asRuntime(async () => {
+    await client.query(`INSERT INTO wilayah_areas (code, level, district_code, regency_code, district_name, regency_name,
+      regency_kind, province_name, search_text, name_search, district_search, dataset_version)
+      VALUES ('32.73.03', 3, '32.73.03', '32.73', 'X', 'Kota Bandung', 'KOTA', 'Jawa Barat', ' x', 'x', 'x', 'forged')`);
+    return { code: "accepted" };
+  });
+  const wilayahUpdate = await asRuntime(async () => {
+    await client.query("UPDATE wilayah_areas SET district_name = 'Forged'");
+    return { code: "accepted" };
+  });
+  const wilayahBadPostal = await asRuntime(async () => {
+    await client.query("RESET ROLE");
+    await client.query(`INSERT INTO wilayah_areas (code, level, district_code, regency_code, village_name, village_kind,
+      district_name, regency_name, regency_kind, province_name, postal_code, search_text, name_search, district_search, dataset_version)
+      VALUES ('32.73.02.1004', 4, '32.73.02', '32.73', 'Dago', 'KELURAHAN', 'Coblong', 'Kota Bandung', 'KOTA', 'Jawa Barat',
+        '0135', ' dago', 'dago', 'coblong', 'migration-probe')`);
+    return { code: "accepted" };
+  });
+  await client.query("DELETE FROM wilayah_areas WHERE dataset_version = 'migration-probe'");
+  if (
+    wilayah067.rows !== 0 || wilayah067.tables !== tablesBefore067 + 1 || wilayah067.trgm !== true
+    || wilayah067.forced !== true || wilayah067.privileges !== "SELECT" || wilayah067.trgm_indexes !== 1
+    || wilayahRead.code !== "read" || wilayahInsert.code !== "42501" || wilayahUpdate.code !== "42501"
+    || wilayahBadPostal.code !== "23514"
+    || (await client.query("SELECT count(*)::int AS n FROM wilayah_areas")).rows[0].n !== 0
+    || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore066)
+  ) {
+    throw new Error(`0067 did not upgrade cleanly: ${JSON.stringify({ wilayah067, tablesBefore067, wilayahRead, wilayahInsert, wilayahUpdate, wilayahBadPostal })}`);
+  }
+  // T-247: 0068 (review M1, L3). An existing logo becomes its first kept version; existing
+  // invoices gain a NULL logo_sha256 (they render no logo); the webhook decision gains
+  // AWAITING_UPSTREAM_PAYMENT → CANCELLED and keeps its privileges; versions are append-only,
+  // read by both roles of the tenant and written only by its active Tenant Admin.
+  const logoSha068 = "c".repeat(64);
+  await client.query(`INSERT INTO tenant_brand_settings (tenant_id, logo_bytes, logo_mime, logo_sha256, logo_updated_at, updated_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', decode('89504e470d0a1a0a0000000d49484452', 'hex'), 'image/png', $1, now(), 'migration-fixture-user')`, [logoSha068]);
+  const outcomeGrantees = async () => (await client.query(`SELECT string_agg(grantee, ',' ORDER BY grantee) AS g FROM information_schema.routine_privileges
+    WHERE routine_name = 'provider_delivery_outcome' AND privilege_type = 'EXECUTE'`)).rows[0].g;
+  const granteesBefore068 = await outcomeGrantees();
+  const invoicesBefore068 = (await client.query("SELECT count(*)::int AS n FROM shipment_invoices")).rows[0].n;
+  await applyMigrations(migrations.slice(reviewFixIndex, reviewFixIndex + 1));
+  const { rows: [fix068] } = await client.query(`
+    SELECT (SELECT count(*)::int FROM tenant_logo_versions) AS versions,
+      (SELECT count(*)::int FROM tenant_logo_versions v JOIN tenant_brand_settings b
+        ON b.tenant_id = v.tenant_id AND b.logo_sha256 = v.sha256 AND b.logo_bytes = v.bytes AND b.logo_mime = v.mime) AS backfilled,
+      (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relname = 'tenant_logo_versions') AS forced,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.table_privileges
+        WHERE table_name = 'tenant_logo_versions' AND grantee = 'geraicuan_app') AS privileges,
+      (SELECT count(*)::int FROM information_schema.column_privileges
+        WHERE table_name = 'tenant_logo_versions' AND grantee = 'geraicuan_app' AND privilege_type = 'UPDATE') AS updatable,
+      (SELECT count(*)::int FROM shipment_invoices) AS invoices,
+      (SELECT count(*)::int FROM shipment_invoices WHERE logo_sha256 IS NOT NULL) AS invoices_with_logo,
+      public.provider_delivery_outcome('AWAITING_UPSTREAM_PAYMENT', 'CANCELLED', true) AS unpaid_cancel,
+      public.provider_delivery_outcome('DELIVERED', 'CANCELLED', true) AS delivered_cancel,
+      public.provider_delivery_outcome('ISSUED', 'CANCELLED', true) AS issued_cancel
+  `);
+  const version = (userId, tenantId, sha) => inContext(userId, tenantId, `INSERT INTO tenant_logo_versions (tenant_id, sha256, bytes, mime, created_by_user_id)
+    VALUES ('${tenantId}', '${sha}', decode('89504e47', 'hex'), 'image/png', '${userId}')`);
+  const adminVersion = await version("migration-fixture-user", "00000000-0000-0000-0000-000000000901", "d".repeat(64));
+  const operatorVersion = await version("migration-operator-965", "00000000-0000-0000-0000-000000000901", "d".repeat(64));
+  const foreignVersion = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000911", `INSERT INTO tenant_logo_versions (tenant_id, sha256, bytes, mime, created_by_user_id)
+    VALUES ('00000000-0000-0000-0000-000000000901', '${"e".repeat(64)}', decode('89504e47', 'hex'), 'image/png', 'migration-fixture-user')`);
+  const versionUpdate = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901", "UPDATE tenant_logo_versions SET mime = 'image/png'");
+  const versionDelete = await inContext("migration-fixture-user", "00000000-0000-0000-0000-000000000901", "DELETE FROM tenant_logo_versions");
+  const badVersion = await version("migration-fixture-user", "00000000-0000-0000-0000-000000000901", "not-a-sha");
+  const operatorVersionRead = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-operator-965", "00000000-0000-0000-0000-000000000901"]);
+    const { rows } = await client.query("SELECT sha256 FROM tenant_logo_versions");
+    return { code: rows.length === 1 && rows[0].sha256 === logoSha068 ? "read" : JSON.stringify(rows) };
+  });
+  const foreignVersionRead = await asRuntime(async () => {
+    await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-fixture-user", "00000000-0000-0000-0000-000000000911"]);
+    const { rows } = await client.query("SELECT sha256 FROM tenant_logo_versions");
+    return { code: rows.length === 0 ? "hidden" : JSON.stringify(rows) };
+  });
+  await client.query("DELETE FROM tenant_logo_versions WHERE tenant_id = '00000000-0000-0000-0000-000000000901'");
+  await client.query("DELETE FROM tenant_brand_settings WHERE tenant_id = '00000000-0000-0000-0000-000000000901'");
+  if (
+    fix068.versions !== 1 || fix068.backfilled !== 1 || fix068.forced !== true || fix068.privileges !== "INSERT,SELECT"
+    || fix068.updatable !== 0 || fix068.invoices !== invoicesBefore068 || fix068.invoices_with_logo !== 0
+    || fix068.unpaid_cancel !== "APPLIED" || fix068.delivered_cancel !== "REFUSED" || fix068.issued_cancel !== "APPLIED"
+    || (await outcomeGrantees()) !== granteesBefore068
+    || adminVersion.code !== "accepted" || operatorVersion.code !== "42501" || foreignVersion.code !== "42501"
+    || versionUpdate.code !== "42501" || versionDelete.code !== "42501" || badVersion.code !== "23514"
+    || operatorVersionRead.code !== "read" || foreignVersionRead.code !== "hidden"
+  ) {
+    throw new Error(`0068 did not upgrade cleanly: ${JSON.stringify({ fix068, granteesBefore068, adminVersion, operatorVersion, foreignVersion, versionUpdate, versionDelete, badVersion, operatorVersionRead, foreignVersionRead })}`);
+  }
+  if ((await client.query("SELECT (SELECT count(*) FROM tenant_logo_versions) + (SELECT count(*) FROM tenant_brand_settings) AS n")).rows[0].n !== "0") {
+    throw new Error("The 0068 probes left a change behind.");
+  }
+  // Later migrations apply on top (each adds its own probes above this line as it lands).
+  await applyMigrations(migrations.slice(reviewFixIndex + 1));
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);
 } finally {

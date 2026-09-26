@@ -23,7 +23,7 @@ import { updateOutletReadiness } from "@/db/outlet-readiness-repository";
 import * as schema from "@/db/schema";
 import { createShipmentDraft } from "@/db/shipment-draft-repository";
 import { withTenantContext } from "@/db/tenant-context";
-import { buildMengantarOrderPayload } from "@/lib/mengantar-order";
+import { buildMengantarOrderRequest } from "@/lib/mengantar-order";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
@@ -134,7 +134,7 @@ async function createEstimatedContactShipment() {
       deliveryEstimate: "2-3 days",
       insuranceAmountIdr: null,
       insuranceSourceField: null,
-      providerService: "JNE REG",
+      providerService: "JNE",
       shippingAmountIdr: 15_000,
       shippingSourceField: "price",
       codFeeIdr: null,
@@ -212,7 +212,7 @@ describe("Mengantar location authority milestone", () => {
         async () => deriveProviderAccountKey("platform_default"),
       ));
     if (!prepared?.orders[0]) throw new Error("Expected one prepared provider order.");
-    const payload = buildMengantarOrderPayload(prepared.orders);
+    const payload = buildMengantarOrderRequest(prepared.orders[0]);
 
     const [contactAddress] = await adminDb
       .select({
@@ -275,9 +275,9 @@ describe("Mengantar location authority milestone", () => {
       destinationAreaLabel: destination.label,
       pickupAddressId: pickup.id,
     });
-    expect(payload).toEqual([expect.objectContaining({
-      destination_id: destination.id,
-      pickup_address_id: pickup.id,
+    expect(payload.pickup.address_id).toBe(pickup.id);
+    expect(payload.orders).toEqual([expect.objectContaining({
+      customerAddressDataId: destination.id,
     })]);
   });
 

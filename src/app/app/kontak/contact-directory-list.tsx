@@ -5,7 +5,7 @@ import Link from "next/link";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 
 import { searchContacts, type ContactSearchRow, type ContactSearchState } from "@/app/app/kontak/actions";
-import { contactDirectoryHref } from "@/app/app/kontak/contact-directory-query";
+import { contactDirectoryHref, shareText } from "@/app/app/kontak/contact-directory-query";
 import { CopyPhoneButton, WhatsAppButton } from "@/app/app/kontak/contact-quick-actions";
 import { EmptyState } from "@/components/app/empty-state";
 import { RecordItem, RecordList } from "@/components/app/record-list";
@@ -22,6 +22,7 @@ import {
   type ContactRole,
   type ContactStatusFilter,
 } from "@/lib/contact-role-filter";
+import { contactCategoryLabel } from "@/lib/contact-category";
 import { areaDisplayCase, formatDistrictCity, formatPostalCode } from "@/lib/label-format";
 import { cn } from "@/lib/utils";
 import { TYPEAHEAD_DEBOUNCE_MS, TYPEAHEAD_MIN_LENGTH } from "@/lib/use-typeahead-search";
@@ -42,14 +43,31 @@ export function contactAreaLine(contact: Pick<ContactSearchRow, "address" | "des
   return `${areaDisplayCase(formatDistrictCity(contact.destinationAreaLabel))}${postal ? ` ${postal}` : ""}`;
 }
 
-function RoleBadges({ contact, role, showArchived }: { contact: ContactSearchRow; role: ContactRole; showArchived: boolean }) {
+/** T-241: the peran/kategori badge (ref "PIC Utama") and, for a dual-role contact, the other role. */
+function RoleBadges({ contact, role }: { contact: ContactSearchRow; role: ContactRole }) {
   const other = otherContactRole(role);
   const holdsOther = role === "pengirim" ? contact.isRecipient : contact.isSender;
-  if (!holdsOther && !(showArchived && contact.archived)) return null;
+  const category = contactCategoryLabel(contact.category);
+  if (!holdsOther && !category) return null;
   return (
     <span className="flex flex-wrap gap-1.5">
+      {category ? <Badge variant="secondary">{category}</Badge> : null}
       {holdsOther ? <Badge variant="outline">Juga {contactRoleLabel(other).toLowerCase()}</Badge> : null}
-      {showArchived && contact.archived ? <StatusBadge label="Diarsipkan" tone="neutral" /> : null}
+    </span>
+  );
+}
+
+function ContactStatus({ contact }: { contact: ContactSearchRow }) {
+  return contact.archived ? <StatusBadge label="Diarsipkan" tone="neutral" /> : <StatusBadge label="Aktif" tone="success" />;
+}
+
+/** CON-SHP-COUNT with CON-SHP-DELIVERED-SHARE, or "—" when GeraiCUAN has no shipment for the contact. */
+function ShipmentCell({ contact }: { contact: ContactSearchRow }) {
+  if (contact.shipmentCount === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="grid gap-0.5">
+      <span className="font-semibold tabular-nums">{count.format(contact.shipmentCount)} kiriman</span>
+      <span className="text-xs text-muted-foreground tabular-nums">{shareText(contact.deliveredCount, contact.shipmentCount)} terkirim</span>
     </span>
   );
 }
@@ -90,7 +108,6 @@ export function ContactDirectoryList({
   }, [trimmed]);
 
   const createHref = `/app/kontak/baru?peran=${role}`;
-  const showArchived = status === "all";
 
   return (
     <Card className="gap-0 py-0">
@@ -192,22 +209,24 @@ export function ContactDirectoryList({
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-6">Nama {noun}</TableHead>
-                  <TableHead>Nomor telepon</TableHead>
+                  <TableHead>WhatsApp</TableHead>
                   <TableHead>Alamat utama</TableHead>
+                  <TableHead>Kiriman</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="pr-6 text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shown.map((contact) => (
                   <TableRow key={contact.id}>
-                    <TableCell className="max-w-72 py-3 pl-6 whitespace-normal">
+                    <TableCell className="max-w-64 py-3 pl-6 whitespace-normal">
                       <span className="grid gap-1">
-                        <span className="font-semibold wrap-anywhere">{contact.name}</span>
-                        <RoleBadges contact={contact} role={role} showArchived={showArchived} />
+                        <Link className="font-semibold text-primary wrap-anywhere underline-offset-4 hover:underline" href={contactDetailHref(contact.contactNumber, role)}>{contact.name}</Link>
+                        <RoleBadges contact={contact} role={role} />
                       </span>
                     </TableCell>
-                    <TableCell>{contact.phone}</TableCell>
-                    <TableCell className="max-w-md py-3 whitespace-normal">
+                    <TableCell className="tabular-nums">{contact.phone}</TableCell>
+                    <TableCell className="max-w-sm py-3 whitespace-normal">
                       <span className="grid gap-0.5">
                         {contact.address ? <span className="line-clamp-2 wrap-anywhere">{areaDisplayCase(contact.address)}</span> : null}
                         <span className="text-xs text-muted-foreground">
@@ -216,12 +235,14 @@ export function ContactDirectoryList({
                         </span>
                       </span>
                     </TableCell>
+                    <TableCell className="py-3"><ShipmentCell contact={contact} /></TableCell>
+                    <TableCell><ContactStatus contact={contact} /></TableCell>
                     <TableCell className="pr-6 text-right">
                       <span className="inline-flex items-center justify-end gap-1">
                         <WhatsAppButton name={contact.name} phone={contact.phone} />
                         <CopyPhoneButton name={contact.name} phone={contact.phone} />
-                        <Button asChild className="ml-1" size="sm" variant="outline">
-                          <Link aria-label={`Detail ${contact.name}`} href={contactDetailHref(contact.id, role)}>Detail</Link>
+                        <Button asChild className="ml-1" variant="outline">
+                          <Link aria-label={`Detail ${contact.name}`} href={contactDetailHref(contact.contactNumber, role)}>Detail</Link>
                         </Button>
                       </span>
                     </TableCell>
@@ -235,17 +256,22 @@ export function ContactDirectoryList({
               {shown.map((contact) => (
                 <RecordItem
                   detail={(
-                    <span className="-ml-2 flex items-center gap-1">
-                      <WhatsAppButton name={contact.name} phone={contact.phone} />
-                      <CopyPhoneButton name={contact.name} phone={contact.phone} />
+                    <span className="grid gap-1">
+                      <RoleBadges contact={contact} role={role} />
+                      <span className="-ml-2 flex items-center gap-1">
+                        <WhatsAppButton name={contact.name} phone={contact.phone} />
+                        <CopyPhoneButton name={contact.name} phone={contact.phone} />
+                      </span>
                     </span>
                   )}
-                  href={contactDetailHref(contact.id, role)}
+                  href={contactDetailHref(contact.contactNumber, role)}
                   key={contact.id}
                   meta={contactAreaLine(contact)}
-                  status={<RoleBadges contact={contact} role={role} showArchived={showArchived} />}
+                  status={<ContactStatus contact={contact} />}
                   subtitle={<span className="tabular-nums">{contact.phone}</span>}
+                  time={contact.shipmentCount > 0 ? `${shareText(contact.deliveredCount, contact.shipmentCount)} terkirim` : undefined}
                   title={contact.name}
+                  value={contact.shipmentCount > 0 ? `${count.format(contact.shipmentCount)} kiriman` : "Belum ada kiriman"}
                 />
               ))}
             </RecordList>

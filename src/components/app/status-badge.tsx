@@ -1,4 +1,4 @@
-import { Calculator, CircleAlert, CircleCheck, CircleDot, CircleX, Clock, FilePen, PackageCheck, TriangleAlert, Truck, Undo2, type LucideIcon } from "lucide-react";
+import { Ban, Calculator, CircleAlert, CircleCheck, CircleDot, CircleX, Clock, FilePen, PackageCheck, TriangleAlert, Truck, Undo2, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { SHIPMENT_STATUS_PRESENTATION, type ShipmentStatus } from "@/lib/shipment-queue";
@@ -43,6 +43,7 @@ export function StatusBadge({
 /** Spec 10 v3.1 §4.12: the one shipment status → tone + icon mapping. Labels come from the lifecycle source. */
 const SHIPMENT_STATUS_BADGE: Record<ShipmentStatus, { icon: LucideIcon; tone: StatusTone }> = {
   AWAITING_UPSTREAM_PAYMENT: { icon: Clock, tone: "warning" },
+  CANCELLED: { icon: Ban, tone: "neutral" },
   DELIVERED: { icon: PackageCheck, tone: "success" },
   DRAFT: { icon: FilePen, tone: "neutral" },
   ESTIMATED: { icon: Calculator, tone: "info" },
@@ -60,6 +61,11 @@ const SHIPMENT_STATUS_BADGE: Record<ShipmentStatus, { icon: LucideIcon; tone: St
 /** The §4.12 tone of a shipment status, or `null` when `value` is not one (e.g. a metric id). */
 export function shipmentStatusTone(value: string): StatusTone | null {
   return Object.hasOwn(SHIPMENT_STATUS_BADGE, value) ? SHIPMENT_STATUS_BADGE[value as ShipmentStatus].tone : null;
+}
+
+/** The §4.12 icon of a shipment status, or `null` when `value` is not one (status tiles share it). */
+export function shipmentStatusIcon(value: string): LucideIcon | null {
+  return Object.hasOwn(SHIPMENT_STATUS_BADGE, value) ? SHIPMENT_STATUS_BADGE[value as ShipmentStatus].icon : null;
 }
 
 export function ShipmentStatusBadge({ className, status }: { className?: string; status: ShipmentStatus }) {

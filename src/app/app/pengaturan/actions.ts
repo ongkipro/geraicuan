@@ -23,6 +23,7 @@ import {
   PickupPointInvalidError,
   PickupPointUnavailableError,
   removeOutletPickupPoint as removeOutletPickupPointRow,
+  saveOutletPickupPointNotes,
   setDefaultOutletPickupPoint as setDefaultOutletPickupPointRow,
 } from "@/db/outlet-pickup-point-repository";
 import {
@@ -33,13 +34,29 @@ import {
 } from "@/db/shipment-number-repository";
 import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
 import {
+  removeTenantLogo,
+  saveTenantBrandProfile,
   saveTenantContactWhatsapp,
+  saveTenantCourierPreferences,
+  saveTenantDefaultLabelSize,
   saveTenantLabelFields,
+  saveTenantLogo,
   TenantContactInvalidError,
   TenantSettingsDeniedError,
+  TenantSettingsInvalidError,
 } from "@/db/tenant-settings-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { characterClassError } from "@/lib/field-character-classes";
+import {
+  LOGO_MAX_BYTES,
+  LOGO_REJECTION_COPY,
+  parseDisabledCouriers,
+  parseGeraiProfile,
+  PICKUP_NOTE_LIMITS,
+  validateLogoUpload,
+  type GeraiProfileField,
+  type PickupNotes,
+} from "@/lib/gerai-settings";
 import { parseLabelFieldsForm } from "@/lib/label-fields";
 import { LABEL_SIZES, type LabelSize } from "@/lib/label-size";
 import { normalizePartyPhone } from "@/lib/shipment-draft";
@@ -586,12 +603,17 @@ export async function saveLabelSettings(
 ): Promise<LabelSettingsActionState> {
   const principal = await requireTenantAdminPrincipal();
   const fields = parseLabelFieldsForm(formData, Object.keys(LABEL_SIZES) as LabelSize[]);
-  if (!fields) {
+  // T-243: the default size travels with the editor's form; a form without it leaves it as is.
+  const defaultSize = formData.get("defaultSize");
+  if (!fields || (defaultSize !== null && defaultSize !== "10x15" && defaultSize !== "10x10")) {
     return { error: "Pilihan informasi label tidak lengkap. Muat ulang halaman lalu coba lagi.", resultToken: randomUUID() };
   }
   try {
-    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      saveTenantLabelFields(tx, context, fields), STORE_SETUP);
+    await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
+      await saveTenantLabelFields(tx, context, fields);
+      // T-243: the size the label page and the batch dialog preselect.
+      if (defaultSize === "10x15" || defaultSize === "10x10") await saveTenantDefaultLabelSize(tx, context, defaultSize);
+    }, STORE_SETUP);
   } catch (error) {
     if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
       return { error: "Hanya pemilik gerai yang dapat mengubah informasi label.", resultToken: randomUUID() };
@@ -601,4 +623,194 @@ export async function saveLabelSettings(
   revalidatePath("/app/pengaturan/label");
   revalidatePath("/app/label", "layout");
   return { resultToken: randomUUID(), saved: true };
+}
+
+// ------------------------------------------------------------------ T-243
+
+/** Every page that prints or previews the brand (label, batch, invoice, Informasi label). */
+function revalidateBrandPaths() {
+  revalidatePath("/app/pengaturan");
+  revalidatePath("/app/pengaturan/label");
+  revalidatePath("/app/label", "layout");
+  revalidatePath("/app/invoice", "layout");
+}
+
+export type GeraiProfileActionState = {
+  error?: string;
+  fieldErrors?: Partial<Record<GeraiProfileField, string>>;
+  resultToken?: string;
+  saved?: boolean;
+};
+
+/** Profil gerai & brand: catatan resi, kategori usaha, email CS, website (all optional). */
+export async function saveGeraiProfile(
+  _previous: GeraiProfileActionState,
+  formData: FormData,
+): Promise<GeraiProfileActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const raw = (name: string) => {
+    const value = formData.get(name);
+    return typeof value === "string" ? value : "";
+  };
+  const parsed = parseGeraiProfile({
+    businessCategory: raw("businessCategory"),
+    csEmail: raw("csEmail"),
+    labelNote: raw("labelNote"),
+    website: raw("website"),
+  });
+  if (!parsed.ok) {
+    return { error: "Periksa isian yang ditandai.", fieldErrors: parsed.errors, resultToken: randomUUID() };
+  }
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveTenantBrandProfile(tx, context, parsed.value), STORE_SETUP);
+  } catch (error) {
+    if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya pemilik gerai yang dapat mengubah profil gerai.", resultToken: randomUUID() };
+    }
+    return { error: "Profil gerai belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
+  }
+  revalidateBrandPaths();
+  return { resultToken: randomUUID(), saved: true };
+}
+
+export type GeraiLogoActionState = {
+  error?: string;
+  resultToken?: string;
+  saved?: "uploaded" | "removed";
+};
+
+/**
+ * The gerai logo: PNG, JPEG or WebP by magic bytes, <= 200 KB, <= 1000 x 1000 px, never
+ * SVG. The size is checked before the bytes are read; the repository checks them again.
+ */
+export async function uploadGeraiLogo(
+  _previous: GeraiLogoActionState,
+  formData: FormData,
+): Promise<GeraiLogoActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: LOGO_REJECTION_COPY.EMPTY, resultToken: randomUUID() };
+  }
+  if (file.size > LOGO_MAX_BYTES) return { error: LOGO_REJECTION_COPY.TOO_LARGE, resultToken: randomUUID() };
+  const upload = { bytes: new Uint8Array(await file.arrayBuffer()), declaredType: file.type, name: file.name };
+  const checked = validateLogoUpload(upload);
+  if (!checked.ok) return { error: LOGO_REJECTION_COPY[checked.reason], resultToken: randomUUID() };
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveTenantLogo(tx, context, upload), STORE_SETUP);
+  } catch (error) {
+    if (error instanceof TenantSettingsInvalidError) return { error: LOGO_REJECTION_COPY.UNSUPPORTED, resultToken: randomUUID() };
+    if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya pemilik gerai yang dapat mengganti logo.", resultToken: randomUUID() };
+    }
+    return { error: "Logo belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
+  }
+  revalidateBrandPaths();
+  return { resultToken: randomUUID(), saved: "uploaded" };
+}
+
+export async function removeGeraiLogo(
+  _previous: GeraiLogoActionState,
+  formData: FormData,
+): Promise<GeraiLogoActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  if (formData.get("confirmation") !== "remove-logo") {
+    return { error: "Konfirmasi penghapusan logo diperlukan.", resultToken: randomUUID() };
+  }
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, removeTenantLogo, STORE_SETUP);
+  } catch (error) {
+    if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya pemilik gerai yang dapat menghapus logo.", resultToken: randomUUID() };
+    }
+    return { error: "Logo belum dapat dihapus. Coba lagi.", resultToken: randomUUID() };
+  }
+  revalidateBrandPaths();
+  return { resultToken: randomUUID(), saved: "removed" };
+}
+
+export type CourierPreferencesActionState = {
+  error?: string;
+  resultToken?: string;
+  saved?: boolean;
+};
+
+/** Mitra kurir: which couriers Cek tarif and Buat kiriman offer; at least one stays on. */
+export async function saveCourierPreferences(
+  _previous: CourierPreferencesActionState,
+  formData: FormData,
+): Promise<CourierPreferencesActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const disabled = parseDisabledCouriers(formData);
+  if (!disabled) {
+    return { error: "Pilihan kurir tidak lengkap. Muat ulang halaman lalu coba lagi.", resultToken: randomUUID() };
+  }
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveTenantCourierPreferences(tx, context, disabled), STORE_SETUP);
+  } catch (error) {
+    if (error instanceof TenantSettingsInvalidError) {
+      return { error: "Aktifkan minimal satu kurir.", resultToken: randomUUID() };
+    }
+    if (error instanceof TenantSettingsDeniedError || error instanceof TenantContextDeniedError) {
+      return { error: "Hanya pemilik gerai yang dapat mengatur mitra kurir.", resultToken: randomUUID() };
+    }
+    return { error: "Pilihan kurir belum dapat disimpan. Coba lagi.", resultToken: randomUUID() };
+  }
+  revalidatePath("/app/pengaturan/kurir");
+  revalidatePath("/app/cek-tarif");
+  revalidatePath("/app/pengiriman", "layout");
+  return { resultToken: randomUUID(), saved: true };
+}
+
+export type PickupNotesActionState = {
+  errors?: Partial<Record<keyof PickupNotes, string>>;
+  message?: string;
+  resultToken?: string;
+  success?: boolean;
+};
+
+/** Titik pickup: internal notes on one pickup point; never sent to Mengantar. */
+export async function savePickupPointNotes(
+  _previous: PickupNotesActionState,
+  formData: FormData,
+): Promise<PickupNotesActionState> {
+  const principal = await requireTenantAdminPrincipal();
+  const { errors: requestErrors, outletId, pickupAddressId } = readPickupRequest(formData);
+  if (Object.keys(requestErrors).length > 0) {
+    return { message: "Titik pickup tidak valid. Muat ulang halaman.", resultToken: randomUUID() };
+  }
+  const text = (name: string) => {
+    const value = formData.get(name);
+    return typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
+  };
+  const errors: NonNullable<PickupNotesActionState["errors"]> = {};
+  const notes: PickupNotes = { accessNote: null, picName: null, picPhone: null, schedule: null };
+  for (const key of ["picName", "schedule", "accessNote"] as const) {
+    const value = text(key);
+    if (CONTROL_CHARACTER_PATTERN.test(value)) errors[key] = "Hapus karakter yang tidak didukung.";
+    else if (value.length > PICKUP_NOTE_LIMITS[key]) errors[key] = `Maksimal ${PICKUP_NOTE_LIMITS[key]} karakter.`;
+    else notes[key] = value === "" ? null : value;
+  }
+  const phone = text("picPhone");
+  if (phone !== "") {
+    const classError = characterClassError("PHONE", "Nomor PIC", phone);
+    const normalized = classError ? null : normalizePartyPhone(phone);
+    if (!normalized) errors.picPhone = classError ?? "Isi nomor Indonesia yang benar, misalnya 0812 3456 7890.";
+    else notes.picPhone = normalized;
+  }
+  if (Object.keys(errors).length > 0) {
+    return { errors, message: "Periksa isian yang ditandai.", resultToken: randomUUID() };
+  }
+  try {
+    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      saveOutletPickupPointNotes(tx, context, outletId, pickupAddressId, notes), STORE_SETUP);
+  } catch (error) {
+    const failure = pickupErrorState(error);
+    return { message: failure.message, resultToken: randomUUID() };
+  }
+  revalidatePath("/app/pengaturan/pickup");
+  return { message: "Catatan titik pickup disimpan.", resultToken: randomUUID(), success: true };
 }

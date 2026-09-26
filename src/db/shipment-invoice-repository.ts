@@ -13,6 +13,8 @@ import {
   shipmentInvoices,
   shipmentParties,
   shipments,
+  tenantBrandSettings,
+  tenantLogoVersions,
   tenants,
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
@@ -58,11 +60,13 @@ export type ShipmentInvoice = {
   collectionMode: "NON_COD" | "COD_SHIPPING_ONLY" | "COD";
   courierCollectionIdr: number | null;
   declaredValueIdr: number;
+  /** T-247 (L3): the gerai logo version at issuance; null = none then, or issued before 0068. */
+  logoSha256: string | null;
 };
 
 export type IssueShipmentInvoiceResult =
   | { ok: true; invoice: ShipmentInvoice }
-  | { ok: false; code: "NOT_ISSUED" | "NOT_FOUND" };
+  | { ok: false; code: "NOT_ISSUED" | "NOT_FOUND" | "CANCELLED" };
 
 const MAX_INVOICE_ITEMS = 20;
 
@@ -112,6 +116,7 @@ export async function loadShipmentInvoice(
       collectionMode: shipmentInvoices.collectionMode,
       courierCollectionIdr: shipmentInvoices.courierCollectionIdr,
       declaredValueIdr: shipmentInvoices.declaredValueIdr,
+      logoSha256: shipmentInvoices.logoSha256,
     })
     .from(shipmentInvoices)
     .where(
@@ -126,12 +131,28 @@ export async function loadShipmentInvoice(
     : null;
 }
 
+/** T-238: Mengantar reported the order cancelled; no new invoice, an issued one stays readable. */
+export async function isShipmentCancelled(tx: TenantTransaction, context: TenantContext, shipmentId: string) {
+  const [row] = await tx
+    .select({ status: shipments.status })
+    .from(shipments)
+    .where(and(eq(shipments.id, shipmentId), eq(shipments.tenantId, context.tenantId)))
+    .limit(1);
+  return row?.status === "CANCELLED";
+}
+
 /**
  * PR-76: at most one invoice per shipment, only once the provider issued a
  * resi. The insert is one `INSERT … SELECT … WHERE cnote_no IS NOT NULL
  * ON CONFLICT (shipment_id) DO NOTHING`, so a repeated or concurrent request
  * returns the invoice that won; the money columns and the resi come from the
  * provider snapshot inside that statement. No provider call is made.
+ *
+ * T-238 / T-247 (review L2): a shipment Mengantar cancelled gets no new invoice. The
+ * refusal is part of that same statement's WHERE (`s.status <> 'CANCELLED'`), not a
+ * check before it, so a cancellation committed before the statement runs always wins;
+ * it answers `CANCELLED`, apart from `NOT_ISSUED`. An invoice issued before the
+ * cancellation stays readable, unchanged.
  */
 export async function issueShipmentInvoice(
   tx: TenantTransaction,
@@ -265,7 +286,7 @@ export async function issueShipmentInvoice(
     INSERT INTO ${shipmentInvoices} (
       tenant_id, shipment_id, provider_order_snapshot_id, invoice_number,
       issued_by_user_id, document, shipping_charge_idr, insurance_idr, total_idr,
-      collection_mode, courier_collection_idr, declared_value_idr
+      collection_mode, courier_collection_idr, declared_value_idr, logo_sha256
     )
     SELECT
       s.tenant_id,
@@ -286,19 +307,29 @@ export async function issueShipmentInvoice(
         ELSE 'COD'
       END,
       pos.provider_cod_amount_idr,
-      d.declared_value_idr
+      d.declared_value_idr,
+      -- T-247 (L3): the logo the gerai has now, as a kept version; a logo without a stored
+      -- version (never expected after 0068's backfill) issues without one rather than failing.
+      v.sha256
     FROM ${shipments} s
     JOIN ${providerOrderSnapshots} pos
       ON pos.shipment_id = s.id AND pos.tenant_id = s.tenant_id
     JOIN ${shipmentDrafts} d
       ON d.shipment_id = s.id AND d.tenant_id = s.tenant_id
+    LEFT JOIN ${tenantBrandSettings} b
+      ON b.tenant_id = s.tenant_id
+    LEFT JOIN ${tenantLogoVersions} v
+      ON v.tenant_id = b.tenant_id AND v.sha256 = b.logo_sha256
     WHERE s.id = ${shipmentId}
       AND s.tenant_id = ${context.tenantId}
+      AND s.status <> 'CANCELLED'
       AND pos.cnote_no IS NOT NULL
       AND d.is_cod = pos.is_cod
     ON CONFLICT (shipment_id) DO NOTHING
   `);
 
   const invoice = await loadShipmentInvoice(tx, context, shipmentId);
-  return invoice ? { ok: true, invoice } : { ok: false, code: "NOT_ISSUED" };
+  if (invoice) return { ok: true, invoice };
+  // Nothing inserted: say why only after the statement decided (never a pre-check).
+  return { ok: false, code: (await isShipmentCancelled(tx, context, shipmentId)) ? "CANCELLED" : "NOT_ISSUED" };
 }

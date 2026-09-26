@@ -122,8 +122,10 @@ describe("thermal sheet layouts", () => {
   it("keeps everything the courier needs on the package label", () => {
     const pkg = text(packageOf(render(printableLabel())));
 
+    // T-243: the courier prints as its black print logo (alt "JNE"), the service beside it.
+    expect(packageOf(render(printableLabel()))).toContain('alt="JNE" class="label-courier-logo" src="/couriers/print/jne.svg"');
     for (const expected of [
-      "JNE", "REG", "JX1234567890", RECIPIENT.name, RECIPIENT.phone, RECIPIENT.address, AREA,
+      "REG", "JX1234567890", RECIPIENT.name, RECIPIENT.phone, RECIPIENT.address, AREA,
       SENDER.name, SENDER.phone, SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 457.226",
       "Nilai barang", "Rp 425.000", "Ongkir Mengantar", "Rp 17.000", "Biaya COD (termasuk PPN)", "Rp 15.226",
       "Kain batik tulis", "2,125 kg · 2 koli", "25 × 18 × 12 cm", "Asuransi Mengantar", "Rp 2.000",

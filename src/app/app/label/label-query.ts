@@ -3,6 +3,15 @@ import type { LabelPrintStateFilter } from "@/db/label-print-repository";
 
 export const LABEL_PAGE_SIZE = 20;
 
+/**
+ * Spec 19 LBL-SHARE (T-247, review L9): the base every Cetak resi tile's share is taken of —
+ * all issued resi in scope, LBL-ALL (still printable) plus LBL-CANCELLED (cancelled since).
+ * LBL-CANCELLED is never inside LBL-ALL, so LBL-ALL alone let Dibatalkan exceed 100 %.
+ */
+export function labelTileShareBase(summary: { "LBL-ALL": number; "LBL-CANCELLED": number }) {
+  return summary["LBL-ALL"] + summary["LBL-CANCELLED"];
+}
+
 /** The repository's own rule for an AWB suffix; a value outside it lists nothing. */
 export const AWB_SUFFIX_PATTERN = /^[a-z0-9]{3,24}$/i;
 
@@ -25,7 +34,7 @@ export function parseLabelQuery(params: Record<string, SearchValue>): LabelQuery
     awbSuffix,
     awbSuffixError: awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix) ? AWB_SUFFIX_ERROR : null,
     page: Number.isSafeInteger(requestedPage) && requestedPage >= 1 ? requestedPage : 1,
-    printState: cetak === "belum" || cetak === "sudah" ? cetak : "semua",
+    printState: cetak === "belum" || cetak === "sudah" || cetak === "batal" ? cetak : "semua",
   };
 }
 

@@ -79,10 +79,9 @@ export function PrintHistoryView({
         title="Riwayat cetak resi"
       />
 
-      <FilterBar action={PRINT_HISTORY_PATH} clearHref={activeCount > 0 ? PRINT_HISTORY_PATH : undefined} label="Filter riwayat cetak">
+      <FilterBar action={PRINT_HISTORY_PATH} clearHref={activeCount > 0 ? PRINT_HISTORY_PATH : undefined} label="Filter riwayat cetak" summary={`${range.periodLabel} · WIB (UTC+07:00)`}>
         <DateRangePicker
           endDate={range.endDate}
-          label={range.periodLabel}
           presetId={range.presetId}
           startDate={range.startDate}
         />

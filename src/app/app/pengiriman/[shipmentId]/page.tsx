@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { db } from "@/db/client";
 import { withTenantContext } from "@/db/tenant-context";
+import { loadTenantDisabledCouriers } from "@/db/tenant-settings-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatDimensions, formatWibDateTime } from "@/lib/label-format";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
@@ -31,12 +32,14 @@ import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture"
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 import { isSanctionedUnpaidRecoveryFixtureEnabled } from "@/lib/sanctioned-unpaid-recovery-fixture";
 import { gramsToKilogramLabel, MENGANTAR_COD_FEE_RATE_LABEL } from "@/lib/shipment-draft-logic";
+import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 
 import { loadShipmentDetailView, type ShipmentDetailView } from "./detail-data";
 import {
+  attentionSignals,
   buildTrackingTimeline,
   codNetAmountIdr,
   detailNextStep,
@@ -44,7 +47,7 @@ import {
   staleCheckAvailable,
   type DetailNextStep,
 } from "./detail-model";
-import { BackToQueue, DefinitionGrid, DetailCard, IdentityStrip, RouteHeader, TrackingTimeline, type DefinitionItem } from "./detail-parts";
+import { AttentionSignals, BackToQueue, DefinitionGrid, DetailCard, IdentityStrip, RouteHeader, TrackingTimeline, type DefinitionItem } from "./detail-parts";
 import { ReconciliationAction, StaleCheckAction, UnpaidRecoveryAction } from "./rail-actions";
 
 export const metadata: Metadata = { title: "Detail kiriman", robots: { index: false } };
@@ -116,12 +119,20 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
   );
 
   const issuance = step.kind === "issue" && detail.estimate;
+  // T-243: Mitra kurir — the gerai's switched-off couriers are never offered.
+  const disabledCouriers = issuance
+    ? await withTenantContext(db, principal.userId, principal.tenantId, loadTenantDisabledCouriers)
+    : [];
   const main = (
     <div className="flex w-full min-w-0 flex-1 flex-col gap-6 lg:order-1">
       <IdentityStrip
         items={[
           { copy: detail.publicReference, label: "Nomor kiriman", mono: true, value: detail.publicReference },
           awb ? { copy: awb, label: "Resi", mono: true, value: awb } : { label: "Resi", value: "Belum ada resi" },
+          // T-238: Mengantar `cnote_no_rts`, once a status pull has seen one.
+          ...(view.order?.returnCnoteNo
+            ? [{ copy: view.order.returnCnoteNo, label: "Resi retur", mono: true, value: view.order.returnCnoteNo }]
+            : []),
           detail.recipient ? { copy: detail.recipient.name, label: "Penerima", value: detail.recipient.name } : { label: "Penerima", value: "—" },
           detail.recipient ? { copy: detail.recipient.phone, label: "Telepon", value: detail.recipient.phone } : { label: "Telepon", value: "—" },
         ]}
@@ -158,6 +169,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
           entries={buildTrackingTimeline({
             awb,
             createdAt: detail.createdAt,
+            historyEvents: view.historyEvents,
             issuedAt: awb ? provider?.resolvedAt ?? null : null,
             observations: view.observations,
           })}
@@ -209,6 +221,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
             <ShipmentStatusBadge status={detail.status} />
           </div>
           <p className="text-sm font-medium text-foreground">{status.guidance}</p>
+          <AttentionSignals signals={attentionSignals(view.attention)} />
           <dl className="flex flex-col gap-1 border-t pt-2 text-xs text-muted-foreground">
             <div className="flex justify-between gap-3"><dt>Aktivitas terakhir</dt><dd>{formatWibDateTime(detail.updatedAt)}</dd></div>
             {responseCode ? <div className="flex justify-between gap-3"><dt>Respons Mengantar</dt><dd className="text-right">{providerResponseLabel(responseCode)}</dd></div> : null}
@@ -218,7 +231,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
 
       <Card aria-labelledby="tindakan-heading" role="region">
         <CardContent className="flex flex-col gap-3">
-          <h2 className="text-base font-bold" id="tindakan-heading">Tindakan berikutnya</h2>
+          <h2 className="text-lg font-bold" id="tindakan-heading">Tindakan berikutnya</h2>
           <NextStepActions shipmentId={detail.shipmentId} step={step} />
           {staleCheck ? <StaleCheckAction shipmentId={detail.shipmentId} /> : null}
         </CardContent>
@@ -245,7 +258,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
             codFormulaRetired: view.codFormulaRetired,
             declaredValueIdr: detail.package.declaredValueIdr,
             paymentMethod: detail.paymentMethod,
-            services: detail.estimate.services,
+            services: filterTenantCourierServices(detail.estimate.services, disabledCouriers),
           })}
           paymentMethod={detail.paymentMethod}
           shipmentId={detail.shipmentId}
@@ -270,7 +283,8 @@ function NextStepActions({ shipmentId, step }: { shipmentId: string; step: Detai
       return (
         <>
           {primaryLink(step.printBothHref, <Printer aria-hidden="true" />, "Cetak resi + invoice")}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Side by side while both labels fit (natural widths), stacked otherwise — never squeezed. */}
+          <div className="flex flex-wrap gap-3 *:flex-auto">
             <Button asChild variant="outline"><Link href={step.labelHref}><Tag aria-hidden="true" />Cetak label saja</Link></Button>
             <Button asChild variant="outline"><Link href={step.invoiceHref}><FileText aria-hidden="true" />Invoice</Link></Button>
           </div>

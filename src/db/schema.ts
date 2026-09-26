@@ -3,6 +3,7 @@ import {
   boolean,
   bigint,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -64,6 +65,10 @@ export const auditEventActions = [
   "TENANT_REGISTRATION_REJECTED",
   // T-233 (0058): written only by `set_tenant_contact_whatsapp`.
   "TENANT_CONTACT_UPDATED",
+  // T-244: written only by the platform announcement functions (Info terbaru).
+  "ANNOUNCEMENT_SAVED",
+  "ANNOUNCEMENT_PUBLISHED",
+  "ANNOUNCEMENT_UNPUBLISHED",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
@@ -296,6 +301,12 @@ export const tenantLabelSettings = pgTable(
     showRecipientPhone: boolean("show_recipient_phone").notNull().default(true),
     showRecipientAddressDetail: boolean("show_recipient_address_detail").notNull().default(true),
     showReturnWarning: boolean("show_return_warning").notNull().default(false),
+    // T-243: the courier's print logo (text when it has none), the gerai logo and the
+    // catatan resi line. On by default; the gerai logo and the catatan print only when the
+    // gerai actually has one (tenant_brand_settings).
+    showCourierLogo: boolean("show_courier_logo").notNull().default(true),
+    showGeraiLogo: boolean("show_gerai_logo").notNull().default(true),
+    showLabelNote: boolean("show_label_note").notNull().default(true),
     updatedByUserId: text("updated_by_user_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -304,6 +315,100 @@ export const tenantLabelSettings = pgTable(
     primaryKey({ name: "tenant_label_settings_pkey", columns: [table.tenantId, table.labelSize] }),
     check("tenant_label_settings_size_valid", sql`label_size IN ('10x15', '10x10')`),
     check("tenant_label_settings_updater_not_blank", sql`char_length(btrim(updated_by_user_id)) > 0`),
+  ],
+);
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
+/**
+ * T-243 (0065): Profil gerai & brand, one row per tenant. The logo is stored here as
+ * validated bytes (PNG/JPEG/WebP by magic bytes, <= 200 KB, <= 1000 x 1000 px) and served
+ * only by the authenticated `/app/brand/logo` handler. Both roles read (every label and
+ * invoice print shows the logo); only an active Tenant Admin inserts or updates (RLS).
+ */
+export const businessCategories = ["FASHION", "BEAUTY", "FOOD", "ELECTRONICS", "HEALTH", "OTHER"] as const;
+export const tenantLogoMimeTypes = ["image/png", "image/jpeg", "image/webp"] as const;
+
+export const tenantBrandSettings = pgTable(
+  "tenant_brand_settings",
+  {
+    tenantId: uuid("tenant_id")
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    businessCategory: text("business_category", { enum: businessCategories }),
+    labelNote: text("label_note"),
+    csEmail: text("cs_email"),
+    website: text("website"),
+    defaultLabelSize: text("default_label_size", { enum: tenantLabelSizes }).notNull().default("10x15"),
+    disabledCouriers: text("disabled_couriers").array().notNull().default(sql`'{}'::text[]`),
+    logoBytes: bytea("logo_bytes"),
+    logoMime: text("logo_mime", { enum: tenantLogoMimeTypes }),
+    logoSha256: text("logo_sha256"),
+    logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
+    updatedByUserId: text("updated_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    check(
+      "tenant_brand_settings_category_valid",
+      sql`business_category IS NULL OR business_category IN ('FASHION', 'BEAUTY', 'FOOD', 'ELECTRONICS', 'HEALTH', 'OTHER')`,
+    ),
+    check(
+      "tenant_brand_settings_label_note_valid",
+      sql`label_note IS NULL OR (char_length(label_note) BETWEEN 1 AND 60 AND label_note = btrim(label_note) AND label_note !~ '[[:cntrl:]]')`,
+    ),
+    check(
+      "tenant_brand_settings_cs_email_valid",
+      sql`cs_email IS NULL OR (char_length(cs_email) <= 254 AND cs_email ~ '^[^[:space:]@]+@[^[:space:]@]+[.][a-z]{2,}$')`,
+    ),
+    check(
+      "tenant_brand_settings_website_valid",
+      sql`website IS NULL OR (char_length(website) <= 200 AND website ~ '^https://[^[:space:]/@]+[.][^[:space:]/@]+')`,
+    ),
+    check("tenant_brand_settings_label_size_valid", sql`default_label_size IN ('10x15', '10x10')`),
+    check("tenant_brand_settings_couriers_bounded", sql`cardinality(disabled_couriers) <= 32`),
+    check(
+      "tenant_brand_settings_logo_complete",
+      sql`(logo_bytes IS NULL) = (logo_mime IS NULL) AND (logo_bytes IS NULL) = (logo_sha256 IS NULL) AND (logo_bytes IS NULL) = (logo_updated_at IS NULL)`,
+    ),
+    check(
+      "tenant_brand_settings_logo_valid",
+      sql`logo_bytes IS NULL OR (octet_length(logo_bytes) BETWEEN 1 AND 204800 AND logo_mime IN ('image/png', 'image/jpeg', 'image/webp') AND logo_sha256 ~ '^[0-9a-f]{64}$')`,
+    ),
+    check("tenant_brand_settings_updater_not_blank", sql`char_length(btrim(updated_by_user_id)) > 0`),
+  ],
+);
+
+/**
+ * T-247 (review L3): every logo a gerai ever saved, content-addressed by its sha256 and kept
+ * when the logo is replaced or removed, so an issued invoice renders the logo it was issued
+ * with (`shipment_invoices.logo_sha256`). Append-only for the runtime role; same member-read /
+ * Tenant-Admin-insert RLS as tenant_brand_settings (0065, 0068).
+ */
+export const tenantLogoVersions = pgTable(
+  "tenant_logo_versions",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    sha256: text("sha256").notNull(),
+    bytes: bytea("bytes").notNull(),
+    mime: text("mime", { enum: tenantLogoMimeTypes }).notNull(),
+    createdByUserId: text("created_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "tenant_logo_versions_pkey", columns: [table.tenantId, table.sha256] }),
+    check(
+      "tenant_logo_versions_valid",
+      sql`sha256 ~ '^[0-9a-f]{64}$' AND octet_length(bytes) BETWEEN 1 AND 204800 AND mime IN ('image/png', 'image/jpeg', 'image/webp')`,
+    ),
+    check("tenant_logo_versions_creator_not_blank", sql`char_length(btrim(created_by_user_id)) > 0`),
   ],
 );
 
@@ -427,6 +532,11 @@ export const outletPickupPoints = pgTable(
     originAreaId: text("origin_area_id").notNull(),
     originAreaLabel: text("origin_area_label").notNull(),
     isDefault: boolean("is_default").notNull().default(false),
+    // T-243 (0065): internal notes for the gerai's own team; never sent to Mengantar.
+    picName: text("pic_name"),
+    picPhone: text("pic_phone"),
+    pickupSchedule: text("pickup_schedule"),
+    driverAccessNote: text("driver_access_note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -463,6 +573,13 @@ export const outletPickupPoints = pgTable(
       "outlet_pickup_points_origin_label_valid",
       sql`char_length(btrim(origin_area_label)) BETWEEN 1 AND 320`,
     ),
+    check(
+      "outlet_pickup_points_notes_valid",
+      sql`(pic_name IS NULL OR char_length(btrim(pic_name)) BETWEEN 1 AND 80)
+        AND (pic_phone IS NULL OR pic_phone ~ '^0[2-9][0-9]{7,11}$')
+        AND (pickup_schedule IS NULL OR char_length(btrim(pickup_schedule)) BETWEEN 1 AND 120)
+        AND (driver_access_note IS NULL OR char_length(btrim(driver_access_note)) BETWEEN 1 AND 240)`,
+    ),
   ],
 );
 
@@ -473,8 +590,15 @@ export const contacts = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "restrict" }),
+    // T-241 (0064): the per-tenant contact number that addresses `/app/kontak/<peran>/<n>`.
+    // The before-insert trigger `contacts_allocate_number` fills it from
+    // tenant_contact_counters; the NULL default fails closed if the trigger is absent, and the
+    // runtime role has no UPDATE grant on it, so a number never moves.
+    contactNumber: integer("contact_number").notNull().default(sql`NULL`),
     name: text("name").notNull(),
     phone: text("phone").notNull(),
+    // T-241 (0064): optional peran/kategori code (`src/lib/contact-category.ts`); NULL = none.
+    category: text("category"),
     isRecipient: boolean("is_recipient").notNull().default(true),
     isSender: boolean("is_sender").notNull().default(true),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -483,12 +607,37 @@ export const contacts = pgTable(
   },
   (table) => [
     unique("contacts_id_tenant_key").on(table.id, table.tenantId),
+    unique("contacts_tenant_number_key").on(table.tenantId, table.contactNumber),
     index("contacts_tenant_archived_name_idx").on(table.tenantId, table.archivedAt, table.name),
     check("contacts_name_not_blank", sql`char_length(btrim(name)) > 0`),
     check("contacts_phone_not_blank", sql`char_length(btrim(phone)) > 0`),
     check("contacts_has_role", sql`is_sender OR is_recipient`),
+    check("contacts_contact_number_valid", sql`contact_number >= 1`),
+    check(
+      "contacts_category_valid",
+      sql`category IS NULL OR category IN (
+        'PIC_UTAMA',
+        'STAF_GUDANG',
+        'DROPSHIPPER',
+        'PENGRAJIN',
+        'OPERASIONAL_CABANG',
+        'ADMIN_PENGIRIMAN',
+        'RESELLER',
+        'PELANGGAN_TETAP',
+        'PEMBELI_BARU'
+      )`,
+    ),
   ],
 );
+
+// T-241 (0064): contact numbering state, mirroring tenant_shipment_counters (PR-44): no RLS and
+// no runtime privilege; only the owner-run SECURITY DEFINER allocator writes it.
+export const tenantContactCounters = pgTable("tenant_contact_counters", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  lastNumber: integer("last_number").notNull(),
+}, () => [
+  check("tenant_contact_counters_last_number_valid", sql`last_number >= 1`),
+]);
 
 export const contactAddresses = pgTable(
   "contact_addresses",
@@ -684,7 +833,8 @@ export const shipments = pgTable(
         'RTS_RECEIVED',
         'IN_TRANSIT',
         'DELIVERED',
-        'PROBLEM'
+        'PROBLEM',
+        'CANCELLED'
       )`,
     ),
   ],
@@ -833,8 +983,8 @@ export const shipmentDrafts = pgTable(
       "shipment_drafts_handover_type_known",
       sql`handover_type IS NULL OR handover_type IN ('PICKUP', 'DROP_OFF')`,
     ),
-    // T-234 (0061): the app offers 08:00–16:00 starts; 17:00 is legacy (drafts saved before
-    // T-234 under 0054's 09–17) and stays valid so no existing row breaks.
+    // 0061 accepts 08–17. D-27 (T-237): the app offers 09:00–17:00 starts (Mengantar
+    // `POST /time`, 09.00–18.00); 08:00 is legacy (drafts saved under D-25) and stays valid.
     check(
       "shipment_drafts_pickup_slot_valid",
       sql`pickup_slot IS NULL OR pickup_slot ~ '^(0[89]|1[0-7]):00$'`,
@@ -1285,6 +1435,9 @@ export const providerOrderSnapshots = pgTable(
     providerBatchId: text("provider_batch_id"),
     isPaid: boolean("is_paid"),
     cnoteNo: text("cnote_no"),
+    // T-238 (0063): Mengantar `cnote_no_rts`, the courier's return resi, as the
+    // latest status pull saw it. NULL until one is reported (DATA-13, DATA-18).
+    returnCnoteNo: text("return_cnote_no"),
     safeResponseCode: text("safe_response_code"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1568,8 +1721,15 @@ export const shipmentInvoices = pgTable(
     collectionMode: text("collection_mode", { enum: invoiceCollectionModes }).notNull(),
     courierCollectionIdr: integer("courier_collection_idr"),
     declaredValueIdr: integer("declared_value_idr").notNull(),
+    /** T-247 (L3): the gerai logo at issuance; NULL = no logo then, or issued before 0068. */
+    logoSha256: text("logo_sha256"),
   },
   (table) => [
+    foreignKey({
+      name: "shipment_invoices_logo_version_fkey",
+      columns: [table.tenantId, table.logoSha256],
+      foreignColumns: [tenantLogoVersions.tenantId, tenantLogoVersions.sha256],
+    }).onDelete("restrict"),
     foreignKey({
       name: "shipment_invoices_shipment_tenant_fkey",
       columns: [table.shipmentId, table.tenantId],
@@ -2031,11 +2191,57 @@ export const auditEvents = pgTable(
         'TENANT_SELF_REGISTERED',
         'TENANT_REGISTRATION_APPROVED',
         'TENANT_REGISTRATION_REJECTED',
-        'TENANT_CONTACT_UPDATED'
+        'TENANT_CONTACT_UPDATED',
+        'ANNOUNCEMENT_SAVED',
+        'ANNOUNCEMENT_PUBLISHED',
+        'ANNOUNCEMENT_UNPUBLISHED'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),
   ],
+);
+
+// T-244 (D-31): "Info terbaru" — platform-wide announcements written by the Admin platform and
+// read by every gerai member. Not tenant content: no tenant_id. The runtime role only SELECTs
+// (published rows for gerai members, every row in the platform context); the two SECURITY
+// DEFINER functions of the migration are the only writers and audit each write.
+export const announcementCategories = ["FITUR_BARU", "INFO_KURIR", "JADWAL", "PEMELIHARAAN", "LAINNYA"] as const;
+
+export const platformAnnouncements = pgTable(
+  "platform_announcements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    // Plain text with line breaks; rendered as text, never as HTML or markdown.
+    body: text("body").notNull(),
+    category: text("category", { enum: announcementCategories }).notNull(),
+    pinned: boolean("pinned").notNull().default(false),
+    // NULL = draft; set = tayang (visible to gerai members).
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdBy: text("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("platform_announcements_published_idx").on(table.publishedAt),
+    check("platform_announcements_title_valid", sql`char_length(btrim(title)) BETWEEN 1 AND 120 AND title !~ '[[:cntrl:]]'`),
+    check("platform_announcements_body_valid", sql`char_length(btrim(body)) BETWEEN 1 AND 2000 AND body !~ '[\\x01-\\x09\\x0b-\\x1f\\x7f]'`),
+    check(
+      "platform_announcements_category_valid",
+      sql`category IN ('FITUR_BARU', 'INFO_KURIR', 'JADWAL', 'PEMELIHARAAN', 'LAINNYA')`,
+    ),
+  ],
+);
+
+// T-244: per-user read state, so "belum dibaca" is per person, not per gerai. Insert-only.
+export const platformAnnouncementReads = pgTable(
+  "platform_announcement_reads",
+  {
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    announcementId: uuid("announcement_id").notNull().references(() => platformAnnouncements.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ name: "platform_announcement_reads_pkey", columns: [table.userId, table.announcementId] })],
 );
 
 export const providerSettlementItemTypes = ["SETTLEMENT", "CHARGE", "REFUND"] as const;
@@ -2138,11 +2344,18 @@ export const providerOrderStatusObservations = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     tenantId: uuid("tenant_id").notNull(),
-    pullId: uuid("pull_id").notNull(),
+    // T-238 (0063): NULL only for a webhook delivery, which belongs to no pull.
+    pullId: uuid("pull_id"),
     shipmentId: uuid("shipment_id").notNull(),
     outletId: uuid("outlet_id").notNull(),
     cnoteNo: text("cnote_no").notNull(),
     providerStatus: text("provider_status").notNull(),
+    // T-238 (0063): `PULL` (a Tenant Admin's status pull) or `WEBHOOK` (a
+    // signed Mengantar delivery, D-30). Every row before 0063 is a pull.
+    source: text("source", { enum: ["PULL", "WEBHOOK"] }).notNull().default("PULL"),
+    // The webhook's `x-timestamp`: the provider's own ordering of deliveries,
+    // which can arrive out of order. NULL on pull rows.
+    providerEventAt: timestamp("provider_event_at", { withTimezone: true }),
     // T-169: the lifecycle decision taken on this observation, written with the
     // observation itself so the transition is auditable from the evidence that
     // caused it. All three are NULL on rows recorded before migration 0047,
@@ -2156,6 +2369,14 @@ export const providerOrderStatusObservations = pgTable(
     lastHistoryDesc: text("last_history_desc"),
     lastHistoryAt: timestamp("last_history_at", { withTimezone: true }),
     podCode: text("pod_code"),
+    // T-238 (0063): live-observed order keys (tests/fixtures/mengantar-order-contract.shape.json):
+    // `cnote_no_rts`, `lastUndeliveredCode`, `isBreach`, `claimStatus`, `ticketStatus`.
+    // NULL when absent or unreadable, and on every row before 0063.
+    cnoteNoRts: text("cnote_no_rts"),
+    lastUndeliveredCode: text("last_undelivered_code"),
+    isBreach: boolean("is_breach"),
+    claimStatus: text("claim_status"),
+    ticketStatus: text("ticket_status"),
     observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -2178,10 +2399,104 @@ export const providerOrderStatusObservations = pgTable(
       "provider_order_status_observations_transition_valid",
       sql`(transition_outcome IS NULL AND from_status IS NULL AND mapped_status IS NULL)
         OR (
-          transition_outcome IN ('APPLIED', 'UNCHANGED', 'REFUSED', 'NO_LIFECYCLE_STATE', 'UNRECOGNISED')
+          transition_outcome IN ('APPLIED', 'UNCHANGED', 'REFUSED', 'NO_LIFECYCLE_STATE', 'UNRECOGNISED', 'SUPERSEDED')
           AND from_status IS NOT NULL
           AND (mapped_status IS NULL) = (transition_outcome IN ('NO_LIFECYCLE_STATE', 'UNRECOGNISED'))
         )`,
     ),
+    // T-238: a pull row names its pull; a webhook row names the provider's event time instead.
+    check(
+      "provider_order_status_observations_source_valid",
+      sql`(source = 'PULL' AND pull_id IS NOT NULL AND provider_event_at IS NULL)
+        OR (source = 'WEBHOOK' AND pull_id IS NULL AND provider_event_at IS NOT NULL)`,
+    ),
+    // A retried webhook delivery (same event time, same status) is recorded once.
+    uniqueIndex("provider_order_status_observations_webhook_event_key")
+      .on(table.tenantId, table.shipmentId, table.providerEventAt, table.providerStatus)
+      .where(sql`source = 'WEBHOOK'`),
+  ],
+);
+
+/**
+ * T-238 / DATA-18: the courier's own tracking history (`history[].date/desc`,
+ * and `lastHistory` when that is all a record carries), one row per distinct
+ * event. Append-only and readable by both tenant roles: it is the parcel's
+ * journey, not settlement evidence. `description` is courier text, cleaned of
+ * control characters and cut at 500 characters; it may name the receiver, whom
+ * both roles already see on the shipment.
+ */
+export const providerOrderHistoryEvents = pgTable(
+  "provider_order_history_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    outletId: uuid("outlet_id").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    description: text("description").notNull(),
+    // `HISTORY` from `history[]`, `LAST_HISTORY` from `lastHistory`.
+    source: text("source", { enum: ["HISTORY", "LAST_HISTORY"] }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "provider_order_history_events_shipment_outlet_tenant_fkey",
+      columns: [table.shipmentId, table.outletId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.outletId, shipments.tenantId],
+    }).onDelete("restrict"),
+    unique("provider_order_history_events_event_key").on(
+      table.tenantId,
+      table.shipmentId,
+      table.occurredAt,
+      table.description,
+    ),
+    check("provider_order_history_events_source_valid", sql`source IN ('HISTORY', 'LAST_HISTORY')`),
+    check(
+      "provider_order_history_events_description_valid",
+      sql`char_length(description) BETWEEN 1 AND 500 AND description !~ '[[:cntrl:]]'`,
+    ),
+  ],
+);
+
+// T-245 (DATA-22, D-32): Kemendagri wilayah reference — kecamatan (level 3) and kelurahan/desa
+// (level 4) with an upstream kode pos hint. Public government reference data, tenant-neutral by
+// construction; the runtime role only SELECTs it and `npm run wilayah:import` (owner role) is the
+// only writer. It SUGGESTS areas while typing; a Mengantar area id from a live provider search
+// stays the sole destination authority, and no tenant table references this one.
+export const wilayahAreas = pgTable(
+  "wilayah_areas",
+  {
+    code: text("code").primaryKey(),
+    level: smallint("level").notNull(),
+    districtCode: text("district_code").notNull(),
+    regencyCode: text("regency_code").notNull(),
+    villageName: text("village_name"),
+    villageKind: text("village_kind", { enum: ["KELURAHAN", "DESA"] }),
+    districtName: text("district_name").notNull(),
+    regencyName: text("regency_name").notNull(),
+    regencyKind: text("regency_kind", { enum: ["KAB", "KOTA"] }).notNull(),
+    provinceName: text("province_name").notNull(),
+    // Upstream hint only (cahyadsn/wilayah_kodepos); the provider ZIP_CODE stays the label's ZIP.
+    postalCode: text("postal_code"),
+    // Normalized (lower-case ASCII words, leading space) so a word-start match is `LIKE '% term%'`.
+    searchText: text("search_text").notNull(),
+    nameSearch: text("name_search").notNull(),
+    districtSearch: text("district_search").notNull(),
+    datasetVersion: text("dataset_version").notNull(),
+  },
+  (table) => [
+    index("wilayah_areas_search_trgm_idx").using("gin", sql`${table.searchText} gin_trgm_ops`),
+    index("wilayah_areas_postal_idx").on(table.postalCode).where(sql`postal_code IS NOT NULL`),
+    check("wilayah_areas_level_valid", sql`level IN (3, 4)`),
+    check(
+      "wilayah_areas_level_shape",
+      sql`(level = 3 AND code = district_code AND village_name IS NULL AND village_kind IS NULL AND postal_code IS NULL)
+        OR (level = 4 AND left(code, 8) = district_code AND village_name IS NOT NULL AND village_kind IS NOT NULL)`,
+    ),
+    check("wilayah_areas_code_valid", sql`code ~ '^[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}(\\.[0-9]{4})?$' AND left(district_code, 5) = regency_code`),
+    check("wilayah_areas_village_kind_valid", sql`village_kind IS NULL OR village_kind IN ('KELURAHAN', 'DESA')`),
+    check("wilayah_areas_regency_kind_valid", sql`regency_kind IN ('KAB', 'KOTA')`),
+    check("wilayah_areas_postal_code_valid", sql`postal_code IS NULL OR postal_code ~ '^[1-9][0-9]{4}$'`),
+    check("wilayah_areas_search_text_valid", sql`search_text ~ '^( [a-z0-9]+)+$' AND char_length(search_text) <= 400`),
   ],
 );

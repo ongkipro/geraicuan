@@ -1128,6 +1128,27 @@ try {
     }
   }
 
+  // T-244 (D-31): Info terbaru — platform announcements every gerai sees, each stating an
+  // accepted decision (D-29 Ninja, D-27 pickup window, D-14/D-15 invoice and batch printing).
+  // Upserted by fixed id; members' read receipts are left alone, so a re-seed keeps "read".
+  const announcements = [
+    [1, "INFO_KURIR", true, at(20, 9), "Ninja tidak lagi tersedia sejak 1 September 2026",
+      "Mengantar menghentikan layanan Ninja sejak 1 September 2026, jadi Ninja tidak lagi muncul di pilihan kurir saat membuat kiriman.\nKiriman Ninja yang dibuat sebelumnya tetap bisa dilihat di Histori kiriman.\nUntuk kiriman baru, pilih kurir lain yang tersedia."],
+    [2, "JADWAL", false, at(3, 10), "Jadwal pickup mengikuti Mengantar: 09.00–18.00 WIB",
+      "Pilihan jam pickup kini mengikuti jadwal Mengantar, pukul 09.00–18.00 WIB dalam slot satu jam.\nUntuk pickup hari ini, slot paling cepat 90 menit dari sekarang.\nDraf lama yang masih memakai jam 08.00 tetap tersimpan; pilih ulang jam pickup saat kiriman dikirim."],
+    [3, "FITUR_BARU", false, at(1, 8), "Invoice dan cetak resi massal kini tersedia",
+      "Setiap kiriman yang resinya sudah terbit kini punya invoice (nota) berisi ongkir dan asuransi dari Mengantar.\nDi menu Cetak resi, pilih beberapa kiriman sekaligus lalu cetak semua resinya dalam satu kali cetak."],
+  ];
+  for (const [index, category, pinned, publishedAt, title, body] of announcements) {
+    await query(
+      `INSERT INTO platform_announcements (id, title, body, category, pinned, published_at, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $6, $6)
+       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, category = EXCLUDED.category,
+         pinned = EXCLUDED.pinned, published_at = EXCLUDED.published_at, updated_at = EXCLUDED.updated_at`,
+      [fixedUuid("87", index), title, body, category, pinned, publishedAt, superUserId],
+    );
+  }
+
   // Settlement pulls: what Mengantar reported, the transition it applied, and the
   // per-AWB reconciliation lines (subItem.amount = COD_AMOUNT − estimatedSpecialPrice,
   // estimatedSpecialPrice = special shipping + COD_AMOUNT × 0.0333 unrounded).

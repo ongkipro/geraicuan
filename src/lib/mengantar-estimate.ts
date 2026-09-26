@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupportedEstimateService } from "@/db/estimate-repository";
 import type { MengantarCredentials } from "@/lib/mengantar-credentials";
+import { isMengantarServiceOffered, mengantarCourierOfService } from "@/lib/mengantar-couriers";
 import { toBillableWeightKg } from "@/lib/shipment-draft";
 
 const MAX_RESPONSE_BYTES = 512_000;
@@ -17,18 +18,25 @@ type DraftEstimateRequest = {
 };
 
 type ProviderService = {
+  cargoDiscount?: unknown;
+  cargoEstimatedPrice?: unknown;
+  cargoEstimatedSpecialPrice?: unknown;
+  cargoPrice?: unknown;
   codFee?: unknown;
   currency?: unknown;
   discount?: unknown;
   estimate_delivery?: unknown;
+  estimate_delivery_cargo?: unknown;
   estimatedDate?: unknown;
   estimatedPrice?: unknown;
   estimatedSpecialPrice?: unknown;
   coverage_cod?: unknown;
+  minimumWeightCargo?: unknown;
   price?: unknown;
   unsupported?: unknown;
   unsupportedPickup?: unknown;
   unsupported_cod?: unknown;
+  unsupportedCodCheckFirstSap?: unknown;
 };
 
 /**
@@ -45,10 +53,14 @@ function isOriginOrPickupUnsupported(service: ProviderService) {
 /**
  * DATA-13: the captures omit `unsupported_cod` on JNE, JNECargo, SiCepat,
  * SiCepatCargo and Ninja, which still accept COD. COD is refused only on an
- * explicit `unsupported_cod: true` or `coverage_cod: false`.
+ * explicit `unsupported_cod: true` or `coverage_cod: false`, and (D-30) on
+ * `unsupportedCodCheckFirstSap: true` — a per-service key the sandbox capture
+ * carries (as `false`) on SAP, SAPLite and SapCargo.
  */
 function isCodEligible(service: ProviderService) {
-  return service.unsupported_cod !== true && service.coverage_cod !== false;
+  return service.unsupported_cod !== true
+    && service.coverage_cod !== false
+    && service.unsupportedCodCheckFirstSap !== true;
 }
 
 const MALFORMED_AMOUNT = Symbol("malformed provider amount");
@@ -102,12 +114,68 @@ async function readBoundedResponseBody(response: Response, controller: AbortCont
   }
 }
 
-function readDeliveryEstimate(service: ProviderService) {
-  const value = service.estimate_delivery ?? service.estimatedDate;
+function readDeliveryEstimate(service: ProviderService, cargo: boolean) {
+  const value = (cargo ? service.estimate_delivery_cargo : undefined) ?? service.estimate_delivery ?? service.estimatedDate;
   return typeof value === "string" && value.trim().length > 0 && value.length <= 160 ? value : null;
 }
 
-export function normalizeMengantarEstimateServices(data: unknown): SupportedEstimateService[] {
+/**
+ * A courier's cargo service key (`JNECargo`, `SiCepatCargo`, `SapCargo`,
+ * `iDexpressCargo`). The docs name the couriers "that have cargo option: (JNE,
+ * SiCepat, Sap, iDexpress)" (Create Order, `orders.cargo`).
+ */
+export function isMengantarCargoService(providerService: string) {
+  const courier = mengantarCourierOfService(providerService);
+  return courier !== null
+    && providerService.replace(/[^A-Za-z0-9]/g, "").toLowerCase() === `${courier.toLowerCase()}cargo`;
+}
+
+/**
+ * T-237: a cargo key quotes its own tier. In the sandbox capture every cargo key's
+ * `price` equals its `cargoPrice`, but its `estimatedPrice`/`estimatedSpecialPrice`
+ * can be the regular service's (SiCepatCargo: 6 000 / 4 200 against a 30 000
+ * cargo price). The docs describe `cargoEstimatedPrice` as "Cargo total before
+ * discount" and `cargoEstimatedSpecialPrice` as "Cargo discounted total" (Check
+ * Shipping Fee Public), so a cargo key's normal/special price and discount come
+ * from the `cargo*` fields; 0 there means "no cargo figure", never a free quote.
+ */
+function cargoAware(service: ProviderService, cargo: boolean) {
+  if (!cargo) {
+    return {
+      discount: service.discount,
+      normal: service.estimatedPrice,
+      price: service.price,
+      special: service.estimatedSpecialPrice,
+    };
+  }
+  const positiveOrNull = (value: unknown) => (value === 0 ? null : value);
+  return {
+    discount: service.cargoDiscount,
+    normal: positiveOrNull(service.cargoEstimatedPrice),
+    price: service.cargoPrice ?? service.price,
+    special: positiveOrNull(service.cargoEstimatedSpecialPrice),
+  };
+}
+
+/**
+ * "minimumWeightCargo is shown only for couriers that support cargo shipments"
+ * (docs, Check Shipping Fee 3PL; captured as `5` on SapCargo). A cargo service
+ * whose minimum the parcel does not reach is hidden; an unreadable minimum hides
+ * it too. Without a known weight nothing is hidden here.
+ */
+function belowCargoMinimum(service: ProviderService, weightGrams: number | undefined) {
+  if (service.minimumWeightCargo === undefined || service.minimumWeightCargo === null) return false;
+  const minimumKg = typeof service.minimumWeightCargo === "string"
+    ? Number(service.minimumWeightCargo)
+    : service.minimumWeightCargo;
+  if (typeof minimumKg !== "number" || !Number.isFinite(minimumKg) || minimumKg < 0) return true;
+  return weightGrams !== undefined && weightGrams < minimumKg * 1000;
+}
+
+export function normalizeMengantarEstimateServices(
+  data: unknown,
+  request: { weightGrams?: number } = {},
+): SupportedEstimateService[] {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new MengantarEstimateError();
   }
@@ -117,13 +185,18 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
 
     const service = value as ProviderService;
-    const price = service.price;
-    const deliveryEstimate = readDeliveryEstimate(service);
+    const cargo = isMengantarCargoService(providerService);
+    const quote = cargoAware(service, cargo);
+    const price = quote.price;
+    const deliveryEstimate = readDeliveryEstimate(service, cargo);
     if (
       !PROVIDER_SERVICE_PATTERN.test(providerService) ||
       providerService.length > MAX_PROVIDER_SERVICE_LENGTH ||
       service.unsupported === true ||
       isOriginOrPickupUnsupported(service) ||
+      // D-29: a discontinued courier (Ninja) is never offered, whatever it quotes.
+      !isMengantarServiceOffered(providerService) ||
+      (cargo && belowCargoMinimum(service, request.weightGrams)) ||
       (service.currency !== undefined && service.currency !== "IDR") ||
       typeof price !== "number" ||
       !Number.isSafeInteger(price) ||
@@ -134,13 +207,13 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
       continue;
     }
 
-    const normalPriceIdr = readOptionalIdr(service.estimatedPrice);
-    const specialPriceIdr = readOptionalIdr(service.estimatedSpecialPrice);
+    const normalPriceIdr = readOptionalIdr(quote.normal);
+    const specialPriceIdr = readOptionalIdr(quote.special);
     const codFeeIdr = readOptionalIdr(service.codFee);
     // `discount` is display-only: nothing downstream prices the shipment or
     // computes the seller payout from it, so a malformed value degrades to
     // null instead of dropping a courier that is otherwise priced correctly.
-    const rawDiscountIdr = readOptionalIdr(service.discount);
+    const rawDiscountIdr = readOptionalIdr(quote.discount);
     const discountIdr = rawDiscountIdr === MALFORMED_AMOUNT ? null : rawDiscountIdr;
     if (
       normalPriceIdr === MALFORMED_AMOUNT
@@ -175,7 +248,9 @@ export function normalizeMengantarEstimateServices(data: unknown): SupportedEsti
       PROVIDER_SERVICE_PATTERN.test(name)
       && value && typeof value === "object" && !Array.isArray(value)
       && ((value as ProviderService).unsupported === true
-        || isOriginOrPickupUnsupported(value as ProviderService))
+        || isOriginOrPickupUnsupported(value as ProviderService)
+        || !isMengantarServiceOffered(name)
+        || (isMengantarCargoService(name) && belowCargoMinimum(value as ProviderService, request.weightGrams)))
     ));
     if (allUnsupported) throw new MengantarNoSupportedServicesError();
     throw new MengantarEstimateError();
@@ -262,5 +337,5 @@ export async function fetchMengantarEstimate(
   }
   const result = payload as { data?: unknown; success?: unknown };
   if (result.success !== true) throw new MengantarEstimateError();
-  return normalizeMengantarEstimateServices(result.data);
+  return normalizeMengantarEstimateServices(result.data, { weightGrams: request.weightGrams });
 }

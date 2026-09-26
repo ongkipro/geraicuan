@@ -104,7 +104,7 @@ async function seedUnknownShipment(onSubmit: () => void) {
     `INSERT INTO shipment_estimate_services (
       id, tenant_id, snapshot_id, provider_service, currency,
       shipping_amount_idr, shipping_source_field, delivery_estimate, cod_eligible
-    ) VALUES ($1, $2, $3, 'JNE REG', 'IDR', 8000, 'price',
+    ) VALUES ($1, $2, $3, 'JNE', 'IDR', 8000, 'price',
       'sanitized estimate', true)`,
     [estimateServiceId, tenantA, estimateSnapshotId],
   );

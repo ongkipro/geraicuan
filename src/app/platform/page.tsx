@@ -252,7 +252,7 @@ export default async function PlatformOverviewPage({ searchParams }: PageProps<"
         label="Filter ringkasan"
         summary={`${range.periodLabel} · ${range.timezoneLabel}`}
       >
-        <DateRangePicker endDate={view.filters.range.lastIncludedDate} label={range.presetLabel} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
+        <DateRangePicker endDate={view.filters.range.lastIncludedDate} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
       </FilterBar>
       {view.health ? <HealthRow health={view.health} /> : <RegionError title="Kesehatan platform" />}
       <Attention view={view} />

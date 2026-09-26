@@ -18,9 +18,9 @@ type ReconciliationFixture = {
     response: {
       success: true;
       data: Array<{
+        _id: string;
         cnote_no: string;
         isPaid: true;
-        order_id: string;
       }>;
     };
   };
@@ -56,7 +56,7 @@ async function loadFixture() {
         throw new SanctionedReconciliationFixtureUnavailableError();
       }
       normalizeMengantarProviderIdentifier(
-        item.order_id,
+        item._id,
         "SANCTIONED_RECONCILIATION_ORDER_ID_UNSAFE",
       );
       normalizeMengantarProviderIdentifier(
@@ -79,7 +79,7 @@ export const resolveSanctionedReconciliationFixture:
       ...key,
       cnoteNo: item.cnote_no,
       isPaid: item.isPaid,
-      providerOrderId: item.order_id,
+      providerOrderId: item._id,
       status: "ISSUED",
     };
     return result;

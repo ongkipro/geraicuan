@@ -1,11 +1,12 @@
 "use client";
 
 import { CircleAlert, CircleCheck, FileText, Printer } from "lucide-react";
-import { useEffect, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
 import { InvoiceMediaCards, InvoicePreview } from "@/app/app/invoice/invoice-media";
 import { DEFAULT_INVOICE_MEDIUM, INVOICE_MEDIA, InvoiceSheet, type InvoiceMedium } from "@/app/app/invoice/invoice-sheet";
 import { printGroup } from "@/app/app/invoice/print-group";
+import { LabelPreviewFrame } from "@/app/app/label/[shipmentId]/label-preview-frame";
 import { LabelPrintContext } from "@/app/app/label/[shipmentId]/label-print-context";
 import { recordBatchLabelPrints, type BatchLabelPrintResult } from "@/app/app/label/cetak/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,9 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { LABEL_SIZES, type LabelSize } from "@/lib/label-size";
-
-/** `.label-sheet` is 100 mm wide at every size (label.css, T-176); CSS px are 96 per inch. */
-const LABEL_SHEET_WIDTH_PX = (100 * 96) / 25.4;
 
 /**
  * PR-87 batch print view. Labels (100 mm) and invoices (80 mm roll / A4) are different
@@ -42,26 +40,10 @@ export function BatchPrintPanel({
   const [error, setError] = useState(false);
   const [nextAttempts, setNextAttempts] = useState(attempts);
   const [medium, setMedium] = useState<InvoiceMedium>(DEFAULT_INVOICE_MEDIUM);
-  const preview = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
   const hasLabels = attempts.length > 0;
   const hasInvoices = invoices.length > 0;
   const both = hasLabels && hasInvoices;
   const labelsDone = result !== null && result.failed === 0;
-
-  useEffect(() => {
-    const region = preview.current;
-    if (!region) return;
-    const fit = () => {
-      const style = getComputedStyle(region);
-      const available = region.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      setZoom(Math.min(1, Math.max(available, 0) / LABEL_SHEET_WIDTH_PX));
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(region);
-    return () => observer.disconnect();
-  }, []);
 
   function printLabels() {
     startTransition(async () => {
@@ -99,7 +81,7 @@ export function BatchPrintPanel({
                   {result.failed > 0 ? <CircleAlert aria-hidden="true" /> : <CircleCheck aria-hidden="true" />}
                   <AlertTitle>{result.printed} permintaan cetak tercatat</AlertTitle>
                   <AlertDescription>
-                    {result.blocked > 0 ? `${result.blocked} label diblokir karena resi belum terbit. ` : ""}
+                    {result.blocked > 0 ? `${result.blocked} label diblokir (resi belum terbit atau kiriman dibatalkan). ` : ""}
                     {result.failed > 0 ? `${result.failed} gagal dicatat; tekan Cetak ulang untuk mencoba lagi. ` : ""}
                     Jika dialog cetak tidak terbuka, tekan Ctrl+P (⌘P) dengan kertas {LABEL_SIZES[size].name}.
                   </AlertDescription>
@@ -141,19 +123,15 @@ export function BatchPrintPanel({
       <div className="grid min-w-0 gap-6 print:block">
         {hasLabels ? (
           <div className="label-print-group grid min-w-0 gap-2 print:block">
-            <p aria-hidden="true" className="label-hide text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Pratinjau label {LABEL_SIZES[size].name}
-            </p>
             <LabelPrintContext.Provider value={{ printedAt: recordedAt, size }}>
-              <div
-                aria-label={`Pratinjau ${attempts.length} label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
-                className="label-preview print-sequence [&>.label-sheet]:[zoom:var(--label-preview-zoom,1)] print:[&>.label-sheet]:[zoom:1]"
-                ref={preview}
-                role="region"
-                style={{ "--label-preview-zoom": zoom } as CSSProperties}
+              <LabelPreviewFrame
+                className="print-sequence"
+                label={`Pratinjau ${attempts.length} label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
+                size={size}
+                title={`Pratinjau label ${LABEL_SIZES[size].name}`}
               >
                 {labels}
-              </div>
+              </LabelPreviewFrame>
             </LabelPrintContext.Provider>
           </div>
         ) : null}

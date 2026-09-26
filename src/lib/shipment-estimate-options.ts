@@ -2,6 +2,7 @@ import "server-only";
 
 import { calculateCodAmountsOrNull } from "@/db/cod-totals-repository";
 import { codChargeBreakdown, shippingMengantarDeductsIdr, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import { isMengantarServiceOffered } from "@/lib/mengantar-couriers";
 import type { PaymentMethod } from "@/lib/payment-method";
 
 /** One service the issuance step offers (moved here from the removed issuance panel, T-208). */
@@ -39,7 +40,8 @@ export function buildShipmentEstimateOptions(input: {
   paymentMethod: PaymentMethod;
   services: readonly EstimateService[];
 }): ShipmentEstimateOption[] {
-  return input.services.map((service) => {
+  // D-29: a snapshot stored before Ninja was discontinued may still hold its quote.
+  return input.services.filter((service) => isMengantarServiceOffered(service.providerService)).map((service) => {
     // COD only: a COD Ongkir amount is the charge chosen with the service.
     const fullCod = input.paymentMethod === "COD" && service.codEligible && !input.codFormulaRetired;
     // A total past the Postgres integer range fails closed as "COD not available", never as a route error.

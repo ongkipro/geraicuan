@@ -18,6 +18,7 @@ vi.mock("@/app/app/pengaturan/actions", () => ({
   removeOutletPickupPoint: async () => ({}),
   savePrivateMengantarCredential: async () => ({}),
   saveLabelSettings: async () => ({}),
+  savePickupPointNotes: async () => ({}),
   saveShipmentPrefix: async () => ({}),
   saveTenantContact: async () => ({}),
   setDefaultOutletPickupPoint: async () => ({}),
@@ -35,6 +36,8 @@ const { ShipmentPrefixCard } = await import("@/app/app/pengaturan/_components/sh
 const { GeraiIdentityCard } = await import("@/app/app/pengaturan/_components/gerai-identity-card");
 const { LabelInfoEditor } = await import("@/app/app/pengaturan/label/label-info-editor");
 const { DEFAULT_LABEL_FIELDS, DEFAULT_LABEL_FIELDS_BY_SIZE } = await import("@/lib/label-fields");
+const { NO_GERAI_BRAND } = await import("@/app/app/brand/gerai-brand");
+const NO_NOTES = { accessNote: null, picName: null, picPhone: null, schedule: null };
 const { ConnectionForm } = await import("@/app/app/pengaturan/koneksi/connection-form");
 const { PickupPoints } = await import("@/app/app/pengaturan/pickup/pickup-points");
 const { MemberAccessDialog } = await import("@/app/app/anggota/_components/member-access-dialog");
@@ -113,14 +116,15 @@ describe("settings sub-menu", () => {
     ["/app/anggota", "Anggota & akses"],
     ["/app/pengaturan", "Profil gerai"],
     ["/app/pengaturan/label", "Informasi label"],
-  ])("lists the six pages in order and marks %s current", (pathname, current) => {
+    ["/app/pengaturan/kurir", "Mitra kurir"],
+  ])("lists the seven pages in order and marks %s current", (pathname, current) => {
     route.pathname = pathname;
     const html = renderToStaticMarkup(createElement(SettingsNav));
     const links = [...html.matchAll(/<a([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, body]) => ({
       current: attributes.includes('aria-current="page"'),
       label: body.replace(/<[^>]+>/g, "").replace("&amp;", "&").trim(),
     }));
-    expect(links.map((link) => link.label)).toEqual(["Profil gerai", "Informasi label", "Titik pickup", "Outlet", "Koneksi Mengantar", "Anggota & akses"]);
+    expect(links.map((link) => link.label)).toEqual(["Profil gerai", "Informasi label", "Titik pickup", "Outlet", "Mitra kurir", "Koneksi Mengantar", "Anggota & akses"]);
     expect(links.filter((link) => link.current).map((link) => link.label)).toEqual([current]);
   });
 });
@@ -140,9 +144,10 @@ describe("gerai identity card (T-233)", () => {
 describe("Informasi label editor (T-229)", () => {
   it("renders the size cards, one switch per field, the real label sheet and one Simpan", () => {
     const initial = { ...DEFAULT_LABEL_FIELDS_BY_SIZE, "10x10": { ...DEFAULT_LABEL_FIELDS, senderPhone: false } };
-    const html = renderToStaticMarkup(createElement(LabelInfoEditor, { geraiName: "Gerai Sinar", geraiWhatsapp: "081234567890", initial }));
+    const html = renderToStaticMarkup(createElement(LabelInfoEditor, { brand: NO_GERAI_BRAND, geraiName: "Gerai Sinar", geraiWhatsapp: "081234567890", initial }));
     expect(html.match(/name="label-info-size"/g)).toHaveLength(2);
-    expect(html.match(/data-slot="switch"/g)).toHaveLength(6);
+    // T-243: + Logo kurir, Logo gerai and Catatan resi (the last two disabled without a logo/catatan).
+    expect(html.match(/data-slot="switch"/g)).toHaveLength(9);
     expect(html.match(/class="label-sheet"/g)).toHaveLength(1);
     expect(html).toContain("Gerai Sinar");
     // Both sizes travel in the form; the 10 × 10 choice is kept while 10 × 15 is shown.
@@ -204,8 +209,8 @@ describe("Koneksi Mengantar", () => {
 
 describe("Titik pickup", () => {
   const points = [
-    { isDefault: true, originAreaLabel: "Coblong, Kota Bandung", pickupAddressId: "p-1", pickupAddressLabel: "Gudang Utama" },
-    { isDefault: false, originAreaLabel: "Sukajadi, Kota Bandung", pickupAddressId: "p-2", pickupAddressLabel: "Gudang Dua" },
+    { isDefault: true, notes: NO_NOTES, originAreaLabel: "Coblong, Kota Bandung", pickupAddressId: "p-1", pickupAddressLabel: "Gudang Utama" },
+    { isDefault: false, notes: NO_NOTES, originAreaLabel: "Sukajadi, Kota Bandung", pickupAddressId: "p-2", pickupAddressLabel: "Gudang Dua" },
   ];
 
   it("offers Jadikan utama only on the non-default point and Hapus on every point", () => {

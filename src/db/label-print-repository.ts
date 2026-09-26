@@ -83,7 +83,7 @@ export type PrintableShipmentRow = {
   awb: string | null;
   courier: string;
   providerService: string;
-  status: "ISSUED" | "AWAITING_UPSTREAM_PAYMENT";
+  status: "ISSUED" | "AWAITING_UPSTREAM_PAYMENT" | "CANCELLED";
   issuedAt: Date | null;
   destinationAreaLabel: string;
   recipientName: string;
@@ -95,13 +95,18 @@ export type PrintableShipmentRow = {
   printCount: number;
 };
 
-/** PR-52 print-state entry on Cetak resi; `semua` is the unfiltered total. */
-export type LabelPrintStateFilter = "semua" | "belum" | "sudah";
+/**
+ * PR-52 print-state entry on Cetak resi; `semua` is every printable (ISSUED) resi.
+ * T-238: `batal` lists resi Mengantar has since cancelled (shipment CANCELLED, order
+ * still ISSUED with its AWB); they are never printable and never in `semua`.
+ */
+export type LabelPrintStateFilter = "semua" | "belum" | "sudah" | "batal";
 
 export type LabelPrintSummary = {
   "LBL-ALL": number;
   "LBL-PRINTED": number;
   "LBL-UNPRINTED": number;
+  "LBL-CANCELLED": number;
 };
 
 export type LabelIndexPage = {
@@ -112,7 +117,9 @@ export type LabelIndexPage = {
 export type LabelUnavailableReason =
   | "NOT_FOUND"
   | "NOT_ISSUED"
-  | "AWAITING_UPSTREAM_PAYMENT";
+  | "AWAITING_UPSTREAM_PAYMENT"
+  // T-238: Mengantar reported the order cancelled; refused and recorded as such.
+  | "CANCELLED";
 
 export type PrintAttemptResult =
   | { outcome: "PRINTED"; sequence: number; printedAt: Date; awb: string }
@@ -172,6 +179,7 @@ async function loadPrintCandidate(
     .limit(1);
 
   if (!row) throw new LabelUnavailableError("NOT_FOUND");
+  if (row.shipmentStatus === "CANCELLED") throw new LabelUnavailableError("CANCELLED");
   if (row.shipmentStatus === "AWAITING_UPSTREAM_PAYMENT") {
     throw new LabelUnavailableError("AWAITING_UPSTREAM_PAYMENT");
   }
@@ -587,6 +595,7 @@ async function loadPrintAttemptReplay(
     && (
       event.reasonCode === "NOT_ISSUED"
       || event.reasonCode === "AWAITING_UPSTREAM_PAYMENT"
+      || event.reasonCode === "CANCELLED"
     )
   ) {
     return {
@@ -789,6 +798,7 @@ export async function listPrintableShipments(
   const status = filter.status === "issued"
     ? "ISSUED"
     : "AWAITING_UPSTREAM_PAYMENT";
+  const cancelledView = filter.status === "issued" && filter.printState === "batal";
   const rows = await tx
     .select({
       shipmentId: shipments.id,
@@ -845,7 +855,7 @@ export async function listPrintableShipments(
     .where(
       and(
         eq(shipments.tenantId, context.tenantId),
-        eq(shipments.status, status),
+        eq(shipments.status, cancelledView ? "CANCELLED" : status),
         eq(providerOrderSnapshots.status, status),
         filter.status === "issued"
           ? sql`char_length(btrim(${providerOrderSnapshots.cnoteNo})) BETWEEN 1 AND 160`
@@ -866,8 +876,8 @@ export async function listPrintableShipments(
     awb: row.cnoteNo?.trim() ?? null,
     courier: row.courier,
     providerService: row.providerService,
-    status: row.status as "ISSUED" | "AWAITING_UPSTREAM_PAYMENT",
-    issuedAt: row.status === "ISSUED" ? row.resolvedAt : null,
+    status: row.status as PrintableShipmentRow["status"],
+    issuedAt: row.status === "AWAITING_UPSTREAM_PAYMENT" ? null : row.resolvedAt,
     destinationAreaLabel: row.destinationAreaLabel,
     recipientName: row.recipientName,
     recipientPhone: row.recipientPhone,
@@ -898,16 +908,20 @@ export async function loadLabelIndexPage(
 ): Promise<LabelIndexPage> {
   const awbSuffix = filter.awbSuffix?.trim();
   if (awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix)) {
-    return { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0 } };
+    return { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 } };
   }
 
   const status = filter.status === "issued" ? "ISSUED" : "AWAITING_UPSTREAM_PAYMENT";
   const printed = printedPredicate(context);
+  // One pass over both cohorts: the printable one (shipment still `status`) and, for
+  // issued resi, the one Mengantar cancelled since (T-238).
+  const printable = sql`${shipments.status} = ${status}`;
   const [summaryRow] = await tx
     .select({
-      all: sql<number>`count(*)::int`.mapWith(Number),
-      printed: sql<number>`count(*) FILTER (WHERE ${printed})::int`.mapWith(Number),
-      unprinted: sql<number>`count(*) FILTER (WHERE NOT ${printed})::int`.mapWith(Number),
+      all: sql<number>`count(*) FILTER (WHERE ${printable})::int`.mapWith(Number),
+      printed: sql<number>`count(*) FILTER (WHERE ${printable} AND ${printed})::int`.mapWith(Number),
+      unprinted: sql<number>`count(*) FILTER (WHERE ${printable} AND NOT ${printed})::int`.mapWith(Number),
+      cancelled: sql<number>`count(*) FILTER (WHERE ${shipments.status} = 'CANCELLED')::int`.mapWith(Number),
     })
     .from(shipments)
     // The same four joins the list makes, or a shipment without a draft, batch
@@ -944,7 +958,9 @@ export async function loadLabelIndexPage(
     .where(
       and(
         eq(shipments.tenantId, context.tenantId),
-        eq(shipments.status, status),
+        filter.status === "issued"
+          ? inArray(shipments.status, ["ISSUED", "CANCELLED"])
+          : eq(shipments.status, status),
         eq(providerOrderSnapshots.status, status),
         filter.status === "issued"
           ? sql`char_length(btrim(${providerOrderSnapshots.cnoteNo})) BETWEEN 1 AND 160`
@@ -964,6 +980,7 @@ export async function loadLabelIndexPage(
       "LBL-ALL": summaryRow?.all ?? 0,
       "LBL-PRINTED": summaryRow?.printed ?? 0,
       "LBL-UNPRINTED": summaryRow?.unprinted ?? 0,
+      "LBL-CANCELLED": summaryRow?.cancelled ?? 0,
     },
   };
 }

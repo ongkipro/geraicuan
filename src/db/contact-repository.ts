@@ -1,9 +1,11 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
+import { loadContactShipmentCounts } from "@/db/contact-shipment-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { contactAddresses, contacts } from "@/db/schema";
+import type { ContactCategory } from "@/lib/contact-category";
 import type { ContactDirectoryInput } from "@/lib/contact-directory";
 import type { ContactStatusFilter } from "@/lib/contact-role-filter";
 
@@ -48,6 +50,7 @@ export async function createContact(
   const created = await tx
     .insert(contacts)
     .values({
+      category: input.category ?? null,
       isRecipient: input.isRecipient,
       isSender: input.isSender,
       name: input.name,
@@ -102,8 +105,13 @@ export type ContactDirectoryRow = {
   address: string | null;
   addressCount: number;
   archivedAt: Date | null;
+  category: string | null;
+  contactNumber: number;
+  /** T-241: shipments attributed to the contact in the list's role (`loadContactShipmentCounts`). */
+  deliveredCount: number;
   destinationAreaLabel: string | null;
   id: string;
+  shipmentCount: number;
   isRecipient: boolean;
   isSender: boolean;
   name: string;
@@ -143,6 +151,8 @@ export async function listContactDirectory(
   const contactRows = await tx
     .select({
       archivedAt: contacts.archivedAt,
+      category: contacts.category,
+      contactNumber: contacts.contactNumber,
       id: contacts.id,
       isRecipient: contacts.isRecipient,
       isSender: contacts.isSender,
@@ -199,14 +209,24 @@ export async function listContactDirectory(
     .groupBy(contactAddresses.contactId);
   const addressByContact = new Map(primaryAddressRows.map((row) => [row.contactId, row]));
   const countByContact = new Map(addressCountRows.map((row) => [row.contactId, row.total]));
+  // T-241: the "Kiriman" column; a role-less read ("all") attributes nothing.
+  const shipmentsByContact = input.role === "all"
+    ? new Map<string, { deliveredCount: number; shipmentCount: number }>()
+    : await loadContactShipmentCounts(tx, context, {
+      contactIds,
+      role: input.role === "sender" ? "SENDER" : "RECIPIENT",
+    });
 
   return contactRows.map((row) => {
     const primary = addressByContact.get(row.id);
+    const shipped = shipmentsByContact.get(row.id);
     return {
       ...row,
       address: primary?.address ?? null,
       addressCount: countByContact.get(row.id) ?? 0,
+      deliveredCount: shipped?.deliveredCount ?? 0,
       destinationAreaLabel: primary?.destinationAreaLabel ?? null,
+      shipmentCount: shipped?.shipmentCount ?? 0,
     };
   });
 }
@@ -233,17 +253,38 @@ export async function getContact(
   contactId: string,
 ) {
   const rows = await tx
-    .select({
-      archivedAt: contacts.archivedAt,
-      id: contacts.id,
-      isRecipient: contacts.isRecipient,
-      isSender: contacts.isSender,
-      name: contacts.name,
-      phone: contacts.phone,
-      updatedAt: contacts.updatedAt,
-    })
+    .select(contactDetailColumns)
     .from(contacts)
     .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, context.tenantId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+const contactDetailColumns = {
+  archivedAt: contacts.archivedAt,
+  category: contacts.category,
+  contactNumber: contacts.contactNumber,
+  id: contacts.id,
+  isRecipient: contacts.isRecipient,
+  isSender: contacts.isSender,
+  name: contacts.name,
+  phone: contacts.phone,
+  updatedAt: contacts.updatedAt,
+};
+
+/**
+ * T-241: a contact by its per-tenant number (`/app/kontak/<peran>/<n>`). The tenant predicate is
+ * the table's own column, so another tenant's number reads as missing.
+ */
+export async function getContactByNumber(
+  tx: TenantTransaction,
+  context: TenantContext,
+  contactNumber: number,
+) {
+  const rows = await tx
+    .select(contactDetailColumns)
+    .from(contacts)
+    .where(and(eq(contacts.contactNumber, contactNumber), eq(contacts.tenantId, context.tenantId)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -448,7 +489,8 @@ export async function updateContact(
   tx: TenantTransaction,
   context: TenantContext,
   contactId: string,
-  input: Pick<ContactDirectoryInput, "isRecipient" | "isSender" | "name" | "phone">,
+  // `category` undefined leaves the stored one; `null` clears it (T-241).
+  input: Pick<ContactDirectoryInput, "isRecipient" | "isSender" | "name" | "phone"> & { category?: ContactCategory | null },
 ) {
   const updated = await tx
     .update(contacts)
@@ -525,8 +567,57 @@ export async function archiveContact(
         isNull(contacts.archivedAt),
       ),
     )
-    .returning({ id: contacts.id });
+    .returning({ contactNumber: contacts.contactNumber });
   if (updated.length !== 1) throw new ContactUnavailableError();
+  return updated[0].contactNumber;
+}
+
+/**
+ * T-241 "Jadikan utama": moves the primary mark to one active address of an active contact, in
+ * one transaction under the contact's row lock, so a contact never ends with two primaries.
+ */
+export async function setPrimaryContactAddress(
+  tx: TenantTransaction,
+  context: TenantContext,
+  contactId: string,
+  addressId: string,
+) {
+  const [contact] = await tx
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, context.tenantId), isNull(contacts.archivedAt)))
+    .limit(1)
+    .for("update");
+  if (!contact) throw new ContactUnavailableError();
+  const [target] = await tx
+    .select({ id: contactAddresses.id })
+    .from(contactAddresses)
+    .where(
+      and(
+        eq(contactAddresses.id, addressId),
+        eq(contactAddresses.contactId, contactId),
+        eq(contactAddresses.tenantId, context.tenantId),
+        isNull(contactAddresses.archivedAt),
+      ),
+    )
+    .limit(1);
+  if (!target) throw new ContactUnavailableError();
+  const now = new Date();
+  await tx
+    .update(contactAddresses)
+    .set({ isPrimary: false, updatedAt: now })
+    .where(
+      and(
+        eq(contactAddresses.contactId, contactId),
+        eq(contactAddresses.tenantId, context.tenantId),
+        eq(contactAddresses.isPrimary, true),
+        ne(contactAddresses.id, addressId),
+      ),
+    );
+  await tx
+    .update(contactAddresses)
+    .set({ isPrimary: true, updatedAt: now })
+    .where(and(eq(contactAddresses.id, addressId), eq(contactAddresses.tenantId, context.tenantId)));
 }
 
 /** Keyed by the `status` value each count answers; the page names the role-scoped metric IDs (spec 19 CON-SENDER-*, CON-RECIPIENT-*). */

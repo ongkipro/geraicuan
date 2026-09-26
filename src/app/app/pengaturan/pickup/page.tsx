@@ -23,6 +23,9 @@ function auditFixture(scenario: Awaited<ReturnType<typeof readAuditScenario>>) {
     originAreaLabel: `Kecamatan Audit ${index}, Kota Bandung, Jawa Barat`,
     pickupAddressId: `pickup-audit-${index}`,
     pickupAddressLabel: `Gudang Audit ${index}, Jalan Contoh ${index}`,
+    notes: index === 1
+      ? { accessNote: "Pintu samping, hubungi PIC sebelum tiba.", picName: "PIC Audit", picPhone: "081234567890", schedule: "Senin–Sabtu 11.30 WIB" }
+      : { accessNote: null, picName: null, picPhone: null, schedule: null },
   }));
   const options: MengantarPickupOptionsActionState = scenario === "settings-pickup-list"
     ? {
@@ -68,8 +71,9 @@ export default async function PickupSettingsPage({
     principal.tenantId,
     (tx, context) => listOutletPickupPoints(tx, context, active.id),
     STORE_SETUP,
-  )).map(({ isDefault, originAreaLabel, pickupAddressId, pickupAddressLabel }) => ({
+  )).map(({ isDefault, notes, originAreaLabel, pickupAddressId, pickupAddressLabel }) => ({
     isDefault,
+    notes,
     originAreaLabel,
     pickupAddressId,
     pickupAddressLabel,

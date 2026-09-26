@@ -11,17 +11,24 @@ const ENABLED_VALUE = "1";
 const FIXTURE_FLAG = "GERAICUAN_ENABLE_SANCTIONED_ORDER_FIXTURE";
 const FIXTURE_PATH = "tests/fixtures/mengantar-order.sanitized.json";
 
+/** Documented shapes (T-237, D-26/D-27): `POST /order` item and `POST /time` data. */
 type PaidOrderFixture = {
   contract: string;
   paid: {
     response: {
       success: true;
       data: Array<{
-        order_id: string;
+        _id: string;
+        ORDER_ID: string;
+        batch: string;
+        batch_id: string;
         isPaid: true;
         cnote_no: string;
       }>;
     };
+  };
+  pickupTime: {
+    response: { success: true; data: { _id: string } };
   };
 };
 
@@ -62,8 +69,10 @@ async function loadPaidFixture(): Promise<PaidOrderFixture> {
       fixture.contract !== "Mengantar POST /order sanitized fixture" ||
       fixture.paid?.response?.success !== true ||
       !first ||
-      typeof first.order_id !== "string" ||
-      first.order_id.trim().length === 0 ||
+      typeof first._id !== "string" ||
+      first._id.trim().length === 0 ||
+      typeof first.batch_id !== "string" ||
+      typeof fixture.pickupTime?.response?.data?._id !== "string" ||
       first.isPaid !== true ||
       typeof first.cnote_no !== "string" ||
       first.cnote_no.trim().length === 0
@@ -91,19 +100,25 @@ export const resolveSanctionedOrderFixtureTransport: MengantarOrderTransportLook
           ? "platform_default"
           : `managed://mengantar/${scope.tenantId}/${scope.outletId}`,
       transport: {
-        async submit(orders) {
-          if (orders.length !== 1) {
+        async submit(body) {
+          if (body.orders.length !== 1 || body.pickup.address_id !== scope.pickupAddressId) {
             throw new SanctionedOrderFixtureUnavailableError();
           }
           return {
             success: true,
-            data: [
-              {
-                order_id: item.order_id,
-                isPaid: item.isPaid,
-                cnote_no: item.cnote_no,
-              },
-            ],
+            data: [{ ...item }],
+            batch: item.batch,
+            batch_id: item.batch_id,
+            courier: body.courier,
+            errors: [],
+          };
+        },
+        // Echoes the request like the documented `POST /time` response does.
+        async reservePickupTime(request) {
+          const data = fixture.pickupTime.response.data;
+          return {
+            success: true,
+            data: { ...data, time: request.time, address: { _id: request.address_id } },
           };
         },
       },

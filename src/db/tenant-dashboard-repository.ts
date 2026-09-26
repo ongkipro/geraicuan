@@ -274,7 +274,8 @@ export async function loadTenantDashboardOutcomeSummary(
 ): Promise<TenantDashboardOutcomeSummary> {
   const returned = inArray(shipments.status, [...RTS_STATUSES]);
   const delivered = eq(shipments.status, "DELIVERED");
-  const failed = eq(shipments.status, "FAILED");
+  // T-238 (owner): a cancelled shipment counts as "Gagal" — not delivered, not returned.
+  const failed = inArray(shipments.status, ["FAILED", "CANCELLED"]);
   const count = (predicate: SQL, cod?: boolean) =>
     sql<number>`count(*) filter (where ${predicate}${
       cod === undefined

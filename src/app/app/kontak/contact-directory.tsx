@@ -2,12 +2,12 @@ import { Plus } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
 
-import type { ContactSearchRow } from "@/app/app/kontak/actions";
 import { ContactDirectoryList } from "@/app/app/kontak/contact-directory-list";
 import {
   CONTACT_PAGE_SIZE,
   pageCount,
   parseContactDirectoryQuery,
+  toContactSearchRow,
   type ContactDirectorySearchParams,
 } from "@/app/app/kontak/contact-directory-query";
 import { requireContactPagePrincipal } from "@/app/app/kontak/contact-page-guard";
@@ -28,7 +28,8 @@ import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-sc
 /**
  * Spec 17 UX-v3.6 `/app/kontak/pengirim` and `/penerima` (ref pengirim.html, penerima.html): one
  * directory scoped to one role. Header with "<Peran> baru" → one card: Aktif/Diarsipkan/Semua tabs
- * + search → table (Nama · Telepon · Alamat · Aksi) → 20 per page.
+ * + search → table (Nama + kategori · WhatsApp · Alamat utama · Kiriman · Status · Aksi) → 20 per
+ * page (T-241).
  */
 export async function ContactDirectory({ role, searchParams }: {
   role: ContactRole;
@@ -58,17 +59,8 @@ export async function ContactDirectory({ role, searchParams }: {
   const { page, rows, summary } = await loading;
 
   const label = contactRoleLabel(role);
-  const contactRows: ContactSearchRow[] = rows.map((contact) => ({
-    address: contact.address,
-    addressCount: contact.addressCount,
-    archived: Boolean(contact.archivedAt),
-    destinationAreaLabel: contact.destinationAreaLabel,
-    id: contact.id,
-    isRecipient: contact.isRecipient,
-    isSender: contact.isSender,
-    name: contact.name,
-    phone: contact.phone,
-  }));
+  const contactRows = rows.map(toContactSearchRow);
+
 
   return (
     <>

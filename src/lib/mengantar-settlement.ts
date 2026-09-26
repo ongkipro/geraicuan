@@ -31,7 +31,8 @@ export const IDR_UNITS = BigInt(10_000);
 const MAX_DECIMAL_IDR = 10_000_000_000;
 const DECIMAL_IDR_TEXT = /^(-?)(\d+)(?:\.(\d{1,4}))?$/;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
-const SAFE_STATUS = /^[A-Za-z][A-Za-z0-9 /_-]{0,59}$/;
+// T-238: parentheses admitted for the app vocabulary ("Terkirim (Pending)"); an unsafe status still refuses the page.
+const SAFE_STATUS = /^[A-Za-z][A-Za-z0-9 /_()-]{0,59}$/;
 
 export type ProviderSettlementItemType = "SETTLEMENT" | "CHARGE" | "REFUND";
 
@@ -67,6 +68,20 @@ export type ProviderOrderStatus = {
   lastHistoryDesc?: string | null;
   lastHistoryAt?: Date | null;
   podCode?: string | null;
+  /** T-238: live-observed keys; null when absent or unreadable. */
+  returnCnoteNo?: string | null;
+  lastUndeliveredCode?: string | null;
+  isBreach?: boolean | null;
+  claimStatus?: string | null;
+  ticketStatus?: string | null;
+  /** T-238: `history[]` (documented) and `lastHistory` (observed), cleaned and de-duplicated. */
+  historyEvents?: ProviderHistoryEvent[];
+};
+
+export type ProviderHistoryEvent = {
+  occurredAt: Date;
+  description: string;
+  source: "HISTORY" | "LAST_HISTORY";
 };
 
 export type ProviderSettlementSnapshot = {
@@ -271,7 +286,9 @@ export function parseMengantarWibTimestamp(value: unknown): Date | null {
 
 function optionalHistoryDesc(value: unknown) {
   if (typeof value !== "string") return null;
-  const text = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  // C0, DEL and (T-247, review L5) C1 controls: the DB CHECK refuses [[:cntrl:]], which in a
+  // UTF-8 database includes U+0080–U+009F, so one NEL (U+0085) would fail the whole pull.
+  const text = value.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim();
   return text ? text.slice(0, MAX_HISTORY_DESC_LENGTH) : null;
 }
 
@@ -281,15 +298,81 @@ function optionalPodCode(value: unknown) {
   return SAFE_POD_CODE.test(text) ? text : null;
 }
 
-/** Never throws: a missing or malformed `lastHistory`/`pod_code` must not fail the pull. */
+// lastUndeliveredCode ("CONSIGNEE NOT AVAILABLE", "U05"), claimStatus ("statusApproved"), ticketStatus ("Closed").
+const SAFE_SIGNAL = /^[A-Za-z0-9][A-Za-z0-9 ._/()-]{0,59}$/;
+/** lazy: one order's history is capped; a longer journey keeps its newest 100 readable entries (T-247 L4). */
+const MAX_HISTORY_EVENTS = 100;
+
+function optionalSignal(value: unknown) {
+  const text = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  return SAFE_SIGNAL.test(text) ? text : null;
+}
+
+function optionalReturnCnote(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return SAFE_IDENTIFIER.test(text) ? text : null;
+}
+
+function plainRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function historyEvent(value: unknown, source: ProviderHistoryEvent["source"]): ProviderHistoryEvent | null {
+  const entry = plainRecord(value);
+  if (!entry) return null;
+  const occurredAt = parseMengantarWibTimestamp(entry.date);
+  const description = optionalHistoryDesc(entry.desc);
+  return occurredAt && description ? { occurredAt, description, source } : null;
+}
+
+/**
+ * T-238: the documented `history[{date, desc}]` (returned by `GET /order` for a
+ * `tracking_id`/`order_id` query) and the live-observed `lastHistory`, as one
+ * list without repeats. An unreadable entry is skipped, never guessed.
+ */
+function orderHistoryEvents(order: Record<string, unknown>) {
+  const events: ProviderHistoryEvent[] = [];
+  const seen = new Set<string>();
+  const keyOf = (event: ProviderHistoryEvent) => `${event.occurredAt.getTime()}|${event.description}`;
+  const add = (event: ProviderHistoryEvent | null) => {
+    if (!event) return;
+    const key = keyOf(event);
+    if (seen.has(key)) return;
+    seen.add(key);
+    events.push(event);
+  };
+  if (Array.isArray(order.history)) for (const entry of order.history) add(historyEvent(entry, "HISTORY"));
+  const last = historyEvent(order.lastHistory, "LAST_HISTORY");
+  add(last);
+  if (events.length <= MAX_HISTORY_EVENTS) return events;
+  // T-247 (review L4): over the cap, keep the newest entries — the ones that say where the
+  // parcel is now — and always the lastHistory event; the list keeps its original order.
+  const lastKey = last ? keyOf(last) : null;
+  const newestFirst = events
+    .map((event, index) => ({ event, index }))
+    .sort((left, right) => right.event.occurredAt.getTime() - left.event.occurredAt.getTime() || right.index - left.index);
+  const kept = new Set(newestFirst.slice(0, MAX_HISTORY_EVENTS).map((entry) => entry.index));
+  const lastIndex = lastKey === null ? -1 : events.findIndex((event) => keyOf(event) === lastKey);
+  if (lastIndex >= 0 && !kept.has(lastIndex)) {
+    kept.delete(newestFirst[MAX_HISTORY_EVENTS - 1]!.index);
+    kept.add(lastIndex);
+  }
+  return events.filter((_, index) => kept.has(index));
+}
+
+/** Never throws: a missing or malformed `lastHistory`/`pod_code`/signal must not fail the pull. */
 function orderHistoryEvidence(order: Record<string, unknown>) {
-  const history = order.lastHistory && typeof order.lastHistory === "object" && !Array.isArray(order.lastHistory)
-    ? order.lastHistory as Record<string, unknown>
-    : {};
+  const history = plainRecord(order.lastHistory) ?? {};
   return {
     lastHistoryDesc: optionalHistoryDesc(history.desc),
     lastHistoryAt: parseMengantarWibTimestamp(history.date),
     podCode: optionalPodCode(order.pod_code),
+    returnCnoteNo: optionalReturnCnote(order.cnote_no_rts),
+    lastUndeliveredCode: optionalSignal(order.lastUndeliveredCode),
+    isBreach: typeof order.isBreach === "boolean" ? order.isBreach : null,
+    claimStatus: optionalSignal(order.claimStatus),
+    ticketStatus: optionalSignal(order.ticketStatus),
+    historyEvents: orderHistoryEvents(order),
   };
 }
 

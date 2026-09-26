@@ -322,4 +322,43 @@ describe("Mengantar destination-area Server Action", () => {
       expect(mocks.authorityCalls).toBe(1);
     },
   );
+  it("T-245: times every provider lookup in one allowlisted line without the query text", async () => {
+    const logger = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      await searchMengantarDestinationAreas(OUTLET_ID, "Dago Bandung");
+      mocks.rateLimited = true;
+      await searchMengantarDestinationAreas(OUTLET_ID, "Dago Bandung");
+      mocks.rateLimited = false;
+      await validateMengantarDestinationAreaSelection(
+        OUTLET_ID,
+        "Dago Bandung",
+        "area-safe",
+        "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
+      );
+      const lines = logger.mock.calls.map((call) => String(call[0]));
+      const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(events).toHaveLength(3);
+      expect(events[0]).toMatchObject({
+        actorId: "location-operator-a",
+        event: "location.search.timing",
+        operation: "provider_search",
+        outcome: "success",
+        providerCalls: 1,
+        queryLength: "Dago Bandung".length,
+        resultCount: 1,
+        tenantId: TENANT_ID,
+      });
+      expect(events[0].totalMs).toEqual(expect.any(Number));
+      expect(events[0].providerMs).toEqual(expect.any(Number));
+      expect(events[1]).toMatchObject({ outcome: "rate_limited", providerCalls: 0 });
+      expect(events[1]).not.toHaveProperty("providerMs");
+      expect(events[2]).toMatchObject({ operation: "provider_validate", outcome: "success" });
+      for (const line of lines) {
+        expect(line).not.toMatch(/Dago|Coblong|Bandung|40135/u);
+        expect(line).not.toContain(SECRET_SENTINEL);
+      }
+    } finally {
+      logger.mockRestore();
+    }
+  });
 });

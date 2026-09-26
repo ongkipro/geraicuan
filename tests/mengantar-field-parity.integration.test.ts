@@ -6,7 +6,7 @@ import { codChargeBreakdown } from "@/lib/mengantar-cod-fee";
 import { deriveDraftProviderMoneyLines } from "@/lib/shipment-draft-logic";
 import type { ProviderOrderSource } from "@/db/order-batch-repository";
 import {
-  buildMengantarOrderPayload,
+  buildMengantarOrderRequest,
   MengantarOrderPayloadError,
 } from "@/lib/mengantar-order";
 import {
@@ -66,6 +66,10 @@ const providerOrder: ProviderOrderSource = {
   isHazardous: false,
   recipientAddressLandmark: null,
   shippingInstruction: null,
+  handoverType: "DROP_OFF",
+  pickupVehicle: null,
+  pickupDate: null,
+  pickupSlot: null,
 };
 
 describe("PR-47 draft field parity", () => {
@@ -159,67 +163,68 @@ describe("PR-47 guard: grams to billable kilograms", () => {
     expect(() => toBillableWeightKg(grams)).toThrow(ShipmentWeightUnavailableError);
   });
 
-  it("never sends a fractional weight for a light parcel", () => {
-    const [payload] = buildMengantarOrderPayload([{ ...providerOrder, weightGrams: 1 }]);
-    expect(payload!.weight).toBe(1);
-    expect(Number.isInteger(payload!.weight)).toBe(true);
+  it("D-26: sends the documented weight in kg, exact from grams", () => {
+    expect(buildMengantarOrderRequest({ ...providerOrder, weightGrams: 1 }).orders[0]!.weight).toBe(0.001);
+    expect(buildMengantarOrderRequest({ ...providerOrder, weightGrams: 1_250 }).orders[0]!.weight).toBe(1.25);
+    expect(buildMengantarOrderRequest({ ...providerOrder, weightGrams: 2_000 }).orders[0]!.weight).toBe(2);
+    expect(() => buildMengantarOrderRequest({ ...providerOrder, weightGrams: 0 })).toThrow(MengantarOrderPayloadError);
   });
 });
 
-describe("PR-47 guard: COD amount and destination verification", () => {
+describe("PR-47 guard: COD amount and destination verification (documented body, D-26)", () => {
   it("refuses to submit a COD order without a COD total", () => {
     for (const providerCodAmountIdr of [null, 0]) {
-      expect(() => buildMengantarOrderPayload([{
+      expect(() => buildMengantarOrderRequest({
         ...providerOrder,
         isCod: true,
         providerCodAmountIdr,
-      }])).toThrow(MengantarOrderPayloadError);
+      })).toThrow(MengantarOrderPayloadError);
     }
   });
 
-  it("sends the persisted COD total, never a zero fallback", () => {
-    const [payload] = buildMengantarOrderPayload([{
+  it("sends the persisted COD total as `COD` and no `goodsValue`", () => {
+    const [item] = buildMengantarOrderRequest({
       ...providerOrder,
       isCod: true,
       providerCodAmountIdr: 113_663,
-    }]);
-    expect(payload).toMatchObject({ cod_amount: 113_663, is_cod: true });
+    }).orders;
+    expect(item).toMatchObject({ COD: 113_663 });
+    expect(item).not.toHaveProperty("goodsValue");
   });
 
-  it("keeps a non-COD order at cod_amount 0", () => {
-    const [payload] = buildMengantarOrderPayload([providerOrder]);
-    expect(payload).toMatchObject({ cod_amount: 0, is_cod: false });
+  it("sends a non-COD order's goods value as `goodsValue` and no `COD`", () => {
+    const [item] = buildMengantarOrderRequest(providerOrder).orders;
+    expect(item).toMatchObject({ goodsValue: providerOrder.declaredValueIdr });
+    expect(item).not.toHaveProperty("COD");
   });
 
   it("refuses an area id that was never re-verified against the account", () => {
-    expect(() => buildMengantarOrderPayload([{
+    expect(() => buildMengantarOrderRequest({
       ...providerOrder,
       destinationAreaVerifiedAt: null,
-    }])).toThrow(MengantarOrderPayloadError);
+    })).toThrow(MengantarOrderPayloadError);
   });
 
-  it("carries every new operational field into the provider payload", () => {
-    const [payload] = buildMengantarOrderPayload([{
+  it("carries every operational field under its documented key", () => {
+    const [item] = buildMengantarOrderRequest({
       ...providerOrder,
       isHazardous: true,
       recipientAddressLandmark: "Seberang masjid",
       shippingInstruction: "Titip ke satpam",
-    }]);
+    }).orders;
 
-    expect(payload).toMatchObject({
-      is_hazardous: true,
-      receiver_landmark: "Seberang masjid",
-      shipping_instruction: "Titip ke satpam",
+    expect(item).toMatchObject({
+      isDangerousGoods: true,
+      destinationMark: "Seberang masjid",
+      deliveryInstruction: "Titip ke satpam",
     });
   });
 
   it("omits the optional handling fields when the draft left them empty", () => {
-    const [payload] = buildMengantarOrderPayload([providerOrder]);
-    expect(payload).toMatchObject({
-      is_hazardous: false,
-      receiver_landmark: null,
-      shipping_instruction: null,
-    });
+    const [item] = buildMengantarOrderRequest(providerOrder).orders;
+    expect(item!.isDangerousGoods).toBe(false);
+    expect(item).not.toHaveProperty("destinationMark");
+    expect(item).not.toHaveProperty("deliveryInstruction");
   });
 });
 
@@ -232,12 +237,13 @@ describe("PR-47 estimate money ingestion", () => {
     const services = normalizeMengantarEstimateServices(fixture.response.body.data);
     const sapCargo = services.find((service) => service.providerService === "SapCargo");
 
+    // T-237: a cargo key reads its cargo tier (`cargoDiscount`, `cargoEstimated*`).
     expect(sapCargo).toMatchObject({
       codFeeIdr: 0,
-      discountIdr: 6_750,
+      discountIdr: 4_500,
       normalPriceIdr: 22_500,
       shippingAmountIdr: 22_500,
-      specialPriceIdr: 14_624,
+      specialPriceIdr: 16_875,
     });
   });
 

@@ -236,7 +236,8 @@ describe("provider delivery status mapping", () => {
   });
 
   it("refuses to guess a state for a provider value outside the observed vocabulary", () => {
-    for (const unknown of ["UNDELIVERED", "ON PROCESS", "RETURNED TO SHIPPER", ""]) {
+    // T-238: UNDELIVERED is documented now (unverified map), so it is no longer an unknown here.
+    for (const unknown of ["IN WAREHOUSE", "ON PROCESS", "RETURNED TO SHIPPER", ""]) {
       expect(decideProviderDeliveryTransition(unknown, "ISSUED"), unknown).toMatchObject({
         mappedStatus: null,
         outcome: "UNRECOGNISED",
@@ -299,14 +300,15 @@ describe("ingesting provider delivery states", () => {
   it("records an unrecognised provider status and leaves the shipment where it was", async () => {
     const shipment = await seedIssuedShipment({ cnoteNo: "AWB-UNKNOWN-1" });
 
-    const result = await pull([{ cnoteNo: "AWB-UNKNOWN-1", status: "UNDELIVERED" }]);
+    // T-238: UNDELIVERED is documented now, so a value in no vocabulary stands in.
+    const result = await pull([{ cnoteNo: "AWB-UNKNOWN-1", status: "IN WAREHOUSE" }]);
 
     expect(result.appliedTransitionCount).toBe(0);
     // Surfaced to the operator who ran the pull, not swallowed.
-    expect(result.unrecognisedStatuses).toEqual(["UNDELIVERED"]);
+    expect(result.unrecognisedStatuses).toEqual(["IN WAREHOUSE"]);
     expect((await statusOf(shipment)).status).toBe("ISSUED");
     expect(await observationsOf(shipment)).toEqual([
-      { provider_status: "UNDELIVERED", from_status: "ISSUED", mapped_status: null, transition_outcome: "UNRECOGNISED" },
+      { provider_status: "IN WAREHOUSE", from_status: "ISSUED", mapped_status: null, transition_outcome: "UNRECOGNISED" },
     ]);
   });
 
@@ -435,12 +437,13 @@ describe("delivery transitions stay inside the actor's tenant and outlet", () =>
    * settlement items with it. Bind the two lists to each other.
    */
   it("keeps the transition-outcome vocabulary and the database constraint in step", () => {
+    // 0047 introduced the constraint; T-238's 0063 re-created it with SUPERSEDED.
     const migration = readFileSync(
-      join(process.cwd(), "drizzle/0047_provider_delivery_transitions.sql"),
+      join(process.cwd(), "drizzle/0063_mengantar_tracking_history.sql"),
       "utf8",
     );
     const clause = migration.match(/transition_outcome\s+IN\s*\(([^)]*)\)/i);
-    expect(clause, "0047 must constrain transition_outcome to a literal list").toBeTruthy();
+    expect(clause, "0063 must constrain transition_outcome to a literal list").toBeTruthy();
     const constrained = [...clause![1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
 
     expect([...constrained].sort()).toEqual([...PROVIDER_DELIVERY_TRANSITION_OUTCOMES].sort());

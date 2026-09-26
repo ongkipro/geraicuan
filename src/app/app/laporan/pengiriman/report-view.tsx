@@ -86,10 +86,9 @@ export function ShipmentReportView({
         title="Laporan pengiriman"
       />
 
-      <FilterBar action={REPORT_PATH} clearHref={activeCount > 0 || filterRejected ? REPORT_PATH : undefined} label="Filter laporan">
+      <FilterBar action={REPORT_PATH} clearHref={activeCount > 0 || filterRejected ? REPORT_PATH : undefined} label="Filter laporan" summary={`${range.periodLabel} · WIB (UTC+07:00)`}>
         <DateRangePicker
           endDate={range.endDate}
-          label={range.periodLabel}
           presetId={range.presetId}
           startDate={range.startDate}
         />

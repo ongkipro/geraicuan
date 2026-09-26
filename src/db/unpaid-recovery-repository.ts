@@ -72,6 +72,8 @@ type RecoveryCandidate = {
   providerOrderId: string | null;
   providerBatchId: string | null;
   orderStatus: (typeof providerOrderSnapshots.$inferSelect)["status"];
+  /** T-247 (M1): the shipment's own lifecycle; Mengantar may cancel an unpaid order. */
+  shipmentStatus: (typeof shipments.$inferSelect)["status"];
   isCod: boolean;
   isPaid: boolean | null;
   cnoteNo: string | null;
@@ -81,6 +83,8 @@ type RecoveryCandidate = {
 
 function isAwaitingRecovery(row: RecoveryCandidate) {
   return row.orderStatus === "AWAITING_UPSTREAM_PAYMENT"
+    // A cancelled order is never paid, even though its order snapshot still reads unpaid.
+    && row.shipmentStatus === "AWAITING_UPSTREAM_PAYMENT"
     && !row.isCod
     && row.isPaid === false
     && row.cnoteNo === null
@@ -136,6 +140,7 @@ export async function prepareUnpaidRecoveries(
       providerOrderId: providerOrderSnapshots.providerOrderId,
       providerBatchId: providerOrderSnapshots.providerBatchId,
       orderStatus: providerOrderSnapshots.status,
+      shipmentStatus: shipments.status,
       isCod: providerOrderSnapshots.isCod,
       isPaid: providerOrderSnapshots.isPaid,
       cnoteNo: providerOrderSnapshots.cnoteNo,
@@ -143,6 +148,13 @@ export async function prepareUnpaidRecoveries(
       recoveryStatus: providerUnpaidRecoveries.status,
     })
     .from(providerOrderSnapshots)
+    .innerJoin(
+      shipments,
+      and(
+        eq(shipments.id, providerOrderSnapshots.shipmentId),
+        eq(shipments.tenantId, providerOrderSnapshots.tenantId),
+      ),
+    )
     .leftJoin(
       providerUnpaidRecoveries,
       and(

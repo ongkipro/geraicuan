@@ -21,6 +21,7 @@ const FOCUSED_ROUTES = new Set(["/app/pengiriman/baru"]);
  */
 export function AppShell({
   account,
+  badges,
   children,
   notice,
   scope,
@@ -28,6 +29,8 @@ export function AppShell({
   title,
 }: {
   account: ShellAccount;
+  /** Unread counts by navigation key (T-244: Info terbaru), shown as sidebar menu badges. */
+  badges?: Readonly<Record<string, number>>;
   children: ReactNode;
   /** One shell-wide notice above the page (e.g. gerai awaiting approval). */
   notice?: ReactNode;
@@ -67,10 +70,10 @@ export function AppShell({
         title={title}
       />
       <div className="flex flex-1">
-        {focused ? null : <AppSidebar account={account} scope={scope} />}
+        {focused ? null : <AppSidebar account={account} badges={badges} scope={scope} />}
         <SidebarInset className="min-w-0">
           <div className="px-4 py-4 md:px-8 md:py-8" data-shell={focused ? "focused" : undefined} data-slot="app-content">
-            <div className="mx-auto flex w-full max-w-content flex-col gap-6 outline-none 2xl:max-w-content-wide" id="konten" tabIndex={-1}>
+            <div className="mx-auto flex w-full max-w-content flex-col gap-6 outline-none" id="konten" tabIndex={-1}>
               {notice}
               {children}
             </div>

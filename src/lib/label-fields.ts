@@ -11,13 +11,18 @@ export const LABEL_FIELD_KEYS = [
   "recipientPhone",
   "recipientAddressDetail",
   "returnWarning",
+  // T-243: the courier's print mark instead of its name (text when it has none), and the
+  // gerai logo / catatan resi, printed only when the gerai has one (Profil gerai).
+  "courierLogo",
+  "geraiLogo",
+  "labelNote",
 ] as const;
 
 export type LabelFieldKey = (typeof LABEL_FIELD_KEYS)[number];
 export type LabelFields = Record<LabelFieldKey, boolean>;
 export type LabelFieldsBySize = Record<LabelSize, LabelFields>;
 
-/** The label as printed before T-229: everything on, no warning line. */
+/** Everything on, no warning line; since T-243 the courier prints as its logo when it has one. */
 export const DEFAULT_LABEL_FIELDS: LabelFields = {
   senderAddress: true,
   senderPhone: true,
@@ -25,6 +30,9 @@ export const DEFAULT_LABEL_FIELDS: LabelFields = {
   recipientPhone: true,
   recipientAddressDetail: true,
   returnWarning: false,
+  courierLogo: true,
+  geraiLogo: true,
+  labelNote: true,
 };
 
 export const DEFAULT_LABEL_FIELDS_BY_SIZE: LabelFieldsBySize = {
@@ -44,6 +52,18 @@ export const LABEL_FIELD_COPY: Record<LabelFieldKey, { label: string; descriptio
   returnWarning: {
     label: "Peringatan sebelum retur",
     description: "Baris bawah label meminta kurir konfirmasi ke pengirim sebelum retur; waktu terbit tidak dicetak.",
+  },
+  courierLogo: {
+    label: "Logo kurir",
+    description: "Logo hitam kurir menggantikan namanya di kiri atas; layanan tetap tercetak di sebelahnya.",
+  },
+  geraiLogo: {
+    label: "Logo gerai",
+    description: "Di kanan atas label, hitam-putih. Tidak menggeser resi, kurir, atau barcode.",
+  },
+  labelNote: {
+    label: "Catatan resi",
+    description: "Satu baris di bawah nama pengirim; alamat pengirim diringkas satu baris.",
   },
 };
 

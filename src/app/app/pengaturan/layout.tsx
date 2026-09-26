@@ -6,7 +6,7 @@ import { requireTenantAdmin } from "./_components/settings-data";
 import { SettingsFrame } from "./_components/settings-frame";
 
 /**
- * One frame for Profil gerai, Informasi label, Titik pickup, Outlet and Koneksi Mengantar, so the sub-menu stays
+ * One frame for Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir and Koneksi Mengantar, so the sub-menu stays
  * while a page loads or fails. Tenant Admin only: an Operator never sees the frame, and every
  * page and Server Action checks again.
  */

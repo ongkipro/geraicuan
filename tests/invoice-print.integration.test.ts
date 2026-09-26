@@ -28,6 +28,7 @@ function invoice(overrides: Partial<ShipmentInvoice> = {}): ShipmentInvoice {
     invoiceNumber: "INV-GC-10222",
     issuedAt: new Date("2026-09-26T03:13:00.000Z"),
     issuedByUserId: "user-1",
+    logoSha256: null,
     shipmentId: "00000000-0000-4000-8000-000000000223",
     shippingChargeIdr: 8_000,
     templateVersion: 1,

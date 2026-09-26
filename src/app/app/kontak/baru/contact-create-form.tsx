@@ -7,7 +7,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 
 import { DestinationAreaPicker, type DestinationAreaOutlet } from "@/app/app/_shared/destination-area-picker";
 import { saveContact, type CreateContactState } from "@/app/app/kontak/actions";
-import { ErrorSummary, FieldMessage, RoleOptions } from "@/app/app/kontak/contact-form-parts";
+import { CategorySelect, ErrorSummary, FieldMessage, RoleOptions } from "@/app/app/kontak/contact-form-parts";
 import { DataCard } from "@/components/app/data-card";
 import { Button } from "@/components/ui/button";
 import { CharacterClassInput, CharacterClassTextarea } from "@/components/ui/character-class-input";
@@ -17,7 +17,8 @@ import { partyNameClass } from "@/lib/field-character-classes";
 
 /**
  * Spec 17 `/app/kontak/baru` (ref kontak-baru.html): cards Kontak · Peran · Alamat pertama, then
- * Batal and the one primary "Simpan kontak". A saved contact opens its detail page.
+ * Batal and the one primary "Simpan kontak". A saved contact opens its detail page at its number
+ * (`/app/kontak/<peran>/<n>`, T-241).
  */
 export function ContactCreateForm({ canManageSettings, outlets, role }: {
   canManageSettings: boolean;
@@ -33,7 +34,7 @@ export function ContactCreateForm({ canManageSettings, outlets, role }: {
   const [isSender, setIsSender] = useState(state.errors ? values.roleSender === "on" : role === "pengirim");
 
   useEffect(() => {
-    if (state.successId) router.replace(`${contactDetailHref(state.successId, state.successRole ?? role)}&tersimpan=1`);
+    if (state.successNumber) router.replace(`${contactDetailHref(state.successNumber, state.successRole ?? role)}?tersimpan=1`);
     else if (state.errors) summaryRef.current?.focus();
   }, [role, router, state]);
 
@@ -75,6 +76,7 @@ export function ContactCreateForm({ canManageSettings, outlets, role }: {
             />
             <FieldMessage error={errors.contactPhone} id="contactPhone-error" />
           </Field>
+          <CategorySelect defaultValue={values.category} error={errors.category} key={values.category ?? "category"} />
         </div>
       </DataCard>
 
@@ -105,15 +107,18 @@ export function ContactCreateForm({ canManageSettings, outlets, role }: {
             />
             <FieldMessage error={errors.addressLabel} id="addressLabel-error" />
           </Field>
-          <DestinationAreaPicker
-            canManageSettings={canManageSettings}
-            defaultQuery={state.areaQuery}
-            defaultSelection={state.selectedArea}
-            error={errors.areaLabel}
-            key={state.selectedArea ? `${state.selectedArea.areaId}:${state.selectedArea.query}` : state.areaQuery ? `${state.areaQuery.query}:invalid` : "area"}
-            label="Kecamatan tujuan Mengantar"
-            outlets={outlets}
-          />
+          {/* The picker renders its error only when present; keep the same inline error space as the fields around it. */}
+          <div className="pb-5 has-data-[slot=field-error]:pb-0">
+            <DestinationAreaPicker
+              canManageSettings={canManageSettings}
+              defaultQuery={state.areaQuery}
+              defaultSelection={state.selectedArea}
+              error={errors.areaLabel}
+              key={state.selectedArea ? `${state.selectedArea.areaId}:${state.selectedArea.query}` : state.areaQuery ? `${state.areaQuery.query}:invalid` : "area"}
+              label="Kecamatan tujuan Mengantar"
+              outlets={outlets}
+            />
+          </div>
           <Field className="mt-2 gap-2" data-invalid={Boolean(errors.addressText)}>
             <FieldLabel htmlFor="addressText">Alamat lengkap &amp; patokan</FieldLabel>
             <CharacterClassTextarea

@@ -1,7 +1,9 @@
 "use client";
 
-import { useContext } from "react";
+import { useContext, type CSSProperties } from "react";
 
+import { useGeraiBrand } from "@/app/app/brand/gerai-brand";
+import { courierPrintLogoSrc } from "@/lib/gerai-settings";
 import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
 import { HandoverTime, LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
@@ -27,6 +29,22 @@ function serviceName(courier: string, service: string) {
   return service.toUpperCase().startsWith(`${courier.toUpperCase()} `) ? service.slice(courier.length + 1) : service;
 }
 
+/*
+ * T-243: the gerai logo and the catatan resi. Inline styles keep `label.css` byte-identical
+ * and the row template untouched: the logo sits in the 8 mm head row's own box (at most
+ * 7 × 20 mm, grayscale for the thermal head), and the catatan takes the sender row's second
+ * line (the sender line clamps to one), so every other row keeps its position and size.
+ */
+const BRAND_STYLE: CSSProperties = { alignSelf: "center", display: "flex", alignItems: "center", gap: "1.5mm", minWidth: 0 };
+const LOGO_STYLE: CSSProperties = {
+  display: "block", width: "auto", height: "auto", maxWidth: "20mm", maxHeight: "7mm", objectFit: "contain", filter: "grayscale(1) contrast(1.15)",
+};
+const COURIER_STYLE: CSSProperties = { alignSelf: "center", display: "flex", alignItems: "center", gap: "1.5mm", minWidth: 0 };
+const COURIER_LOGO_STYLE: CSSProperties = { display: "block", width: "auto", height: "6.5mm", maxWidth: "40mm", flex: "none" };
+const NOTE_STYLE: CSSProperties = {
+  fontSize: "7pt", fontWeight: 600, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+};
+
 /**
  * T-176 thermal sheet: a 10 × 10 cm package label for the courier and, at 10 × 15 cm,
  * a 10 × 5 cm stub the operator cuts off and hands to the sender.
@@ -39,14 +57,25 @@ function serviceName(courier: string, service: string) {
 export function LabelSheet({ fields, label }: { fields?: LabelFieldsBySize; label: PrintableLabel }) {
   const { size } = useContext(LabelPrintContext);
   const shown = (fields ?? DEFAULT_LABEL_FIELDS_BY_SIZE)[size];
+  const brand = useGeraiBrand();
   return (
     <LabelSheetFrame stub={<LabelSenderStub label={label} />}>
-      <LabelPackage label={label} shown={shown} />
+      <LabelPackage
+        label={label}
+        logoSrc={shown.geraiLogo ? brand.logoSrc : null}
+        note={shown.labelNote ? brand.note : null}
+        shown={shown}
+      />
     </LabelSheetFrame>
   );
 }
 
-function LabelPackage({ label, shown }: { label: PrintableLabel; shown: LabelFields }) {
+function LabelPackage({ label, logoSrc, note, shown }: {
+  label: PrintableLabel;
+  logoSrc: string | null;
+  note: string | null;
+  shown: LabelFields;
+}) {
   const cityProvince = shown.recipientAddressDetail ? null : formatCityProvince(label.destinationAreaLabel);
   // Density follows what prints, so hidden fields let the rest print larger.
   const recipientLayout = recipientDensity({
@@ -54,16 +83,33 @@ function LabelPackage({ label, shown }: { label: PrintableLabel; shown: LabelFie
     addressLength: cityProvince === null ? label.recipient.address.length : 0,
     areaLabelLength: cityProvince === null ? label.destinationAreaLabel.length : cityProvince.length,
   });
+  const courierLogoSrc = shown.courierLogo ? courierPrintLogoSrc(label.courier) : null;
   const dimensions = formatDimensions(label.package.lengthCm, label.package.widthCm, label.package.heightCm);
   const insurance = label.insuranceAmountIdr === null ? "Tidak ada" : formatIdr(label.insuranceAmountIdr);
 
   return (
     <section aria-label="Label paket 10 × 10 cm" className="label-package">
       <div className="label-head">
-        <p className="label-courier">
-          {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
-        </p>
-        <p className="label-mark">GeraiCUAN</p>
+        {courierLogoSrc ? (
+          <p className="label-courier" style={COURIER_STYLE}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static black-only print mark */}
+            <img alt={label.courier} className="label-courier-logo" src={courierLogoSrc} style={COURIER_LOGO_STYLE} />
+            <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
+          </p>
+        ) : (
+          <p className="label-courier">
+            {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
+          </p>
+        )}
+        {logoSrc ? (
+          <div className="label-brand" style={BRAND_STYLE}>
+            <p className="label-mark">GeraiCUAN</p>
+            {/* eslint-disable-next-line @next/next/no-img-element -- authenticated same-origin bytes; must print as-is */}
+            <img alt="Logo gerai" className="label-logo" src={logoSrc} style={LOGO_STYLE} />
+          </div>
+        ) : (
+          <p className="label-mark">GeraiCUAN</p>
+        )}
       </div>
 
       <div className="label-awb-block">
@@ -90,12 +136,13 @@ function LabelPackage({ label, shown }: { label: PrintableLabel; shown: LabelFie
       </div>
 
       <div className="label-party label-sender">
-        <p className="label-sender-line">
+        <p className="label-sender-line" style={note ? { WebkitLineClamp: 1 } : undefined}>
           <span className="label-eyebrow">Pengirim</span>{" "}
           <span className="label-party-name">{label.sender.name}</span>
           {shown.senderPhone ? <>{" "}<span className="label-party-phone">{label.sender.phone}</span></> : null}
           {shown.senderAddress ? <>{" · "}<span className="label-party-address">{label.sender.address}</span></> : null}
         </p>
+        {note ? <p className="label-note" style={NOTE_STYLE}>{note}</p> : null}
       </div>
 
       <div className="label-payment-block">

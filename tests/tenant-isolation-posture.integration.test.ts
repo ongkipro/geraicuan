@@ -34,7 +34,9 @@ const EXPLICIT_TENANT_SCOPED = ["tenants", "platform_roles"];
  * all: only an owner-run SECURITY DEFINER function uses them. No privilege is a
  * stronger boundary than row-level security, and the last test asserts it.
  */
-const INTERNAL_NO_RUNTIME_ACCESS = ["tenant_shipment_counters"];
+// T-241 / 0064: tenant_contact_counters is the contact-number allocator, revoked from the
+// runtime role exactly like tenant_shipment_counters (0040).
+const INTERNAL_NO_RUNTIME_ACCESS = ["tenant_shipment_counters", "tenant_contact_counters"];
 
 async function tenantScopedTables() {
   const { rows } = await adminPool.query<{
@@ -132,6 +134,7 @@ describe("tenant isolation posture", () => {
       "audit_events",
       "ledger_entries",
       "print_events",
+      "provider_order_history_events",
       "provider_order_status_observations",
       "provider_settlement_items",
       "provider_settlement_pulls",
@@ -157,7 +160,8 @@ describe("tenant isolation posture", () => {
       "INSERT",
       "SELECT",
       // T-223 / 0056: provider_batch_id is written when an order is accepted.
-      "UPDATE(cnote_no,is_paid,provider_batch_id,provider_order_id,resolved_at,safe_response_code,status)",
+      // T-238 / 0063: return_cnote_no is written by the status pull.
+      "UPDATE(cnote_no,is_paid,provider_batch_id,provider_order_id,resolved_at,return_cnote_no,safe_response_code,status)",
     ]);
     expect(await effectiveGrants("provider_unpaid_recoveries")).toEqual([
       "INSERT",
@@ -188,7 +192,8 @@ describe("tenant isolation posture", () => {
     const mutable: Record<string, string> = {
       contact_addresses:
         "UPDATE(address,archived_at,destination_area_id,destination_area_label,is_primary,label,updated_at)",
-      contacts: "UPDATE(archived_at,is_recipient,is_sender,name,phone,updated_at)",
+      // T-241 / 0064: category joins the column grant; contact_number never does.
+      contacts: "UPDATE(archived_at,category,is_recipient,is_sender,name,phone,updated_at)",
       managed_secret_payloads:
         "UPDATE(authentication_tag,ciphertext,key_version,nonce,reference,updated_at)",
       mengantar_connections: "UPDATE(secret_reference,updated_at)",
@@ -198,8 +203,9 @@ describe("tenant isolation posture", () => {
         "UPDATE(cogs_amount_idr,declared_value_idr,destination_area_id,destination_area_label,destination_area_verified_at,is_cod,package_content,package_height_cm,package_length_cm,package_quantity,package_weight_grams,package_width_cm,updated_at)",
       shipments: "UPDATE(cogs_amount_idr,status,updated_at)",
       // T-229 / 0059: the per-size choices and who changed them; never the tenant or size.
+      // T-243 / 0065: the courier logo, gerai logo and label note toggles.
       tenant_label_settings:
-        "UPDATE(show_recipient_address_detail,show_recipient_name,show_recipient_phone,show_return_warning,show_sender_address,show_sender_phone,updated_at,updated_by_user_id)",
+        "UPDATE(show_courier_logo,show_gerai_logo,show_label_note,show_recipient_address_detail,show_recipient_name,show_recipient_phone,show_return_warning,show_sender_address,show_sender_phone,updated_at,updated_by_user_id)",
       // T-233 / 0058: contact_whatsapp is written only by set_tenant_contact_whatsapp.
       tenants: "UPDATE(name,status,updated_at)",
     };
@@ -218,7 +224,7 @@ describe("tenant isolation posture", () => {
     // rejected by a policy's WITH CHECK.
     const immutable: Record<string, readonly string[]> = {
       contact_addresses: ["id", "tenant_id", "created_at", "contact_id"],
-      contacts: ["id", "tenant_id", "created_at"],
+      contacts: ["id", "tenant_id", "created_at", "contact_number"],
       managed_secret_payloads: ["tenant_id", "created_at", "outlet_id", "purpose"],
       mengantar_connections: ["id", "tenant_id", "created_at", "outlet_id"],
       outlets: ["id", "tenant_id", "created_at"],

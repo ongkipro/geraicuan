@@ -11,10 +11,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ANALYTICS_PRESETS, type AnalyticsPresetId } from "@/lib/analytics-range";
 import { cn } from "@/lib/utils";
 
-/** Spec 10 §5: the four presets the picker offers; any other range is picked on the calendar. */
-const PICKER_PRESETS = ANALYTICS_PRESETS.filter((preset) =>
-  (["hari-ini", "7-hari", "30-hari", "bulan-ini"] as AnalyticsPresetId[]).includes(preset.id),
-);
+/**
+ * Spec 10 §5 / T-240: the presets the picker offers, in this order; any other range is picked on
+ * the calendar. `minggu-ini` and `bulan-lalu` stay parseable for bookmarked URLs but are not listed.
+ */
+const PICKER_PRESET_IDS = ["hari-ini", "kemarin", "7-hari", "30-hari", "bulan-ini"] as const satisfies readonly AnalyticsPresetId[];
+export const PICKER_PRESETS = PICKER_PRESET_IDS.map((id) => ANALYTICS_PRESETS.find((preset) => preset.id === id)!);
 
 const dayLabel = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" });
 
@@ -37,14 +39,11 @@ type Selection = { presetId: AnalyticsPresetId; from: string; to: string };
  */
 export function DateRangePicker({
   endDate,
-  label,
   presetId,
   startDate,
 }: {
   /** `range.lastIncludedDate` (YYYY-MM-DD, WIB calendar day). */
   endDate: string;
-  /** The server-formatted period, e.g. "27 Agu 2026 – 25 Sep 2026". */
-  label: string;
   presetId: AnalyticsPresetId;
   /** `range.startDate` (YYYY-MM-DD). */
   startDate: string;
@@ -52,15 +51,14 @@ export function DateRangePicker({
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<Selection>({ from: startDate, presetId, to: endDate });
   const [draft, setDraft] = useState<DateRange | undefined>();
-  const changed = selection.presetId !== presetId || selection.from !== startDate || selection.to !== endDate;
-
-  const triggerLabel = !changed
-    ? label
-    : selection.presetId === "kustom"
-      ? selection.from === selection.to
-        ? dayLabel.format(toDate(selection.from))
-        : `${dayLabel.format(toDate(selection.from))} – ${dayLabel.format(toDate(selection.to))}`
-      : ANALYTICS_PRESETS.find((preset) => preset.id === selection.presetId)?.label ?? label;
+  // A preset reads as its name; the exact dates are the FilterBar summary line. A picked range
+  // (or a legacy preset the list no longer offers) reads as its dates.
+  const listedPreset = PICKER_PRESETS.find((preset) => preset.id === selection.presetId);
+  const triggerLabel = listedPreset
+    ? listedPreset.label
+    : selection.from === selection.to
+      ? dayLabel.format(toDate(selection.from))
+      : `${dayLabel.format(toDate(selection.from))} – ${dayLabel.format(toDate(selection.to))}`;
 
   function pickPreset(id: AnalyticsPresetId) {
     setSelection({ from: startDate, presetId: id, to: endDate });

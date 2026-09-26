@@ -29,6 +29,9 @@ const actionPredicate: Record<AuditAction, string> = {
   TENANT_REGISTRATION_APPROVED: "menyetujui pendaftaran gerai",
   TENANT_REGISTRATION_REJECTED: "menolak pendaftaran gerai",
   TENANT_CONTACT_UPDATED: "mengubah WhatsApp gerai",
+  ANNOUNCEMENT_SAVED: "menyimpan info terbaru",
+  ANNOUNCEMENT_PUBLISHED: "menayangkan info terbaru",
+  ANNOUNCEMENT_UNPUBLISHED: "menurunkan info terbaru",
 };
 
 const actorLabels: Record<string, string> = {

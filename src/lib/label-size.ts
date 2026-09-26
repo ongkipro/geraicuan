@@ -35,8 +35,8 @@ export const THERMAL = {
   contentWidthMm: 94,
 } as const;
 
-export function parseLabelSize(value: unknown): LabelSize {
-  return value === "10x15" || value === "10x10" ? value : DEFAULT_LABEL_SIZE;
+export function parseLabelSize(value: unknown, fallback: LabelSize = DEFAULT_LABEL_SIZE): LabelSize {
+  return value === "10x15" || value === "10x10" ? value : fallback;
 }
 
 export function labelSizeStorageKey(operatorId: string) {
@@ -46,11 +46,16 @@ export function labelSizeStorageKey(operatorId: string) {
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 /** Storage can be absent, blocked or throwing (private mode, disabled site data). */
-export function readStoredLabelSize(storage: () => StorageLike | undefined, operatorId: string): LabelSize {
+/** T-243: `fallback` is the gerai's default size (Informasi label) when nothing is stored. */
+export function readStoredLabelSize(
+  storage: () => StorageLike | undefined,
+  operatorId: string,
+  fallback: LabelSize = DEFAULT_LABEL_SIZE,
+): LabelSize {
   try {
-    return parseLabelSize(storage()?.getItem(labelSizeStorageKey(operatorId)));
+    return parseLabelSize(storage()?.getItem(labelSizeStorageKey(operatorId)), fallback);
   } catch {
-    return DEFAULT_LABEL_SIZE;
+    return fallback;
   }
 }
 

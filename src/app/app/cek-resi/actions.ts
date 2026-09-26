@@ -28,11 +28,13 @@ export type TrackingLookupState =
       courier: string | null;
       declaredValueIdr: number;
       destinationAreaLabel: string;
+      historyEvents: { description: string; occurredAtIso: string }[];
       observation: { observedAtIso: string; providerStatus: string } | null;
       paymentMethod: PaymentMethod;
       providerCodAmountIdr: number | null;
       providerService: string | null;
       publicReference: string;
+      returnAwb: string | null;
       status: (typeof shipmentStatuses)[number];
       updatedAtIso: string;
     };
@@ -75,6 +77,10 @@ export async function lookupShipmentTracking(
         courier: result.courier,
         declaredValueIdr: result.declaredValueIdr,
         destinationAreaLabel: result.destinationAreaLabel,
+        historyEvents: result.historyEvents.map((event) => ({
+          description: event.description,
+          occurredAtIso: event.occurredAt.toISOString(),
+        })),
         observation: result.observation
           ? {
             observedAtIso: result.observation.observedAt.toISOString(),
@@ -85,6 +91,7 @@ export async function lookupShipmentTracking(
         providerCodAmountIdr: result.providerCodAmountIdr,
         providerService: result.providerService,
         publicReference: result.publicReference,
+        returnAwb: result.returnAwb,
         status: result.status,
         updatedAtIso: result.updatedAt.toISOString(),
       },

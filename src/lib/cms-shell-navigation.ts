@@ -30,6 +30,13 @@ const navigationGroups: readonly {
   {
     label: "Utama",
     items: [
+      // T-244 (D-31): Info terbaru sits above Dasbor, for both roles; login still lands on /app.
+      {
+        href: "/app/info",
+        key: "announcements",
+        label: "Info terbaru",
+        shortLabel: "IT",
+      },
       {
         href: "/app",
         key: "dashboard",
@@ -169,6 +176,13 @@ const platformNavigationGroups: readonly {
         key: "platform-audit",
         label: "Audit",
         shortLabel: "AU",
+      },
+      // T-244 (D-31): announcements every gerai sees under Info terbaru.
+      {
+        href: "/platform/info",
+        key: "platform-announcements",
+        label: "Info terbaru",
+        shortLabel: "IT",
       },
     ],
   },
