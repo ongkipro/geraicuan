@@ -1,22 +1,25 @@
-import "server-only";
-
 import { characterClassError } from "@/lib/field-character-classes";
 import {
   normalizeEmailInput,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
-} from "@/lib/public-auth";
-import { normalizePartyPhone } from "@/lib/shipment-draft";
+} from "@/lib/public-auth-routes";
+import { normalizePartyPhone } from "@/lib/shipment-draft-logic";
+import { normalizeShipmentPrefixInput, suggestShipmentPrefix } from "@/lib/shipment-number";
 
 /**
  * PR-59: the sign-up fields, validated on the server with Indonesian messages.
- * The database function validates the same shapes again.
+ * The database function validates the same shapes again. Client-safe since T-225:
+ * the stepped form runs this same function before it lets the owner advance, so
+ * the browser and the server never disagree on a rule. The server call is still
+ * the trust boundary.
  */
 export type RegistrationField =
   | "email"
   | "ownerName"
   | "password"
   | "passwordConfirmation"
+  | "shipmentPrefix"
   | "storeName"
   | "terms"
   | "whatsapp";
@@ -25,6 +28,7 @@ export type RegistrationInput = {
   email: string;
   ownerName: string;
   password: string;
+  shipmentPrefix: string;
   storeName: string;
   whatsapp: string;
 };
@@ -95,6 +99,16 @@ export function validateRegistration(formData: FormData): RegistrationValidation
     errors.passwordConfirmation = "Konfirmasi kata sandi belum sama.";
   }
 
+  // D-21: 2–3 capitals or digits, upper-cased here. A submission without the field
+  // (a page loaded before T-225) gets the suggestion the form would have offered.
+  const rawPrefix = formData.get("shipmentPrefix");
+  const shipmentPrefix = typeof rawPrefix === "string"
+    ? normalizeShipmentPrefixInput(rawPrefix)
+    : suggestShipmentPrefix(storeName ?? "");
+  if (!shipmentPrefix) {
+    errors.shipmentPrefix = "Isi awalan 2–3 huruf atau angka, misalnya PHI atau A29.";
+  }
+
   if (formData.get("terms") !== "setuju") {
     errors.terms = "Centang persetujuan syarat penggunaan untuk melanjutkan.";
   }
@@ -107,8 +121,9 @@ export function validateRegistration(formData: FormData): RegistrationValidation
     || whatsappClass
     || !email
     || !whatsapp
+    || !shipmentPrefix
   ) {
     return { errors, ok: false };
   }
-  return { input: { email, ownerName, password, storeName, whatsapp }, ok: true };
+  return { input: { email, ownerName, password, shipmentPrefix, storeName, whatsapp }, ok: true };
 }

@@ -508,3 +508,41 @@ export function issuanceCharges(input: {
     total: { amountIdr: option.shippingAmountIdr, label: "Ongkir layanan" },
   };
 }
+
+const MAX_PHONE_LENGTH = 16;
+/**
+ * Indonesian national significant number: no leading zero, 8-12 digits, so the
+ * canonical form is `0` + NSN (10-13 characters). Mobile (`8...`) and landline
+ * (`2...`-`7...`, `9...`) both fit; any other shape is not Indonesian.
+ */
+const INDONESIAN_NSN_PATTERN = /^[2-9]\d{7,11}$/;
+
+/**
+ * Every party phone converges on one Indonesian form, `0` + national number.
+ * `+62812…`, `62812…`, `0812…` and a bare `812…` are the same subscriber, so
+ * they must be stored, deduplicated and sent to the provider identically.
+ * A non-Indonesian shape (another country code, a leading `00`, too few or too
+ * many digits) is rejected rather than passed through.
+ */
+export function normalizePartyPhone(value: string) {
+  if (!/^[+0-9()\s-]+$/.test(value)) {
+    return null;
+  }
+
+  const compact = value.replace(/[()\s-]/g, "");
+  if (compact.length > MAX_PHONE_LENGTH || compact.includes("+", 1)) {
+    return null;
+  }
+  if (compact.startsWith("+") && !compact.startsWith("+62")) {
+    return null;
+  }
+
+  const nationalNumber = compact.startsWith("+62")
+    ? compact.slice(3)
+    : compact.startsWith("62")
+      ? compact.slice(2)
+      : compact.startsWith("0")
+        ? compact.slice(1)
+        : compact;
+  return INDONESIAN_NSN_PATTERN.test(nationalNumber) ? `0${nationalNumber}` : null;
+}

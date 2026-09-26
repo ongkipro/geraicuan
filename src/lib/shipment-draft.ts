@@ -2,17 +2,19 @@ import "server-only";
 
 import { characterClassError, normalizeFieldText, partyNameClass } from "@/lib/field-character-classes";
 import { isPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
-import { checkPickupSchedule, isHandoverType, isPickupVehicle, type HandoverType, type PickupVehicle } from "@/lib/shipment-draft-logic";
+import { checkPickupSchedule, isHandoverType, isPickupVehicle, normalizePartyPhone, type HandoverType, type PickupVehicle } from "@/lib/shipment-draft-logic";
 
 const MAX_ADDRESS_LENGTH = 500;
 const MAX_AREA_ID_LENGTH = 160;
 const MAX_AREA_LABEL_LENGTH = 160;
+// T-225: moved to the client-safe logic module so the sign-up form checks with the server's rule.
+export { normalizePartyPhone };
+
 const MAX_CONTENT_LENGTH = 240;
 const MAX_DIMENSION_CM = 1_000;
 const MAX_INSTRUCTION_LENGTH = 500;
 const MAX_LANDMARK_LENGTH = 160;
 const MAX_NAME_LENGTH = 120;
-const MAX_PHONE_LENGTH = 16;
 const MAX_QUANTITY = 1_000;
 const MAX_VALUE_IDR = 2_147_483_647;
 const MAX_WEIGHT_GRAMS = 100_000;
@@ -26,13 +28,6 @@ const DIMENSION_LABELS = {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PROVIDER_AREA_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 const SAFE_AREA_LABEL_PATTERN = /^[^\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]+$/u;
-
-/**
- * Indonesian national significant number: no leading zero, 8-12 digits, so the
- * canonical form is `0` + NSN (10-13 characters). Mobile (`8...`) and landline
- * (`2...`-`7...`, `9...`) both fit; any other shape is not Indonesian.
- */
-const INDONESIAN_NSN_PATTERN = /^[2-9]\d{7,11}$/;
 
 export const GRAMS_PER_KILOGRAM = 1_000;
 /** Couriers bill whole kilograms and never less than one. */
@@ -148,42 +143,12 @@ function readText(formData: FormData, field: string) {
 }
 
 /**
- * Every party phone converges on one Indonesian form, `0` + national number.
- * `+62812…`, `62812…`, `0812…` and a bare `812…` are the same subscriber, so
- * they must be stored, deduplicated and sent to the provider identically.
- * A non-Indonesian shape (another country code, a leading `00`, too few or too
- * many digits) is rejected rather than passed through.
- */
-/**
  * The national significant number of an already-canonical phone: `081234…` → `81234…`.
  * Comparisons use this because rows stored before the canonical rule (and party
  * snapshots, which are immutable by contract) may still read `+6281234…`.
  */
 export function partyPhoneNationalNumber(canonicalPhone: string) {
   return canonicalPhone.replace(/^0/, "");
-}
-
-export function normalizePartyPhone(value: string) {
-  if (!/^[+0-9()\s-]+$/.test(value)) {
-    return null;
-  }
-
-  const compact = value.replace(/[()\s-]/g, "");
-  if (compact.length > MAX_PHONE_LENGTH || compact.includes("+", 1)) {
-    return null;
-  }
-  if (compact.startsWith("+") && !compact.startsWith("+62")) {
-    return null;
-  }
-
-  const nationalNumber = compact.startsWith("+62")
-    ? compact.slice(3)
-    : compact.startsWith("62")
-      ? compact.slice(2)
-      : compact.startsWith("0")
-        ? compact.slice(1)
-        : compact;
-  return INDONESIAN_NSN_PATTERN.test(nationalNumber) ? `0${nationalNumber}` : null;
 }
 
 function readWholeNumber(value: string) {

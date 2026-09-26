@@ -510,7 +510,7 @@ export async function saveShipmentPrefix(
   const attemptId = formData.get("attemptId");
   const prefix = typeof rawPrefix === "string" ? normalizeShipmentPrefixInput(rawPrefix) : null;
   if (!prefix) {
-    return { error: "Awalan harus 2–5 huruf besar atau angka, tanpa spasi.", resultToken: randomUUID() };
+    return { error: "Awalan harus 2–3 huruf besar atau angka tanpa spasi, mis. PHI atau A29.", resultToken: randomUUID() };
   }
   if (typeof attemptId !== "string" || !UUID_PATTERN.test(attemptId) || formData.get("confirmation") !== "locked") {
     return { error: "Konfirmasi penguncian awalan diperlukan. Muat ulang halaman lalu coba lagi.", resultToken: randomUUID() };
@@ -523,7 +523,7 @@ export async function saveShipmentPrefix(
       return { error: "Awalan sudah terkunci dan tidak dapat diubah. Hubungi Super Admin bila ada kesalahan.", resultToken: randomUUID() };
     }
     if (error instanceof ShipmentPrefixInvalidError) {
-      return { error: "Awalan harus 2–5 huruf besar atau angka, tanpa spasi.", resultToken: randomUUID() };
+      return { error: "Awalan harus 2–3 huruf besar atau angka tanpa spasi, mis. PHI atau A29.", resultToken: randomUUID() };
     }
     if (error instanceof ShipmentPrefixDeniedError || error instanceof TenantContextDeniedError) {
       return { error: "Hanya Tenant Admin yang dapat mengatur awalan nomor kiriman.", resultToken: randomUUID() };

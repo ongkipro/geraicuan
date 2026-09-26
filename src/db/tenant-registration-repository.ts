@@ -21,6 +21,8 @@ export type SelfRegistrationInput = {
   email: string;
   ownerName: string;
   passwordHash: string;
+  /** D-21: 2–3 capitals or digits; stored unlocked, so Pengaturan can still change it before the first shipment. */
+  shipmentPrefix: string;
   storeName: string;
   whatsapp: string;
 };
@@ -47,8 +49,9 @@ function postgresError(error: unknown) {
 /**
  * Creates the user, credential account, PROVISIONING + PRIVATE_ONLY tenant, its
  * first outlet, the TENANT_ADMIN membership and the audit event in one
- * transaction. An email that already has an account creates nothing and
- * reports `created: false`, including the concurrent case.
+ * transaction, plus the chosen shipment prefix (migration 0060's wrapper, which
+ * calls the 0051 function unchanged). An email that already has an account
+ * creates nothing and reports `created: false`, including the concurrent case.
  */
 export async function registerSelfServiceTenant(
   db: Database,
@@ -58,8 +61,9 @@ export async function registerSelfServiceTenant(
     return await db.transaction(async (tx) => {
       await assertRestrictedRole(tx);
       const result = await tx.execute<{ tenant_id: string | null }>(sql`
-        SELECT register_tenant_self_service(
-          ${input.email}, ${input.ownerName}, ${input.passwordHash}, ${input.storeName}, ${input.whatsapp}
+        SELECT register_tenant_self_service_with_prefix(
+          ${input.email}, ${input.ownerName}, ${input.passwordHash}, ${input.storeName}, ${input.whatsapp},
+          ${input.shipmentPrefix}
         ) AS tenant_id
       `);
       const tenantId = result.rows[0]?.tenant_id;

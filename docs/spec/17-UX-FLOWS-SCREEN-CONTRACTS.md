@@ -103,13 +103,13 @@ Page anatomy, filter row, card, table, record card, tiles, KPI, states and anti-
 
 | Route | Anatomy | Primary |
 |---|---|---|
-| `/login/tenant` | Brand mark + "GeraiCUAN" → card (title "Masuk ke gerai Anda", Email, Kata sandi with show/hide, link "Lupa kata sandi?") → primary **Masuk** → footer "Belum punya akun? Daftar gratis" | Masuk |
-| `/daftar` | Same card: Nama gerai, Nama pemilik, WhatsApp, Email, Kata sandi (min 8, show/hide, strength hint as text) → checkbox syarat → **Daftar gratis** → "Sudah punya akun? Masuk"; after submit: "Cek email Anda" state | Daftar gratis |
+| `/login/tenant` | ≥ 1024 px: left visual panel (primary ground: GC mark, "Gratis", one headline, Kirim · Cetak resi · Invoice with icons, static nota mock `INV-SBN-10001`) + right card; < 1024 px: brand row + card only. Card: title "Masuk ke gerai Anda", Email, Kata sandi with show/hide → primary **Masuk** → footer "Lupa kata sandi?", "Belum punya akun? Daftar gratis" | Masuk |
+| `/daftar` | Same split. Card: stepper **1 Akun · 2 Gerai · 3 Awalan**, one step visible: (1) Email, Kata sandi (min 8, show/hide), Ulangi kata sandi; (2) Nama gerai, Nama pemilik, Nomor WhatsApp gerai; (3) Awalan nomor kiriman (2–3 A–Z/0–9, upper-cased, pre-filled from the gerai name's initials — "Sekar Batik Nusantara" → SBN, "Phi Store" → PS — live example "Nomor kiriman SBN-10001 · Invoice INV-SBN-10001", editable in Pengaturan until the first shipment) + checkbox syarat. **Kembali** (outline, steps 2–3) / **Lanjut** (steps 1–2) / **Daftar gratis** (step 3); Enter advances when the step is valid. Each step runs the server's validation for its fields; one server submission at the end; a server field error opens the step of the first error and focuses that field; the error summary links switch steps. After submit: the "Periksa email Anda" state. Fields keep their values across steps and server errors | Lanjut / Daftar gratis |
 | `/lupa-password`, `/atur-ulang-password` | Same card, one field group, success state replaces the form | Kirim tautan / Simpan kata sandi |
 | `/verifikasi-email/*` | Same card, icon + one sentence + one action | per state |
-| `/login/super-admin` | Same card on the dark ground with a "Super Admin" badge; no sign-up link | Masuk |
+| `/login/super-admin` | Same split on the dark ground (panel headline about monitoring, no "Gratis"), badge "Khusus Super Admin"; no sign-up link | Masuk |
 
-Rules: max width 400 px, centered, 44 px fields, labels above inputs, errors under the field plus one summary alert on submit, autofocus first field, `autocomplete` set, Enter submits, no side marketing panel below 1024 px (at ≥ 1024 px an optional left panel lists the three cores: Kirim · Cetak resi · Invoice — "Gratis selamanya" is not claimed; say "Gratis").
+Rules: card max width 448 px, 48 px fields (≥ 44), 17 px body, 13 px text floor, labels above inputs, errors under the field plus one summary alert, first field focused, `autocomplete` set, Enter submits (Daftar: advances a valid step), one filled primary per step. The visual panel appears only at ≥ 1024 px on Masuk (both surfaces) and Daftar — no image, no external asset, no marketing paragraph; "Gratis selamanya" is not claimed, say "Gratis". Lupa/Atur ulang kata sandi and Verifikasi email keep the centered card (D-21).
 
 ### UX-v3.8 Acceptance (every screen)
 - Matches its reference HTML at 1440 and 390 in a side-by-side screenshot review, section by section (spec 10 §11).

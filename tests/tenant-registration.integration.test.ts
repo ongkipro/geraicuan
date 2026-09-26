@@ -178,6 +178,7 @@ describe("the registration function (0051)", () => {
       ownerName: "Pak Budi",
       passwordHash: await hashPassword(password),
       storeName: "Toko Budi",
+      shipmentPrefix: "TSM",
       whatsapp: "081234567890",
     });
     expect(result.created).toBe(true);
@@ -210,6 +211,7 @@ describe("the registration function (0051)", () => {
         ownerName: "Pak Gagal",
         passwordHash: await hashPassword(password),
         storeName: "Toko Gagal",
+        shipmentPrefix: "TSM",
         whatsapp: "081234567891",
       })).rejects.toThrow();
     } finally {
@@ -236,6 +238,7 @@ describe("the registration function (0051)", () => {
       ownerName: "Penyusup",
       passwordHash: await hashPassword("another-password"),
       storeName: "Toko Penyusup",
+      shipmentPrefix: "TSM",
       whatsapp: "081234567892",
     })).resolves.toEqual({ created: false });
     const after = await admin.query("SELECT count(*)::int AS n FROM memberships WHERE tenant_id = $1", [existingTenantId]);
@@ -389,6 +392,79 @@ describe("/daftar server path (PR-59)", () => {
     }
     expect((await register({ email: email("client-6") }, "192.0.2.77")).state.status).toBe("limited");
     expect(await rowsFor(email("client-6"))).toEqual([]);
+  }, 30_000);
+});
+
+describe("the chosen shipment prefix (T-225, D-21)", () => {
+  const counterFor = async (address: string) => (await admin.query<{ shipment_prefix: string; locked: boolean; last_number: number | null }>(`
+    SELECT c.shipment_prefix, c.shipment_prefix_locked_at IS NOT NULL AS locked, c.last_number
+    FROM tenant_shipment_counters c JOIN memberships m ON m.tenant_id = c.tenant_id JOIN users u ON u.id = m.user_id
+    WHERE u.email = $1`, [address])).rows;
+
+  it("stores the owner's prefix upper-cased and unlocked; without the field it takes the name's initials", async () => {
+    expect((await register({ email: email("prefix-typed"), shipmentPrefix: " a29 " })).state.status).toBe("submitted");
+    expect(await counterFor(email("prefix-typed"))).toEqual([{ last_number: null, locked: false, shipment_prefix: "A29" }]);
+    // A page loaded before T-225 posts no prefix: "Toko Sari Makmur" → TSM.
+    expect((await register({ email: email("prefix-absent") })).state.status).toBe("submitted");
+    expect(await counterFor(email("prefix-absent"))).toEqual([{ last_number: null, locked: false, shipment_prefix: "TSM" }]);
+  }, 30_000);
+
+  it("refuses a prefix outside 2–3 capitals or digits on the server, creating nothing", async () => {
+    for (const [index, bad] of ["S", "SBNX", "SB-N", ""].entries()) {
+      const address = email(`prefix-bad-${index}`);
+      const { state } = await register({ email: address, shipmentPrefix: bad });
+      expect(state, bad).toMatchObject({
+        errors: { shipmentPrefix: "Isi awalan 2–3 huruf atau angka, misalnya PHI atau A29." },
+        status: "invalid",
+        values: expect.objectContaining({ shipmentPrefix: bad }),
+      });
+      expect(await rowsFor(address)).toEqual([]);
+    }
+  }, 30_000);
+
+  it("refuses a 4-character prefix in the database for new writes, while a legacy 5-character row stays readable and keeps numbering", async () => {
+    const client = await runtime.connect();
+    try {
+      await expect(client.query(
+        "SELECT register_tenant_self_service_with_prefix($1, 'Pemilik', $2, 'Toko Awalan', '081234567880', 'ABCD')",
+        [email("prefix-db"), "x".repeat(40)],
+      )).rejects.toMatchObject({ code: "22023" });
+      // The runtime role cannot write numbering state at all.
+      await expect(client.query("UPDATE tenant_shipment_counters SET shipment_prefix = 'AB'")).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      client.release();
+    }
+    expect(await rowsFor(email("prefix-db"))).toEqual([]);
+
+    const { registerSelfServiceTenant } = await import("@/db/tenant-registration-repository");
+    const created = await registerSelfServiceTenant(runtimeDb, {
+      email: email("prefix-legacy"), ownerName: "Pemilik Lama", passwordHash: await hashPassword(password),
+      shipmentPrefix: "LG", storeName: "Toko Lama", whatsapp: "081234567881",
+    });
+    if (!created.created) throw new Error("fixture not created");
+    // Even the migration owner cannot write a new 4–5 character prefix.
+    await expect(admin.query("UPDATE tenant_shipment_counters SET shipment_prefix = 'LEGAC' WHERE tenant_id = $1", [created.tenantId]))
+      .rejects.toMatchObject({ code: "22023" });
+    // A row stored before 0060 (simulated with the guard off) is still valid and keeps allocating.
+    const owner = await admin.connect();
+    try {
+      await owner.query("BEGIN");
+      await owner.query("ALTER TABLE tenant_shipment_counters DISABLE TRIGGER tenant_shipment_counters_new_prefix_guard");
+      await owner.query("UPDATE tenant_shipment_counters SET shipment_prefix = 'LEGAC' WHERE tenant_id = $1", [created.tenantId]);
+      await owner.query("ALTER TABLE tenant_shipment_counters ENABLE TRIGGER tenant_shipment_counters_new_prefix_guard");
+      await owner.query("COMMIT");
+    } catch (error) {
+      await owner.query("ROLLBACK");
+      throw error;
+    } finally {
+      owner.release();
+    }
+    await admin.query("UPDATE tenant_shipment_counters SET last_number = 10000, shipment_prefix_locked_at = now() WHERE tenant_id = $1", [created.tenantId]);
+    expect(await counterFor(email("prefix-legacy"))).toEqual([{ last_number: 10000, locked: true, shipment_prefix: "LEGAC" }]);
+    const privileges = await admin.query<{ app_execute: boolean; public_execute: boolean }>(`
+      SELECT has_function_privilege('public', 'register_tenant_self_service_with_prefix(text,text,text,text,text,text)', 'EXECUTE') AS public_execute,
+        has_function_privilege('geraicuan_app', 'register_tenant_self_service_with_prefix(text,text,text,text,text,text)', 'EXECUTE') AS app_execute`);
+    expect(privileges.rows[0]).toEqual({ app_execute: true, public_execute: false });
   }, 30_000);
 });
 
@@ -709,6 +785,7 @@ describe("Super Admin review (PR-61)", () => {
         ownerName: "Pemilik Probe",
         passwordHash: await hashPassword(password),
         storeName: "Toko Probe",
+        shipmentPrefix: "TSM",
         whatsapp: "081234567899",
       });
       expect(registered.created).toBe(true);
@@ -724,6 +801,7 @@ describe("Super Admin review (PR-61)", () => {
         ownerName: "Pemilik Ditolak",
         passwordHash: await hashPassword(password),
         storeName: "Toko Ditolak",
+        shipmentPrefix: "TSM",
         whatsapp: "081234567898",
       });
       const rejected = (await rowsFor(email("probe-rejected")))[0];
@@ -740,6 +818,7 @@ describe("Super Admin review (PR-61)", () => {
         ownerName: "Pemilik Peran",
         passwordHash: await hashPassword(password),
         storeName: "Toko Peran",
+        shipmentPrefix: "TSM",
         whatsapp: "081234567897",
       });
       const withRole = (await rowsFor(email("probe-platform-role")))[0];

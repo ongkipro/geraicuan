@@ -624,6 +624,7 @@ export const tenantShipmentCounters = pgTable("tenant_shipment_counters", {
   tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
   // NULL until the first number is allocated (a prefix may be saved before any shipment).
   lastNumber: integer("last_number"),
+  // 2–5 stays valid for stored rows; a new or changed prefix is 2–3 (trigger, migration 0060, D-21).
   shipmentPrefix: text("shipment_prefix").notNull().default("GC"),
   shipmentPrefixLockedAt: timestamp("shipment_prefix_locked_at", { withTimezone: true }),
 }, () => [

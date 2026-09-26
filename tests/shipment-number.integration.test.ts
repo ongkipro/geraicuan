@@ -41,11 +41,22 @@ describe("PR-44 shipment number helpers", () => {
 
   it("suggests tenant initials and validates a one-time prefix", () => {
     expect(suggestShipmentPrefix("Toko Kopi Pagi")).toBe("TKP");
-    expect(suggestShipmentPrefix("Ölçü Café & Bakery 2")).toBe("OCB2");
-    expect(suggestShipmentPrefix("Satu Dua Tiga Empat Lima Enam")).toBe("SDTEL");
+    // D-21 (T-225): at most three characters.
+    expect(suggestShipmentPrefix("Sekar Batik Nusantara")).toBe("SBN");
+    expect(suggestShipmentPrefix("Phi Store")).toBe("PS");
+    expect(suggestShipmentPrefix("Phi")).toBe("PHI");
+    expect(suggestShipmentPrefix("Ölçü Café & Bakery 2")).toBe("OCB");
+    expect(suggestShipmentPrefix("Satu Dua Tiga Empat Lima Enam")).toBe("SDT");
+    expect(suggestShipmentPrefix("A 29")).toBe("A2");
     expect(suggestShipmentPrefix("Z")).toBe("GC");
+    expect(suggestShipmentPrefix("")).toBe("GC");
     expect(normalizeShipmentPrefixInput(" tkp- ")).toBe("TKP");
-    for (const bad of ["T", "TOKOKU", "TK P", "TK_P", ""]) expect(normalizeShipmentPrefixInput(bad), bad).toBeNull();
+    expect(normalizeShipmentPrefixInput("a29")).toBe("A29");
+    expect(normalizeShipmentPrefixInput("GC")).toBe("GC");
+    for (const bad of ["T", "TKPJ", "SDTEL", "TOKOKU", "TK P", "TK_P", ""]) expect(normalizeShipmentPrefixInput(bad), bad).toBeNull();
+    // Legacy 4–5 character references stay readable.
+    expect(parseShipmentRouteKey("SDTEL-10013")).toEqual({ kind: "number", tenantNumber: 10013, canonical: false });
+    expect(shipmentDetailHref("SDTEL-10013")).toBe("/app/pengiriman/10013");
   });
 
   it("denies a non-admin save in the application before any database call", async () => {

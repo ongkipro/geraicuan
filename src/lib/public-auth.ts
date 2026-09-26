@@ -58,14 +58,5 @@ export async function withMinimumDuration<T>(minimumMs: number, work: () => Prom
   }
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Lower-cased and trimmed, the form Better Auth stores; `null` when unusable. */
-export function normalizeEmailInput(value: FormDataEntryValue | null) {
-  if (typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  return email.length >= 3 && email.length <= 254 && EMAIL_PATTERN.test(email) ? email : null;
-}
-
-export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_LENGTH = 128;
+// T-225: client-safe, so the stepped sign-up form checks with the server's own rules.
+export { normalizeEmailInput, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/public-auth-routes";

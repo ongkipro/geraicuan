@@ -90,7 +90,7 @@ afterAll(async () => {
 
 describe("bootstrap-super-admin refusals", () => {
   it("uses the same password limits as sign-up and password reset", () => {
-    const source = readFileSync(join(process.cwd(), "src/lib/public-auth.ts"), "utf8");
+    const source = readFileSync(join(process.cwd(), "src/lib/public-auth-routes.ts"), "utf8");
     expect(Number(/PASSWORD_MIN_LENGTH = (\d+)/.exec(source)?.[1])).toBe(PASSWORD_MIN_LENGTH);
     expect(Number(/PASSWORD_MAX_LENGTH = (\d+)/.exec(source)?.[1])).toBe(PASSWORD_MAX_LENGTH);
   });

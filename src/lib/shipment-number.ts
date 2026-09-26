@@ -3,7 +3,12 @@
 // these helpers only parse route input and build canonical links from a stored reference.
 
 export const DEFAULT_SHIPMENT_PREFIX = "GC";
-export const SHIPMENT_PREFIX_PATTERN = /^[A-Z0-9]{2,5}$/;
+/**
+ * D-21 (T-225): a new or changed prefix is 2–3 capitals or digits (e.g. PHI, A29).
+ * Stored 4–5 character prefixes from before the rule stay valid and readable: the
+ * reference and route patterns below still accept them.
+ */
+export const SHIPMENT_PREFIX_PATTERN = /^[A-Z0-9]{2,3}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUTE_NUMBER_PATTERN = /^(?:([A-Za-z0-9]{2,5})-)?([1-9][0-9]{4,9})$/;
 const REFERENCE_PATTERN = /^[A-Z0-9]{2,5}-([0-9]{5,})$/;
@@ -57,11 +62,14 @@ export function shipmentLabelHref(publicReference: string) {
   return `/app/label/${shipmentNumberFromReference(publicReference)}`;
 }
 
-/** Initials of the tenant name, e.g. "Toko Kopi Pagi" → "TKP"; falls back to GC. */
+/**
+ * Initials of the tenant name, at most three, e.g. "Sekar Batik Nusantara" → "SBN",
+ * "Phi Store" → "PS"; a one-word name gives its first three characters; falls back to GC.
+ */
 export function suggestShipmentPrefix(tenantName: string) {
   // Drop diacritic marks before splitting, so "Ölçü" stays one word (OLCU), not "O LC U".
   const words = tenantName.normalize("NFKD").replace(/\p{M}+/gu, "").toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
-  const initials = words.map((word) => word[0]).join("").slice(0, 5);
+  const initials = words.map((word) => word[0]).join("").slice(0, 3);
   if (SHIPMENT_PREFIX_PATTERN.test(initials)) return initials;
   const compact = words.join("").slice(0, 3);
   return SHIPMENT_PREFIX_PATTERN.test(compact) ? compact : DEFAULT_SHIPMENT_PREFIX;

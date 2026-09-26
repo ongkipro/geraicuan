@@ -4893,3 +4893,10 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Gotcha.** React resets a `<form>` after its action; a Radix Switch inside the form listens to `reset` and calls `onCheckedChange` with its first value, silently reverting a controlled editor. Keep switches outside the form and post hidden inputs.
 - **Checks.** tsc 0; lint 0; full integration suite on the isolated DB 114 files / 1,322 passed; `verify-migration-upgrade` through 0059 (temporary DB created and dropped); migrations applied to the iso and dev DBs. Browser evidence at 1440/390 in the scratchpad `t229/`.
 
+## 2026-09-26 — T-225 split sign-in, stepped sign-up, 2–3 character prefix (D-21)
+
+- **Auth layout.** `AuthShell visual` adds a ≥ 1024 px left panel on Masuk (both surfaces) and Daftar; below that only the card. Daftar is three client-side steps with one Server Action call; the step checks reuse `validateRegistration`, made client-safe by moving `normalizePartyPhone` and the email/password rules into client-safe modules (old import paths re-export them).
+- **Prefix rule.** New or changed prefixes are 2–3 characters; sign-up stores the owner's choice unlocked (0060 `register_tenant_self_service_with_prefix`, wrapping the unchanged 0051 function so its regprocedure-based policies stay valid).
+- **Gotcha.** The requested `CHECK (...) NOT VALID` would have broken shipment creation for any tenant holding a legacy 4–5 character prefix: PostgreSQL enforces a NOT VALID CHECK on every later UPDATE of a row, and allocation updates `last_number` each time. A trigger on `INSERT OR UPDATE OF shipment_prefix` that compares OLD/NEW enforces only new writes. `verify-migration-upgrade` proves a legacy `LEGAC` row still allocates after 0060.
+- **Gotcha.** A stepped form built on `<form action>` loses typed values when the server refuses (React resets the form after the action); controlled fields plus `startTransition(() => action(formData))` keep them.
+- **Checks.** tsc 0; lint 0; full suite on the iso DB 114 files / 1,328 passed; `verify-migration-upgrade` through 0060; browser evidence at 1440/390 in the scratchpad `t225/`.

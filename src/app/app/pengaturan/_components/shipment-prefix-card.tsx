@@ -121,17 +121,17 @@ export function ShipmentPrefixCard({
             autoComplete="off"
             className="w-32 font-mono uppercase"
             id="shipment-prefix"
-            maxLength={5}
+            maxLength={3}
             name="prefix"
             onChange={(event) => setValue(event.target.value.toUpperCase())}
             spellCheck={false}
             value={value}
           />
           <FieldDescription id="shipment-prefix-help">
-            2–5 huruf besar atau angka. Pratinjau:{" "}
+            2–3 huruf besar atau angka, mis. PHI, A29. Pratinjau:{" "}
             <span className="font-mono font-semibold text-foreground">{normalized ?? "—"}-10013</span>
           </FieldDescription>
-          {value !== "" && !normalized ? <FieldError>Gunakan 2–5 huruf besar atau angka tanpa spasi.</FieldError> : null}
+          {value !== "" && !normalized ? <FieldError>Gunakan 2–3 huruf besar atau angka tanpa spasi.</FieldError> : null}
         </Field>
         <AlertDialog onOpenChange={setConfirming} open={confirming}>
           <AlertDialogContent>

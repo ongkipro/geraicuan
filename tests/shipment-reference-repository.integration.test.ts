@@ -163,13 +163,13 @@ describe("per-tenant shipment numbers (PR-44)", () => {
     expect(unlocked.rows).toEqual([{ actor_role: "SUPER_ADMIN" }]);
     await insert(2);
     expect((await counter(2)).shipment_prefix_locked_at).toBeNull();
-    await inTenant(2, (tx, context) => saveTenantShipmentPrefix(tx, context, "TKPJ", randomUUID()));
-    expect((await references(2)).every(reference => reference.startsWith("TKPJ-"))).toBe(true);
+    await inTenant(2, (tx, context) => saveTenantShipmentPrefix(tx, context, "TKJ", randomUUID()));
+    expect((await references(2)).every(reference => reference.startsWith("TKJ-"))).toBe(true);
   });
 
   it("serializes a prefix save racing a tenant's first allocation into one consistent outcome", async () => {
     const results = await Promise.allSettled([
-      inTenant(3, (tx, context) => saveTenantShipmentPrefix(tx, context, "RACE", randomUUID())),
+      inTenant(3, (tx, context) => saveTenantShipmentPrefix(tx, context, "RCE", randomUUID())),
       insert(3),
       insert(3),
     ]);
@@ -178,7 +178,7 @@ describe("per-tenant shipment numbers (PR-44)", () => {
     if (!saved) expect((results[0] as PromiseRejectedResult).reason).toBeInstanceOf(ShipmentPrefixLockedError);
     const state = await counter(3);
     expect(state.shipment_prefix_locked_at).not.toBeNull();
-    expect(state.shipment_prefix).toBe(saved ? "RACE" : "GC");
+    expect(state.shipment_prefix).toBe(saved ? "RCE" : "GC");
     expect(await references(3)).toEqual([`${state.shipment_prefix}-10000`, `${state.shipment_prefix}-10001`]);
   });
 

@@ -17,7 +17,7 @@ export default function RegistrationPage() {
       homeHref={homeHref}
       surface="tenant"
       title="Daftarkan gerai Anda"
-      wide
+      visual
     >
       <RegistrationForm />
     </AuthShell>

@@ -22,6 +22,7 @@ export default async function SuperAdminLoginPage({ searchParams }: PageProps<"/
       homeHref={homeHref}
       surface="platform"
       title="Masuk Super Admin"
+      visual
     >
       <LoginForm
         demoCredentials={demo ? { email: "super@geraicuan.com", password: demo } : undefined}

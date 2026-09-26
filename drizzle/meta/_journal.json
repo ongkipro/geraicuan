@@ -421,6 +421,13 @@
       "when": 1790386306548,
       "tag": "0059_tenant_label_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790391254279,
+      "tag": "0060_shipment_prefix_three_chars",
+      "breakpoints": true
     }
   ]
 }

@@ -51,6 +51,12 @@ if (contactIndex <= emailReleaseIndex) {
   throw new Error("Expected the tenant contact upgrade boundary after 0053.");
 }
 
+const prefixRuleIndex = migrations.findIndex((migration) =>
+  migration.startsWith("0060_shipment_prefix_three_chars"));
+if (prefixRuleIndex <= contactIndex) {
+  throw new Error("Expected the three-character prefix upgrade boundary after 0058.");
+}
+
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
 
@@ -1218,7 +1224,7 @@ try {
   const tenantsBefore058 = await fullTenants();
   const auditBefore058 = await auditRows();
   if (tenantsBefore058.length < 5 || auditBefore058.length < 4) throw new Error("Pre-0058 fixtures missing.");
-  await applyMigrations(migrations.slice(contactIndex));
+  await applyMigrations(migrations.slice(contactIndex, prefixRuleIndex));
   if (JSON.stringify(await fullTenants()) !== JSON.stringify(tenantsBefore058)
     || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore058)) {
     throw new Error("0058/0059 changed an existing tenant or audit row.");
@@ -1255,6 +1261,53 @@ try {
   }
   if (JSON.stringify(await fullTenants()) !== JSON.stringify(tenantsBefore058)) {
     throw new Error("The 0058 probes left a change behind.");
+  }
+
+  // 0060 (T-225, D-21): new or changed prefixes are 2-3 characters, but a prefix stored
+  // before it (here a 5-character one, valid under 0040's 2-5 CHECK) is left as it was and
+  // keeps allocating: a NOT VALID CHECK would have refused every later update of the row.
+  await client.query("UPDATE tenant_shipment_counters SET shipment_prefix = 'LEGAC' WHERE tenant_id = '00000000-0000-0000-0000-000000000901'");
+  const countersBefore060 = (await client.query("SELECT to_jsonb(c) AS row FROM tenant_shipment_counters c ORDER BY tenant_id")).rows;
+  await applyMigrations(migrations.slice(prefixRuleIndex));
+  if (JSON.stringify((await client.query("SELECT to_jsonb(c) AS row FROM tenant_shipment_counters c ORDER BY tenant_id")).rows) !== JSON.stringify(countersBefore060)) {
+    throw new Error("0060 changed an existing counter row.");
+  }
+  const asOwner = async (statement) => {
+    await client.query("BEGIN");
+    try {
+      const { rows } = await client.query(statement);
+      return { code: "accepted", rows };
+    } catch (error) {
+      return { code: error.code };
+    } finally {
+      await client.query("ROLLBACK");
+    }
+  };
+  const legacyAllocation = await asOwner(
+    "UPDATE tenant_shipment_counters SET last_number = last_number + 1 WHERE tenant_id = '00000000-0000-0000-0000-000000000901' RETURNING shipment_prefix, last_number",
+  );
+  const legacyRewrite = await asOwner("UPDATE tenant_shipment_counters SET shipment_prefix = 'LEGAD' WHERE tenant_id = '00000000-0000-0000-0000-000000000901'");
+  const fourCharacters = await asOwner("UPDATE tenant_shipment_counters SET shipment_prefix = 'ABCD' WHERE tenant_id = '00000000-0000-0000-0000-000000000911'");
+  const threeCharacters = await asOwner("UPDATE tenant_shipment_counters SET shipment_prefix = 'A29' WHERE tenant_id = '00000000-0000-0000-0000-000000000911'");
+  const registeredWithPrefix = await asRuntime(async () => {
+    const { rows: [row] } = await client.query(
+      "SELECT register_tenant_self_service_with_prefix('migration.prefix.probe@example.test', 'Pemilik Awalan', repeat('h', 64), 'Toko Awalan', '081234567870', 'PHI') AS tenant_id",
+    );
+    await client.query("RESET ROLE");
+    const { rows: [counter] } = await client.query(
+      "SELECT shipment_prefix, shipment_prefix_locked_at, last_number FROM tenant_shipment_counters WHERE tenant_id = $1", [row.tenant_id]);
+    return { code: counter?.shipment_prefix === "PHI" && counter.shipment_prefix_locked_at === null && counter.last_number === null ? "stored" : JSON.stringify(counter) };
+  });
+  const registeredLongPrefix = await asRuntime(async () => {
+    await client.query("SELECT register_tenant_self_service_with_prefix('migration.prefix.long@example.test', 'Pemilik Awalan', repeat('h', 64), 'Toko Awalan', '081234567871', 'PHIX')");
+    return { code: "accepted" };
+  });
+  if (
+    legacyAllocation.code !== "accepted" || legacyAllocation.rows[0]?.shipment_prefix !== "LEGAC"
+    || legacyRewrite.code !== "22023" || fourCharacters.code !== "22023" || threeCharacters.code !== "accepted"
+    || registeredWithPrefix.code !== "stored" || registeredLongPrefix.code !== "22023"
+  ) {
+    throw new Error(`0060 did not upgrade cleanly: ${JSON.stringify({ legacyAllocation, legacyRewrite, fourCharacters, threeCharacters, registeredWithPrefix, registeredLongPrefix })}`);
   }
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);

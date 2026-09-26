@@ -22,7 +22,7 @@ vi.mock("@/app/platform/pendaftaran/actions", () => ({ reviewRegistration: vi.fn
 const { demoPassword, resolveLoginNotice } = await import("@/app/login/_components/login-notices");
 const { AuthShell } = await import("@/app/login/_components/auth-shell");
 const { LoginForm } = await import("@/app/login/_components/login-form");
-const { RegistrationForm } = await import("@/app/daftar/registration-form");
+const { firstRegistrationError, RegistrationForm, registrationFormData, registrationStepErrors, registrationStepOf } = await import("@/app/daftar/registration-form");
 const { PasswordResetForm } = await import("@/app/atur-ulang-password/reset-form");
 const { attentionItems, filtersChanged, registrationDecisions } = await import("@/app/platform/_components/platform-logic");
 const { auditActor, formatSeconds, formatWib, severityBadge, tenantStatusChange } = await import("@/app/platform/_components/platform-format");
@@ -79,10 +79,59 @@ describe("public auth markup", () => {
 
   it("keeps every registration field name the server action reads", () => {
     const html = render(createElement(RegistrationForm));
-    for (const name of ["storeName", "whatsapp", "ownerName", "email", "password", "passwordConfirmation", "terms"]) {
+    for (const name of ["storeName", "whatsapp", "ownerName", "email", "password", "passwordConfirmation", "shipmentPrefix", "terms"]) {
       expect(html, name).toContain(`name="${name}"`);
     }
     expect(filledPrimaries(html)).toBe(1);
+  });
+
+  it("T-225: renders three steps with only Akun visible, a stepper and one Lanjut primary", () => {
+    const html = render(createElement(RegistrationForm));
+    expect(html).toContain('data-slot="registration-stepper"');
+    expect(html).toMatch(/aria-current="step"[^>]*>.*?Akun/);
+    expect(html).toMatch(/<fieldset[^>]*data-step="0"(?![^>]*hidden)/);
+    expect(html).toMatch(/<fieldset[^>]*data-step="1"[^>]*hidden/);
+    expect(html).toMatch(/<fieldset[^>]*data-step="2"[^>]*hidden/);
+    expect(html).toContain(">Lanjut</button>");
+    expect(html).not.toContain("Kembali");
+    expect(html).not.toContain("Daftar gratis");
+    for (const [id, autocomplete] of [["email", "email"], ["password", "new-password"], ["storeName", "organization"], ["ownerName", "name"], ["whatsapp", "tel"], ["shipmentPrefix", "off"]]) {
+      expect(html, id).toMatch(new RegExp(`autoComplete="${autocomplete}"[^>]*id="${id}"|id="${id}"[^>]*autoComplete="${autocomplete}"`));
+    }
+    // Empty gerai name: the prefix starts at the default, with the live example.
+    expect(html).toContain('maxLength="3"');
+    expect(html).toContain(">GC-10001</span>");
+    expect(html).toContain(">INV-GC-10001</span>");
+  });
+
+  it("T-225: each step checks the server's own rules for its fields only, and errors map to their step", () => {
+    const values = { email: "", ownerName: "", password: "", passwordConfirmation: "", storeName: "", terms: false, whatsapp: "" };
+    expect(Object.keys(registrationStepErrors(values, "GC", [0])).sort()).toEqual(["email", "password", "passwordConfirmation"]);
+    expect(Object.keys(registrationStepErrors(values, "GC", [1])).sort()).toEqual(["ownerName", "storeName", "whatsapp"]);
+    expect(registrationStepErrors(values, "GC", [2])).toEqual({ terms: "Centang persetujuan syarat penggunaan untuk melanjutkan." });
+    expect(registrationStepErrors(values, "ABCD", [2])).toMatchObject({ shipmentPrefix: "Isi awalan 2–3 huruf atau angka, misalnya PHI atau A29." });
+    const filled = { email: "Pemilik@Gerai.com", ownerName: "Ibu Sari", password: "rahasia-aman", passwordConfirmation: "rahasia-aman", storeName: "Sekar Batik Nusantara", terms: true, whatsapp: "0812 3456 7890" };
+    expect(registrationStepErrors(filled, "SBN", [0, 1, 2])).toEqual({});
+    expect(registrationStepErrors({ ...filled, passwordConfirmation: "lain" }, "SBN", [1, 2])).toEqual({});
+    expect(registrationFormData(filled, "SBN").get("terms")).toBe("setuju");
+    expect(registrationFormData({ ...filled, terms: false }, "SBN").get("terms")).toBeNull();
+    expect(firstRegistrationError({ shipmentPrefix: "x", storeName: "y" })).toBe("storeName");
+    expect(firstRegistrationError({})).toBeNull();
+    expect(["email", "passwordConfirmation", "whatsapp", "shipmentPrefix", "terms"].map((field) => registrationStepOf(field as never))).toEqual([0, 0, 1, 2, 2]);
+  });
+
+  it("T-225: Masuk and Daftar add the desktop visual panel; other auth pages and phones get only the card", () => {
+    const tenant = render(createElement(AuthShell, { surface: "tenant", title: "Masuk ke gerai Anda", visual: true } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")));
+    expect(tenant).toContain('data-slot="auth-visual"');
+    expect(tenant).toMatch(/class="[^"]*hidden[^"]*lg:flex[^"]*bg-primary/);
+    for (const core of ["Kirim", "Cetak resi", "Invoice", "Gratis"]) expect(tenant, core).toContain(core);
+    expect(tenant).not.toMatch(/gratis selamanya/i);
+    expect(tenant).not.toContain("<img");
+    const platform = render(createElement(AuthShell, { surface: "platform", title: "Masuk Super Admin", visual: true } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")));
+    expect(platform).toContain("Khusus Super Admin");
+    expect(platform).not.toContain(">Gratis<");
+    expect(platform).toMatch(/data-surface="platform"/);
+    expect(render(createElement(AuthShell, { surface: "tenant", title: "Lupa kata sandi" } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")))).not.toContain('data-slot="auth-visual"');
   });
 
   it("shows the expired state instead of the form when the reset link is unusable", () => {

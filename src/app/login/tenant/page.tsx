@@ -20,12 +20,13 @@ export default async function TenantLoginPage({ searchParams }: PageProps<"/logi
       footer={
         <>
           <AuthLink href="/lupa-password">Lupa kata sandi?</AuthLink>
-          <AuthLink href="/daftar">Belum punya akun? Daftarkan gerai</AuthLink>
+          <AuthLink href="/daftar">Belum punya akun? Daftar gratis</AuthLink>
         </>
       }
       homeHref={homeHref}
       surface="tenant"
       title="Masuk ke gerai Anda"
+      visual
     >
       <LoginForm
         demoCredentials={demo ? { email: "tenant@geraicuan.com", password: demo } : undefined}

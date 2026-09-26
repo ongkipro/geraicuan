@@ -12,7 +12,7 @@ import { consumePublicAuthRateLimit } from "@/lib/public-auth-rate-limit";
 import { clientIdentifier, requestSetPasswordLink, withMinimumDuration } from "@/lib/public-auth";
 import { validateRegistration, type RegistrationField } from "@/lib/self-registration";
 
-export type RegistrationValues = Partial<Record<"email" | "ownerName" | "storeName" | "whatsapp", string>>;
+export type RegistrationValues = Partial<Record<"email" | "ownerName" | "shipmentPrefix" | "storeName" | "whatsapp", string>>;
 
 export type RegistrationActionState =
   | { status: "idle" }
@@ -37,6 +37,7 @@ function valuesFrom(formData: FormData): RegistrationValues {
   return {
     email: read("email"),
     ownerName: read("ownerName"),
+    shipmentPrefix: read("shipmentPrefix"),
     storeName: read("storeName"),
     whatsapp: read("whatsapp"),
   };
@@ -114,6 +115,7 @@ export async function registerStore(
       email: input.email,
       ownerName: input.ownerName,
       passwordHash,
+      shipmentPrefix: input.shipmentPrefix,
       storeName: input.storeName,
       whatsapp: input.whatsapp,
     });
