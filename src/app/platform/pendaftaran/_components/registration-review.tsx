@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 
 const initialState: RegistrationReviewState = {};
 
@@ -78,12 +78,12 @@ export function RegistrationReview({ emailVerified, storeName, tenantId }: { ema
               <form action={action} aria-busy={pending} className="flex flex-col gap-4" noValidate>
                 <DialogHeader>
                   <DialogTitle>Tolak pendaftaran {storeName}?</DialogTitle>
-                  <DialogDescription>Gerai diarsipkan dan pemilik menerima alasan ini lewat email.</DialogDescription>
+                  <DialogDescription>{storeName} diarsipkan dan tidak dapat dipakai. Keputusan ini tercatat di jejak audit.</DialogDescription>
                 </DialogHeader>
                 <input name="tenantId" type="hidden" value={tenantId} />
                 <input name="decision" type="hidden" value="REJECT" />
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor={`reason-${tenantId}`}>Alasan penolakan</Label>
+                <Field data-invalid={reasonError ? true : undefined}>
+                  <FieldLabel htmlFor={`reason-${tenantId}`}>Alasan penolakan</FieldLabel>
                   <CharacterClassTextarea
                     aria-describedby={`reason-hint-${tenantId}${reasonError ? ` reason-error-${tenantId}` : ""}`}
                     aria-invalid={reasonError ? true : undefined}
@@ -95,9 +95,9 @@ export function RegistrationReview({ emailVerified, storeName, tenantId }: { ema
                     ref={reasonRef}
                     required
                   />
-                  <p className="text-xs text-muted-foreground" id={`reason-hint-${tenantId}`}>5 sampai 500 karakter.</p>
-                  {reasonError ? <p className="text-sm font-medium text-destructive" id={`reason-error-${tenantId}`}>{reasonError}</p> : null}
-                </div>
+                  <FieldDescription id={`reason-hint-${tenantId}`}>5 sampai 500 karakter. Pemilik menerima alasan ini lewat email.</FieldDescription>
+                  {reasonError ? <FieldError className="font-medium" id={`reason-error-${tenantId}`}>{reasonError}</FieldError> : null}
+                </Field>
                 {state.message && !settled && !reasonError ? <p className="text-sm font-medium text-destructive" role="alert">{state.message}</p> : null}
                 <DialogFooter>
                   <DialogClose asChild>

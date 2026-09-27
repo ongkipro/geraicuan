@@ -1,26 +1,27 @@
-import { CircleCheck } from "lucide-react";
+import { ChevronDown, CircleCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { DateRangePicker } from "@/components/app/date-range-picker";
 import { FilterBar } from "@/components/app/filter-bar";
+import { SectionHelp } from "@/components/app/help-hint";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
+import { StatStrip, type StatItem } from "@/components/app/stat-strip";
 import { StatusBadge } from "@/components/app/status-badge";
-import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { HealthTile, PlatformHealth } from "@/db/platform-monitoring-repository";
 import { formatRangeLabel } from "@/lib/analytics-range";
-import { auditActionSentence } from "@/lib/labels/audit";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 import { formatCount, formatDuration } from "@/lib/platform-monitoring-format";
 
-import { auditActor, formatSeconds, formatWib, severityBadge } from "./_components/platform-format";
-import { attentionItems, filtersChanged } from "./_components/platform-logic";
+import { formatSeconds, formatWib, severityBadge } from "./_components/platform-format";
+import { attentionItems, filtersChanged, platformTrendTotals } from "./_components/platform-logic";
 import { PlatformTrendChart } from "./_components/platform-trend-chart";
 import {
   ArrowLink,
-  AuditOutcomeBadge,
+  AuditFeed,
   DESKTOP_ONLY,
   FLUSH_TABLE,
   PHONE_ONLY,
@@ -35,34 +36,34 @@ import { loadPlatformView, type PlatformView } from "./_components/platform-view
 export const metadata: Metadata = { robots: { index: false }, title: "Ringkasan" };
 export const dynamic = "force-dynamic";
 
-function HealthCard({ detail, label, tile, value }: {
-  detail: string;
-  label: string;
-  tile?: HealthTile;
-  value: string;
-}) {
-  const badge = tile ? severityBadge(tile.severity) : null;
-  return (
-    <Card className="gap-2 [--card-spacing:--spacing(5)] max-md:[--card-spacing:--spacing(4)]" data-slot="health-card">
-      <p className="px-(--card-spacing) text-sm font-medium text-muted-foreground">{label}</p>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-(--card-spacing)">
-        <p className="text-3xl font-bold tabular-nums">{value}</p>
-        {badge ? <StatusBadge label={badge.label} tone={badge.tone} /> : null}
-      </div>
-      <p className="px-(--card-spacing) text-xs text-muted-foreground">{detail}</p>
-    </Card>
-  );
+/**
+ * T-257: the five health signals as one §4.6 stat strip instead of five 150 px cards. A badge
+ * appears only above Normal (Perhatian / Kritis), where it changes a decision.
+ */
+function HealthRow({ health }: { health: PlatformHealth }) {
+  const badge = (tile: HealthTile) => {
+    if (tile.severity === "normal") return null;
+    const { label, tone } = severityBadge(tile.severity);
+    return <StatusBadge label={label} tone={tone} />;
+  };
+  const items: StatItem[] = [
+    { badge: badge(health.queue), key: "queue", label: "Antrean pengajuan", metric: "OPS-QUEUE-STUCK", note: health.queue.count ? `Terlama ${formatDuration(health.queue.oldestMs)}` : "Tidak ada yang tertahan", value: formatCount(health.queue.count) },
+    { badge: badge(health.failures), key: "failures", label: "Kegagalan provider", metric: "OPS-FAILURE-COUNT", note: `${Math.round(health.failures.share * 100)}% dari pengajuan`, value: formatCount(health.failures.count) },
+    { badge: badge(health.unknown), key: "unknown", label: "Status tidak diketahui", metric: "OPS-UNKNOWN", note: `${formatCount(health.unknown.batches)} pengajuan · ${formatCount(health.unknown.orders)} pesanan`, value: formatCount(health.unknown.count) },
+    { badge: badge(health.unpaid), key: "unpaid", label: "Menunggu pembayaran", metric: "OPS-UNPAID", note: `${formatCount(health.unpaid.recovering)} pemulihan berjalan`, value: formatCount(health.unpaid.count) },
+    { key: "latency", label: "Durasi penyelesaian", metric: "OPS-BATCH-DURATION", note: `Median · 95% dalam ${formatSeconds(health.latency.p95Seconds)}`, value: formatSeconds(health.latency.p50Seconds) },
+  ];
+  return <StatStrip items={items} label="Kesehatan platform" />;
 }
 
-function HealthRow({ health }: { health: PlatformHealth }) {
+function HealthHelp() {
   return (
-    <section aria-label="Kesehatan platform" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      <HealthCard detail={health.queue.count ? `Terlama ${formatDuration(health.queue.oldestMs)}` : "Tidak ada yang tertahan"} label="Antrean pengajuan" tile={health.queue} value={formatCount(health.queue.count)} />
-      <HealthCard detail={`${Math.round(health.failures.share * 100)}% dari pengajuan`} label="Kegagalan provider" tile={health.failures} value={formatCount(health.failures.count)} />
-      <HealthCard detail={`${formatCount(health.unknown.batches)} pengajuan · ${formatCount(health.unknown.orders)} pesanan`} label="Status tidak diketahui" tile={health.unknown} value={formatCount(health.unknown.count)} />
-      <HealthCard detail={`${formatCount(health.unpaid.recovering)} pemulihan berjalan`} label="Menunggu pembayaran" tile={health.unpaid} value={formatCount(health.unpaid.count)} />
-      <HealthCard detail={`Median · 95% selesai dalam ${formatSeconds(health.latency.p95Seconds)}`} label="Durasi penyelesaian" value={formatSeconds(health.latency.p50Seconds)} />
-    </section>
+    <SectionHelp label="Cara membaca kesehatan platform">
+      <p>Antrean pengajuan menghitung pengajuan ke Mengantar yang tertahan lebih dari 15 menit. Kritis bila 20 atau lebih, atau yang terlama lebih dari 60 menit.</p>
+      <p>Kegagalan provider adalah pengajuan gagal pada periode ini; persennya dari semua pengajuan periode ini. Status tidak diketahui perlu rekonsiliasi sebelum dicoba lagi.</p>
+      <p>Menunggu pembayaran adalah pesanan yang belum dibayar ke Mengantar. Durasi penyelesaian adalah median waktu pengajuan sampai selesai.</p>
+      <p>Tanda Perhatian atau Kritis hanya muncul bila perlu tindakan.</p>
+    </SectionHelp>
   );
 }
 
@@ -75,12 +76,12 @@ function Attention({ view }: { view: PlatformView }) {
           {items.map((item) => {
             const badge = severityBadge(item.severity);
             return (
-              <li className="flex flex-col gap-2 px-6 py-4 max-md:px-4 sm:flex-row sm:items-center sm:justify-between" key={item.key}>
+              <li className="flex items-start justify-between gap-3 px-6 py-4 max-md:px-4 sm:items-center" key={item.key}>
                 <StackCell
-                  primary={item.href ? <Link className="font-semibold text-primary hover:underline" href={item.href} prefetch={false}>{item.title}</Link> : <span className="font-semibold">{item.title}</span>}
+                  primary={item.href ? <Link className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline md:min-h-6" href={item.href} prefetch={false}>{item.title}</Link> : <span className="font-semibold">{item.title}</span>}
                   secondary={item.detail}
                 />
-                <StatusBadge label={badge.label} tone={badge.tone} />
+                <span className="shrink-0"><StatusBadge label={badge.label} tone={badge.tone} /></span>
               </li>
             );
           })}
@@ -95,24 +96,63 @@ function Attention({ view }: { view: PlatformView }) {
   );
 }
 
+/** A legend entry that also carries the series' period total (spec 19 PLT-TREND-TOTALS, as T-254). */
+function LegendTotal({ children, label, metric, swatch }: { children: ReactNode; label: string; metric: string; swatch: string }) {
+  return (
+    <div className="flex items-baseline gap-2" data-metric-id={metric}>
+      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span aria-hidden="true" className={`w-4 self-center ${swatch}`} />
+        {label}
+      </dt>
+      <dd className="font-semibold tabular-nums">{children}</dd>
+    </div>
+  );
+}
+
 function Trend({ view }: { view: PlatformView }) {
   if (!view.trend) return <RegionError title="Tren kiriman" />;
-  const total = view.trend.reduce((sum, bucket) => sum + bucket.created, 0);
+  const totals = platformTrendTotals(view.trend);
   return (
     <PlatformCard
-      action={<span className="text-sm font-bold tabular-nums">{formatCount(total)} kiriman</span>}
+      action={(
+        <SectionHelp label="Penjelasan tren kiriman">
+          <p>Kiriman dibuat dihitung menurut waktu kiriman dibuat; resi terbit menurut waktu Mengantar menerbitkan resi. Keduanya per hari (WIB), seluruh gerai.</p>
+          <p>Angka di samping keterangan garis adalah total periode ini.</p>
+        </SectionHelp>
+      )}
       className="lg:col-span-2"
-      description={
-        <span aria-hidden="true" className="flex flex-wrap gap-4">
-          <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 bg-chart-1" />Kiriman dibuat</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 border-t-2 border-dashed border-chart-2" />Resi terbit</span>
-        </span>
-      }
       id="tren-kiriman"
       title="Tren kiriman seluruh gerai"
     >
-      {total || view.trend.some((bucket) => bucket.issued) ? (
-        <PlatformTrendChart data={view.trend.map(({ created, issued, label }) => ({ created, issued, label }))} />
+      <dl aria-label="Total periode ini" className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+        <LegendTotal label="Kiriman dibuat" metric="PLT-TREND-TOTALS" swatch="h-0.5 bg-chart-1">{formatCount(totals.created)}</LegendTotal>
+        <LegendTotal label="Resi terbit" metric="PLT-TREND-TOTALS" swatch="border-t-2 border-dashed border-chart-2">{formatCount(totals.issued)}</LegendTotal>
+      </dl>
+      {totals.created || totals.issued ? (
+        <>
+          <PlatformTrendChart data={view.trend.map(({ created, issued, label }) => ({ created, issued, label }))} />
+          <details className="group">
+            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground md:min-h-6 [&::-webkit-details-marker]:hidden">
+              Lihat tabel data tren
+              <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+            </summary>
+            <Table aria-label="Data tren kiriman" className="mt-2 text-xs [&_td:first-child]:pl-0 [&_td:last-child]:pr-0 [&_th:first-child]:pl-0 [&_th:last-child]:pr-0 [&_tr]:hover:bg-transparent">
+              <TableCaption className="sr-only">Kiriman dibuat dan resi terbit per hari, terbaru di atas.</TableCaption>
+              <TableHeader>
+                <TableRow><TableHead>Tanggal (WIB)</TableHead><TableHead className="text-right">Kiriman dibuat</TableHead><TableHead className="text-right">Resi terbit</TableHead></TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...view.trend].reverse().map((bucket) => (
+                  <TableRow className="h-auto" key={bucket.key}>
+                    <TableCell className="h-auto py-1.5">{bucket.label}</TableCell>
+                    <TableCell className="h-auto py-1.5 text-right tabular-nums">{formatCount(bucket.created)}</TableCell>
+                    <TableCell className="h-auto py-1.5 text-right tabular-nums">{formatCount(bucket.issued)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </details>
+        </>
       ) : (
         <p className="py-12 text-center text-muted-foreground">Belum ada kiriman pada periode ini.</p>
       )}
@@ -122,22 +162,22 @@ function Trend({ view }: { view: PlatformView }) {
 
 function Volume({ view }: { view: PlatformView }) {
   const counts = view.counts;
-  const rows: [string, string][] = counts
+  const rows: [string, string, string][] = counts
     ? [
-        ["Gerai aktif", formatCount(counts.tenants.active)],
-        ["Gerai ditangguhkan", formatCount(counts.tenants.suspended)],
-        ["Gerai baru", formatCount(counts.tenants.newInRange)],
-        ["Outlet lengkap", `${formatCount(counts.outlets.configured)} / ${formatCount(counts.outlets.total)}`],
-        ["Anggota aktif", formatCount(counts.memberships.active)],
-        ["Pengajuan selesai", `${formatCount(counts.lifecycle.batchesCompleted)} / ${formatCount(counts.lifecycle.batches)}`],
+        ["Gerai aktif", formatCount(counts.tenants.active), "PLT-TENANT-ACTIVE"],
+        ["Gerai ditangguhkan", formatCount(counts.tenants.suspended), "PLT-TENANT-SUSPENDED"],
+        ["Gerai baru", formatCount(counts.tenants.newInRange), "PLT-TENANT-NEW"],
+        ["Outlet lengkap", `${formatCount(counts.outlets.configured)} / ${formatCount(counts.outlets.total)}`, "PLT-OUTLET-CONFIGURED"],
+        ["Anggota aktif", formatCount(counts.memberships.active), "PLT-MEMBER-ACTIVE"],
+        ["Pengajuan selesai", `${formatCount(counts.lifecycle.batchesCompleted)} / ${formatCount(counts.lifecycle.batches)}`, "PLT-BATCH-COMPLETED"],
       ]
     : [];
   return (
     <PlatformCard id="volume-platform" title="Volume platform">
       {counts ? (
         <dl className="flex flex-col divide-y">
-          {rows.map(([label, value]) => (
-            <div className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0" key={label}>
+          {rows.map(([label, value, metric]) => (
+            <div className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0" data-metric-id={metric} key={label}>
               <dt className="text-muted-foreground">{label}</dt>
               <dd className="font-semibold tabular-nums">{value}</dd>
             </div>
@@ -165,7 +205,7 @@ function TopTenants({ view }: { view: PlatformView }) {
           <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
             <TableCaption className="sr-only">Gerai dengan masalah pengajuan lebih dulu, lalu resi terbit terbanyak.</TableCaption>
             <TableHeader>
-              <TableRow><TableHead>Gerai</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Kiriman</TableHead><TableHead className="text-right">Resi terbit</TableHead><TableHead>Aktivitas terakhir</TableHead></TableRow>
+              <TableRow><TableHead>Gerai</TableHead><TableHead>Status</TableHead><TableHead className="w-28 text-right">Kiriman</TableHead><TableHead className="w-28 text-right">Resi terbit</TableHead><TableHead>Aktivitas terakhir</TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
@@ -177,9 +217,9 @@ function TopTenants({ view }: { view: PlatformView }) {
                     />
                   </TableCell>
                   <TableCell><TenantStatusBadge status={row.status} /></TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">{formatCount(row.shipments)}</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">{formatCount(row.issued)}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.lastActivityAt ? formatWib(row.lastActivityAt) : "—"}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums" data-metric-id="PLT-TENANT-SHIPMENTS">{formatCount(row.shipments)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums" data-metric-id="PLT-TENANT-ISSUED">{formatCount(row.issued)}</TableCell>
+                  <TableCell className="text-muted-foreground">{row.lastActivityAt ? <TimeCell instant={row.lastActivityAt} now={view.now} /> : "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -211,26 +251,20 @@ function RecentAudit({ view }: { view: PlatformView }) {
   const rows = view.audit.rows;
   return (
     <PlatformCard
-      action={<ArrowLink href={buildPlatformHref("/platform/audit", view.filters, { outcome: null, page: 1, query: null })}>Lihat semua audit</ArrowLink>}
+      action={(
+        <>
+          <ArrowLink href={buildPlatformHref("/platform/audit", view.filters, { outcome: null, page: 1, query: null })}>Lihat semua audit</ArrowLink>
+          <SectionHelp label="Penjelasan aktivitas audit terbaru">
+            <p>Lima aktivitas terbaru pada periode ini. Membuka pemantauan platform tidak ditampilkan di sini agar perubahan tidak tertutup; semuanya ada di halaman Audit.</p>
+          </SectionHelp>
+        </>
+      )}
       flush={rows.length > 0}
       id="aktivitas-audit"
       title="Aktivitas audit terbaru"
     >
       {rows.length ? (
-        <ul className="divide-y">
-          {rows.map((row) => (
-            <li className="flex flex-col gap-2 px-6 py-3 max-md:px-4 sm:flex-row sm:items-center sm:justify-between" key={row.id}>
-              <StackCell
-                primary={auditActionSentence(row)}
-                secondary={`${row.tenantName ?? "Platform"} · ${auditActor(row)}`}
-              />
-              <div className="flex shrink-0 items-center gap-3 sm:flex-row-reverse">
-                <AuditOutcomeBadge outcome={row.outcome} />
-                <span className="text-xs text-muted-foreground"><TimeCell instant={row.createdAt} /></span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <AuditFeed label="Aktivitas audit terbaru" now={view.now} rows={rows} />
       ) : (
         <p className="text-muted-foreground">Belum ada aktivitas audit pada periode ini.</p>
       )}
@@ -254,7 +288,14 @@ export default async function PlatformOverviewPage({ searchParams }: PageProps<"
       >
         <DateRangePicker endDate={view.filters.range.lastIncludedDate} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
       </FilterBar>
-      {view.health ? <HealthRow health={view.health} /> : <RegionError title="Kesehatan platform" />}
+      <section aria-labelledby="kesehatan-platform" className="grid gap-3">
+        {/* T-257: the card header's anatomy on the ground, as Laporan's Ringkasan (T-254). */}
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg leading-snug font-bold" id="kesehatan-platform">Kesehatan platform</h2>
+          <HealthHelp />
+        </div>
+        {view.health ? <HealthRow health={view.health} /> : <RegionError title="Kesehatan platform" />}
+      </section>
       <Attention view={view} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Trend view={view} />

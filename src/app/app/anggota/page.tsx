@@ -5,26 +5,18 @@ import { CircleAlert, LockKeyhole, UsersRound } from "lucide-react";
 
 import { readAuditScenario, requireTenantAdmin } from "@/app/app/pengaturan/_components/settings-data";
 import { SettingsFrame } from "@/app/app/pengaturan/_components/settings-frame";
-import {
-  initials,
-  memberAccess,
-  orderMembers,
-  ROLE_LABEL,
-  summarizeMembers,
-} from "@/app/app/pengaturan/_components/settings-logic";
+import { memberAccess, orderMembers, summarizeMembers } from "@/app/app/pengaturan/_components/settings-logic";
 import { DataCard } from "@/components/app/data-card";
 import { EmptyState } from "@/components/app/empty-state";
-import { KpiCard } from "@/components/app/kpi-card";
 import { PageHeader } from "@/components/app/page-header";
-import { StatusBadge } from "@/components/app/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db/client";
 import { listTenantMembers, type TenantMember } from "@/db/member-governance-repository";
 import { withTenantContext } from "@/db/tenant-context";
 
-import { InviteMemberCard } from "./_components/invite-member-card";
-import { MemberAccessDialog } from "./_components/member-access-dialog";
+import { InviteMemberDialog } from "./_components/invite-member-card";
+import { MemberRow, MemberStatStrip } from "./_components/member-list";
 
 export const metadata: Metadata = { title: "Anggota & akses · Pengaturan", robots: { index: false } };
 
@@ -64,11 +56,17 @@ export default async function MembersPage() {
   const ordered = orderMembers(members, principal.userId);
 
   return (
-    <SettingsFrame
-      header={(
-<PageHeader title="Pengaturan" />
-      )}
-    >
+    <SettingsFrame header={<PageHeader title="Pengaturan" />}>
+      <InviteMemberDialog attemptId={randomUUID()}>
+        <h2 className="text-lg font-bold text-foreground">Anggota &amp; akses</h2>
+        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+          Akun yang bisa masuk ke gerai ini. Pemilik gerai memegang semua akses, termasuk pengaturan dan anggota;
+          Operator membuat kiriman dan mencetak resi.
+        </p>
+      </InviteMemberDialog>
+
+      <MemberStatStrip summary={summary} />
+
       {summary.activeAdmins === 1 ? (
         <Alert role="status">
           <CircleAlert aria-hidden="true" />
@@ -76,16 +74,6 @@ export default async function MembersPage() {
           <AlertDescription>Undang pemilik gerai lain agar akses gerai tetap terjaga.</AlertDescription>
         </Alert>
       ) : null}
-
-      <section aria-label="Ringkasan akses" className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total anggota"
-          note={summary.inactive === 0 ? "Semua akun aktif" : `${summary.active} aktif · ${summary.inactive} nonaktif`}
-          value={`${summary.total} orang`}
-        />
-        <KpiCard label="Pemilik gerai aktif" note="Akses penuh, termasuk pengaturan" value={`${summary.activeAdmins} orang`} />
-        <KpiCard label="Operator aktif" note="Buat kiriman dan cetak resi" value={`${summary.activeOperators} orang`} />
-      </section>
 
       <DataCard
         action={summary.activeAdmins === 1 ? (
@@ -105,59 +93,24 @@ export default async function MembersPage() {
           <div className="md:grid md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
             <div aria-hidden="true" className="hidden h-11 items-center border-b text-xs font-medium text-muted-foreground md:col-span-4 md:grid md:grid-cols-subgrid">
               <span className="px-6">Anggota</span>
-              <span className="px-4">Peran</span>
-              <span className="px-4">Status</span>
+              <span className="px-3">Peran</span>
+              <span className="px-3">Status</span>
               <span className="px-6 text-right">Tindakan</span>
             </div>
             <ul aria-label="Daftar anggota" className="divide-y md:col-span-4 md:grid md:grid-cols-subgrid">
-              {ordered.map((member) => {
-                const access = memberAccess(member, principal.userId, summary.activeAdmins);
-                return (
-                  <li
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-4 md:col-span-4 md:grid-cols-subgrid md:gap-y-0 md:px-0"
-                    key={member.id}
-                  >
-                    <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1 md:px-6">
-                      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
-                        {initials(member.name)}
-                      </span>
-                      <div className="grid min-w-0 gap-0.5">
-                        <p className="text-sm font-semibold wrap-anywhere">
-                          {member.name}
-                          {access.isCurrentUser ? <span className="font-normal text-muted-foreground"> (Anda)</span> : null}
-                        </p>
-                        <p className="text-xs text-muted-foreground wrap-anywhere">{member.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 md:contents">
-                      <span className="md:px-4"><Badge variant="secondary">{ROLE_LABEL[member.role]}</Badge></span>
-                      <span className="md:px-4">
-                        {member.status === "ACTIVE"
-                          ? <StatusBadge label="Aktif" tone="success" />
-                          : <StatusBadge label="Nonaktif" tone="neutral" />}
-                      </span>
-                    </div>
-                    <div className={access.manageable ? "text-right md:px-6" : "col-span-2 md:col-span-1 md:px-6 md:text-right"}>
-                      <MemberAccessDialog
-                        deactivateAttemptId={randomUUID()}
-                        email={member.email}
-                        manageable={access.manageable}
-                        membershipId={member.id}
-                        name={member.name}
-                        note={access.note}
-                        role={member.role}
-                        roleAttemptId={randomUUID()}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
+              {ordered.map((member) => (
+                <MemberRow
+                  access={memberAccess(member, principal.userId, summary.activeAdmins)}
+                  deactivateAttemptId={randomUUID()}
+                  key={member.id}
+                  member={member}
+                  roleAttemptId={randomUUID()}
+                />
+              ))}
             </ul>
           </div>
         )}
       </DataCard>
-
-      <InviteMemberCard attemptId={randomUUID()} />
     </SettingsFrame>
   );
 }

@@ -86,7 +86,7 @@ describe("AppSidebar", () => {
   it("shows the Info terbaru unread count as a badge only while it is above zero (T-244)", () => {
     const withUnread = renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app", "", { announcements: 3 });
     expect(withUnread.html).toMatch(/data-testid="nav-badge-announcements"[^>]*>3</);
-    expect(withUnread.links[0]).toMatchObject({ href: "/app/info", label: "Info terbaru, 3 belum dibaca" });
+    expect(withUnread.links[0]).toMatchObject({ href: "/app/info", label: "Info terbaru, 3 info baru" });
     expect(renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app", "", { announcements: 150 }).html)
       .toMatch(/data-testid="nav-badge-announcements"[^>]*>99\+</);
     const read = renderSidebar({ kind: "tenant", role: "OPERATOR" }, "/app", "", { announcements: 0 });

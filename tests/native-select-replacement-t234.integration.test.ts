@@ -32,7 +32,7 @@ vi.mock("@/app/app/anggota/actions", () => ({
 const { ShipmentCreateForm } = await import("@/app/app/pengiriman/baru/shipment-create-form");
 const { StatusSelect } = await import("@/app/app/pengiriman/_list/status-select");
 const { StatusPull } = await import("@/app/app/pengiriman/_list/status-pull");
-const { InviteMemberCard } = await import("@/app/app/anggota/_components/invite-member-card");
+const { InviteMemberForm } = await import("@/app/app/anggota/_components/invite-member-card");
 const { validateShipmentDraft } = await import("@/lib/shipment-draft");
 
 /** Every named, submittable control in the markup: [tag, name, value]. */
@@ -134,7 +134,9 @@ describe("Histori status facet and status-pull outlet", () => {
 
 describe("Undang anggota role cards", () => {
   it("posts role=OPERATOR by default from two radio cards with the Select's values", () => {
-    const html = renderToStaticMarkup(createElement(InviteMemberCard, { attemptId: "00000000-0000-4000-8000-000000000005" }));
+    const html = renderToStaticMarkup(createElement(InviteMemberForm, {
+      attemptId: "00000000-0000-4000-8000-000000000005", formAction: () => undefined, pending: false, state: {},
+    }));
     const roles = namedControls(html).filter((control) => control.name === "role");
     expect(roles.map((control) => [control.tag, control.value, control.attributes.includes("checked")])).toEqual([
       ["input", "OPERATOR", true],

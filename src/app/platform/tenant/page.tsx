@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Building2, SearchX } from "lucide-react";
+import { Archive, Building2, SearchX } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -9,15 +9,17 @@ import { EmptyState } from "@/components/app/empty-state";
 import { FilterBar } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
+import { StatusTiles } from "@/components/app/status-tiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { TenantUsageRow } from "@/db/platform-monitoring-repository";
 import { formatRangeLabel } from "@/lib/analytics-range";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
+import { tenantStatusPresentation } from "@/lib/labels/audit";
 import { formatCount, formatShortId } from "@/lib/platform-monitoring-format";
 
-import { PLATFORM_PAGE_SIZE, formatWib } from "../_components/platform-format";
+import { PLATFORM_PAGE_SIZE, badgeTone, formatWib } from "../_components/platform-format";
 import { filtersChanged } from "../_components/platform-logic";
 import {
   DESKTOP_ONLY,
@@ -28,8 +30,9 @@ import {
   RegionError,
   StackCell,
   TenantStatusBadge,
+  TimeCell,
 } from "../_components/platform-ui";
-import { loadPlatformView } from "../_components/platform-view";
+import { loadPlatformView, type PlatformView } from "../_components/platform-view";
 import { CreateTenant } from "./_components/create-tenant";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Gerai" };
@@ -47,6 +50,35 @@ function submissionIssues(row: TenantUsageRow) {
     .join(" · ");
 }
 
+const TENANT_STATUS_ORDER = ["ACTIVE", "PROVISIONING", "SUSPENDED", "ARCHIVED"] as const;
+
+/**
+ * T-257: the §4.6 stat strip of the list's status filter (`status-gerai`). Each count is what that
+ * filter lists under the current search (spec 19 PLT-TEN-*); the four statuses are disjoint, so
+ * the composition bar has no Lainnya.
+ */
+function TenantStatusStrip({ counts, filters }: { counts: NonNullable<PlatformView["usage"]>["statusCounts"]; filters: PlatformView["filters"] }) {
+  const href = (tenantStatus: PlatformView["filters"]["tenantStatus"]) => buildPlatformHref("/platform/tenant", filters, { page: 1, tenantStatus });
+  return (
+    <StatusTiles
+      label="Status gerai"
+      tiles={[
+        { count: counts.all, href: href(null), icon: Building2, key: "ALL", label: "Semua gerai", selected: !filters.tenantStatus },
+        ...TENANT_STATUS_ORDER.map((status) => ({
+          count: counts[status],
+          icon: status === "ARCHIVED" ? Archive : undefined,
+          href: href(status),
+          key: status,
+          label: tenantStatusPresentation[status].label,
+          selected: filters.tenantStatus === status,
+          tone: badgeTone(tenantStatusPresentation[status].tone),
+        })),
+      ]}
+      total={counts.all}
+    />
+  );
+}
+
 export default async function PlatformTenantsPage({ searchParams }: PageProps<"/platform/tenant">) {
   const view = await loadPlatformView("tenant-list", await searchParams);
   const { filters } = view;
@@ -62,13 +94,19 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
         eyebrow="Platform"
         title="Gerai"
       />
-      <FilterBar clearHref={changed ? "/platform/tenant" : undefined} label="Filter gerai" summary={`${range.periodLabel} · ${range.timezoneLabel}`}>
+      <FilterBar
+        clearHref={changed ? "/platform/tenant" : undefined}
+        hidden={{ "status-gerai": filters.tenantStatus ?? undefined }}
+        label="Filter gerai"
+        summary={`${range.periodLabel} · ${range.timezoneLabel}`}
+      >
         <label className="w-full sm:w-72">
           <span className="sr-only">Cari nama gerai</span>
           <Input defaultValue={filters.query ?? ""} maxLength={80} minLength={2} name="q" placeholder="Cari nama gerai…" type="search" />
         </label>
         <DateRangePicker endDate={filters.range.lastIncludedDate} presetId={filters.range.presetId} startDate={filters.range.startDate} />
       </FilterBar>
+      {view.usage ? <TenantStatusStrip counts={view.usage.statusCounts} filters={filters} /> : null}
       {!view.usage ? (
         <RegionError title="Daftar gerai" />
       ) : (
@@ -124,7 +162,7 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{row.outletConfigured}/{row.outletTotal}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCount(row.members)}</TableCell>
-                        <TableCell className="min-w-28 whitespace-normal text-muted-foreground">{row.lastActivityAt ? formatWib(row.lastActivityAt) : "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{row.lastActivityAt ? <TimeCell instant={row.lastActivityAt} now={view.now} /> : "—"}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -136,12 +174,12 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                     <RecordItem
                       href={href(row.tenantId)}
                       key={row.tenantId}
+                      detail={submissionIssues(row) ? <p className="text-xs font-medium text-danger">{submissionIssues(row)}</p> : undefined}
                       meta={`Outlet lengkap ${row.outletConfigured}/${row.outletTotal} · ${formatCount(row.members)} anggota`}
                       status={<TenantStatusBadge status={row.status} />}
                       subtitle={`${formatCount(row.shipments)} kiriman · ${formatCount(row.issued)} resi terbit`}
                       time={row.lastActivityAt ? formatWib(row.lastActivityAt) : "Belum ada aktivitas"}
                       title={row.name}
-                      value={submissionIssues(row) || undefined}
                     />
                   ))}
                 </RecordList>

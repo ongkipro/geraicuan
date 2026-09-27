@@ -1,5 +1,6 @@
 import type { announcementCategories } from "@/db/schema";
 import { validate } from "@/lib/field-character-classes";
+import { formatRelativeAge } from "@/lib/relative-age";
 
 /**
  * T-244 (D-31): Info terbaru — platform announcements. Shared by the platform form, the
@@ -89,3 +90,88 @@ export const ANNOUNCEMENT_STATUS_LABEL: Record<AnnouncementStatus, string> = {
   DRAF: "Draf",
   TAYANG: "Tayang",
 };
+
+/**
+ * T-256: the tenant category filter's URL values (`/app/info?kategori=info-kurir`). An unknown
+ * or missing value is "Semua", never an error.
+ */
+export const ANNOUNCEMENT_CATEGORY_SLUG: Record<AnnouncementCategory, string> = {
+  FITUR_BARU: "fitur-baru",
+  INFO_KURIR: "info-kurir",
+  JADWAL: "jadwal",
+  PEMELIHARAAN: "pemeliharaan",
+  LAINNYA: "lainnya",
+};
+
+export function parseAnnouncementCategoryParam(value: string | string[] | undefined): AnnouncementCategory | null {
+  const slug = typeof value === "string" ? value : null;
+  return ANNOUNCEMENT_CATEGORIES.find((category) => ANNOUNCEMENT_CATEGORY_SLUG[category] === slug) ?? null;
+}
+
+/** Rows per category plus `all`, for the filter's counts (every category present, zero included). */
+export function countAnnouncementsByCategory(rows: readonly { category: AnnouncementCategory }[]) {
+  const counts = Object.fromEntries(ANNOUNCEMENT_CATEGORIES.map((category) => [category, 0])) as Record<AnnouncementCategory, number>;
+  for (const row of rows) counts[row.category] += 1;
+  return { all: rows.length, ...counts };
+}
+
+const wibShortDate = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone: "Asia/Jakarta" });
+
+/**
+ * T-256: an announcement's age for its card — `formatRelativeAge` capitalised, then the WIB date
+ * ("12 Sep 2026") after six days. The card carries the full WIB date and time in `title` and
+ * `<time dateTime>`.
+ */
+export function formatAnnouncementAge(publishedAt: Date, now: Date) {
+  const age = formatRelativeAge(publishedAt, now, 6);
+  return age ? age.charAt(0).toUpperCase() + age.slice(1) : wibShortDate.format(publishedAt);
+}
+
+/** T-256: one wording for unread info — the Dasbor line and the sidebar badge's accessible name. */
+export function unreadInfoLabel(count: number) {
+  return `${count > 99 ? "99+" : count} info baru`;
+}
+
+export type AnnouncementResult = "published" | "saved" | "unpublished";
+
+/**
+ * T-256: the page-level success line after a save or takedown on /platform/info. It names the
+ * announcement and what gerai now see, and replaces the previous line, so an earlier "disimpan
+ * sebagai draf" never outlives a later publish (T-244 review).
+ */
+export function announcementResultMessage(outcome: AnnouncementResult, title: string, wasPublished: boolean) {
+  const name = `“${title}”`;
+  if (outcome === "unpublished") return `${name} diturunkan dan kembali menjadi draf. Gerai tidak lagi melihatnya.`;
+  if (outcome === "published") {
+    return wasPublished ? `Perubahan ${name} tersimpan dan tetap tayang.` : `${name} tayang di Info terbaru semua gerai.`;
+  }
+  return wasPublished
+    ? `${name} diturunkan dan disimpan sebagai draf. Gerai tidak lagi melihatnya.`
+    : `${name} disimpan sebagai draf. Gerai belum melihatnya.`;
+}
+
+export type PlatformAnnouncementStatusFilter = "draf" | "semua" | "tayang";
+export type PlatformAnnouncementOrder = "terbaru" | "terlama";
+
+/** `/platform/info?status=` and `?urut=`; anything else is the default (Semua, Terbaru). */
+export function parsePlatformAnnouncementView(params: { status?: string | string[]; urut?: string | string[] }) {
+  const status: PlatformAnnouncementStatusFilter = params.status === "draf" || params.status === "tayang" ? params.status : "semua";
+  const order: PlatformAnnouncementOrder = params.urut === "terlama" ? "terlama" : "terbaru";
+  return { order, status };
+}
+
+/**
+ * T-256: the Admin platform list by the date it shows — published at, or last changed for a
+ * draft — newest or oldest first, optionally only live or only drafts; ties by id.
+ */
+export function viewPlatformAnnouncements<T extends { id: string; publishedAt: Date | null; updatedAt: Date }>(
+  rows: readonly T[],
+  view: { order: PlatformAnnouncementOrder; status: PlatformAnnouncementStatusFilter },
+) {
+  const shown = rows.filter((row) => view.status === "semua" || (view.status === "tayang") === (row.publishedAt !== null));
+  const direction = view.order === "terbaru" ? -1 : 1;
+  return shown.sort((left, right) => {
+    const difference = (left.publishedAt ?? left.updatedAt).getTime() - (right.publishedAt ?? right.updatedAt).getTime();
+    return difference === 0 ? left.id.localeCompare(right.id) : difference * direction;
+  });
+}

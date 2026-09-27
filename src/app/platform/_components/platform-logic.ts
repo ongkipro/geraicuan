@@ -49,12 +49,14 @@ export function attentionItems(health: PlatformHealth | null, tenants: readonly 
   return items.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "kritis" ? -1 : 1));
 }
 
-/** Filters differ from the default window (30 hari, no tenant/outcome/query) → "Hapus filter". */
+/** Filters differ from the default window (30 hari, no tenant/outcome/query/aksi/status gerai) → "Hapus filter". */
 export function filtersChanged(filters: PlatformFilters, { ignoreTenant = false } = {}): boolean {
   return (
     filters.range.presetId !== "30-hari" ||
     Boolean(filters.outcome) ||
     Boolean(filters.query) ||
+    Boolean(filters.action) ||
+    Boolean(filters.tenantStatus) ||
     (!ignoreTenant && filters.scope.kind === "tenant")
   );
 }
@@ -64,4 +66,12 @@ const REGISTRATION_DECISIONS = ["TENANT_REGISTRATION_APPROVED", "TENANT_REGISTRA
 /** Successful approve/reject events of the registration queue, newest first, at most `limit`. */
 export function registrationDecisions<T extends { action: string; outcome: string }>(rows: readonly T[], limit = 10): T[] {
   return rows.filter((row) => row.outcome === "SUCCESS" && REGISTRATION_DECISIONS.includes(row.action)).slice(0, limit);
+}
+
+/**
+ * Spec 19 PLT-TREND-TOTALS (T-257): the period totals beside the trend legend — the sums of the
+ * trend's buckets, which equal PLT/SHP-CREATED and SHP-ISSUED for the same filters.
+ */
+export function platformTrendTotals(buckets: readonly { created: number; issued: number }[]) {
+  return buckets.reduce((sum, bucket) => ({ created: sum.created + bucket.created, issued: sum.issued + bucket.issued }), { created: 0, issued: 0 });
 }

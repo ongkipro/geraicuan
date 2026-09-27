@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, Megaphone, PackageSearch, Plus, Settings2 } from "lucide-react";
+import { ArrowRight, ChevronDown, PackageSearch, Plus, Settings2 } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -47,6 +47,7 @@ import {
   TrendLegend,
 } from "./_dashboard/sections";
 import { SetupSteps } from "./_dashboard/setup-steps";
+import { UnreadInfoNotice } from "./info/unread-info-notice";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Dasbor" };
 
@@ -85,13 +86,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const isAdmin = role === "TENANT_ADMIN";
   // T-244: one line to Info terbaru while this member has unread announcements (a failed count hides it).
   const unreadInfo = await withTenantContext(db, userId, tenantId, (tx, context) => countUnreadAnnouncements(tx, context.userId), { allowPendingApproval: true }).catch(() => 0);
-  const infoNotice = unreadInfo > 0 ? (
-    <Alert className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5" data-testid="dashboard-info-notice" role="status">
-      <Megaphone aria-hidden="true" className="size-4 text-primary" />
-      <span className="font-semibold">{unreadInfo} info baru</span>
-      <Link className={arrowLink} href="/app/info">Lihat info terbaru<ArrowRight aria-hidden="true" /></Link>
-    </Alert>
-  ) : null;
+  const infoNotice = <UnreadInfoNotice count={unreadInfo} />;
 
   // PR-60: a gerai awaiting approval sees its setup steps, not shipment figures; every shipment
   // read below stays behind the default approval refusal.

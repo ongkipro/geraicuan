@@ -5041,6 +5041,29 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
   - The strip is 116 px with the legend.
   - The skeleton strip was not rendered in a browser.
 
+## 2026-09-27 — T-256 Anggota & akses and Info terbaru UI/UX pass
+
+- **What changed.** `src/app/app/anggota/` (`page.tsx` section header + strip + list, `loading.tsx`, `_components/invite-member-card.tsx` → `InviteMemberDialog` / `InviteMemberForm`, new `_components/member-list.tsx` with `MemberStatStrip` and `MemberRow`); `src/app/app/info/` (`page.tsx` `?kategori=`, `announcement-parts.tsx` feed + filter + unread-at-load set, new `unread-info-notice.tsx`); `src/app/app/page.tsx` (uses `UnreadInfoNotice`); `src/components/app/announcement-card.tsx` (new, shared card and category chip); `src/components/app/app-sidebar.tsx` (badge name "N info baru"); `src/app/platform/info/` (`page.tsx` list/filter/order, `announcement-editor.tsx` counters + preview + reporting, new `announcement-feedback.tsx`); `src/lib/announcements.ts` (category slugs and counts, `formatAnnouncementAge`, `unreadInfoLabel`, `announcementResultMessage`, platform view helpers). No Server Action, schema, RLS or route change.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: announcements-t244, settings-screens-t217, native-select-replacement-t234, app-foundation-render, cms-shell, dashboard-v3, dashboard-audit-scenario, dashboard-outcome-parity, tenant-dashboard, shipment-status-copy, system-map-inventory, tenant-approval-gate, member-governance-actions, design-token-contrast — 14 files / 214 passed.
+  - Mutations (UTC days for the age, every row "Baru", "Anda" moved under the name) failed 4 tests; restored.
+  - `tsc --noEmit` 0; `npx eslint .` 0; `git diff --check` clean.
+- **Browser.** Own headless Chrome (CDP 9550), dev app 3127, as Tenant Admin, Operator and Admin platform, 1440 and 390; screenshots in session scratchpad `anggota-info/` (`before-*`, `after-*`, `flow-*`, `final-*`). Results as recorded in TASKS T-256 (strip 70/85 px, "Anda" inline, dialogs' focus and Escape, unread → read, filters incl. empty, soft-nav keeps "Baru", Dasbor line and sidebar badge, editor preview, draft → publish line replaced, takedown line with focus). Overflow 0 at 390 everywhere; console clean.
+- **Dev data.** Two temporary announcements were published for the unread states and taken down through the UI; both are drafts now. No member role changed; the invite test used an invalid email (refused before any write).
+- **Gotcha.** A takedown's result cannot live in the row's own `useActionState`: the revalidated list no longer renders "Turunkan" for a draft, so the component unmounts with its message. The result is awaited in a transition and reported to a page-level provider, which also makes the latest result replace an older one.
+- **Open.** No member last-activity data; phone category filter has no edge fade; the takedown-line behaviour is browser-verified only.
+
+## 2026-09-26 — T-255 Thermal label layout
+
+- **What changed.** `src/app/app/label/[shipmentId]/label-sheet.tsx` (recipient block order, one rule, COD block, two fact lines, fit-on-layout effect), `label-barcode.tsx` (`fill`: widest whole-dot module within 94 mm), `src/app/label.css` (package anatomy; stub lighter), `src/lib/label-format.ts` (`formatPhoneGroups`, `formatAddressArea`). No data, query, permission or print-flow change.
+- **Checks run.**
+  - vitest on the iso DB under `flock`: label-render, label-thermal (8 new T-255 cases), label-info-settings, gerai-brand-t243, cod-ongkir, shipment-lists-render, settings-screens-t217, label-batch-print, label-print, label-print-actions, shipment-table-cells, shipment-status-copy, system-map-inventory — 13 files / 151 passed.
+  - Three mutations (area dropped past 480, raw area label printed, `data-cod` on NON-COD) each failed a T-255 test; reverted.
+  - `tsc --noEmit` 0 and `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9540), dev app 3127, Tenant Admin. Label pages 10153 / 10127 / 10140 / 10121 / 10170 / 10137 at 10 × 15 and 10 × 10, three long-address variants (rendered text edited in place, then re-rendered through a size round-trip so the real layout effect ran), batch of 4 at both sizes, Informasi label preview at both sizes. Print emulation + `Page.printToPDF`: 1 PDF page per label (batch 4 → 4), 99.8 × 149.9 / 99.8 × 99.8 mm; no element outside the sheet; text ≥ 7 pt; barcode 78–93.5 mm. Before/after screenshots and PDFs: session scratchpad `label/`. No print recorded.
+- **Gotcha.** Character-count tiers alone cannot see a wrapping name or kelurahan (a 50-character name with a 100-character street counts as "long" but only fits at "dense" in the browser); measuring `scrollHeight` after layout and stepping the tier down is what keeps every case on one sheet.
+- **Open.** Landmark not printed (never was); extreme name + origin + 484-character street clamps the street with an ellipsis; no physical print/scan.
+
 ## 2026-09-26 — T-254 Laporan pengiriman UI/UX tidy
 
 - **Changed.**
@@ -5150,3 +5173,30 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
 - **Cause.** `OUTCOME_OF_STATUS` maps each status to an outcome bucket with lowercase string literals (`DRAFT: "in-progress"`), which the guard reads as prose labels.
 - **Fix.** The bucket values are named `OutcomeKey` constants; the `Record<ShipmentStatus, OutcomeKey>` keeps its exhaustiveness check. No label, count or metric changed.
 - **Evidence.** `tsc --noEmit` 0; `npx eslint .` 0; `git diff --check` clean; full integration suite on the isolated DB (BETTER_AUTH_URL 127.0.0.1:3110, migrations applied) 126 files / 1,553 passed.
+
+## 2026-09-26 — T-255 follow-up: service repeated the courier ("JT JT")
+- **Symptom.** When Mengantar's service name equals the courier (J&T: courier `JT`, service `JT`), the header and the stub printed "JT JT"; pre-existing, noticed on the T-255 PDFs.
+- **Fix.** `serviceName` in `label-sheet.tsx` returns nothing when the service only repeats the courier (case-insensitive); the "JNE REG" → "REG" prefix rule is unchanged.
+- **Evidence.** New case in `tests/label-thermal` (21/21 on the isolated DB); removing the fix fails it (1 failed), restored. `tsc --noEmit` 0; `npx eslint .` 0.
+
+## 2026-09-27 — T-257 Super Admin pages aligned with the tenant CMS
+
+- **What changed.** `src/app/platform/{page.tsx, tenant/page.tsx, tenant/[tenantId]/page.tsx, pendaftaran/page.tsx, audit/page.tsx}`, `_components/{platform-ui.tsx (TimeCell "n lalu", AuditFeed), platform-format.ts (formatAgo), platform-logic.ts (platformTrendTotals, filtersChanged), platform-view.ts, filter-select.tsx}`, `tenant/_components/{create-tenant,tenant-lifecycle}.tsx`, `pendaftaran/_components/registration-review.tsx`; `src/components/app/stat-strip.tsx` (new), `help-hint.tsx` (`SectionHelp`), `src/app/app/laporan/pengiriman/analytics-sections.tsx` (imports the shared constants; markup identical); `src/lib/platform-monitoring-filters.ts` (`aksi`, `status-gerai`), `src/lib/labels/audit.ts` (`auditActionLabel`, `auditActionOptions`), `src/db/platform-monitoring-repository.ts` (`listTenantUsage` status counts + `tenantStatus`; `listAuditEvents` `action` + `hideMonitoringViews`). No action, authorization, platform-context, audit-write or lifecycle effect changed; no formula changed.
+- **Checks run.**
+  - vitest on the isolated DB under `flock` (BETTER_AUTH_URL 127.0.0.1:3110): `platform-public-render` (+7 T-257 tests), `platform-monitoring` (+1 DB test binding PLT-TEN-* to the rows each filter lists, the search, `aksi`, `hideMonitoringViews`, PLT-TREND-TOTALS = SHP-CREATED/SHP-ISSUED, tenant-scoped member counts), `platform-monitoring-filters` (+1 URL contract test), `platform-tenant-actions`, `platform-tenant-lifecycle`, `tenant-registration`, `audit-labels`, `shipment-status-copy`, `system-map-inventory`, `tenant-approval-gate`, `tenant-isolation-posture`, `metric-scope-parity`, `report-pages-render`, `shipment-report`: 14 files / 148 passed.
+  - Mutations: status counts without the search predicate → the T-257 DB test failed; `hideMonitoringViews` ignored → failed; both restored, 5/5 pass.
+  - `tsc --noEmit` 0; `npx eslint .` 0.
+- **Browser.** Own headless Chrome (CDP 9560) on the dev app 3127 as Super Admin; before/after full-page screenshots of all five pages at 1440, 720 and 390 (`platform/before-*`, `after-*`).
+  - No horizontal overflow at any width; filter controls 40 px desktop / 44 px at 390; the only sub-40 px targets left are the desktop arrow links and back link (24 px, the §4.9 anatomy) and the shared record-card title links on phones.
+  - Heights: Ringkasan 390 px wide 3686 → 3213 px (health strip instead of five stacked cards); detail 1440 2606 → 2587 px with two more figures; health strip ≈ 86 px at 1440 instead of ≈ 150 px cards.
+  - `/platform/audit?aksi=TENANT_REGISTRATION_REJECTED` → 1 row, trigger shows "Menolak pendaftaran gerai", "Hapus filter" shown; `/platform/tenant?status-gerai=PROVISIONING` → 2 rows = the Disiapkan tile (2, 33 %).
+  - Dialogs opened and cancelled with "Batal" at 1440 and 390 (screenshots `dialog-*`): Buka kunci awalan, Tangguhkan gerai (name typed, then Batal), Buat gerai, Tolak pendaftaran, Setujui gerai; each names the gerai and consequence. Aksi Select opens as a popper (21 options, 40/44 px items). Afterwards Sekar Batik Nusantara still reads "Aktif"; nothing was submitted, no tenant approved, suspended or archived.
+- **Open.**
+  - Suspended/archived detail pages (reactivate zone, no zone) were not rendered in a browser — reaching them needs a lifecycle write; the lifecycle render test covers both statuses.
+  - Audit rows for tenant events recorded without a tenant (e.g. "Anggota gerai mengunci awalan nomor kiriman") show "Platform" in the Gerai column; that is the stored `tenant_id`, not a render bug, and was left as is.
+  - Monitoring views are hidden only in the two short feeds; the Audit page lists and counts them (narrow with Aksi). An "exclude monitoring" option for the Audit page was not added.
+
+## 2026-09-26 — T-256/T-257 follow-up: one "how long ago" wording
+- **Symptom.** T-256 (`formatAnnouncementAge`, WIB calendar days: "Kemarin") and T-257 (`formatAgo`, elapsed 24-hour days: "1 hari lalu") gave different words for the same instant on Info terbaru vs the platform audit/registrations.
+- **Fix.** New `src/lib/relative-age.ts` `formatRelativeAge(instant, now, maxDays)`; `formatAnnouncementAge` capitalises it and falls back to the WIB date after 6 days, `formatAgo` returns it up to 29 days and `null` beyond. The two member/stat strips stay separate on purpose (the Anggota strip keeps three columns on a phone; the shared `StatStrip` goes two-up in a narrow container).
+- **Evidence.** `tests/platform-public-render` now expects "kemarin" at 25 h and asserts both formatters agree at 0.5/5/25/49/144 h; with `announcements-t244` and `platform-monitoring`, 46/46 on the isolated DB. tsc 0; eslint 0 on the touched files.

@@ -47,7 +47,8 @@ const NO_NOTES = { accessNote: null, picName: null, picPhone: null, schedule: nu
 const { ConnectionForm } = await import("@/app/app/pengaturan/koneksi/connection-form");
 const { PickupPoints } = await import("@/app/app/pengaturan/pickup/pickup-points");
 const { MemberAccessDialog } = await import("@/app/app/anggota/_components/member-access-dialog");
-const { InviteMemberCard } = await import("@/app/app/anggota/_components/invite-member-card");
+const { InviteMemberDialog, InviteMemberForm } = await import("@/app/app/anggota/_components/invite-member-card");
+const { MemberRow, MemberStatStrip } = await import("@/app/app/anggota/_components/member-list");
 
 const SelectUi = await import("@/components/ui/select");
 
@@ -394,12 +395,74 @@ describe("Anggota & akses", () => {
     expect(manageableHtml).toContain('aria-label="Kelola akses Ayu"');
   });
 
-  it("submits the invite from the card footer with the form's field names", () => {
-    const html = renderToStaticMarkup(createElement(InviteMemberCard, { attemptId: "00000000-0000-4000-8000-000000000005" }));
-    expect(html).toContain('name="email"');
-    expect(html).toContain('name="attemptId"');
-    expect(html).toContain('form="member-invite-form"');
-    expect(filledButtons(html)).toBe(1);
+  // T-256: "Undang anggota" is the section header's one filled primary; the form opens in a dialog.
+  it("puts Undang anggota in the section header and keeps the invite form's field names", () => {
+    const header = renderToStaticMarkup(createElement(InviteMemberDialog, { attemptId: "00000000-0000-4000-8000-000000000005" }, createElement("h2", null, "Anggota & akses")));
+    expect(header).toContain("Anggota &amp; akses</h2>");
+    expect(header).toContain(">Undang anggota</button>");
+    expect(header.match(/<button[^>]*data-variant="default"/g)).toHaveLength(1);
+    expect(header).not.toContain('name="email"'); // the closed dialog renders no form
+
+    const form = renderToStaticMarkup(createElement(InviteMemberForm, {
+      attemptId: "00000000-0000-4000-8000-000000000005", formAction: () => undefined, pending: false, state: {},
+    }));
+    expect(form).toContain('name="email"');
+    expect(form).toContain('name="attemptId"');
+    expect(form).toContain('id="member-invite-form"');
+    // A refused invite shows its reason inside the dialog; a success does not repeat there.
+    const refused = renderToStaticMarkup(createElement(InviteMemberForm, {
+      attemptId: "00000000-0000-4000-8000-000000000005", formAction: () => undefined, pending: false,
+      state: { errors: { email: "Masukkan email akun GeraiCUAN yang valid." }, message: "Periksa kembali undangan yang ditandai.", resultToken: "t1", status: "error" },
+    }));
+    expect(refused).toContain('aria-invalid="true"');
+    expect(refused).toContain("Periksa kembali undangan yang ditandai.");
+    const done = renderToStaticMarkup(createElement(InviteMemberForm, {
+      attemptId: "00000000-0000-4000-8000-000000000005", formAction: () => undefined, pending: false,
+      state: { message: "Budi ditambahkan sebagai Operator.", resultToken: "t2", status: "success" },
+    }));
+    expect(done).not.toContain("ditambahkan");
+  });
+
+  it("summarises members in one strip: everyone in the total, active owners and operators", () => {
+    const strip = (members: Parameters<typeof logic.summarizeMembers>[0]) =>
+      renderToStaticMarkup(createElement(MemberStatStrip, { summary: logic.summarizeMembers(members) }))
+        .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const members = [
+      { id: "1", name: "A", role: "TENANT_ADMIN" as const, status: "ACTIVE" as const, userId: "u1" },
+      { id: "2", name: "B", role: "OPERATOR" as const, status: "ACTIVE" as const, userId: "u2" },
+      { id: "3", name: "C", role: "OPERATOR" as const, status: "SUSPENDED" as const, userId: "u3" },
+      { id: "4", name: "D", role: "OPERATOR" as const, status: "ACTIVE" as const, userId: "u4" },
+    ];
+    expect(strip(members)).toBe("Total anggota 4 1 nonaktif Pemilik gerai 1 aktif Operator 2 aktif");
+    expect(strip(members.filter((member) => member.status === "ACTIVE"))).toBe("Total anggota 3 Pemilik gerai 1 aktif Operator 2 aktif");
+    const html = renderToStaticMarkup(createElement(MemberStatStrip, { summary: logic.summarizeMembers(members) }));
+    expect(html).not.toContain("<a ");
+    expect(html.match(/<dt/g)).toHaveLength(3);
+  });
+
+  it("keeps Anda beside the viewer's name and gives suspended members their reason", () => {
+    const member = {
+      email: "wulan@example.test", id: "00000000-0000-4000-8000-000000000031", name: "Wulan Sekarsari Prameswari Wijayakusuma",
+      role: "TENANT_ADMIN" as const, status: "ACTIVE" as const, updatedAt: new Date("2026-09-01T00:00:00Z"), userId: "viewer",
+    };
+    const row = (value: typeof member, viewer: string, activeAdmins: number) => renderToStaticMarkup(createElement(MemberRow, {
+      access: logic.memberAccess(value, viewer, activeAdmins),
+      deactivateAttemptId: "00000000-0000-4000-8000-000000000032",
+      member: value,
+      roleAttemptId: "00000000-0000-4000-8000-000000000033",
+    }));
+    const self = row(member, "viewer", 2);
+    // Name and "Anda" are siblings in one flex line; the name wraps inside its own box.
+    expect(self).toMatch(/<p class="flex min-w-0 items-start gap-2" data-slot="member-name"><span class="[^"]*wrap-anywhere[^"]*">Wulan Sekarsari Prameswari Wijayakusuma<\/span><span[^>]*data-slot="badge"[^>]*>Anda<\/span><\/p>/);
+    expect(self).not.toContain("(Anda)");
+    expect(self).toContain("Diubah oleh pemilik gerai lain");
+    expect(row(member, "someone-else", 2)).not.toContain(">Anda<");
+    const suspended = row({ ...member, status: "SUSPENDED" as never, userId: "u9" }, "viewer", 2);
+    expect(suspended).toContain('data-status="SUSPENDED"');
+    expect(suspended).toContain("Nonaktif");
+    expect(suspended).toContain("Undang ulang untuk mengaktifkan");
+    expect(suspended).not.toContain("Kelola akses");
+    expect(row({ ...member, userId: "u8" }, "viewer", 1)).toContain("Pemilik gerai terakhir dilindungi");
   });
 });
 

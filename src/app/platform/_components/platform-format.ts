@@ -2,6 +2,7 @@ import type { StatusTone } from "@/components/app/status-badge";
 import type { HealthSeverity } from "@/db/platform-monitoring-repository";
 import { auditActorLabel, tenantStatusLabel } from "@/lib/labels/audit";
 import { formatDuration } from "@/lib/platform-monitoring-format";
+import { formatRelativeAge } from "@/lib/relative-age";
 
 /** `src/lib/labels/audit.ts` speaks ok/warn; the v3 `StatusBadge` speaks success/warning. */
 const LABEL_TONE: Record<"danger" | "neutral" | "ok" | "warn", StatusTone> = {
@@ -57,4 +58,13 @@ export function tenantStatusChange(row: { fromStatus: string | null; toStatus: s
   if (!row.fromStatus && !row.toStatus) return undefined;
   if (!row.fromStatus) return `Menjadi ${tenantStatusLabel(row.toStatus)}`;
   return `${tenantStatusLabel(row.fromStatus)} → ${tenantStatusLabel(row.toStatus)}`;
+}
+
+/**
+ * T-257: how long ago, next to the WIB time on audit rows and the registration queue — the shared
+ * `formatRelativeAge` wording; `null` from 30 days, where the date says it. `now` is the page's
+ * database clock, so a render never mixes two clocks.
+ */
+export function formatAgo(instant: Date, now: Date): string | null {
+  return formatRelativeAge(instant, now, 29);
 }

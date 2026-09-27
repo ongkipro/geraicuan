@@ -1,29 +1,29 @@
 import { randomUUID } from "node:crypto";
 
-import { ArrowLeft, ClipboardCheck, Package, ReceiptText, Send } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { DateRangePicker } from "@/components/app/date-range-picker";
 import { FilterBar } from "@/components/app/filter-bar";
-import { KpiCard } from "@/components/app/kpi-card";
+import { SectionHelp } from "@/components/app/help-hint";
 import { Money } from "@/components/app/money";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
+import { StatStrip, type StatItem } from "@/components/app/stat-strip";
 import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRangeLabel } from "@/lib/analytics-range";
-import { auditActionSentence } from "@/lib/labels/audit";
 import { PROVIDER_BATCH_STATUS_LABELS, providerResponseLabel } from "@/lib/labels/provider";
 import { LEGACY_COD_FEE_VAT_LABEL } from "@/lib/mengantar-cod-fee";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 import { formatCount, formatShortId } from "@/lib/platform-monitoring-format";
 
-import { auditActor, formatWib } from "../../_components/platform-format";
+import { formatWib } from "../../_components/platform-format";
 import {
   ArrowLink,
-  AuditOutcomeBadge,
+  AuditFeed,
   DESKTOP_ONLY,
   FLUSH_TABLE,
   PHONE_ONLY,
@@ -214,23 +214,80 @@ function TenantAudit({ view }: { view: PlatformView }) {
   const rows = view.audit.rows;
   return (
     <PlatformCard
-      action={<ArrowLink href={buildPlatformHref("/platform/audit", { ...view.filters, page: 1 })}>Lihat semua</ArrowLink>}
+      action={(
+        <>
+          <ArrowLink href={buildPlatformHref("/platform/audit", { ...view.filters, page: 1 })}>Lihat semua</ArrowLink>
+          <SectionHelp label="Penjelasan jejak audit gerai">
+            <p>Sepuluh aktivitas terbaru gerai ini pada periode ini. Membuka pemantauan platform tidak ditampilkan di sini; semuanya ada di halaman Audit.</p>
+          </SectionHelp>
+        </>
+      )}
       flush={rows.length > 0}
       id="audit-tenant"
       title="Jejak audit"
     >
       {rows.length ? (
-        <ul className="divide-y">
-          {rows.map((row) => (
-            <li className="flex flex-col gap-2 px-6 py-3 max-md:px-4 sm:flex-row sm:items-center sm:justify-between" key={row.id}>
-              <StackCell primary={auditActionSentence(row)} secondary={`${auditActor(row)} · ${formatWib(row.createdAt)}`} />
-              <AuditOutcomeBadge outcome={row.outcome} />
-            </li>
-          ))}
-        </ul>
+        <AuditFeed label="Jejak audit gerai" now={view.now} rows={rows} showTenant={false} />
       ) : (
         <p className="text-muted-foreground">Belum ada aktivitas audit pada periode ini.</p>
       )}
+    </PlatformCard>
+  );
+}
+
+/**
+ * T-257: the four 150 px KPI cards as one §4.6 stat strip, with the gerai's members (Pemilik gerai
+ * and Operator counts, no names or emails) and outlet readiness, which the page did not show.
+ */
+function TenantStrip({ counts, finance }: { counts: NonNullable<PlatformView["counts"]>; finance: PlatformView["finance"] }) {
+  const reconciliations = finance?.reconciliations ?? [];
+  const variances = reconciliations.filter((row) => row.status === "VARIANCE").length;
+  const { lifecycle, memberships, outlets } = counts;
+  const items: StatItem[] = [
+    { key: "shipments", label: "Kiriman dibuat", metric: "SHP-CREATED", value: formatCount(lifecycle.shipments) },
+    { key: "issued", label: "Resi terbit", metric: "SHP-ISSUED", value: formatCount(lifecycle.issued) },
+    {
+      badge: lifecycle.batchesFailed ? <StatusBadge label="Perlu dicek" tone="danger" /> : null,
+      key: "failed",
+      label: "Pengajuan gagal",
+      metric: "PLT-TD-BATCH-FAILED",
+      note: `dari ${formatCount(lifecycle.batches)} pengajuan`,
+      value: formatCount(lifecycle.batchesFailed),
+    },
+    {
+      key: "members",
+      label: "Anggota aktif",
+      metric: "PLT-TD-MEMBER-ACTIVE",
+      note: `${formatCount(memberships.tenantAdmins)} pemilik · ${formatCount(memberships.operators)} operator`,
+      value: formatCount(memberships.active),
+    },
+    { key: "outlets", label: "Outlet lengkap", metric: "PLT-OUTLET-CONFIGURED", note: `dari ${formatCount(outlets.total)} outlet`, value: formatCount(outlets.configured) },
+    {
+      badge: variances ? <StatusBadge label="Ada selisih" tone="warning" /> : null,
+      key: "reconciliation",
+      label: "Rekonsiliasi",
+      metric: "PLT-TD-REC-VARIANCE",
+      note: !finance ? "Tidak dapat dimuat" : reconciliations.length ? `dari ${formatCount(reconciliations.length)} hasil` : "Belum ada hasil",
+      value: !finance || !reconciliations.length ? "—" : variances ? `${formatCount(variances)} selisih` : "Cocok",
+    },
+  ];
+  return <StatStrip items={items} label="Ringkasan gerai" />;
+}
+
+function PrefixCard({ prefix, tenantId, tenantName }: { prefix: PlatformView["prefix"]; tenantId: string; tenantName: string }) {
+  return (
+    <PlatformCard id="awalan-tenant" title="Awalan nomor kiriman">
+      <p>
+        {prefix === null
+          ? "Status awalan tidak dapat dimuat."
+          : (
+            <>
+              Awalan <span className="font-mono font-semibold">{prefix.prefix}-</span>{" "}
+              {prefix.lockedAt ? `terkunci sejak ${formatWib(prefix.lockedAt)}` : "belum terkunci; pemilik gerai masih dapat memilih."}
+            </>
+          )}
+      </p>
+      <PrefixUnlock initialAttemptId={randomUUID()} locked={Boolean(prefix?.lockedAt)} tenantId={tenantId} tenantName={tenantName} />
     </PlatformCard>
   );
 }
@@ -242,8 +299,6 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
   const { tenant } = detail;
   const range = formatRangeLabel(view.filters.range);
   const counts = view.counts;
-  const reconciliations = view.finance?.reconciliations ?? [];
-  const variances = reconciliations.filter((row) => row.status === "VARIANCE").length;
   const prefix = view.prefix;
 
   return (
@@ -271,35 +326,25 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
       >
         <DateRangePicker endDate={view.filters.range.lastIncludedDate} presetId={view.filters.range.presetId} startDate={view.filters.range.startDate} />
       </FilterBar>
-      {counts ? (
-        <section aria-label="Ringkasan gerai" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard icon={Package} label="Kiriman dibuat" value={counts.lifecycle.shipments} />
-          <KpiCard icon={ReceiptText} label="Resi terbit" value={counts.lifecycle.issued} />
-          <KpiCard icon={Send} label="Pengajuan gagal" value={`${formatCount(counts.lifecycle.batchesFailed)} / ${formatCount(counts.lifecycle.batches)}`} />
-          <KpiCard icon={ClipboardCheck} label="Rekonsiliasi" value={!view.finance ? "—" : !reconciliations.length ? "—" : variances ? `${formatCount(variances)} selisih` : "Cocok"} />
-        </section>
-      ) : (
-        <RegionError title="Ringkasan gerai" />
-      )}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section aria-labelledby="ringkasan-gerai" className="grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg leading-snug font-bold" id="ringkasan-gerai">Ringkasan gerai</h2>
+          <SectionHelp label="Cara membaca ringkasan gerai">
+            <p>Kiriman dibuat dan resi terbit mengikuti periode di atas, sama dengan Ringkasan platform. Pengajuan gagal dihitung dari semua pengajuan gerai ini ke Mengantar pada periode itu.</p>
+            <p>Anggota aktif dan outlet lengkap adalah keadaan saat ini. Outlet lengkap berarti titik pickup dan area asal sudah terisi.</p>
+            <p>Rekonsiliasi menunjukkan berapa hasil rekonsiliasi periode ini yang masih ada selisih.</p>
+          </SectionHelp>
+        </div>
+        {counts ? <TenantStrip counts={counts} finance={view.finance} /> : <RegionError title="Ringkasan gerai" />}
+      </section>
+      {/* T-257: the two short regions share a row; Pengajuan runs full width instead of beside a one-outlet card. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>section>[data-slot=card]]:h-full">
         <Outlets detail={detail} />
-        <Submissions detail={detail} />
+        <PrefixCard prefix={prefix} tenantId={tenant.id} tenantName={tenant.name} />
       </div>
+      <Submissions detail={detail} />
       {view.finance ? <FinanceSummary finance={view.finance} timezone={range.timezoneLabel} /> : <RegionError title="Keuangan & rekonsiliasi" />}
       <TenantAudit view={view} />
-      <PlatformCard id="awalan-tenant" title="Awalan nomor kiriman">
-        <p>
-          {prefix === null
-            ? "Status awalan tidak dapat dimuat."
-            : (
-              <>
-                Awalan <span className="font-mono font-semibold">{prefix.prefix}-</span>{" "}
-                {prefix.lockedAt ? `terkunci sejak ${formatWib(prefix.lockedAt)}` : "belum terkunci; pemilik gerai masih dapat memilih."}
-              </>
-            )}
-        </p>
-        <PrefixUnlock initialAttemptId={randomUUID()} locked={Boolean(prefix?.lockedAt)} tenantId={tenant.id} tenantName={tenant.name} />
-      </PlatformCard>
       <TenantLifecycle initialAttemptId={randomUUID()} status={tenant.status} tenantId={tenant.id} tenantName={tenant.name} />
     </>
   );

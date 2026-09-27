@@ -26,3 +26,11 @@ export function HelpHint({ children, label }: {
     </Popover>
   );
 }
+
+/**
+ * The "?" of a section header (T-254). The 40 px button is pulled into the title's line box, so
+ * it centres on the title and does not add a row under it.
+ */
+export function SectionHelp({ children, label }: { children: ReactNode; label: string }) {
+  return <span className="-my-2 flex"><HelpHint label={label}>{children}</HelpHint></span>;
+}

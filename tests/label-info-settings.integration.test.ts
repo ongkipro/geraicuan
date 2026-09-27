@@ -90,6 +90,9 @@ const LABEL: PrintableLabel = {
   shippingAmountIdr: 18_000,
 };
 
+const RECIPIENT_PHONE = "0812-9999-0229";
+const SENDER_PHONE = "0812-1111-0229";
+
 function render(size: LabelSize, fields?: LabelFieldsBySize) {
   return renderToStaticMarkup(createElement(
     LabelPrintContext.Provider,
@@ -160,11 +163,12 @@ describe("label sheet with the Informasi label choice", () => {
       const html = render(size);
       expect(render(size, DEFAULT_LABEL_FIELDS_BY_SIZE)).toBe(html);
       const pkg = packageOf(html);
+      // T-255: phones print grouped (same digits); the area prints as its hierarchy lines.
       for (const expected of [
-        LABEL.sender.name, LABEL.sender.phone, LABEL.sender.address, LABEL.recipient.name, LABEL.recipient.phone,
-        LABEL.recipient.address, AREA, "Nomor kiriman GC-10229 · Terbit",
+        LABEL.sender.name, SENDER_PHONE, LABEL.sender.address, LABEL.recipient.name, RECIPIENT_PHONE,
+        LABEL.recipient.address, "Dago, Kec. Coblong, Kota Bandung", "Jawa Barat 40135", "Nomor kiriman GC-10229 · Terbit",
       ]) expect(pkg, `${size}: ${expected}`).toContain(expected);
-      expect(pkg).toContain(`${LABEL.sender.phone} · ${LABEL.sender.address}`);
+      expect(pkg).toContain(`${LABEL.sender.name} · ${SENDER_PHONE} ${LABEL.sender.address}`);
       expect(pkg).not.toContain(RETURN_WARNING_TEXT);
     }
   });
@@ -172,9 +176,9 @@ describe("label sheet with the Informasi label choice", () => {
   it("hides each field when its switch is off, only at the size it was set for", () => {
     const cases = [
       ["senderAddress", LABEL.sender.address],
-      ["senderPhone", LABEL.sender.phone],
+      ["senderPhone", SENDER_PHONE],
       ["recipientName", LABEL.recipient.name],
-      ["recipientPhone", LABEL.recipient.phone],
+      ["recipientPhone", RECIPIENT_PHONE],
       ["recipientAddressDetail", LABEL.recipient.address],
     ] as const;
     for (const [key, value] of cases) {
@@ -182,8 +186,9 @@ describe("label sheet with the Informasi label choice", () => {
       expect(packageOf(render("10x10", fields)), key).not.toContain(value);
       expect(packageOf(render("10x15", fields)), key).toContain(value);
     }
-    // The sender separator goes with the address.
-    expect(packageOf(render("10x10", withOff("10x10", "senderAddress")))).not.toContain(" · Ruko");
+    // The sender's origin line goes with the address, and the phone's separator with the phone.
+    expect(render("10x10", withOff("10x10", "senderAddress"))).not.toContain("label-sender-origin");
+    expect(packageOf(render("10x10", withOff("10x10", "senderPhone")))).toContain(`Pengirim ${LABEL.sender.name} ${LABEL.sender.address}`);
   });
 
   it("prints only the city and province when the address detail is off", () => {

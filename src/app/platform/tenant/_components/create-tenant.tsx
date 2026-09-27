@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 
 const initialState: PlatformTenantLifecycleState = {};
 
@@ -70,8 +70,8 @@ export function CreateTenant({ initialAttemptId }: { initialAttemptId: string })
             <input name="attemptId" type="hidden" value={attemptId} />
             <input name="lifecycleAction" type="hidden" value="create" />
             <input name="confirmation" type="hidden" value="confirmed" />
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="tenant-name">Nama gerai</Label>
+            <Field data-invalid={nameError ? true : undefined}>
+              <FieldLabel htmlFor="tenant-name">Nama gerai</FieldLabel>
               <CharacterClassInput
                 aria-describedby={nameError ? "tenant-name-error" : undefined}
                 aria-invalid={nameError ? true : undefined}
@@ -84,8 +84,8 @@ export function CreateTenant({ initialAttemptId }: { initialAttemptId: string })
                 ref={nameRef}
                 required
               />
-              {nameError ? <p className="text-sm font-medium text-destructive" id="tenant-name-error">{nameError}</p> : null}
-            </div>
+              {nameError ? <FieldError className="font-medium" id="tenant-name-error">{nameError}</FieldError> : null}
+            </Field>
             {otherError ? <p className="text-sm font-medium text-destructive" role="alert">{otherError}</p> : null}
             <DialogFooter>
               <DialogClose asChild>

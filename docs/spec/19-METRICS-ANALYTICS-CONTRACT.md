@@ -278,6 +278,32 @@ The figure is omitted while unknown (no order yet) and where the surface does no
 | OPS-FAILURE-SHARE | Kegagalan provider | FAILED batches / batches created in range; one decimal | Drift: whole-percent display — T-89 |
 | OPS-BATCH-DURATION | Durasi penyelesaian batch p50 / p95 | `percentile_cont` of `completed_at − submission_attempted_at` for batches completed in range; shows seconds below one minute | Drift: sub-minute values render "0 menit" — T-92 |
 | OPS-TENANT-AFFECTED | tenant terdampak | `count(distinct tenant_id)` of the tile's records | Aligned |
+| OPS-FAILURE-COUNT | Kegagalan provider (count) | FAILED batches created in range — OPS-FAILURE-SHARE's numerator, the value of the Kesehatan platform cell (its note shows the share) | Aligned (T-257) |
+
+### Platform pages (T-257)
+
+Every figure the Super Admin pages show, with the element that carries it (`data-metric-id` on stat-strip cells, Volume rows and usage cells). Platform scope only: read inside `withPlatformContext` from the redacted `platform_monitoring_*` views, never recipient data. Formulas are the existing repository reads (`src/db/platform-monitoring-repository.ts`); T-257 added only PLT-TEN-* (a grouped count) and PLT-TREND-TOTALS (a sum of buckets already shown). Verified by `tests/platform-monitoring.integration.test.ts` ("T-257: binds each status strip count …") and `tests/platform-public-render.integration.test.ts` ("T-257 platform alignment").
+
+| ID | Label | Definition | Scope | Surface |
+|---|---|---|---|---|
+| OPS-QUEUE-STUCK, OPS-FAILURE-COUNT, OPS-UNKNOWN, OPS-UNPAID, OPS-BATCH-DURATION | Kesehatan platform cells | as above; a Perhatian/Kritis badge from M-2 only above Normal | global or `tenant` | `/platform` stat strip |
+| PLT-TENANT-ACTIVE / -SUSPENDED | Gerai aktif / ditangguhkan | `count(tenants)` by current status (`readPlatformCounts`); snapshot, no period | global | `/platform` Volume platform |
+| PLT-TENANT-NEW | Gerai baru | tenants with `created_at` in range | global | `/platform` Volume platform |
+| PLT-OUTLET-CONFIGURED | Outlet lengkap "n / N" | outlets with pickup and origin area set / all outlets (snapshot) | global or one gerai | `/platform` Volume; tenant list column; tenant detail strip ("dari N outlet") |
+| PLT-MEMBER-ACTIVE | Anggota aktif | active memberships (snapshot) | global | `/platform` Volume platform |
+| PLT-BATCH-COMPLETED | Pengajuan selesai "n / N" | COMPLETED provider batches / all batches created in range | global | `/platform` Volume platform |
+| PLT-TREND-TOTALS | Legend totals of Tren kiriman | Σ buckets of `readTrend`: created = SHP-CREATED, issued = SHP-ISSUED for the same filters (test binds both) | global | `/platform` trend legend |
+| PLT-TENANT-SHIPMENTS / -ISSUED | Kiriman / Resi terbit per gerai | SHP-CREATED / SHP-ISSUED grouped by tenant (`listTenantUsage`) | per gerai | `/platform` Aktivitas gerai teratas; tenant list "Kiriman / resi" |
+| PLT-TEN-ALL | Semua gerai | `count(tenants)` matching the list search (`q`), any status | global | `/platform/tenant` status strip |
+| PLT-TEN-ACTIVE / -PROVISIONING / -SUSPENDED / -ARCHIVED | Aktif / Disiapkan / Ditangguhkan / Diarsipkan | tenants with that status matching the search; each equals the rows (and total) `status-gerai=<status>` lists | global | `/platform/tenant` status strip |
+| PLT-TEN-SHARE | "x%" | PLT-TEN-<status> ÷ PLT-TEN-ALL × 100, rounded (`tileShare`) | global | status strip |
+| PLT-TEN-OTHER | Lainnya | PLT-TEN-ALL − Σ statuses; 0 by construction (four disjoint statuses), so no segment | global | status strip bar |
+| PLT-TD-BATCH-FAILED | Pengajuan gagal "n · dari N pengajuan" | FAILED batches / all batches of the gerai created in range | one gerai | tenant detail strip |
+| PLT-TD-MEMBER-ACTIVE | Anggota aktif "n pemilik · n operator" | the gerai's active memberships, split by role (`readPlatformCounts` tenant scope); counts only, no names or emails | one gerai | tenant detail strip |
+| PLT-TD-REC-VARIANCE | Rekonsiliasi "n selisih" / Cocok | reconciliation results of the gerai in the period (`readPlatformTenantFinanceSummary`) with status `VARIANCE`, "dari N hasil" | one gerai | tenant detail strip |
+| PLT-REG-QUEUE | Menunggu persetujuan count | tenants in `listRegistrationQueue` (PROVISIONING self-registrations) | global | `/platform/pendaftaran` |
+
+Tenant detail also shows SHP-CREATED and SHP-ISSUED for the one gerai, and the FIN-* ledger figures listed under Money.
 
 ## M-2 — Severity rules
 

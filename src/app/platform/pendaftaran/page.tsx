@@ -2,6 +2,7 @@ import { CircleCheck, Inbox } from "lucide-react";
 import type { Metadata } from "next";
 
 import { EmptyState } from "@/components/app/empty-state";
+import { SectionHelp } from "@/components/app/help-hint";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -16,7 +17,7 @@ import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { auditActorLabel } from "@/lib/labels/audit";
 import type { PlatformFilters } from "@/lib/platform-monitoring-filters";
 
-import { formatWib } from "../_components/platform-format";
+import { formatAgo, formatWib } from "../_components/platform-format";
 import { registrationDecisions } from "../_components/platform-logic";
 import { DESKTOP_ONLY, FLUSH_TABLE, PHONE_ONLY, PlatformCard, RegionError, TimeCell } from "../_components/platform-ui";
 import { requirePlatformPrincipal } from "../_components/platform-view";
@@ -58,7 +59,8 @@ async function readDecisions(tx: Parameters<Parameters<typeof withPlatformContex
   return found;
 }
 
-function RegistrationCard({ entry }: { entry: RegistrationQueueEntry }) {
+function RegistrationCard({ entry, now }: { entry: RegistrationQueueEntry; now: Date }) {
+  const waiting = formatAgo(entry.registeredAt, now);
   const titleId = `pendaftaran-${entry.tenantId}`;
   return (
     <Card aria-labelledby={titleId} className="gap-0" role="article">
@@ -67,7 +69,7 @@ function RegistrationCard({ entry }: { entry: RegistrationQueueEntry }) {
           <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent font-bold text-accent-foreground">{initials(entry.storeName)}</span>
           <div className="min-w-0">
             <h3 className="text-base font-semibold" id={titleId}>{entry.storeName}</h3>
-            <p className="text-xs text-muted-foreground">Terdaftar {formatWib(entry.registeredAt)}</p>
+            <p className="text-xs text-muted-foreground">Terdaftar {formatWib(entry.registeredAt)}{waiting ? ` · ${waiting}` : ""}</p>
           </div>
         </div>
         <StatusBadge
@@ -89,7 +91,7 @@ function RegistrationCard({ entry }: { entry: RegistrationQueueEntry }) {
   );
 }
 
-function History({ rows }: { rows: AuditRow[] | null }) {
+function History({ now, rows }: { now: Date; rows: AuditRow[] | null }) {
   if (!rows) return <RegionError title="Riwayat keputusan" />;
   const decision = (row: AuditRow) =>
     row.action === "TENANT_REGISTRATION_APPROVED"
@@ -108,7 +110,7 @@ function History({ rows }: { rows: AuditRow[] | null }) {
               {rows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-semibold whitespace-normal">{row.tenantName ?? "Gerai terhapus"}</TableCell>
-                  <TableCell><TimeCell instant={row.createdAt} /></TableCell>
+                  <TableCell><TimeCell instant={row.createdAt} now={now} /></TableCell>
                   <TableCell>{decision(row)}</TableCell>
                   <TableCell>{auditActorLabel(row.actorRole)}</TableCell>
                 </TableRow>
@@ -136,7 +138,8 @@ function History({ rows }: { rows: AuditRow[] | null }) {
  */
 export default async function RegistrationQueuePage() {
   const principal = await requirePlatformPrincipal();
-  const { history, queue } = await withPlatformContext(db, principal.userId, async (tx) => {
+  const { history, now, queue } = await withPlatformContext(db, principal.userId, async (tx) => {
+    const now = await readPlatformClock(tx);
     const queue = await listRegistrationQueue(tx);
     let history: AuditRow[] | null = null;
     try {
@@ -144,26 +147,33 @@ export default async function RegistrationQueuePage() {
     } catch {
       history = null;
     }
-    return { history, queue };
+    return { history, now, queue };
   });
 
   return (
     <>
       <PageHeader eyebrow="Platform" title="Pendaftaran" />
       <section aria-labelledby="menunggu-persetujuan" className="flex flex-col gap-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold" id="menunggu-persetujuan">Menunggu persetujuan</h2>
-          <Badge className="tabular-nums" variant="secondary">{queue.length} antrean</Badge>
+        {/* T-257: the §4.3 header on the ground — title 18/700, count, "?" at the right. */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg leading-snug font-bold" id="menunggu-persetujuan">Menunggu persetujuan</h2>
+            <Badge className="tabular-nums" data-metric-id="PLT-REG-QUEUE" variant="secondary">{queue.length}</Badge>
+          </div>
+          <SectionHelp label="Cara menyetujui pendaftaran">
+            <p>Pendaftaran terlama tampil paling atas. Setujui gerai hanya setelah pemilik memverifikasi email; gerai langsung dapat membuat dan menerbitkan kiriman.</p>
+            <p>Tolak pendaftaran mengarsipkan gerai dan mengirim alasan Anda ke email pemilik. Kedua keputusan tercatat di Audit.</p>
+          </SectionHelp>
         </div>
         {queue.length ? (
-          queue.map((entry) => <RegistrationCard entry={entry} key={entry.tenantId} />)
+          queue.map((entry) => <RegistrationCard entry={entry} key={entry.tenantId} now={now} />)
         ) : (
           <Card>
             <EmptyState description="Pendaftaran baru muncul di sini setelah pemilik gerai mengisi formulir pendaftaran." icon={Inbox} title="Tidak ada pendaftaran yang menunggu" />
           </Card>
         )}
       </section>
-      <History rows={history} />
+      <History now={now} rows={history} />
     </>
   );
 }

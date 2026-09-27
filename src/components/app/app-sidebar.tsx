@@ -26,6 +26,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { unreadInfoLabel } from "@/lib/announcements";
 import {
   platformCmsNavigation,
   tenantCmsNavigation,
@@ -124,7 +125,8 @@ export function AppSidebar({
                               {badge > 0 ? <span className="absolute top-1.5 right-1.5 hidden size-2 rounded-full bg-primary ring-2 ring-sidebar group-data-[collapsible=icon]:block" /> : null}
                             </span>
                             <span>{item.label}</span>
-                            {badge > 0 ? <span className="sr-only">, {badge} belum dibaca</span> : null}
+                            {/* T-256: the Dasbor line's words, "N info baru". */}
+                            {badge > 0 ? <span className="sr-only">, {unreadInfoLabel(badge)}</span> : null}
                           </Link>
                         </SidebarMenuButton>
                         {badge > 0 ? (

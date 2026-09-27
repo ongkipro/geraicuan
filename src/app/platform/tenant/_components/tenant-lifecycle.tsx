@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 const initialState: PlatformTenantLifecycleState = {};
@@ -87,8 +87,8 @@ export function TenantLifecycle({
             <input name="lifecycleAction" type="hidden" value={suspending ? "suspend" : "reactivate"} />
             <input name="tenantId" type="hidden" value={tenantId} />
             <input name="confirmation" type="hidden" value="confirmed" />
-            <div className="flex max-w-md flex-col gap-2">
-              <Label className="block leading-normal" htmlFor="tenant-confirmation-name">Ketik <strong className="font-semibold">{tenantName}</strong> untuk mengonfirmasi</Label>
+            <Field className="max-w-md" data-invalid={nameError ? true : undefined}>
+              <FieldLabel className="block leading-normal" htmlFor="tenant-confirmation-name">Ketik <strong className="font-semibold">{tenantName}</strong> untuk mengonfirmasi</FieldLabel>
               <Input
                 aria-describedby={nameError ? "tenant-confirmation-name-error" : undefined}
                 aria-invalid={nameError ? true : undefined}
@@ -101,8 +101,8 @@ export function TenantLifecycle({
                 ref={inputRef}
                 required
               />
-              {nameError ? <p className="text-sm font-medium text-destructive" id="tenant-confirmation-name-error">{nameError}</p> : null}
-            </div>
+              {nameError ? <FieldError className="font-medium" id="tenant-confirmation-name-error">{nameError}</FieldError> : null}
+            </Field>
             <div className="flex flex-wrap items-center gap-3">
               <AlertDialog onOpenChange={(next) => { if (!pending) setOpen(next); }} open={open}>
                 <AlertDialogTrigger asChild>

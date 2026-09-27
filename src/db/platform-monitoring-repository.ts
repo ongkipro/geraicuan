@@ -393,13 +393,24 @@ export async function readTrend(tx: PlatformTransaction, filters: PlatformFilter
   return buildTrendBuckets(filters.range).map(({key,label})=>{ const row=byKey.get(key); return { key,label,created:asNumber(row?.created),issued:asNumber(row?.issued),failed:asNumber(row?.failed),unpaid:asNumber(row?.unpaid) }; });
 }
 
-export async function listTenantUsage(tx: PlatformTransaction, filters: PlatformFilters, limit: number): Promise<{rows:TenantUsageRow[];total:number}> {
+/** Spec 19 PLT-TEN-*: tenants per status under the list's search, before its status filter. */
+export type TenantStatusCounts = Record<(typeof tenantStatuses)[number], number> & { all: number };
+
+export async function listTenantUsage(tx: PlatformTransaction, filters: PlatformFilters, limit: number): Promise<{rows:TenantUsageRow[];total:number;statusCounts:TenantStatusCounts}> {
   if (!Number.isInteger(limit)||limit<1||limit>100) throw new RangeError("Tenant usage limit is invalid.");
-  const tenantWhere = filters.scope.kind === "tenant" ? sql`AND t.id=${filters.scope.tenantId}::uuid` : EMPTY;
+  const scopeWhere = filters.scope.kind === "tenant" ? sql`AND t.id=${filters.scope.tenantId}::uuid` : EMPTY;
   const escapedQuery = filters.query?.replace(/[\\%_]/g,"\\$&");
   const queryWhere = escapedQuery ? sql`AND t.name ILIKE ${`%${escapedQuery}%`} ESCAPE '\\'` : EMPTY;
-  const count = await tx.execute<{total:string}>(sql`SELECT count(*)::text total FROM ${platformMonitoringTenant} t WHERE true ${tenantWhere} ${queryWhere}`);
-  const total=asNumber(count.rows[0]?.total); if(total===0)return {rows:[],total};
+  // T-257: the status strip counts what each status filter would list, so it ignores only that filter.
+  const byStatus = await tx.execute<{status:string;n:string}>(sql`SELECT t.status,count(*)::text n FROM ${platformMonitoringTenant} t WHERE true ${scopeWhere} ${queryWhere} GROUP BY t.status`);
+  const statusCounts: TenantStatusCounts = { ACTIVE: 0, ARCHIVED: 0, PROVISIONING: 0, SUSPENDED: 0, all: 0 };
+  for (const row of byStatus.rows) {
+    if (Object.hasOwn(statusCounts, row.status) && row.status !== "all") statusCounts[row.status as (typeof tenantStatuses)[number]] = asNumber(row.n);
+    statusCounts.all += asNumber(row.n);
+  }
+  const tenantWhere = filters.tenantStatus ? sql`${scopeWhere} AND t.status=${filters.tenantStatus}` : scopeWhere;
+  const total = filters.tenantStatus ? statusCounts[filters.tenantStatus] : statusCounts.all;
+  if(total===0)return {rows:[],total,statusCounts};
   const offset=Math.min((filters.page-1)*limit,Math.floor((total-1)/limit)*limit);
   const start=filters.range.startInclusive,end=filters.range.endExclusive;
   const rows=await tx.execute<Record<string,unknown>>(sql`
@@ -413,12 +424,16 @@ export async function listTenantUsage(tx: PlatformTransaction, filters: Platform
     FROM ${platformMonitoringTenant} t LEFT JOIN os ON os.tenant_id=t.id LEFT JOIN ms ON ms.tenant_id=t.id LEFT JOIN ss ON ss.tenant_id=t.id LEFT JOIN bs ON bs.tenant_id=t.id LEFT JOIN ps ON ps.tenant_id=t.id LEFT JOIN rs ON rs.tenant_id=t.id
     WHERE true ${tenantWhere} ${queryWhere}
     ORDER BY (coalesce(bs.failed,0)+coalesce(bs.unknown,0)+coalesce(ps.unpaid,0)+coalesce(ps.unknown,0)+coalesce(rs.unknown,0)) DESC,coalesce(ps.issued,0) DESC,t.name ASC LIMIT ${limit} OFFSET ${offset}`);
-  return {total,rows:rows.rows.map((r)=>({tenantId:String(r.tenant_id),name:String(r.name),status:r.status as TenantUsageRow["status"],outletTotal:asNumber(r.outlet_total),outletConfigured:asNumber(r.outlet_configured),members:asNumber(r.members),shipments:asNumber(r.shipments),batches:asNumber(r.batches),issued:asNumber(r.issued),unpaid:asNumber(r.unpaid),failed:asNumber(r.failed),unknown:asNumber(r.unknown),lastActivityAt:asDate(r.last_activity_at)}))};
+  return {total,statusCounts,rows:rows.rows.map((r)=>({tenantId:String(r.tenant_id),name:String(r.name),status:r.status as TenantUsageRow["status"],outletTotal:asNumber(r.outlet_total),outletConfigured:asNumber(r.outlet_configured),members:asNumber(r.members),shipments:asNumber(r.shipments),batches:asNumber(r.batches),issued:asNumber(r.issued),unpaid:asNumber(r.unpaid),failed:asNumber(r.failed),unknown:asNumber(r.unknown),lastActivityAt:asDate(r.last_activity_at)}))};
 }
 
-export async function listAuditEvents(tx:PlatformTransaction,filters:PlatformFilters,limit:number):Promise<{rows:AuditRow[];total:number}>{
+/**
+ * `hideMonitoringViews` (T-257): the short feeds on Ringkasan and tenant detail leave out
+ * PLATFORM_MONITORING_VIEWED, which every platform page view writes; /platform/audit lists them all.
+ */
+export async function listAuditEvents(tx:PlatformTransaction,filters:PlatformFilters,limit:number,{hideMonitoringViews=false}:{hideMonitoringViews?:boolean}={}):Promise<{rows:AuditRow[];total:number}>{
   if(!Number.isInteger(limit)||limit<1||limit>100)throw new RangeError("Audit limit is invalid.");
-  const where=sql`${scopeClause("a",filters.scope)} ${filters.outcome?sql`AND a.outcome=${filters.outcome}`:EMPTY}`;
+  const where=sql`${scopeClause("a",filters.scope)} ${filters.outcome?sql`AND a.outcome=${filters.outcome}`:EMPTY} ${filters.action?sql`AND a.action=${filters.action}`:EMPTY} ${hideMonitoringViews?sql`AND a.action<>'PLATFORM_MONITORING_VIEWED'`:EMPTY}`;
   const count=await tx.execute<{total:string}>(sql`SELECT count(*)::text total FROM ${platformMonitoringAuditEvent} a WHERE a.created_at>=${filters.range.startInclusive} AND a.created_at<${filters.range.endExclusive} ${where}`);
   const total=asNumber(count.rows[0]?.total);if(total===0)return {rows:[],total};
   const offset=Math.min((filters.page-1)*limit,Math.floor((total-1)/limit)*limit);

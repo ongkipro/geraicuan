@@ -1,6 +1,7 @@
 /*
- * Thermal label sheet and its print rules, moved verbatim from the pre-v3 globals.css
- * (d0db307, T-176) so the label geometry is untouched by the UI v3 rebuild (spec 10 §10).
+ * Thermal label sheet and its print rules, moved from the pre-v3 globals.css (d0db307,
+ * T-176) so the page geometry is untouched by the UI v3 rebuild; package anatomy T-255
+ * (spec 10 §10).
  * Imported by the root layout. The shell print rules at the end replace the old `.cms-*`
  * ones: they hide the v3 sidebar and top bar so a label prints at its page origin.
  */
@@ -11,69 +12,90 @@
 .label-caution summary { display:flex; align-items:center; min-height:44px; color:var(--primary); cursor:pointer; }
 .label-caution details p { white-space:pre-wrap; }
 /* T-176 thermal label. Sizes in mm for a 203 dpi head (1 dot = 0.125 mm). Pure black
-   on white only: no greys, tints, opacity or background fills, which a thermal head
-   renders as noise and which browsers drop from print anyway. Text floor 7pt; rules
-   in whole CSS px because Chrome snaps borders to them (1px = 0.26 mm, 2 dots; the
-   COD box and the cut line 2px = 4 dots); Code 128 modules 0.25 mm (2 dots) with a
-   10-module quiet zone inside the SVG box. The screen outline does not take space, so the preview has
+   on white only: no greys, tints or opacity, which a thermal head renders as noise; the
+   one fill is the solid black COD amount (T-255), printed with print-color-adjust:exact.
+   Text floor 7pt; rules in whole CSS px because Chrome snaps borders to them (1px =
+   0.26 mm, 2 dots; the cut line 2px = 4 dots); Code 128 modules of whole dots (2 to 4,
+   T-255 widest that fits 94 mm) with a 10-module quiet zone inside the SVG box. The screen outline does not take space, so the preview has
    exactly the printed geometry. */
 .label-sheet { position:relative; width:100mm; height:150mm; page:label-100x150; overflow:hidden; outline:1px solid var(--hairline-strong); color:#000; background:#fff; font-family:var(--font-text); font-size:8pt; line-height:1.2; font-variant-numeric:tabular-nums; }
 .label-sheet[data-label-size="10x10"] { height:100mm; page:label-100x100; }
 .label-sheet p, .label-sheet dl, .label-sheet dd { margin:0; }
-.label-package { display:grid; height:100mm; padding:3mm; grid-template-rows:8mm 17mm minmax(0,1fr) 8.4mm 14.4mm 10.8mm 4.8mm; overflow:hidden; }
-.label-package > * { min-width:0; overflow:hidden; padding-block:.7mm; border-top:1px solid #000; }
-.label-package > :first-child { padding-top:0; border-top:0; }
-.label-eyebrow { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.label-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; }
+/* T-255 anatomy: hierarchy by size, weight and whitespace instead of boxes. The package is
+   one column: head, barcode + resi, PENERIMA (takes the free height), one 1px rule, PENGIRIM,
+   payment (only an amount to collect prints inverted), package facts, footer. */
+.label-package { display:flex; flex-direction:column; height:100mm; padding:3mm; overflow:hidden; }
+.label-package > * { flex:none; min-width:0; overflow:hidden; }
+.label-eyebrow { font-size:7pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.label-head { display:flex; height:8mm; align-items:center; justify-content:space-between; gap:2mm; }
 .label-courier { font-size:15pt; font-weight:800; line-height:1.1; }
 .label-service { font-size:10pt; font-weight:700; }
 .label-mark { font-size:7pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.label-awb-block { display:flex; flex-direction:column; align-items:center; gap:.5mm; }
+.label-awb-block { display:flex; flex-direction:column; align-items:center; gap:.6mm; }
+.label-package > .label-awb-block { margin-top:1.2mm; }
 .label-barcode { display:block; flex:none; }
-.label-awb { max-width:100%; font-family:var(--font-mono); font-size:12pt; font-weight:700; line-height:1.1; letter-spacing:.04em; text-align:center; overflow-wrap:anywhere; }
-.label-awb .label-eyebrow { font-family:var(--font-text); letter-spacing:.06em; }
-.label-party-line { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:1.5mm; }
-/* Recipient type steps down with the density tier, so short addresses print large
-   for a courier at arm's length and the 480-character ceiling still fits. */
-.label-party-name { font-size:12pt; font-weight:800; line-height:1.15; overflow-wrap:anywhere; }
-.label-party-phone { font-size:11pt; font-weight:700; }
-.label-party-area { font-size:9.5pt; font-weight:700; line-height:1.2; }
-.label-party-address { margin-top:.3mm !important; font-size:9pt; line-height:1.2; overflow-wrap:anywhere; }
-.label-recipient[data-density="long"] .label-party-name { font-size:10.5pt; }
-.label-recipient[data-density="long"] .label-party-phone { font-size:10pt; }
-.label-recipient[data-density="long"] .label-party-area { font-size:8.5pt; }
-.label-recipient[data-density="long"] .label-party-address { font-size:8pt; line-height:1.15; }
-.label-recipient[data-density="dense"] .label-party-name { font-size:10pt; }
-.label-recipient[data-density="dense"] .label-party-phone { font-size:9.5pt; }
-.label-recipient[data-density="dense"] .label-party-area { font-size:8pt; }
-.label-recipient[data-density="dense"] .label-party-address { font-size:7.25pt; line-height:1.12; }
-.label-recipient[data-density="ultra"] .label-party-name { font-size:9.5pt; }
-.label-recipient[data-density="ultra"] .label-party-phone { font-size:9pt; }
-.label-recipient[data-density="ultra"] .label-party-area { font-size:8pt; }
-.label-recipient[data-density="ultra"] .label-party-address { font-size:7pt; line-height:1.12; }
-.label-sender-line { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:7.5pt; line-height:1.15; overflow-wrap:anywhere; }
-.label-sender .label-party-name { font-size:7.5pt; font-weight:700; }
-.label-sender .label-party-phone { font-size:7.5pt; font-weight:700; }
-.label-sender .label-party-address { margin:0 !important; font-size:7.5pt; }
-.label-sender-line * { line-height:inherit; }
-.label-payment { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding:.2mm 1.5mm; border:2px solid #000; line-height:1.1; }
-.label-payment span { font-size:7.5pt; font-weight:700; letter-spacing:.04em; }
+.label-awb { max-width:100%; font-family:var(--font-mono); font-size:13pt; font-weight:700; line-height:1.1; letter-spacing:.06em; text-align:center; overflow-wrap:anywhere; }
+.label-awb .label-eyebrow { font-family:var(--font-text); font-weight:400; letter-spacing:.08em; }
+/* Recipient: name, phone and address step down together with the density tier, so a short
+   address prints large for a courier at arm's length and the 484-character ceiling fits.
+   Up to "long" the name and phone stack; from "dense" they share the PENERIMA line. The
+   street clamps; the area lines (kecamatan, kota, provinsi, kode pos) always print. */
+.label-recipient { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; margin-top:2.2mm; }
+.label-recipient > * { flex:none; min-width:0; }
+.label-recipient-id > span { display:block; }
+.label-recipient-id .label-eyebrow { margin-bottom:.4mm; }
+.label-recipient .label-party-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:14pt; font-weight:800; line-height:1.12; overflow-wrap:anywhere; }
+.label-recipient .label-party-phone { margin-top:.2mm; font-size:12.5pt; font-weight:700; line-height:1.15; letter-spacing:.02em; white-space:nowrap; }
+.label-recipient .label-party-address { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; margin-top:1mm !important; font-size:9.5pt; line-height:1.18; overflow-wrap:anywhere; }
+.label-recipient .label-party-area { font-size:9.5pt; font-weight:700; line-height:1.18; overflow-wrap:anywhere; }
+.label-party-region { display:flex; align-items:baseline; justify-content:space-between; gap:3mm; }
+.label-postal { flex:none; font-weight:800; letter-spacing:.04em; }
+.label-recipient[data-density="long"] .label-party-name { font-size:12pt; }
+.label-recipient[data-density="long"] .label-party-phone { font-size:11pt; }
+.label-recipient[data-density="long"] .label-party-address { -webkit-line-clamp:4; font-size:8.5pt; line-height:1.15; }
+.label-recipient[data-density="long"] .label-party-area { font-size:8.5pt; line-height:1.15; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) { margin-top:1.2mm; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-id > span { display:inline; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-id .label-eyebrow { margin-right:1mm; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-party-phone { margin-left:1.5mm; }
+.label-recipient[data-density="dense"] .label-recipient-id { font-size:11pt; line-height:1.15; }
+.label-recipient[data-density="dense"] .label-party-name { font-size:11pt; }
+.label-recipient[data-density="dense"] .label-party-phone { font-size:10.5pt; }
+.label-recipient[data-density="dense"] .label-party-address { -webkit-line-clamp:6; margin-top:.6mm !important; font-size:7.5pt; line-height:1.12; }
+.label-recipient[data-density="dense"] .label-party-area { font-size:7.5pt; line-height:1.12; }
+.label-recipient[data-density="ultra"] .label-recipient-id { font-size:10pt; line-height:1.12; }
+.label-recipient[data-density="ultra"] .label-party-name { font-size:10pt; }
+.label-recipient[data-density="ultra"] .label-party-phone { font-size:9.5pt; }
+.label-recipient[data-density="ultra"] .label-party-address { -webkit-line-clamp:var(--street-lines,7); margin-top:.4mm !important; font-size:7pt; line-height:1.1; }
+.label-recipient[data-density="ultra"] .label-party-area { font-size:7pt; line-height:1.1; }
+/* The only rule on the package: between the recipient and the sender. */
+.label-sender { margin-top:1.2mm; padding-top:1.2mm; border-top:1px solid #000; }
+.label-sender-line { overflow:hidden; font-size:8pt; line-height:1.2; white-space:nowrap; text-overflow:ellipsis; }
+.label-sender-line .label-eyebrow { margin-right:1mm; }
+.label-sender .label-party-name, .label-sender .label-party-phone { font-weight:700; }
+.label-sender-origin { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:7.5pt; line-height:1.15; overflow-wrap:anywhere; }
+.label-payment-block { margin-top:1.6mm; }
+.label-payment { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; line-height:1.15; }
+.label-payment span { font-size:8pt; font-weight:800; letter-spacing:.04em; }
+/* The amount to collect: the one solid block. Backgrounds print only when asked to. */
+.label-payment[data-cod] { padding:.6mm 2mm; color:#fff; background:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .label-payment b { font-size:13pt; font-weight:800; }
-.label-money { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; margin-top:.5mm; font-size:7pt; line-height:1.15; }
+.label-money { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 4mm; margin-top:.6mm; font-size:7pt; line-height:1.15; }
 .label-money > div { display:flex; justify-content:space-between; gap:1mm; }
-.label-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 3mm; font-size:7.5pt; line-height:1.15; }
-.label-facts > div { display:grid; grid-template-columns:auto minmax(0,1fr); gap:0 1.2mm; min-width:0; }
-.label-facts-wide { grid-column:1 / -1; }
-.label-facts dt { font-weight:700; white-space:nowrap; }
-.label-facts dd { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.label-footer { font-size:7pt; line-height:1.2; }
+.label-facts { margin-top:1.4mm; font-size:7.5pt; line-height:1.2; }
+.label-facts-line:first-child { display:flex; white-space:nowrap; }
+.label-facts-line:first-child > b { margin-right:1mm; }
+.label-facts-content { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.label-facts-weight { flex:none; white-space:pre; }
+.label-footer { margin-top:.8mm; font-size:7pt; line-height:1.2; }
+.label-footer p { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .label-cut { position:absolute; left:0; right:0; top:100mm; height:4mm; margin-top:-2mm; display:flex; align-items:center; gap:1.5mm; padding-inline:1mm; }
 .label-cut-rule { flex:1; height:0; border-top:2px dashed #000; }
 .label-cut-mark { display:flex; align-items:center; gap:1mm; font-size:7pt; font-weight:700; white-space:nowrap; }
 .label-cut-icon { width:3.5mm; height:3.5mm; stroke-width:2.25; }
 .label-stub { display:grid; height:50mm; padding:3mm; grid-template-rows:4.5mm 6.5mm 15mm minmax(0,1fr); overflow:hidden; }
 .label-stub > * { min-width:0; overflow:hidden; }
-.label-stub-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; border-bottom:1px solid #000; }
+.label-stub-head { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; }
 .label-stub-title { flex:none; font-size:7pt; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
 .label-stub-outlet { min-width:0; overflow:hidden; font-size:8pt; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
 .label-stub-service { display:flex; align-items:baseline; justify-content:space-between; gap:2mm; padding-top:.6mm; }
@@ -81,10 +103,10 @@
 .label-stub .label-service { font-size:9pt; }
 .label-stub-payment { flex:none; font-size:8pt; font-weight:700; }
 .label-stub-payment b { font-size:11pt; font-weight:800; }
-.label-stub .label-awb { font-size:11pt; }
-.label-stub-facts { display:grid; align-content:start; gap:.8mm; padding-top:1.2mm; font-size:10pt; line-height:1.2; }
-.label-stub-facts > div { display:grid; grid-template-columns:21mm minmax(0,1fr); align-items:baseline; gap:1.5mm; }
-.label-stub-facts dt { font-size:8pt; font-weight:400; }
+.label-stub .label-awb { font-size:12pt; }
+.label-stub-facts { display:grid; align-content:start; gap:.6mm; padding-top:1.2mm; font-size:9pt; line-height:1.2; }
+.label-stub-facts > div { display:grid; grid-template-columns:19mm minmax(0,1fr); align-items:baseline; gap:1.5mm; }
+.label-stub-facts dt { font-size:7.5pt; font-weight:400; }
 .label-stub-facts dd { min-width:0; overflow:hidden; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }
 @page label-100x150 { size:100mm 150mm; margin:0; }
 @page label-100x100 { size:100mm 100mm; margin:0; }

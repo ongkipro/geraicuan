@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 
 import { PlatformContextDeniedError, withPlatformContext } from "@/db/platform-context";
-import { listTenantUsage, PLATFORM_HEALTH_THRESHOLDS, readPlatformCounts, readPlatformHealth } from "@/db/platform-monitoring-repository";
+import { listAuditEvents, listTenantUsage, PLATFORM_HEALTH_THRESHOLDS, readPlatformCounts, readPlatformHealth, readTrend } from "@/db/platform-monitoring-repository";
 import * as schema from "@/db/schema";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { parsePlatformFilters } from "@/lib/platform-monitoring-filters";
@@ -70,5 +70,41 @@ describe("platform monitoring trust boundary",()=>{
     const parsed=parsePlatformFilters({tz:"Mars/Base",status:"mystery",outlet:outletA,q:"x",extra:"1"},{route:"/platform/tenant",now,knownTenantIds:[tenantA,tenantB],knownOutletIds:[outletA],knownCouriers:["JNE"]});
     expect(parsed.issues).toEqual(expect.arrayContaining(["tz_tidak_dikenal","status_tidak_dikenal","outlet_tanpa_tenant","kata_kunci_terlalu_pendek","parameter_tidak_dikenal"]));
     const stable=parsePlatformFilters(Object.fromEntries(parsed.canonicalQuery),{route:"/platform/tenant",now,knownTenantIds:[tenantA,tenantB],knownOutletIds:[outletA],knownCouriers:["JNE"]});expect(stable.canonicalQuery.toString()).toBe(parsed.canonicalQuery.toString());
+  });
+
+  it("T-257: binds each status strip count to the rows its filter lists, the audit filters, trend totals and member counts",async()=>{
+    await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,created_at) VALUES ('monitor-super','SUPER_ADMIN',$1,'TENANT_SUSPENDED','TENANT',$2,'SUCCESS','2026-08-29T00:00:00Z'),('monitor-super','SUPER_ADMIN',NULL,'PLATFORM_MONITORING_VIEWED','PLATFORM','platform','SUCCESS','2026-08-29T01:00:00Z')",[tenantB,tenantB]);
+    const range=parseAnalyticsRange({rentang:"30-hari",tz:"Asia/Jakarta"},now);
+    const filters={range,scope:{kind:"global"} as const,outletId:null,courier:null,status:null,outcome:null,query:null,page:1};
+    const r=await withPlatformContext(appDb,"monitor-super",async tx=>{
+      const all=await listTenantUsage(tx,filters,25);
+      const byStatus:Record<string,Awaited<ReturnType<typeof listTenantUsage>>>={};
+      for(const status of ["ACTIVE","SUSPENDED","PROVISIONING","ARCHIVED"] as const)byStatus[status]=await listTenantUsage(tx,{...filters,tenantStatus:status},25);
+      const searched=await listTenantUsage(tx,{...filters,query:"alp"},25);
+      const suspended=await listAuditEvents(tx,{...filters,action:"TENANT_SUSPENDED"},25);
+      const everything=await listAuditEvents(tx,filters,25);
+      const feed=await listAuditEvents(tx,filters,25,{hideMonitoringViews:true});
+      const trend=await readTrend(tx,filters);const counts=await readPlatformCounts(tx,filters);
+      const tenantCounts=await readPlatformCounts(tx,{...filters,scope:{kind:"tenant",tenantId:tenantA}});
+      return{all,byStatus,searched,suspended,everything,feed,trend,counts,tenantCounts};
+    });
+    // PLT-TEN-*: each count equals the rows (and total) its status filter returns; the four sum to Semua.
+    expect(r.all.statusCounts).toEqual({all:2,ACTIVE:1,SUSPENDED:1,PROVISIONING:0,ARCHIVED:0});
+    for(const [status,page] of Object.entries(r.byStatus)){
+      expect(page.total).toBe(r.all.statusCounts[status as "ACTIVE"]);expect(page.rows).toHaveLength(page.total);
+      expect(page.rows.every(row=>row.status===status)).toBe(true);expect(page.statusCounts).toEqual(r.all.statusCounts);
+    }
+    expect(r.searched.statusCounts).toEqual({all:1,ACTIVE:1,SUSPENDED:0,PROVISIONING:0,ARCHIVED:0});
+    // aksi filter and the Ringkasan/detail feed without monitoring views.
+    expect(r.suspended.rows.map(row=>[row.action,row.tenantId])).toEqual([["TENANT_SUSPENDED",tenantB]]);
+    expect(r.everything.rows.some(row=>row.action==="PLATFORM_MONITORING_VIEWED")).toBe(true);
+    expect(r.feed.rows.some(row=>row.action==="PLATFORM_MONITORING_VIEWED")).toBe(false);
+    expect(r.feed.total).toBe(r.everything.total-r.everything.rows.filter(row=>row.action==="PLATFORM_MONITORING_VIEWED").length);
+    // PLT-TREND-TOTALS equal SHP-CREATED / SHP-ISSUED of the same filters.
+    expect(r.trend.reduce((sum,bucket)=>sum+bucket.created,0)).toBe(r.counts.lifecycle.shipments);
+    expect(r.trend.reduce((sum,bucket)=>sum+bucket.issued,0)).toBe(r.counts.lifecycle.issued);
+    // PLT-TD-MEMBER-ACTIVE: the gerai's own active members by role, never another gerai's.
+    expect(r.tenantCounts.memberships).toMatchObject({active:1,tenantAdmins:1,operators:0});
+    expect(r.tenantCounts.outlets).toMatchObject({total:1,configured:1});
   });
 });

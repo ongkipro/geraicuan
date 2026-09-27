@@ -1,6 +1,7 @@
 // T-176 — thermal label: sizes, the sender stub and its exclusions, Code 128.
 // Print geometry (page box, cut line, quiet zone, text floor, black-on-white) is
 // measured in a real browser by scripts/ui-audit/thermal-label.mjs.
+import { readFileSync } from "node:fs";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -10,7 +11,8 @@ import { LabelPrintContext, type LabelPrintContextValue } from "@/app/app/label/
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import { CODE128_PATTERNS, CODE128_QUIET_ZONE_MODULES, encodeCode128B } from "@/lib/code128";
-import { formatWibDateTime } from "@/lib/label-format";
+import { formatAddressArea, formatPhoneGroups, formatWibDateTime, recipientDensity } from "@/lib/label-format";
+import { geraiSenderIdentity } from "@/lib/shipment-draft-logic";
 import {
   DEFAULT_LABEL_SIZE,
   labelSizeStorageKey,
@@ -125,8 +127,10 @@ describe("thermal sheet layouts", () => {
     // T-243: the courier prints as its black print logo (alt "JNE"), the service beside it.
     expect(packageOf(render(printableLabel()))).toContain('alt="JNE" class="label-courier-logo" src="/couriers/print/jne.svg"');
     for (const expected of [
-      "REG", "JX1234567890", RECIPIENT.name, RECIPIENT.phone, RECIPIENT.address, AREA,
-      SENDER.name, SENDER.phone, SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 457.226",
+      // T-255: phones grouped for reading (same digits), the area as its hierarchy lines.
+      "REG", "JX1234567890", RECIPIENT.name, "0813-7777-2222", RECIPIENT.address,
+      "Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta 10240",
+      SENDER.name, "0812-5555-3333", SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 457.226",
       "Nilai barang", "Rp 425.000", "Ongkir Mengantar", "Rp 17.000", "Biaya COD (termasuk PPN)", "Rp 15.226",
       "Kain batik tulis", "2,125 kg · 2 koli", "25 × 18 × 12 cm", "Asuransi Mengantar", "Rp 2.000",
       "GC-10024", formatWibDateTime(new Date("2026-09-14T08:24:00.000Z")),
@@ -197,6 +201,137 @@ describe("thermal sheet layouts", () => {
     expect(stub).toContain("Diserahkan Saat label dicetak");
     expect(stub).not.toContain(formatWibDateTime(new Date("2026-09-01T01:00:00.000Z")));
     expect(stub).not.toContain(formatWibDateTime(new Date("2026-09-14T08:24:00.000Z")));
+  });
+});
+
+// T-255 — the owner's cleaner label: recipient first and largest, one rule, one inverted
+// block for the amount to collect. Print geometry (one page per label, no clipping, 7 pt
+// floor) is measured in a real browser; these pin what prints and in which order.
+describe("T-255 label anatomy", () => {
+  it("prints a service that only repeats the courier once, and strips a repeated courier prefix", () => {
+    const repeated = text(render(printableLabel({ courier: "JT", providerService: "JT" })));
+    expect(repeated).not.toMatch(/\bJT JT\b/);
+    expect(repeated).toMatch(/\bJT\b/);
+    const prefixed = text(render(printableLabel({ courier: "JNE", providerService: "JNE REG" })));
+    expect(prefixed).toMatch(/\bJNE REG\b/);
+    expect(prefixed).not.toMatch(/\bJNE JNE\b/);
+  });
+
+  const recipientOf = (html: string) => html.match(/<div class="label-party label-recipient"[\s\S]*?<\/div>/)?.[0] ?? "";
+
+  it("prints the recipient as name, phone, street, then kecamatan/kota and provinsi with the kode pos last", () => {
+    const html = packageOf(render(printableLabel()));
+    const recipient = recipientOf(html);
+    const order = [
+      "Penerima", RECIPIENT.name, "0813-7777-2222", RECIPIENT.address,
+      "Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta", "10240",
+    ].map((piece) => recipient.indexOf(piece));
+    expect(order.every((index) => index >= 0), String(order)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // The kode pos is bold at the end of the provinsi line, not a separate line.
+    expect(recipient).toMatch(/<p class="label-party-area label-party-region"><span>DKI Jakarta<\/span> <b class="label-postal">10240<\/b><\/p>/);
+    // The recipient reads before the sender, and the sender before the payment.
+    expect(html.indexOf("label-recipient")).toBeLessThan(html.indexOf("label-sender"));
+    expect(html.indexOf("label-sender")).toBeLessThan(html.indexOf("label-payment-block"));
+  });
+
+  it("composes the area lines from the stored label's hierarchy and never invents a part", () => {
+    expect(formatAddressArea(AREA)).toEqual({ lines: ["Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta"], postalCode: "10240" });
+    // No kelurahan: kecamatan, kota / provinsi.
+    expect(formatAddressArea("Coblong, Kota Bandung, Jawa Barat, 40135")).toEqual({ lines: ["Kec. Coblong, Kota Bandung", "Jawa Barat"], postalCode: "40135" });
+    // Counted from the end: a comma inside the kelurahan stays in the kelurahan.
+    expect(formatAddressArea("Kebon Jeruk, Blok A, Kebon Jeruk, Jakarta Barat, DKI Jakarta, 11530").lines)
+      .toEqual(["Kebon Jeruk, Blok A, Kec. Kebon Jeruk, Jakarta Barat", "DKI Jakarta"]);
+    // Kabupaten keeps its stored name; an already prefixed kecamatan is not prefixed twice.
+    expect(formatAddressArea("Caturtunggal, Kecamatan Depok, Kabupaten Sleman, DI Yogyakarta, 55281").lines)
+      .toEqual(["Caturtunggal, Kecamatan Depok, Kabupaten Sleman", "DI Yogyakarta"]);
+    // Fewer than three parts cannot say which is which: printed as stored, no "Kec.".
+    expect(formatAddressArea("Gambir, Jakarta Pusat")).toEqual({ lines: ["Gambir, Jakarta Pusat"], postalCode: null });
+    expect(formatAddressArea(" , 10110")).toEqual({ lines: [], postalCode: "10110" });
+    const noPostal = recipientOf(packageOf(render(printableLabel({ destinationAreaLabel: "Gambir, Jakarta Pusat" }))));
+    expect(noPostal).toContain("Gambir, Jakarta Pusat");
+    expect(noPostal).not.toContain("label-postal");
+    expect(noPostal).not.toContain("Kec.");
+  });
+
+  it("groups phones for reading without changing a digit", () => {
+    for (const [raw, grouped] of [
+      ["081377772222", "0813-7777-2222"],
+      ["08137777222", "0813-7777-222"],
+      ["0813777722223", "0813-7777-22223"],
+      ["0813 7777-2222", "0813-7777-2222"],
+      ["+6281377772222", "+62 813-7777-2222"],
+      ["6281377772222", "62 813-7777-2222"],
+    ] as const) {
+      expect(formatPhoneGroups(raw)).toBe(grouped);
+      expect(formatPhoneGroups(raw).replace(/\D/g, "")).toBe(raw.replace(/\D/g, ""));
+    }
+    // Anything that is not a plain number prints exactly as stored.
+    for (const raw of ["0813-7777-2222 (WA)", "ext 12", "1234567"]) expect(formatPhoneGroups(raw)).toBe(raw);
+  });
+
+  it("prints the sender as stored after masking: the gerai identity when off, the typed identity when on", () => {
+    // Masking off (PR-71): the gerai's name, WhatsApp and pickup street — never Mengantar's pickup name.
+    const gerai = geraiSenderIdentity(
+      { name: "Gerai Sinar", phone: "081234560001" },
+      { pickupAddressLabel: "Gudang Mengantar Pusat, Jl. Pickup 9, Kebon Kacang, Tanah Abang, Jakarta Pusat, DKI Jakarta, 10240" },
+    );
+    const off = text(packageOf(render(printableLabel({ sender: gerai }))));
+    expect(off).toContain("Pengirim Gerai Sinar · 0812-3456-0001 Jl. Pickup 9, Kebon Kacang");
+    expect(off).not.toContain("Gudang Mengantar Pusat");
+    expect(text(render(printableLabel({ sender: gerai })))).not.toContain("Gudang Mengantar Pusat");
+    // Masking on: the operator-typed name, phone and kota print instead, unchanged.
+    const masked = { address: "Kota Bandung", name: "Butik Kirana", phone: "081299990002" };
+    const on = text(packageOf(render(printableLabel({ sender: masked }))));
+    expect(on).toContain("Pengirim Butik Kirana · 0812-9999-0002 Kota Bandung");
+    expect(on).not.toContain("Gerai Sinar");
+  });
+
+  it("inverts only an amount to collect: COD and COD Ongkir in the black block, non-COD as plain text", () => {
+    const payment = (label: PrintableLabel) => packageOf(render(label)).match(/<div class="label-payment"[^>]*>/g) ?? [];
+    expect(payment(printableLabel())).toEqual(['<div class="label-payment" data-cod="">']);
+    expect(payment(printableLabel({ codBreakdown: null, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: 20_000 }))).toEqual(['<div class="label-payment" data-cod="">']);
+    const nonCod = printableLabel({ codBreakdown: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null });
+    expect(payment(nonCod)).toEqual(['<div class="label-payment">']);
+    expect(text(packageOf(render(nonCod)))).toContain("NON-COD — JANGAN TAGIH PENERIMA");
+    // The stylesheet fills only [data-cod], and keeps that fill when printing.
+    const css = readFileSync("src/app/label.css", "utf8");
+    expect(css).toMatch(/\.label-payment\[data-cod\] \{[^}]*background:#000;[^}]*print-color-adjust:exact;/);
+    expect(css.match(/background:#000/g)).toHaveLength(1);
+  });
+
+  it("keeps a long address on the label: smallest tier, one merged area line, kode pos kept", () => {
+    const address = "Jl. Raya Kebon Jeruk Gg. Haji Mawar No. 17B RT 004 RW 011 ".repeat(9).slice(0, 484);
+    const label = printableLabel({ recipient: { ...RECIPIENT, address } });
+    expect(recipientDensity({ addressLength: 484, areaLabelLength: AREA.length, nameLength: RECIPIENT.name.length })).toMatchObject({ omitAreaLine: true, overCapacity: false, tier: "ultra" });
+    for (const size of ["10x15", "10x10"] as const) {
+      const recipient = recipientOf(packageOf(render(label, { size })));
+      expect(recipient).toContain('data-density="ultra"');
+      expect(recipient).toContain(address.trim());
+      // Past 480 characters the two area lines share one line instead of dropping it.
+      expect(recipient.match(/class="label-party-area/g)).toHaveLength(1);
+      expect(recipient).toContain("Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat, DKI Jakarta</span> <b class=\"label-postal\">10240</b>");
+    }
+    // In the browser the street clamps last (label.css --street-lines) so the area lines print whole.
+    expect(readFileSync("src/app/label.css", "utf8")).toContain('.label-recipient[data-density="ultra"] .label-party-address { -webkit-line-clamp:var(--street-lines,7);');
+  });
+
+  it("prints the same package label at 10 × 10 cm, only without the stub", () => {
+    const wide = packageOf(render(printableLabel()));
+    const square = packageOf(render(printableLabel(), { size: "10x10" }));
+    expect(square).toBe(wide);
+  });
+
+  it("widens the package barcode to the largest whole-dot module that fits 94 mm", () => {
+    const symbol = encodeCode128B("JX1234567890")!;
+    const width = packageOf(render(printableLabel())).match(/<svg[^>]*class="label-barcode"[^>]*style="height:10mm;width:([\d.]+)mm"/)?.[1];
+    expect(Number(width)).toBe(symbol.modules * 0.5);
+    expect(symbol.modules * 0.5).toBeLessThanOrEqual(THERMAL.contentWidthMm);
+    // A longer AWB steps down to 3 dots, then 2; the encoded bars are the same.
+    const spx = encodeCode128B("SPXID048001169536")!;
+    const spxWidth = renderToStaticMarkup(createElement(LabelBarcode, { fill: true, heightMm: 10, value: "SPXID048001169536" })).match(/width:([\d.]+)mm/)?.[1];
+    expect(Number(spxWidth)).toBe(spx.modules * 0.375);
+    expect(renderToStaticMarkup(createElement(LabelBarcode, { fill: true, heightMm: 10, value: "A".repeat(29) }))).toContain(`width:${(20 + 11 * 31 + 13) * 0.25}mm`);
   });
 });
 

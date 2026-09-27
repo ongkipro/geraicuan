@@ -138,3 +138,42 @@ export function parseAreaRegion(areaLabel: string | null | undefined): {
   const entry = (name: string) => ({ key: name.toLocaleUpperCase("id-ID"), name: areaDisplayCase(name) });
   return { city: entry(city), province: entry(province) };
 }
+
+/**
+ * T-255: a phone grouped for reading at arm's length, "081234567890" → "0812-3456-7890".
+ * Formatting only: the digits and their order never change, and anything that is not a
+ * plain (+)digit string is returned as stored. "+62"/"62" stays in front as its own group.
+ */
+export function formatPhoneGroups(phone: string) {
+  const compact = phone.replace(/[\s-]/g, "");
+  if (!/^\+?\d{8,15}$/.test(compact)) return phone;
+  const country = /^\+?62/.exec(compact)?.[0] ?? "";
+  const digits = compact.slice(country.length);
+  const groups = [digits.slice(0, country ? 3 : 4)];
+  let rest = digits.slice(groups[0].length);
+  while (rest.length > 5) {
+    groups.push(rest.slice(0, 4));
+    rest = rest.slice(4);
+  }
+  if (rest) groups.push(rest);
+  return `${country ? `${country} ` : ""}${groups.join("-")}`;
+}
+
+/**
+ * T-255: the destination area as the label's address lines 2 and 3, read from the stored
+ * Mengantar area label ("kelurahan, kecamatan, kota/kabupaten, provinsi, kode pos") counted
+ * from the end like `formatDistrictCity`, so a comma inside the kelurahan never shifts it.
+ * Line 2 is "kelurahan, Kec. kecamatan, kota" and line 3 the province; the postal code is
+ * returned apart so it can print bold at the end of the last line. Nothing is invented:
+ * only "Kec." is added before the part that sits in the kecamatan position, and a label
+ * with fewer than three area parts cannot say which part is which, so it prints as stored.
+ */
+export function formatAddressArea(areaLabel: string): { lines: string[]; postalCode: string | null } {
+  const parts = areaLabel.split(",").map((part) => part.trim()).filter(Boolean);
+  const postalCode = parts.length > 0 && /^\d{5}$/.test(parts[parts.length - 1]) ? parts.pop()! : null;
+  if (parts.length < 3) return { lines: parts.length > 0 ? [parts.join(", ")] : [], postalCode };
+  const [district, city, province] = parts.slice(-3);
+  const kelurahan = parts.slice(0, -3).join(", ");
+  const kecamatan = /^kec(\.|amatan\b)/i.test(district) ? district : `Kec. ${district}`;
+  return { lines: [[kelurahan, kecamatan, city].filter(Boolean).join(", "), province], postalCode };
+}

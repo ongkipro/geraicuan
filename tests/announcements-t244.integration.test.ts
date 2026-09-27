@@ -10,6 +10,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnnouncementFeed } from "@/app/app/info/announcement-parts";
+import { UnreadInfoNotice } from "@/app/app/info/unread-info-notice";
 import {
   AnnouncementStateError,
   countUnreadAnnouncements,
@@ -23,7 +24,19 @@ import {
 import { withPlatformContext } from "@/db/platform-context";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
-import { announcementIsLong, announcementStatus, parseAnnouncementForm } from "@/lib/announcements";
+import {
+  type AnnouncementCategory,
+  announcementIsLong,
+  announcementResultMessage,
+  announcementStatus,
+  countAnnouncementsByCategory,
+  formatAnnouncementAge,
+  parseAnnouncementCategoryParam,
+  parseAnnouncementForm,
+  parsePlatformAnnouncementView,
+  unreadInfoLabel,
+  viewPlatformAnnouncements,
+} from "@/lib/announcements";
 import { platformCmsNavigation, tenantCmsNavigation } from "@/lib/cms-shell-navigation";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
@@ -316,27 +329,35 @@ describe("Info terbaru presentation (T-244)", () => {
     ...overrides,
   });
 
-  it("renders the body as escaped text with its line breaks, never as HTML", () => {
-    const html = renderToStaticMarkup(createElement(AnnouncementFeed, {
-      rows: [announcement({ body: "<script>alert(1)</script>\n**tebal**", title: "<b>Judul</b>" })],
+  // T-256: the feed takes the server's clock and the category counts; the default is "Semua".
+  const NOW = new Date("2026-09-26T05:00:00.000Z"); // 26 Sep 2026, 12.00 WIB
+  const feed = (rows: TenantAnnouncement[], selected: AnnouncementCategory | null = null, all = rows) =>
+    renderToStaticMarkup(createElement(AnnouncementFeed, {
+      counts: countAnnouncementsByCategory(all),
+      now: NOW,
+      rows: selected ? rows.filter((row) => row.category === selected) : rows,
+      selected,
     }));
+
+  it("renders the body as escaped text with its line breaks, never as HTML", () => {
+    const html = feed([announcement({ body: "<script>alert(1)</script>\n**tebal**", title: "<b>Judul</b>" })]);
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<b>Judul");
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;\n**tebal**");
     expect(html).toContain("whitespace-pre-line");
     expect(html).toContain("Fitur baru");
-    expect(html).toContain("26 Sep 2026");
-    expect(html).toContain("WIB");
+    // T-256: the age is the visible date; the WIB date and time sit in `title` and `dateTime`.
+    expect(html).toContain('dateTime="2026-09-26T02:00:00.000Z"');
+    expect(html).toContain('title="26 Sep 2026, 09.00 WIB"');
+    expect(html).toContain(">3 jam lalu</time>");
   });
 
   it("marks unread cards Baru, pinned cards Disematkan, and expands only a long body", () => {
     const long = "Baris panjang ".repeat(40);
-    const html = renderToStaticMarkup(createElement(AnnouncementFeed, {
-      rows: [
-        announcement({ body: long, id: "00000000-0000-4000-8000-000000000002", pinned: true }),
-        announcement({ id: "00000000-0000-4000-8000-000000000003", read: true }),
-      ],
-    }));
+    const html = feed([
+      announcement({ body: long, id: "00000000-0000-4000-8000-000000000002", pinned: true }),
+      announcement({ id: "00000000-0000-4000-8000-000000000003", read: true }),
+    ]);
     expect(announcementIsLong(long)).toBe(true);
     expect(announcementIsLong("a\nb\nc\nd\ne")).toBe(true);
     expect(announcementIsLong("pendek")).toBe(false);
@@ -346,6 +367,106 @@ describe("Info terbaru presentation (T-244)", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('data-new="true"');
     expect(html).toContain('data-new="false"');
+    expect(html).toContain('data-pinned="true"');
+  });
+
+  // T-256: "Baru" is the read state the server saw before this view's receipt, not a later refresh.
+  it("marks Baru exactly the rows that were unread when the page loaded, bold with a dot", () => {
+    const html = feed([
+      announcement({ id: "00000000-0000-4000-8000-000000000011", read: false, title: "Belum dibaca" }),
+      announcement({ id: "00000000-0000-4000-8000-000000000012", read: true, title: "Sudah dibaca" }),
+    ]);
+    const cards = html.split('data-slot="card"').slice(1);
+    expect(cards[0]).toContain('data-new="true"');
+    expect(cards[0]).toContain('<span class="font-bold">Belum dibaca</span>');
+    expect(cards[0]).toContain(">Baru<");
+    expect(cards[1]).toContain('<span class="font-semibold">Sudah dibaca</span>');
+    expect(cards[1]).not.toContain(">Baru<");
+  });
+
+  it("filters by category with counts per category, and explains an empty category", () => {
+    const rows = [
+      announcement({ category: "INFO_KURIR", id: "00000000-0000-4000-8000-000000000021" }),
+      announcement({ category: "INFO_KURIR", id: "00000000-0000-4000-8000-000000000022" }),
+      announcement({ category: "JADWAL", id: "00000000-0000-4000-8000-000000000023" }),
+    ];
+    expect(countAnnouncementsByCategory(rows)).toEqual({ FITUR_BARU: 0, INFO_KURIR: 2, JADWAL: 1, LAINNYA: 0, PEMELIHARAAN: 0, all: 3 });
+    expect(parseAnnouncementCategoryParam("info-kurir")).toBe("INFO_KURIR");
+    expect(parseAnnouncementCategoryParam("INFO_KURIR")).toBeNull();
+    expect(parseAnnouncementCategoryParam(["jadwal"])).toBeNull();
+
+    const all = feed(rows);
+    const link = (html: string, label: string) => html.match(new RegExp(`<a[^>]*>${label}<span[^>]*>(\\d+)</span></a>`))?.[0] ?? "";
+    expect(link(all, "Semua")).toContain('aria-current="page"');
+    expect(link(all, "Semua")).toContain(">3</span>");
+    expect(link(all, "Info kurir")).toContain('href="/app/info?kategori=info-kurir"');
+    expect(link(all, "Info kurir")).toContain(">2</span>");
+    expect(link(all, "Pemeliharaan")).toContain(">0</span>");
+
+    const courier = feed(rows, "INFO_KURIR", rows);
+    expect(courier.match(/role="article"/g)).toHaveLength(2);
+    expect(link(courier, "Info kurir")).toContain('aria-current="page"');
+    expect(link(courier, "Semua")).not.toContain("aria-current");
+
+    const empty = feed(rows, "PEMELIHARAAN", rows);
+    expect(empty).not.toContain('role="article"');
+    expect(empty).toContain("Belum ada info pemeliharaan");
+    expect(empty).toContain('href="/app/info"');
+    expect(feed([])).toContain("Belum ada info");
+    expect(feed([])).not.toContain('aria-label="Kategori info"');
+  });
+
+  it("formats the age in WIB against a fixed clock", () => {
+    const at = (iso: string) => formatAnnouncementAge(new Date(iso), NOW);
+    expect(at("2026-09-26T04:59:40.000Z")).toBe("Baru saja");
+    expect(at("2026-09-26T05:00:30.000Z")).toBe("Baru saja"); // a clock a few seconds ahead
+    expect(at("2026-09-26T04:15:00.000Z")).toBe("45 menit lalu");
+    expect(at("2026-09-25T17:30:00.000Z")).toBe("11 jam lalu"); // 00.30 WIB today
+    expect(at("2026-09-25T04:00:00.000Z")).toBe("Kemarin"); // 25 Sep, 11.00 WIB
+    expect(at("2026-09-23T03:00:00.000Z")).toBe("3 hari lalu");
+    expect(at("2026-09-20T01:00:00.000Z")).toBe("6 hari lalu");
+    expect(at("2026-09-19T01:00:00.000Z")).toBe("19 Sep 2026");
+    // Days count WIB calendar days, not UTC: 01.00 WIB on 25 Sep is still 24 Sep in UTC.
+    expect(at("2026-09-24T18:00:00.000Z")).toBe("Kemarin");
+    expect(at("2026-09-24T16:30:00.000Z")).toBe("2 hari lalu"); // 23.30 WIB on 24 Sep
+  });
+
+  it("words unread info the same on the Dasbor line and the sidebar badge", () => {
+    expect(unreadInfoLabel(3)).toBe("3 info baru");
+    expect(unreadInfoLabel(150)).toBe("99+ info baru");
+    const notice = renderToStaticMarkup(createElement(UnreadInfoNotice, { count: 3 }));
+    expect(notice.replace(/<[^>]+>/g, "").replace(/\s+/g, " ")).toContain("3 info baru");
+    expect(notice).toContain('href="/app/info"');
+    expect(notice).toContain('role="status"');
+    expect(renderToStaticMarkup(createElement(UnreadInfoNotice, { count: 0 }))).toBe("");
+  });
+
+  // T-256 (T-244 review): the page-level line names the result and never keeps an older one.
+  it("words each save and takedown result, including the takedown", () => {
+    expect(announcementResultMessage("unpublished", "Libur", true)).toBe("“Libur” diturunkan dan kembali menjadi draf. Gerai tidak lagi melihatnya.");
+    expect(announcementResultMessage("saved", "Libur", false)).toBe("“Libur” disimpan sebagai draf. Gerai belum melihatnya.");
+    expect(announcementResultMessage("published", "Libur", false)).toBe("“Libur” tayang di Info terbaru semua gerai.");
+    expect(announcementResultMessage("published", "Libur", true)).toBe("Perubahan “Libur” tersimpan dan tetap tayang.");
+    expect(announcementResultMessage("saved", "Libur", true)).toContain("diturunkan dan disimpan sebagai draf");
+  });
+
+  it("filters the Admin platform list by status and orders it by its shown date", () => {
+    const row = (id: string, publishedAt: string | null, updatedAt: string) => ({ id, publishedAt: publishedAt ? new Date(publishedAt) : null, updatedAt: new Date(updatedAt) });
+    const rows = [
+      row("a", "2026-09-20T00:00:00Z", "2026-09-26T00:00:00Z"),
+      row("b", null, "2026-09-25T00:00:00Z"),
+      row("c", "2026-09-24T00:00:00Z", "2026-09-24T00:00:00Z"),
+    ];
+    const ids = (view: Parameters<typeof viewPlatformAnnouncements>[1]) => viewPlatformAnnouncements(rows, view).map((item) => item.id);
+    expect(parsePlatformAnnouncementView({})).toEqual({ order: "terbaru", status: "semua" });
+    expect(parsePlatformAnnouncementView({ status: "draf", urut: "terlama" })).toEqual({ order: "terlama", status: "draf" });
+    expect(parsePlatformAnnouncementView({ status: "x", urut: ["terlama"] })).toEqual({ order: "terbaru", status: "semua" });
+    // A published row sorts by its publish date, not a later edit.
+    expect(ids({ order: "terbaru", status: "semua" })).toEqual(["b", "c", "a"]);
+    expect(ids({ order: "terlama", status: "semua" })).toEqual(["a", "c", "b"]);
+    expect(ids({ order: "terbaru", status: "tayang" })).toEqual(["c", "a"]);
+    expect(ids({ order: "terbaru", status: "draf" })).toEqual(["b"]);
+    expect(rows.map((item) => item.id)).toEqual(["a", "b", "c"]);
   });
 
   it("parses the form: trims, folds CRLF, reads the pin and the intent", () => {

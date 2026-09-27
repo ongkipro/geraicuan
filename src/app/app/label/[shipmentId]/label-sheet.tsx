@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, type CSSProperties } from "react";
+import { useContext, useLayoutEffect, useRef, type CSSProperties } from "react";
 
 import { useGeraiBrand } from "@/app/app/brand/gerai-brand";
 import { courierPrintLogoSrc } from "@/lib/gerai-settings";
@@ -15,25 +15,34 @@ import {
   type LabelFieldsBySize,
 } from "@/lib/label-fields";
 import {
+  formatAddressArea,
   formatDimensions,
   formatDistrictCity,
   formatIdr,
+  formatPhoneGroups,
   formatWeight,
   formatWibDateTime,
   recipientDensity,
 } from "@/lib/label-format";
 import { THERMAL } from "@/lib/label-size";
 
-/** "JNE REG" under a "JNE" heading reads twice; print the service alone when it repeats the courier. */
+const DENSITY_TIERS = ["compact", "long", "dense", "ultra"] as const;
+/** The street's line clamp at the "ultra" tier (label.css `--street-lines` default). */
+const ULTRA_STREET_LINES = 7;
+
+/**
+ * "JNE REG" under a "JNE" heading reads twice; print the service alone when it repeats the courier,
+ * and nothing when the service is only the courier again ("JT" under "JT").
+ */
 function serviceName(courier: string, service: string) {
+  if (service.trim().toUpperCase() === courier.trim().toUpperCase()) return "";
   return service.toUpperCase().startsWith(`${courier.toUpperCase()} `) ? service.slice(courier.length + 1) : service;
 }
 
 /*
- * T-243: the gerai logo and the catatan resi. Inline styles keep `label.css` byte-identical
- * and the row template untouched: the logo sits in the 8 mm head row's own box (at most
- * 7 × 20 mm, grayscale for the thermal head), and the catatan takes the sender row's second
- * line (the sender line clamps to one), so every other row keeps its position and size.
+ * T-243: the gerai logo and the catatan resi. The logo sits in the 8 mm head row's own box
+ * (at most 7 × 20 mm, grayscale for the thermal head); the catatan takes the sender origin's
+ * second line (the origin clamps to one), so the sender block never grows (T-255).
  */
 const BRAND_STYLE: CSSProperties = { alignSelf: "center", display: "flex", alignItems: "center", gap: "1.5mm", minWidth: 0 };
 const LOGO_STYLE: CSSProperties = {
@@ -83,6 +92,31 @@ function LabelPackage({ label, logoSrc, note, shown }: {
     addressLength: cityProvince === null ? label.recipient.address.length : 0,
     areaLabelLength: cityProvince === null ? label.destinationAreaLabel.length : cityProvince.length,
   });
+  const recipientRef = useRef<HTMLDivElement>(null);
+  // T-255: the tier is an estimate from character counts; after layout, step down while the
+  // recipient block still overflows (a long name wraps, a long kelurahan wraps), so the
+  // address never clips. Starts from the estimate each render, so freed room scales back up.
+  useLayoutEffect(() => {
+    const element = recipientRef.current;
+    if (!element) return;
+    const fit = () => {
+      let index = DENSITY_TIERS.indexOf(recipientLayout.tier);
+      element.dataset.density = DENSITY_TIERS[index];
+      element.style.removeProperty("--street-lines");
+      const overflowing = () => element.scrollHeight > element.clientHeight + 1;
+      while (overflowing() && index < DENSITY_TIERS.length - 1) element.dataset.density = DENSITY_TIERS[++index];
+      // Last resort at the smallest type: the street gives up lines (with an ellipsis) so the
+      // kecamatan, kota, provinsi and kode pos lines still print whole.
+      for (let lines = ULTRA_STREET_LINES - 1; overflowing() && lines >= 2; lines -= 1) {
+        element.style.setProperty("--street-lines", String(lines));
+      }
+    };
+    fit();
+    void document.fonts?.ready.then(fit);
+  });
+  const area = formatAddressArea(label.destinationAreaLabel);
+  // Past the 480-character tier the two area lines share one line, so the street keeps its room.
+  const areaLines = recipientLayout.omitAreaLine ? [area.lines.join(", ")] : area.lines;
   const courierLogoSrc = shown.courierLogo ? courierPrintLogoSrc(label.courier) : null;
   const dimensions = formatDimensions(label.package.lengthCm, label.package.widthCm, label.package.heightCm);
   const insurance = label.insuranceAmountIdr === null ? "Tidak ada" : formatIdr(label.insuranceAmountIdr);
@@ -113,52 +147,65 @@ function LabelPackage({ label, logoSrc, note, shown }: {
       </div>
 
       <div className="label-awb-block">
-        <LabelBarcode heightMm={THERMAL.packageBarHeightMm} value={label.awb} />
+        <LabelBarcode fill heightMm={THERMAL.packageBarHeightMm} value={label.awb} />
         <p className="label-awb"><span className="label-eyebrow">Resi</span> {label.awb}</p>
       </div>
 
-      <div className="label-party label-recipient" data-density={recipientLayout.tier}>
-        <p className="label-party-line">
+      {/* T-255: the recipient reads first — name, phone, then the address from street to
+          province, the kode pos bold at the end of the last line. */}
+      <div className="label-party label-recipient" data-density={recipientLayout.tier} ref={recipientRef}>
+        <p className="label-recipient-id">
           <span className="label-eyebrow">Penerima</span>
           {shown.recipientName ? <>{" "}<span className="label-party-name">{label.recipient.name}</span></> : null}
-          {shown.recipientPhone ? <>{" "}<span className="label-party-phone">{label.recipient.phone}</span></> : null}
+          {shown.recipientPhone ? <>{" "}<span className="label-party-phone">{formatPhoneGroups(label.recipient.phone)}</span></> : null}
         </p>
         {cityProvince !== null ? (
           <p className="label-party-area">{cityProvince}</p>
         ) : (
           <>
-            {recipientLayout.omitAreaLine ? null : (
-              <p className="label-party-area">{label.destinationAreaLabel}</p>
-            )}
             <p className="label-party-address">{label.recipient.address}</p>
+            {areaLines.map((line, index) => {
+              const last = index === areaLines.length - 1;
+              return (
+                <p className={last ? "label-party-area label-party-region" : "label-party-area"} key={index}>
+                  <span>{line}</span>
+                  {last && area.postalCode ? <>{" "}<b className="label-postal">{area.postalCode}</b></> : null}
+                </p>
+              );
+            })}
+            {areaLines.length === 0 && area.postalCode ? (
+              <p className="label-party-area label-party-region"><b className="label-postal">{area.postalCode}</b></p>
+            ) : null}
           </>
         )}
       </div>
 
       <div className="label-party label-sender">
-        <p className="label-sender-line" style={note ? { WebkitLineClamp: 1 } : undefined}>
+        <p className="label-sender-line">
           <span className="label-eyebrow">Pengirim</span>{" "}
           <span className="label-party-name">{label.sender.name}</span>
-          {shown.senderPhone ? <>{" "}<span className="label-party-phone">{label.sender.phone}</span></> : null}
-          {shown.senderAddress ? <>{" · "}<span className="label-party-address">{label.sender.address}</span></> : null}
+          {shown.senderPhone ? <>{" · "}<span className="label-party-phone">{formatPhoneGroups(label.sender.phone)}</span></> : null}
         </p>
+        {shown.senderAddress ? (
+          <p className="label-sender-origin" style={note ? { WebkitLineClamp: 1 } : undefined}>{label.sender.address}</p>
+        ) : null}
         {note ? <p className="label-note" style={NOTE_STYLE}>{note}</p> : null}
       </div>
 
       <div className="label-payment-block">
         {label.paymentMethod === "COD_ONGKIR" ? (
           <>
-            <div className="label-payment">
+            <div className="label-payment" data-cod="">
               <span>COD ONGKIR — TAGIH ONGKIR SAJA</span>
               <b>{formatIdr(label.providerCodAmountIdr as number)}</b>
             </div>
             <div className="label-money">
-              <div><span>Barang sudah dibayar</span><span>JANGAN DITAGIH</span></div>
+              <div><span>Barang sudah dibayar</span><b>JANGAN DITAGIH</b></div>
             </div>
           </>
         ) : label.isCod ? (
           <>
-            <div className="label-payment">
+            <div className="label-payment" data-cod="">
               <span>COD — TAGIH KE PENERIMA</span>
               <b>{formatIdr(label.providerCodAmountIdr as number)}</b>
             </div>
@@ -177,6 +224,7 @@ function LabelPackage({ label, logoSrc, note, shown }: {
           </>
         ) : (
           <>
+            {/* T-255: non-COD is plain bold text; only an amount to collect prints inverted. */}
             <div className="label-payment">
               <span>NON-COD — JANGAN TAGIH PENERIMA</span>
             </div>
@@ -187,16 +235,18 @@ function LabelPackage({ label, logoSrc, note, shown }: {
         )}
       </div>
 
-      <dl className="label-facts">
-        <div className="label-facts-wide"><dt>Isi</dt><dd>{label.package.content}</dd></div>
-        <div><dt>Berat</dt><dd>{formatWeight(label.package.weightGrams)} · {label.package.quantity} koli</dd></div>
-        <div><dt>Dimensi</dt><dd>{dimensions ?? "Tidak dicatat"}</dd></div>
-        <div>
-          <dt>{label.paymentMethod === "COD_ONGKIR" ? "Nilai (lunas)" : "Nilai"}</dt>
-          <dd>{formatIdr(label.package.declaredValueIdr)}</dd>
-        </div>
-        <div><dt>Asuransi Mengantar</dt><dd>{insurance}</dd></div>
-      </dl>
+      {/* T-255: two plain lines — what is inside and its weight, then size, value and insurance. */}
+      <div className="label-facts">
+        <p className="label-facts-line">
+          <b>Isi</b>{" "}<span className="label-facts-content">{label.package.content}</span>
+          <span className="label-facts-weight">{" · "}{formatWeight(label.package.weightGrams)} · {label.package.quantity} koli</span>
+        </p>
+        <p className="label-facts-line">
+          {dimensions ?? "Dimensi tidak dicatat"}
+          {" · "}<b>{label.paymentMethod === "COD_ONGKIR" ? "Nilai (lunas)" : "Nilai"}</b> {formatIdr(label.package.declaredValueIdr)}
+          {" · "}<b>Asuransi Mengantar</b> {insurance}
+        </p>
+      </div>
 
       <div className="label-footer">
         {shown.returnWarning ? (
@@ -235,7 +285,7 @@ function LabelSenderStub({ label }: { label: PrintableLabel }) {
         </p>
       </div>
       <div className="label-awb-block">
-        <LabelBarcode heightMm={THERMAL.stubBarHeightMm} value={label.awb} />
+        <LabelBarcode fill heightMm={THERMAL.stubBarHeightMm} value={label.awb} />
         <p className="label-awb"><span className="label-eyebrow">Resi</span> {label.awb}</p>
       </div>
       <dl className="label-stub-facts">

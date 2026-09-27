@@ -10,11 +10,11 @@ import { RecordItem, RecordList } from "@/components/app/record-list";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRangeLabel } from "@/lib/analytics-range";
-import { auditActionSentence } from "@/lib/labels/audit";
+import { auditActionLabel, auditActionOptions } from "@/lib/labels/audit";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 
 import { FilterSelect } from "../_components/filter-select";
-import { PLATFORM_PAGE_SIZE, auditActor, formatWib, tenantStatusChange } from "../_components/platform-format";
+import { PLATFORM_PAGE_SIZE, auditActor, formatAgo, formatWib, tenantStatusChange } from "../_components/platform-format";
 import { filtersChanged } from "../_components/platform-logic";
 import {
   AuditOutcomeBadge,
@@ -52,6 +52,13 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
           value={filters.scope.kind === "tenant" ? filters.scope.tenantId : null}
         />
         <FilterSelect
+          allLabel="Semua aksi"
+          label="Aksi"
+          name="aksi"
+          options={auditActionOptions()}
+          value={filters.action}
+        />
+        <FilterSelect
           allLabel="Semua hasil"
           label="Hasil"
           name="hasil"
@@ -84,13 +91,13 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
               <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
                 <TableCaption className="sr-only">Jejak audit · {range.periodLabel} · {range.timezoneLabel}</TableCaption>
                 <TableHeader>
-                  <TableRow><TableHead>Waktu</TableHead><TableHead>Aksi</TableHead><TableHead>Pelaku</TableHead><TableHead>Gerai</TableHead><TableHead>Hasil</TableHead></TableRow>
+                  <TableRow><TableHead>Waktu (WIB)</TableHead><TableHead>Aksi</TableHead><TableHead>Pelaku</TableHead><TableHead>Gerai</TableHead><TableHead>Hasil</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell><TimeCell instant={row.createdAt} /></TableCell>
-                      <TableCell className="whitespace-normal"><StackCell primary={<span className="font-medium">{auditActionSentence(row)}</span>} secondary={tenantStatusChange(row)} /></TableCell>
+                      <TableCell><TimeCell instant={row.createdAt} now={view.now} /></TableCell>
+                      <TableCell className="whitespace-normal"><StackCell primary={<span className="font-medium">{auditActionLabel(row.action)}</span>} secondary={tenantStatusChange(row)} /></TableCell>
                       <TableCell>{auditActor(row)}</TableCell>
                       <TableCell className="whitespace-normal">
                         {row.tenantId && row.tenantName ? (
@@ -111,9 +118,9 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
                       key={row.id}
                       meta={tenantStatusChange(row)}
                       status={<AuditOutcomeBadge outcome={row.outcome} />}
-                      subtitle={`${row.tenantName ?? "Platform"} · ${auditActor(row)}`}
-                      time={formatWib(row.createdAt)}
-                      title={<span className="whitespace-normal">{auditActionSentence(row)}</span>}
+                      subtitle={`${auditActor(row)} · ${row.tenantName ?? "Platform"}`}
+                      time={[formatWib(row.createdAt), formatAgo(row.createdAt, view.now)].filter(Boolean).join(" · ")}
+                      title={<span className="whitespace-normal">{auditActionLabel(row.action)}</span>}
                     />
                   ))}
                 </RecordList>

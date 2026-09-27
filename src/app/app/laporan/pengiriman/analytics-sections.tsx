@@ -4,8 +4,9 @@ import type { ReactNode } from "react";
 import { reportTrendTotals, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
 import { ReportTrendChart } from "@/app/app/laporan/pengiriman/report-trend-chart";
 import { DataCard } from "@/components/app/data-card";
-import { HelpHint } from "@/components/app/help-hint";
+import { SectionHelp } from "@/components/app/help-hint";
 import { formatIdr } from "@/components/app/money";
+import { STAT_CELL, STAT_LABEL, STAT_NOTE, STAT_VALUE } from "@/components/app/stat-strip";
 import { ShipmentStatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -26,13 +27,8 @@ const disclosureSummary = "inline-flex min-h-11 cursor-pointer list-none items-c
 const chevron = "size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none";
 const REGION_TOP = 10;
 
-/**
- * The "?" of a section header (T-254). The 40 px button is pulled into the title's line box, so
- * it centres on the title and does not add a row under it.
- */
-export function SectionHelp({ children, label }: { children: ReactNode; label: string }) {
-  return <span className="-my-2 flex"><HelpHint label={label}>{children}</HelpHint></span>;
-}
+// T-257: moved to the shared help-hint module for the platform pages; re-exported for callers.
+export { SectionHelp };
 
 /** Spec 19 M-0: a muted "Volume rendah (n = N)" under a group of fewer than 10 shipments; its rates stay. */
 export function LowVolumeNote({ shipmentCount }: { shipmentCount: number }) {
@@ -112,10 +108,10 @@ export function reportStatusGroups(totals: readonly ShipmentReportLifecycleTotal
   });
 }
 
-const statCell = "flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5 @xl:px-4 @xl:py-3";
-const statLabel = "flex items-center gap-1.5 text-xs font-medium text-muted-foreground";
-const statValue = "text-xl leading-none font-semibold tabular-nums text-foreground";
-const statNote = "text-xs tabular-nums text-muted-foreground";
+const statCell = STAT_CELL;
+const statLabel = STAT_LABEL;
+const statValue = STAT_VALUE;
+const statNote = STAT_NOTE;
 /** A money cell: label and amount on one line in a narrow panel, stacked from a 28rem panel. */
 const moneyCell = "flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-card px-4 py-2.5 @md:flex-col @md:py-3 @md:flex-nowrap @md:items-start @md:justify-start";
 

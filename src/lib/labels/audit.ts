@@ -86,6 +86,23 @@ export function auditActionSentence({
   return outcome === "DENIED" ? `${actor} mencoba ${predicate}` : `${actor} ${predicate}`;
 }
 
+/**
+ * T-257: the action alone, for the Aksi column and filter where the actor has its own column:
+ * "Menangguhkan gerai". An unknown code reads "Aktivitas lain", never the code.
+ */
+export function auditActionLabel(action: string): string {
+  if (!known(actionPredicate, action)) return "Aktivitas lain";
+  const predicate = actionPredicate[action];
+  return predicate.charAt(0).toLocaleUpperCase("id-ID") + predicate.slice(1);
+}
+
+/** The Aksi filter's options, sorted by their words. */
+export function auditActionOptions(): { label: string; value: AuditAction }[] {
+  return (Object.keys(actionPredicate) as AuditAction[])
+    .map((value) => ({ label: auditActionLabel(value), value }))
+    .sort((a, b) => a.label.localeCompare(b.label, "id-ID"));
+}
+
 export function auditOutcomeLabel(outcome: string | null | undefined): { label: string; tone: Tone } {
   if (outcome === "SUCCESS") return { label: "Berhasil", tone: "ok" };
   if (outcome === "DENIED") return { label: "Ditolak", tone: "danger" };

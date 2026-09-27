@@ -7,10 +7,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { auditOutcomeLabel, tenantStatusLabel, tenantStatusTone } from "@/lib/labels/audit";
+import { auditActionLabel, auditOutcomeLabel, tenantStatusLabel, tenantStatusTone } from "@/lib/labels/audit";
 import { cn } from "@/lib/utils";
 
-import { badgeTone, wibParts } from "./platform-format";
+import { auditActor, badgeTone, formatAgo, tenantStatusChange, wibParts } from "./platform-format";
 import { RetryButton } from "./retry-button";
 
 const number = new Intl.NumberFormat("id-ID");
@@ -102,14 +102,47 @@ export function AuditOutcomeBadge({ outcome }: { outcome: string }) {
   return <StatusBadge label={label} tone={badgeTone(tone)} />;
 }
 
-/** Date on the first line (15px), time WIB under it (13px muted). */
-export function TimeCell({ instant }: { instant: Date }) {
+/** Date on the first line (15px), time WIB under it (13px muted), then how long ago when `now` is given (T-257). */
+export function TimeCell({ instant, now }: { instant: Date; now?: Date }) {
   const { date, time } = wibParts(instant);
+  const ago = now ? formatAgo(instant, now) : null;
   return (
-    <span className="flex flex-col">
+    <span className="flex flex-col" data-slot="time-cell">
       <span className="whitespace-nowrap">{date}</span>
-      <span className="text-xs whitespace-nowrap text-muted-foreground">{time}</span>
+      <span className="text-xs whitespace-nowrap text-muted-foreground">
+        <time dateTime={instant.toISOString()}>{time}</time>
+        {ago ? ` · ${ago}` : null}
+      </span>
     </span>
+  );
+}
+
+type FeedRow = { action: string; actorRole: string | null; createdAt: Date; fromStatus: string | null; id: string; outcome: string; tenantName: string | null; toStatus: string | null };
+
+/**
+ * T-257: a short audit list (Ringkasan, tenant detail). The action in words is the title, the
+ * actor, gerai and status change under it, the WIB time with "n menit lalu" and the result at the
+ * right — the same reading order as the Audit table.
+ */
+export function AuditFeed({ label, now, rows, showTenant = true }: { label: string; now: Date; rows: FeedRow[]; showTenant?: boolean }) {
+  return (
+    <ul aria-label={label} className="divide-y">
+      {rows.map((row) => {
+        const change = tenantStatusChange(row);
+        return (
+          <li className="flex flex-col gap-2 px-6 py-3 max-md:px-4 sm:flex-row sm:items-center sm:justify-between" key={row.id}>
+            <StackCell
+              primary={<span className="font-medium">{auditActionLabel(row.action)}</span>}
+              secondary={[auditActor(row), showTenant ? (row.tenantName ?? "Platform") : null, change].filter(Boolean).join(" · ")}
+            />
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-row-reverse sm:justify-start">
+              <AuditOutcomeBadge outcome={row.outcome} />
+              <span className="text-sm sm:text-right"><TimeCell instant={row.createdAt} now={now} /></span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

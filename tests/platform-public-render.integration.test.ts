@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PlatformHealth, TenantUsageRow } from "@/db/platform-monitoring-repository";
 import type { PlatformFilters } from "@/lib/platform-monitoring-filters";
+import { formatAnnouncementAge } from "@/lib/announcements";
 
 /**
  * T-218 (UI v3): platform pages and the public/auth pages — pure logic and key markup. No
@@ -24,9 +25,13 @@ const { AuthShell } = await import("@/app/login/_components/auth-shell");
 const { LoginForm } = await import("@/app/login/_components/login-form");
 const { firstRegistrationError, RegistrationForm, registrationFormData, registrationStepErrors, registrationStepOf } = await import("@/app/daftar/registration-form");
 const { PasswordResetForm } = await import("@/app/atur-ulang-password/reset-form");
-const { attentionItems, filtersChanged, registrationDecisions } = await import("@/app/platform/_components/platform-logic");
-const { auditActor, formatSeconds, formatWib, severityBadge, tenantStatusChange } = await import("@/app/platform/_components/platform-format");
-const { PlatformPagination } = await import("@/app/platform/_components/platform-ui");
+const { attentionItems, filtersChanged, platformTrendTotals, registrationDecisions } = await import("@/app/platform/_components/platform-logic");
+const { auditActor, formatAgo, formatSeconds, formatWib, severityBadge, tenantStatusChange } = await import("@/app/platform/_components/platform-format");
+const { AuditFeed, PlatformPagination, TimeCell } = await import("@/app/platform/_components/platform-ui");
+const { FilterSelect } = await import("@/app/platform/_components/filter-select");
+const { StatStrip } = await import("@/components/app/stat-strip");
+const { auditActionLabel, auditActionOptions } = await import("@/lib/labels/audit");
+const { auditEventActions } = await import("@/db/schema");
 const { TenantLifecycle } = await import("@/app/platform/tenant/_components/tenant-lifecycle");
 const { RegistrationReview } = await import("@/app/platform/pendaftaran/_components/registration-review");
 
@@ -231,5 +236,84 @@ describe("platform markup", () => {
     expect(approve(unverified)).toContain('disabled=""');
     expect(unverified).toContain("setelah pemilik memverifikasi email");
     expect(unverified).toContain("Tolak pendaftaran");
+  });
+});
+
+describe("T-257 platform alignment", () => {
+  const now = new Date("2026-09-26T16:00:00Z");
+
+  it("says how long ago on the page's clock, then leaves it to the date", () => {
+    expect(formatAgo(new Date(now.getTime() - 30_000), now)).toBe("baru saja");
+    expect(formatAgo(new Date(now.getTime() - 59 * 60_000), now)).toBe("59 menit lalu");
+    expect(formatAgo(new Date(now.getTime() - 60 * 60_000), now)).toBe("1 jam lalu");
+    // One wording app-wide: past 24 hours the WIB calendar day decides, as on Info terbaru.
+    expect(formatAgo(new Date(now.getTime() - 25 * 3_600_000), now)).toBe("kemarin");
+    for (const hoursAgo of [0.5, 5, 25, 49, 24 * 6]) {
+      const instant = new Date(now.getTime() - hoursAgo * 3_600_000);
+      expect(formatAnnouncementAge(instant, now).toLowerCase()).toBe(formatAgo(instant, now));
+    }
+    expect(formatAgo(new Date(now.getTime() - 29 * 86_400_000), now)).toBe("29 hari lalu");
+    expect(formatAgo(new Date(now.getTime() - 30 * 86_400_000), now)).toBeNull();
+  });
+
+  it("words every audit action without its actor or code, sorted for the Aksi filter", () => {
+    expect(auditActionLabel("TENANT_SUSPENDED")).toBe("Menangguhkan gerai");
+    expect(auditActionLabel("SOMETHING_NEW")).toBe("Aktivitas lain");
+    const options = auditActionOptions();
+    expect(options.map((option) => option.value).sort()).toEqual([...auditEventActions].sort());
+    for (const option of options) {
+      expect(option.label).toMatch(/^[A-Z][a-z]/);
+      expect(option.label).not.toMatch(/[A-Z]{2,}_|Admin platform|Tenant/);
+    }
+    expect(options.map((option) => option.label)).toEqual([...options.map((option) => option.label)].sort((a, b) => a.localeCompare(b, "id-ID")));
+  });
+
+  it("sums the trend buckets for the legend totals (PLT-TREND-TOTALS)", () => {
+    expect(platformTrendTotals([{ created: 2, issued: 1 }, { created: 3, issued: 0 }])).toEqual({ created: 5, issued: 1 });
+    expect(platformTrendTotals([])).toEqual({ created: 0, issued: 0 });
+  });
+
+  it("counts the new facets as filters for Hapus filter", () => {
+    const base = { courier: null, outcome: null, outletId: null, page: 1, query: null, range: { presetId: "30-hari" }, scope: { kind: "global" }, status: null } as unknown as PlatformFilters;
+    expect(filtersChanged({ ...base, action: "TENANT_CREATED" })).toBe(true);
+    expect(filtersChanged({ ...base, tenantStatus: "SUSPENDED" })).toBe(true);
+    expect(filtersChanged({ ...base, action: null, tenantStatus: null })).toBe(false);
+  });
+
+  it("renders a stat strip as labelled dt/dd pairs with metric IDs, the odd last cell spanning", () => {
+    const html = render(createElement(StatStrip, {
+      items: [
+        { key: "a", label: "Antrean pengajuan", metric: "OPS-QUEUE-STUCK", note: "Terlama 5 menit", value: "1" },
+        { key: "b", label: "Kegagalan provider", metric: "OPS-FAILURE-COUNT", value: "6" },
+        { key: "c", label: "Durasi penyelesaian", metric: "OPS-BATCH-DURATION", value: "5 menit" },
+      ],
+      label: "Kesehatan platform",
+    }));
+    expect(html).toMatch(/aria-label="Kesehatan platform"[^>]*role="group"|role="group"[^>]*aria-label="Kesehatan platform"/);
+    expect(html).toMatch(/<dt[^>]*>Antrean pengajuan<\/dt><dd[^>]*><span[^>]*>1<\/span><\/dd><dd[^>]*>Terlama 5 menit<\/dd>/);
+    expect(html.match(/data-metric-id="[^"]+"/g)).toEqual(['data-metric-id="OPS-QUEUE-STUCK"', 'data-metric-id="OPS-FAILURE-COUNT"', 'data-metric-id="OPS-BATCH-DURATION"']);
+    expect(html).toMatch(/col-span-2[^"]*" data-metric-id="OPS-BATCH-DURATION"/);
+  });
+
+  it("reads an audit feed as action, actor · gerai · change, WIB time and how long ago", () => {
+    const html = render(createElement(AuditFeed, {
+      label: "Aktivitas audit terbaru",
+      now,
+      rows: [{ action: "TENANT_SUSPENDED", actorRole: "SUPER_ADMIN", createdAt: new Date("2026-09-26T15:48:00Z"), fromStatus: "ACTIVE", id: "1", outcome: "SUCCESS", tenantName: "Sekar Batik", toStatus: "SUSPENDED" }],
+    }));
+    const text = html.replace(/<[^>]+>/g, "|");
+    expect(text).toContain("Menangguhkan gerai");
+    expect(text).not.toContain("Admin platform menangguhkan");
+    expect(text).toContain("Admin platform · Sekar Batik · Aktif → Ditangguhkan");
+    expect(text).toContain("22.48 WIB| · 12 menit lalu");
+    expect(html).toMatch(/datetime="2026-09-26T15:48:00.000Z"/i);
+    expect(render(createElement(TimeCell, { instant: new Date("2026-09-26T15:48:00Z") }))).not.toContain("lalu");
+  });
+
+  it("puts the chosen filter label in the server HTML (T-236 pattern)", () => {
+    const html = render(createElement(FilterSelect, { allLabel: "Semua aksi", label: "Aksi", name: "aksi", options: auditActionOptions(), value: "TENANT_SUSPENDED" }));
+    expect(html).toContain('type="hidden" name="aksi" value="TENANT_SUSPENDED"');
+    expect(html).toMatch(/data-slot="select-value"[^>]*>Menangguhkan gerai</);
+    expect(render(createElement(FilterSelect, { allLabel: "Semua aksi", label: "Aksi", name: "aksi", options: auditActionOptions() }))).toMatch(/data-slot="select-value"[^>]*>Semua aksi</);
   });
 });

@@ -1,72 +1,148 @@
 "use client";
 
-import { ChevronDown, Pin } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { Megaphone, SearchX } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
 import type { TenantAnnouncement } from "@/db/announcement-repository";
 
 import { markAnnouncementsReadAction } from "@/app/app/info/actions";
-import { StatusBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
+import { AnnouncementCard } from "@/components/app/announcement-card";
+import { EmptyState } from "@/components/app/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ANNOUNCEMENT_CATEGORY_LABEL, announcementIsLong } from "@/lib/announcements";
-import { formatWibDateTime } from "@/lib/label-format";
+import {
+  ANNOUNCEMENT_CATEGORIES,
+  ANNOUNCEMENT_CATEGORY_LABEL,
+  ANNOUNCEMENT_CATEGORY_SLUG,
+  type AnnouncementCategory,
+  type countAnnouncementsByCategory,
+} from "@/lib/announcements";
 import { cn } from "@/lib/utils";
 
+const number = new Intl.NumberFormat("id-ID");
+
 /**
- * T-244: an announcement body is plain text rendered as text (React escapes it; no HTML or
- * markdown), line breaks kept by `whitespace-pre-line`. A long body is clamped to four lines
- * behind a "Baca selengkapnya" toggle that names what it controls.
+ * T-256: the category filter — a compact segmented row of links (`?kategori=`), each with its
+ * count; one scrolling row on a phone with the current segment scrolled into view.
  */
-export function AnnouncementBody({ body }: { body: string }) {
-  const long = announcementIsLong(body);
-  const [open, setOpen] = useState(false);
-  const id = useId();
+export function AnnouncementCategoryFilter({
+  counts,
+  selected,
+}: {
+  counts: ReturnType<typeof countAnnouncementsByCategory>;
+  selected: AnnouncementCategory | null;
+}) {
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    const current = list?.querySelector<HTMLElement>("[aria-current=page]");
+    // Horizontal only: scrollIntoView would also move the page.
+    if (list && current && list.scrollWidth > list.clientWidth) {
+      list.scrollLeft = current.offsetLeft - (list.clientWidth - current.offsetWidth) / 2;
+    }
+  }, [selected]);
+  const items = [
+    { count: counts.all, href: "/app/info", key: "all", label: "Semua", selected: selected === null },
+    ...ANNOUNCEMENT_CATEGORIES.map((category) => ({
+      count: counts[category],
+      href: `/app/info?kategori=${ANNOUNCEMENT_CATEGORY_SLUG[category]}`,
+      key: category,
+      label: ANNOUNCEMENT_CATEGORY_LABEL[category],
+      selected: selected === category,
+    })),
+  ];
   return (
-    <div className="flex flex-col items-start gap-1">
-      <p
-        className={cn("max-w-2xl text-sm leading-relaxed break-words whitespace-pre-line text-foreground", long && !open && "line-clamp-4")}
-        data-slot="announcement-body"
-        id={id}
-      >
-        {body}
-      </p>
-      {long ? (
-        <Button
-          aria-controls={id}
-          aria-expanded={open}
-          className="h-auto min-h-11 px-0 text-primary md:min-h-8"
-          onClick={() => setOpen((value) => !value)}
-          type="button"
-          variant="link"
-        >
-          {open ? "Tutup" : "Baca selengkapnya"}
-          <ChevronDown aria-hidden="true" className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
-        </Button>
-      ) : null}
+    <nav aria-label="Kategori info" className="w-full min-w-0 rounded-2xl bg-card p-1.5 shadow-card md:w-fit">
+      <ul className="flex gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]" ref={listRef}>
+        {items.map((item) => (
+          <li className="shrink-0" key={item.key}>
+            <Link
+              aria-current={item.selected ? "page" : undefined}
+              className={cn(
+                "flex h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:h-9",
+                item.selected ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              href={item.href}
+              scroll={false}
+            >
+              {item.label}
+              <span
+                className={cn(
+                  "min-w-6 rounded-full px-1.5 text-center text-xs font-semibold tabular-nums",
+                  item.selected ? "bg-primary-foreground/20" : "bg-muted text-foreground",
+                )}
+              >
+                {number.format(item.count)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+/**
+ * The page body, always mounted across filter changes: filter, cards (pinned first, then
+ * newest) and the empty states. `rows` arrive with the read state the server saw before this
+ * view's receipt, so an unread row is "Baru". The ids stay "Baru" for this view even after the
+ * receipt revalidates the page (refreshed rows arrive read) or the filter changes; rows that
+ * first appear under another filter join the set and are marked read in turn. The next visit
+ * shows them read.
+ */
+export function AnnouncementFeed({
+  counts,
+  now,
+  rows,
+  selected,
+}: {
+  counts: ReturnType<typeof countAnnouncementsByCategory>;
+  now: Date;
+  rows: TenantAnnouncement[];
+  selected: AnnouncementCategory | null;
+}) {
+  const [newIds, setNewIds] = useState(() => new Set(rows.filter((row) => !row.read).map((row) => row.id)));
+  const unseen = rows.filter((row) => !row.read && !newIds.has(row.id));
+  if (unseen.length > 0) setNewIds(new Set([...newIds, ...unseen.map((row) => row.id)]));
+  const toMark = rows.filter((row) => !row.read).map((row) => row.id);
+
+  if (counts.all === 0) {
+    return (
+      <Card>
+        <EmptyState
+          description="Kabar fitur baru, kurir, jadwal pickup dan pemeliharaan dari tim GeraiCUAN akan tampil di sini."
+          icon={Megaphone}
+          title="Belum ada info"
+        />
+      </Card>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <MarkAnnouncementsRead ids={toMark} />
+      <AnnouncementCategoryFilter counts={counts} selected={selected} />
+      {rows.length === 0 ? (
+        <Card>
+          <EmptyState
+            action={<Button asChild variant="outline"><Link href="/app/info" scroll={false}>Lihat semua info</Link></Button>}
+            description="Kabar di kategori lain tetap ada di Semua."
+            icon={SearchX}
+            title={`Belum ada info ${selected ? ANNOUNCEMENT_CATEGORY_LABEL[selected].toLocaleLowerCase("id-ID") : ""}`.trim()}
+          />
+        </Card>
+      ) : (
+        <section aria-label="Daftar info" className="flex flex-col gap-4">
+          {rows.map((row) => <AnnouncementCard announcement={row} isNew={newIds.has(row.id)} key={row.id} now={now} />)}
+        </section>
+      )}
     </div>
   );
 }
 
 /**
- * The list. The ids unread when the page was opened keep their "Baru" badge for this view even
- * after the receipt revalidates the page (the refreshed rows arrive already read); the next
- * visit shows them as read.
- */
-export function AnnouncementFeed({ rows }: { rows: TenantAnnouncement[] }) {
-  const [unreadAtOpen] = useState(() => new Set(rows.filter((row) => !row.read).map((row) => row.id)));
-  return (
-    <section aria-label="Daftar info" className="flex flex-col gap-4">
-      <MarkAnnouncementsRead ids={[...unreadAtOpen]} />
-      {rows.map((row) => <AnnouncementCard announcement={row} isNew={unreadAtOpen.has(row.id)} key={row.id} />)}
-    </section>
-  );
-}
-
-/**
- * Viewing /app/info reads what it shows: once per page view the unread ids are sent to the
- * idempotent Server Action, which revalidates the tenant layout so the sidebar badge clears.
+ * Viewing /app/info reads what it shows: the unread ids of each rendered list are sent once to
+ * the idempotent Server Action, which revalidates the tenant layout so the sidebar badge clears.
  * Renders nothing.
  */
 export function MarkAnnouncementsRead({ ids }: { ids: string[] }) {
@@ -81,28 +157,4 @@ export function MarkAnnouncementsRead({ ids }: { ids: string[] }) {
     });
   }, [key]);
   return null;
-}
-
-/** One announcement (pure; rendered inside the client feed): category, pin and unread badges, WIB date, title, plain-text body. */
-export function AnnouncementCard({ announcement, isNew }: { announcement: TenantAnnouncement; isNew: boolean }) {
-  const titleId = `info-${announcement.id}`;
-  return (
-    <Card
-      aria-labelledby={titleId}
-      className="gap-3 px-(--card-spacing)"
-      data-new={isNew ? "true" : "false"}
-      role="article"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">{ANNOUNCEMENT_CATEGORY_LABEL[announcement.category]}</Badge>
-        {announcement.pinned ? <StatusBadge icon={Pin} label="Disematkan" tone="info" /> : null}
-        {isNew ? <Badge>Baru</Badge> : null}
-        <time className="ml-auto text-xs text-muted-foreground tabular-nums" dateTime={announcement.publishedAt.toISOString()}>
-          {formatWibDateTime(announcement.publishedAt)}
-        </time>
-      </div>
-      <h2 className="text-base font-semibold break-words text-foreground" id={titleId}>{announcement.title}</h2>
-      <AnnouncementBody body={announcement.body} />
-    </Card>
-  );
 }

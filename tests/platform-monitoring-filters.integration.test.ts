@@ -34,4 +34,20 @@ describe("platform monitoring URL contract", () => {
     expect(parsed.filters).toMatchObject({ scope: { kind: "global" }, outletId: null, status: null, outcome: null, query: null, page: 1 });
     expect(parsed.issues).toEqual(expect.arrayContaining(["tz_tidak_dikenal", "outlet_tanpa_tenant", "status_tidak_dikenal", "parameter_tidak_berlaku", "kata_kunci_terlalu_pendek", "parameter_tidak_dikenal"]));
   });
+
+  it("T-257: reads aksi only on /platform/audit and status-gerai only on /platform/tenant, canonically", () => {
+    const audit = parsePlatformFilters({ aksi: "tenant_suspended" }, { ...options, route: "/platform/audit" });
+    expect(audit.filters.action).toBe("TENANT_SUSPENDED");
+    expect(audit.issues).toEqual([]);
+    expect(audit.canonicalQuery.get("aksi")).toBe("TENANT_SUSPENDED");
+    expect(parsePlatformFilters(Object.fromEntries(audit.canonicalQuery), { ...options, route: "/platform/audit" }).canonicalQuery.toString()).toBe(audit.canonicalQuery.toString());
+    expect(parsePlatformFilters({ aksi: "DROP_TABLE" }, { ...options, route: "/platform/audit" })).toMatchObject({ filters: { action: null }, issues: ["aksi_tidak_dikenal"] });
+    expect(parsePlatformFilters({ aksi: "TENANT_SUSPENDED" }, options)).toMatchObject({ filters: { action: null }, issues: ["parameter_tidak_berlaku"] });
+
+    const tenants = parsePlatformFilters({ "status-gerai": "suspended" }, options);
+    expect(tenants.filters.tenantStatus).toBe("SUSPENDED");
+    expect(tenants.canonicalQuery.get("status-gerai")).toBe("SUSPENDED");
+    expect(parsePlatformFilters({ "status-gerai": "gone" }, options)).toMatchObject({ filters: { tenantStatus: null }, issues: ["status_gerai_tidak_dikenal"] });
+    expect(parsePlatformFilters({ "status-gerai": "ACTIVE" }, { ...options, route: "/platform/audit" })).toMatchObject({ filters: { tenantStatus: null }, issues: ["parameter_tidak_berlaku"] });
+  });
 });

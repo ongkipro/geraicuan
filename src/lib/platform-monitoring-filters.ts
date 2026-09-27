@@ -1,4 +1,4 @@
-import { shipmentStatuses } from "@/db/schema";
+import { auditEventActions, shipmentStatuses, tenantStatuses } from "@/db/schema";
 import {
   analyticsIssueMessage,
   parseAnalyticsRange,
@@ -9,6 +9,8 @@ import {
 } from "@/lib/analytics-range";
 
 export type ShipmentStatus = (typeof shipmentStatuses)[number];
+export type AuditAction = (typeof auditEventActions)[number];
+export type TenantStatus = (typeof tenantStatuses)[number];
 export type PlatformRoute =
   | "/platform"
   | "/platform/tenant"
@@ -25,6 +27,8 @@ export type PlatformIssue =
   | "kurir_tidak_dikenal"
   | "status_tidak_dikenal"
   | "hasil_tidak_dikenal"
+  | "aksi_tidak_dikenal"
+  | "status_gerai_tidak_dikenal"
   | "kata_kunci_terlalu_pendek"
   | "kata_kunci_terlalu_panjang"
   | "parameter_tidak_berlaku"
@@ -38,6 +42,10 @@ export type PlatformFilters = {
   outcome: "SUCCESS" | "DENIED" | null;
   query: string | null;
   page: number;
+  /** `aksi` on /platform/audit (T-257): one stored audit action. */
+  action?: AuditAction | null;
+  /** `status-gerai` on /platform/tenant (T-257): one tenant status. */
+  tenantStatus?: TenantStatus | null;
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -70,6 +78,8 @@ const PLATFORM_KEYS: Record<string, true> = {
   hasil: true,
   q: true,
   halaman: true,
+  aksi: true,
+  "status-gerai": true,
 };
 const issueMessages: Record<Exclude<PlatformIssue, AnalyticsIssue>, string> = {
   tenant_tidak_dikenal: "Gerai tidak dikenal, lingkup dikembalikan ke global.",
@@ -78,6 +88,8 @@ const issueMessages: Record<Exclude<PlatformIssue, AnalyticsIssue>, string> = {
   kurir_tidak_dikenal: "Kurir tidak dikenal dan telah dihapus dari filter.",
   status_tidak_dikenal: "Status kiriman tidak dikenal dan telah dihapus dari filter.",
   hasil_tidak_dikenal: "Hasil audit tidak dikenal dan telah dihapus dari filter.",
+  aksi_tidak_dikenal: "Aksi audit tidak dikenal dan telah dihapus dari filter.",
+  status_gerai_tidak_dikenal: "Status gerai tidak dikenal dan telah dihapus dari filter.",
   kata_kunci_terlalu_pendek: "Kata kunci minimal 2 karakter dan telah dihapus.",
   kata_kunci_terlalu_panjang: "Kata kunci maksimal 80 karakter dan telah dihapus.",
   parameter_tidak_berlaku: "Parameter tidak berlaku pada halaman ini dan telah dihapus.",
@@ -103,6 +115,8 @@ function canonicalParams(filters: PlatformFilters, forcedTenant: boolean) {
   if (filters.status) params.set("status", filters.status);
   if (filters.outcome) params.set("hasil", filters.outcome);
   if (filters.query) params.set("q", filters.query);
+  if (filters.action) params.set("aksi", filters.action);
+  if (filters.tenantStatus) params.set("status-gerai", filters.tenantStatus);
   if (filters.page !== 1) params.set("halaman", String(filters.page));
   return params;
 }
@@ -178,6 +192,26 @@ export function parsePlatformFilters(
     else query = requestedQuery;
   }
 
+  let action: AuditAction | null = null;
+  const requestedAction = first(params.aksi)?.trim().toUpperCase();
+  if (requestedAction) {
+    if (options.route !== "/platform/audit") issues.push("parameter_tidak_berlaku");
+    else {
+      action = auditEventActions.find((value) => value === requestedAction) ?? null;
+      if (!action) issues.push("aksi_tidak_dikenal");
+    }
+  }
+
+  let tenantStatus: TenantStatus | null = null;
+  const requestedTenantStatus = first(params["status-gerai"])?.trim().toUpperCase();
+  if (requestedTenantStatus) {
+    if (options.route !== "/platform/tenant") issues.push("parameter_tidak_berlaku");
+    else {
+      tenantStatus = tenantStatuses.find((value) => value === requestedTenantStatus) ?? null;
+      if (!tenantStatus) issues.push("status_gerai_tidak_dikenal");
+    }
+  }
+
   const parsedPage = parsePageNumber(params.halaman);
   issues.push(...parsedPage.issues);
   for (const key of Object.keys(params)) {
@@ -195,6 +229,8 @@ export function parsePlatformFilters(
     outcome,
     query,
     page: parsedPage.page,
+    action,
+    tenantStatus,
   };
   return {
     filters,
