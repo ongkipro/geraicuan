@@ -279,6 +279,7 @@ describe("tenant-scoped AWB labels", () => {
         name: "Penerima Snapshot",
         phone: "081299998765",
         address: "Alamat penerima snapshot yang tidak berubah",
+        landmark: null,
       },
       printCount: 0,
       lastPrintedAt: null,
@@ -286,6 +287,10 @@ describe("tenant-scoped AWB labels", () => {
     const breakdown = label.codBreakdown!;
     expect(breakdown.goodsValueIdr + breakdown.shippingAmountIdr + breakdown.codFeeIdr + breakdown.roundingIdr)
       .toBe(label.providerCodAmountIdr);
+    // T-258: the draft's patokan is loaded for the package label, trimmed, in the tenant's scope.
+    await adminPool.query("UPDATE shipment_drafts SET recipient_address_landmark = $1 WHERE shipment_id = $2", ["  Seberang masjid  ", fixture.shipmentId]);
+    const withLandmark = await inTenantA((tx, context) => loadPrintableLabel(tx, context, fixture.shipmentId));
+    expect(withLandmark.recipient.landmark).toBe("Seberang masjid");
   });
 
   it("prints a version 1 COD amount without a breakdown that cannot add up with Mengantar's fee (T-193)", async () => {

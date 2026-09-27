@@ -2198,6 +2198,13 @@ export const auditEvents = pgTable(
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),
+    // T-259 (DATA-23): a row about a gerai carries that gerai. Tenantless only for a platform
+    // target or a refused lifecycle attempt whose gerai was never verified. Migration 0069 adds
+    // it NOT VALID: rows written before it (the implicit prefix lock) are not re-checked.
+    check(
+      "audit_events_tenant_recorded",
+      sql`tenant_id IS NOT NULL OR target_type = 'PLATFORM' OR (outcome = 'DENIED' AND action IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED'))`,
+    ),
   ],
 );
 

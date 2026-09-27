@@ -4,6 +4,7 @@ import { useContext, useLayoutEffect, useRef, type CSSProperties } from "react";
 
 import { useGeraiBrand } from "@/app/app/brand/gerai-brand";
 import { courierPrintLogoSrc } from "@/lib/gerai-settings";
+import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
 import { HandoverTime, LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
@@ -27,8 +28,38 @@ import {
 import { THERMAL } from "@/lib/label-size";
 
 const DENSITY_TIERS = ["compact", "long", "dense", "ultra"] as const;
+type DensityTier = (typeof DENSITY_TIERS)[number];
 /** The street's line clamp at the "ultra" tier (label.css `--street-lines` default). */
 const ULTRA_STREET_LINES = 7;
+/** The patokan's line clamp before fitting (label.css `--landmark-lines` default). */
+const LANDMARK_LINES = 2;
+
+/** What the fitting ladder may change on the recipient block; the browser adapter is in `LabelPackage`. */
+export type RecipientFitTarget = {
+  overflowing: () => boolean;
+  setTier: (tier: DensityTier) => void;
+  /** null restores the stylesheet default. */
+  setLandmarkLines: (lines: number | null) => void;
+  setStreetLines: (lines: number | null) => void;
+};
+
+/**
+ * T-255 / T-258: the long-address fitting ladder, run after layout while the recipient block
+ * overflows. The patokan gives way first (down to one line with an ellipsis), then the type
+ * steps down tier by tier, and last the street gives up lines. The kecamatan, kota, provinsi
+ * and kode pos lines are never clamped, so they always print whole.
+ */
+export function fitRecipientBlock(target: RecipientFitTarget, estimate: DensityTier, hasLandmark: boolean) {
+  let index = DENSITY_TIERS.indexOf(estimate);
+  target.setTier(DENSITY_TIERS[index]);
+  target.setLandmarkLines(null);
+  target.setStreetLines(null);
+  if (hasLandmark) {
+    for (let lines = LANDMARK_LINES - 1; target.overflowing() && lines >= 1; lines -= 1) target.setLandmarkLines(lines);
+  }
+  while (target.overflowing() && index < DENSITY_TIERS.length - 1) target.setTier(DENSITY_TIERS[++index]);
+  for (let lines = ULTRA_STREET_LINES - 1; target.overflowing() && lines >= 2; lines -= 1) target.setStreetLines(lines);
+}
 
 /**
  * "JNE REG" under a "JNE" heading reads twice; print the service alone when it repeats the courier,
@@ -93,24 +124,22 @@ function LabelPackage({ label, logoSrc, note, shown }: {
     areaLabelLength: cityProvince === null ? label.destinationAreaLabel.length : cityProvince.length,
   });
   const recipientRef = useRef<HTMLDivElement>(null);
-  // T-255: the tier is an estimate from character counts; after layout, step down while the
-  // recipient block still overflows (a long name wraps, a long kelurahan wraps), so the
-  // address never clips. Starts from the estimate each render, so freed room scales back up.
+  const landmark = cityProvince === null ? label.recipient.landmark : null;
+  // T-255: the tier is an estimate from character counts; after layout the ladder steps down
+  // while the recipient block still overflows (a long name wraps, a long kelurahan wraps), so
+  // the address never clips. Starts from the estimate each render, so freed room scales back up.
   useLayoutEffect(() => {
     const element = recipientRef.current;
     if (!element) return;
-    const fit = () => {
-      let index = DENSITY_TIERS.indexOf(recipientLayout.tier);
-      element.dataset.density = DENSITY_TIERS[index];
-      element.style.removeProperty("--street-lines");
-      const overflowing = () => element.scrollHeight > element.clientHeight + 1;
-      while (overflowing() && index < DENSITY_TIERS.length - 1) element.dataset.density = DENSITY_TIERS[++index];
-      // Last resort at the smallest type: the street gives up lines (with an ellipsis) so the
-      // kecamatan, kota, provinsi and kode pos lines still print whole.
-      for (let lines = ULTRA_STREET_LINES - 1; overflowing() && lines >= 2; lines -= 1) {
-        element.style.setProperty("--street-lines", String(lines));
-      }
+    const setLines = (property: string) => (lines: number | null) =>
+      lines === null ? element.style.removeProperty(property) : element.style.setProperty(property, String(lines));
+    const target: RecipientFitTarget = {
+      overflowing: () => element.scrollHeight > element.clientHeight + 1,
+      setTier: (tier) => { element.dataset.density = tier; },
+      setLandmarkLines: setLines("--landmark-lines"),
+      setStreetLines: setLines("--street-lines"),
     };
+    const fit = () => fitRecipientBlock(target, recipientLayout.tier, Boolean(landmark));
     fit();
     void document.fonts?.ready.then(fit);
   });
@@ -127,12 +156,12 @@ function LabelPackage({ label, logoSrc, note, shown }: {
         {courierLogoSrc ? (
           <p className="label-courier" style={COURIER_STYLE}>
             {/* eslint-disable-next-line @next/next/no-img-element -- static black-only print mark */}
-            <img alt={label.courier} className="label-courier-logo" src={courierLogoSrc} style={COURIER_LOGO_STYLE} />
+            <img alt={courierDisplayName(label.courier)} className="label-courier-logo" src={courierLogoSrc} style={COURIER_LOGO_STYLE} />
             <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
           </p>
         ) : (
           <p className="label-courier">
-            {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
+            {courierDisplayName(label.courier)} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
           </p>
         )}
         {logoSrc ? (
@@ -156,14 +185,19 @@ function LabelPackage({ label, logoSrc, note, shown }: {
       <div className="label-party label-recipient" data-density={recipientLayout.tier} ref={recipientRef}>
         <p className="label-recipient-id">
           <span className="label-eyebrow">Penerima</span>
-          {shown.recipientName ? <>{" "}<span className="label-party-name">{label.recipient.name}</span></> : null}
-          {shown.recipientPhone ? <>{" "}<span className="label-party-phone">{formatPhoneGroups(label.recipient.phone)}</span></> : null}
+          {/* Owner, 2026-09-27: name left, phone right on one line; a long name wraps, the phone never. */}
+          <span className="label-recipient-line">
+            {shown.recipientName ? <span className="label-party-name">{label.recipient.name}</span> : null}
+            {shown.recipientPhone ? <>{" "}<span className="label-party-phone">{formatPhoneGroups(label.recipient.phone)}</span></> : null}
+          </span>
         </p>
         {cityProvince !== null ? (
           <p className="label-party-area">{cityProvince}</p>
         ) : (
           <>
             <p className="label-party-address">{label.recipient.address}</p>
+            {/* T-258: the patokan follows the address detail switch and prints only when stored. */}
+            {landmark ? <p className="label-party-landmark"><b>Patokan:</b> {landmark}</p> : null}
             {areaLines.map((line, index) => {
               const last = index === areaLines.length - 1;
               return (
@@ -265,7 +299,7 @@ function LabelPackage({ label, logoSrc, note, shown }: {
 /**
  * The stub leaves the building with the sender, so it carries what proves and traces
  * the handover and nothing that only the parcel needs: no recipient name, street
- * address or phone, no sender contact, no package value and no COD breakdown.
+ * address, patokan (T-258) or phone, no sender contact, no package value and no COD breakdown.
  */
 function LabelSenderStub({ label }: { label: PrintableLabel }) {
   return (
@@ -276,7 +310,7 @@ function LabelSenderStub({ label }: { label: PrintableLabel }) {
       </div>
       <div className="label-stub-service">
         <p className="label-courier">
-          {label.courier} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
+          {courierDisplayName(label.courier)} <span className="label-service">{serviceName(label.courier, label.providerService)}</span>
         </p>
         <p className="label-stub-payment">
           {label.paymentMethod === "COD_ONGKIR"

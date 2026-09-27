@@ -735,7 +735,7 @@ describe("T-186 the draft validation, the charge rule and the label keep each me
       providerCodAmountIdr: 20_000,
       providerService: "JNE REG",
       publicReference: "GC-10186",
-      recipient: { address: "Jl. Penerima", name: "Penerima", phone: "081377772222" },
+      recipient: { address: "Jl. Penerima", landmark: null, name: "Penerima", phone: "081377772222" },
       sender: { address: "Ruko", name: "Pengirim", phone: "081255553333" },
       shipmentId: randomUUID(),
       shippingAmountIdr: 12_000,

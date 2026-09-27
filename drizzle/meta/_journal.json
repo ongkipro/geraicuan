@@ -484,6 +484,13 @@
       "when": 1790409072583,
       "tag": "0068_cancel_unpaid_and_invoice_logo",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1790476952950,
+      "tag": "0069_audit_tenant_recorded",
+      "breakpoints": true
     }
   ]
 }

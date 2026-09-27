@@ -94,6 +94,8 @@ async function cleanup() {
   await adminPool.query("DELETE FROM shipments WHERE tenant_id = ANY($1::uuid[])", [tenantIds]);
   await adminPool.query("DELETE FROM outlets WHERE tenant_id = ANY($1::uuid[])", [tenantIds]);
   await adminPool.query("DELETE FROM memberships WHERE tenant_id = ANY($1::uuid[])", [tenantIds]);
+  // T-259: the first shipment's implicit prefix lock is stored with the gerai (audit FK, 0069).
+  await adminPool.query("DELETE FROM audit_events WHERE tenant_id = ANY($1::uuid[])", [tenantIds]);
   await adminPool.query("DELETE FROM tenants WHERE id = ANY($1::uuid[])", [tenantIds]);
   await adminPool.query("DELETE FROM users WHERE id = ANY($1::text[])", [userIds]);
 }

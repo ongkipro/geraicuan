@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 import { LabelPrintContext } from "@/app/app/label/[shipmentId]/label-print-context";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
+import { sampleLabel } from "@/app/app/pengaturan/label/label-info-editor";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -84,7 +85,7 @@ const LABEL: PrintableLabel = {
   providerCodAmountIdr: null,
   providerService: "REG",
   publicReference: "GC-10229",
-  recipient: { address: "Jl. Ir. H. Juanda No. 10 RT 02", name: "Budi Penerima", phone: "081299990229" },
+  recipient: { address: "Jl. Ir. H. Juanda No. 10 RT 02", landmark: null, name: "Budi Penerima", phone: "081299990229" },
   sender: { address: "Ruko Pengirim Blok C3", name: "Gerai Pengirim", phone: "081211110229" },
   shipmentId: "00000000-0000-4000-8000-000000000229",
   shippingAmountIdr: 18_000,
@@ -93,11 +94,11 @@ const LABEL: PrintableLabel = {
 const RECIPIENT_PHONE = "0812-9999-0229";
 const SENDER_PHONE = "0812-1111-0229";
 
-function render(size: LabelSize, fields?: LabelFieldsBySize) {
+function render(size: LabelSize, fields?: LabelFieldsBySize, label: PrintableLabel = LABEL) {
   return renderToStaticMarkup(createElement(
     LabelPrintContext.Provider,
     { value: { printedAt: null, size } },
-    createElement(LabelSheet, { fields, label: LABEL }),
+    createElement(LabelSheet, { fields, label }),
   ));
 }
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
@@ -166,7 +167,7 @@ describe("label sheet with the Informasi label choice", () => {
       // T-255: phones print grouped (same digits); the area prints as its hierarchy lines.
       for (const expected of [
         LABEL.sender.name, SENDER_PHONE, LABEL.sender.address, LABEL.recipient.name, RECIPIENT_PHONE,
-        LABEL.recipient.address, "Dago, Kec. Coblong, Kota Bandung", "Jawa Barat 40135", "Nomor kiriman GC-10229 · Terbit",
+        LABEL.recipient.address, "Kec. Coblong, Kota Bandung", "Jawa Barat 40135", "Nomor kiriman GC-10229 · Terbit",
       ]) expect(pkg, `${size}: ${expected}`).toContain(expected);
       expect(pkg).toContain(`${LABEL.sender.name} · ${SENDER_PHONE} ${LABEL.sender.address}`);
       expect(pkg).not.toContain(RETURN_WARNING_TEXT);
@@ -200,6 +201,17 @@ describe("label sheet with the Informasi label choice", () => {
     expect(pkg).not.toContain(LABEL.recipient.address);
     // Name and phone stay unless switched off themselves.
     expect(pkg).toContain(LABEL.recipient.name);
+  });
+
+  it("previews a sample patokan under the street that the address detail switch hides (T-258)", () => {
+    const sample = sampleLabel("Gerai Contoh", null);
+    expect(sample.recipient.landmark).toBe("Seberang masjid, pagar hijau");
+    for (const size of ["10x15", "10x10"] as const) {
+      expect(packageOf(render(size, undefined, sample))).toContain(`${sample.recipient.address} Patokan: ${sample.recipient.landmark} Kec. Coblong`);
+      const off = packageOf(render(size, withOff(size, "recipientAddressDetail"), sample));
+      expect(off).not.toContain("Patokan");
+      expect(off).toContain("Kota Bandung, Jawa Barat");
+    }
   });
 
   it("prints the return warning in the footer row instead of the issue time", () => {

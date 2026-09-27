@@ -299,7 +299,7 @@ describe("T-257 platform alignment", () => {
     const html = render(createElement(AuditFeed, {
       label: "Aktivitas audit terbaru",
       now,
-      rows: [{ action: "TENANT_SUSPENDED", actorRole: "SUPER_ADMIN", createdAt: new Date("2026-09-26T15:48:00Z"), fromStatus: "ACTIVE", id: "1", outcome: "SUCCESS", tenantName: "Sekar Batik", toStatus: "SUSPENDED" }],
+      rows: [{ action: "TENANT_SUSPENDED", actorRole: "SUPER_ADMIN", createdAt: new Date("2026-09-26T15:48:00Z"), fromStatus: "ACTIVE", id: "1", outcome: "SUCCESS", targetType: "TENANT", tenantName: "Sekar Batik", toStatus: "SUSPENDED" }],
     }));
     const text = html.replace(/<[^>]+>/g, "|");
     expect(text).toContain("Menangguhkan gerai");
@@ -308,6 +308,21 @@ describe("T-257 platform alignment", () => {
     expect(text).toContain("22.48 WIB| · 12 menit lalu");
     expect(html).toMatch(/datetime="2026-09-26T15:48:00.000Z"/i);
     expect(render(createElement(TimeCell, { instant: new Date("2026-09-26T15:48:00Z") }))).not.toContain("lalu");
+  });
+
+  it("T-259: a gerai row stored without its gerai reads \"Gerai tidak tercatat\"; a platform-wide row keeps \"Platform\"", () => {
+    const row = { actorRole: "TENANT_MEMBER", createdAt: new Date("2026-09-26T15:48:00Z"), fromStatus: null, outcome: "SUCCESS", tenantName: null, toStatus: null };
+    const text = render(createElement(AuditFeed, {
+      label: "Aktivitas audit terbaru",
+      now,
+      rows: [
+        { ...row, action: "SHIPMENT_PREFIX_LOCKED", id: "old-lock", targetType: "TENANT" },
+        { ...row, action: "ANNOUNCEMENT_PUBLISHED", actorRole: "SUPER_ADMIN", id: "info", targetType: "PLATFORM" },
+      ],
+    })).replace(/<[^>]+>/g, "|");
+    expect(text).toContain("Anggota gerai · Gerai tidak tercatat");
+    expect(text).toContain("Admin platform · Platform");
+    expect(text).not.toContain("Anggota gerai · Platform");
   });
 
   it("puts the chosen filter label in the server HTML (T-236 pattern)", () => {

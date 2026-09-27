@@ -8,10 +8,11 @@ import { describe, expect, it } from "vitest";
 
 import { awbBarcodeFits, LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
 import { LabelPrintContext, type LabelPrintContextValue } from "@/app/app/label/[shipmentId]/label-print-context";
-import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
+import { fitRecipientBlock, LabelSheet, type RecipientFitTarget } from "@/app/app/label/[shipmentId]/label-sheet";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import { CODE128_PATTERNS, CODE128_QUIET_ZONE_MODULES, encodeCode128B } from "@/lib/code128";
 import { formatAddressArea, formatPhoneGroups, formatWibDateTime, recipientDensity } from "@/lib/label-format";
+import { DEFAULT_LABEL_FIELDS, DEFAULT_LABEL_FIELDS_BY_SIZE } from "@/lib/label-fields";
 import { geraiSenderIdentity } from "@/lib/shipment-draft-logic";
 import {
   DEFAULT_LABEL_SIZE,
@@ -22,7 +23,7 @@ import {
   writeStoredLabelSize,
 } from "@/lib/label-size";
 
-const RECIPIENT = { address: "Jl. Kenari Dalam No. 42 RT 003 RW 007", name: "Sulastri Penerima", phone: "081377772222" };
+const RECIPIENT = { address: "Jl. Kenari Dalam No. 42 RT 003 RW 007", landmark: null, name: "Sulastri Penerima", phone: "081377772222" };
 const SENDER = { address: "Ruko Pengirim Blok B7", name: "Toko Pengirim Jaya", phone: "081255553333" };
 const AREA = "Kebon Kacang, Tanah Abang, Jakarta Pusat, DKI Jakarta, 10240";
 
@@ -52,8 +53,8 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
   };
 }
 
-function render(label: PrintableLabel, context?: Partial<LabelPrintContextValue>) {
-  const sheet = createElement(LabelSheet, { label });
+function render(label: PrintableLabel, context?: Partial<LabelPrintContextValue>, fields?: Parameters<typeof LabelSheet>[0]["fields"]) {
+  const sheet = createElement(LabelSheet, { fields, label });
   const tree: ReactElement = context
     ? createElement(LabelPrintContext.Provider, { value: { printedAt: null, size: DEFAULT_LABEL_SIZE, ...context } }, sheet)
     : sheet;
@@ -129,7 +130,7 @@ describe("thermal sheet layouts", () => {
     for (const expected of [
       // T-255: phones grouped for reading (same digits), the area as its hierarchy lines.
       "REG", "JX1234567890", RECIPIENT.name, "0813-7777-2222", RECIPIENT.address,
-      "Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta 10240",
+      "Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta 10240",
       SENDER.name, "0812-5555-3333", SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 457.226",
       "Nilai barang", "Rp 425.000", "Ongkir Mengantar", "Rp 17.000", "Biaya COD (termasuk PPN)", "Rp 15.226",
       "Kain batik tulis", "2,125 kg · 2 koli", "25 × 18 × 12 cm", "Asuransi Mengantar", "Rp 2.000",
@@ -208,10 +209,13 @@ describe("thermal sheet layouts", () => {
 // block for the amount to collect. Print geometry (one page per label, no clipping, 7 pt
 // floor) is measured in a real browser; these pin what prints and in which order.
 describe("T-255 label anatomy", () => {
-  it("prints a service that only repeats the courier once, and strips a repeated courier prefix", () => {
+  it("prints the courier by its display name, a service that only repeats the courier once, and strips a repeated courier prefix", () => {
     const repeated = text(render(printableLabel({ courier: "JT", providerService: "JT" })));
-    expect(repeated).not.toMatch(/\bJT JT\b/);
-    expect(repeated).toMatch(/\bJT\b/);
+    expect(repeated).not.toMatch(/\bJT\b/);
+    expect(repeated).toContain("J&T");
+    const pos = text(render(printableLabel({ courier: "pos", providerService: "POS" })));
+    expect(pos).toContain("POS Indonesia");
+    expect(pos).not.toMatch(/\bpos\b/);
     const prefixed = text(render(printableLabel({ courier: "JNE", providerService: "JNE REG" })));
     expect(prefixed).toMatch(/\bJNE REG\b/);
     expect(prefixed).not.toMatch(/\bJNE JNE\b/);
@@ -224,7 +228,7 @@ describe("T-255 label anatomy", () => {
     const recipient = recipientOf(html);
     const order = [
       "Penerima", RECIPIENT.name, "0813-7777-2222", RECIPIENT.address,
-      "Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta", "10240",
+      "Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta", "10240",
     ].map((piece) => recipient.indexOf(piece));
     expect(order.every((index) => index >= 0), String(order)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -235,16 +239,22 @@ describe("T-255 label anatomy", () => {
     expect(html.indexOf("label-sender")).toBeLessThan(html.indexOf("label-payment-block"));
   });
 
+  it("puts the recipient's name left and phone right on one line (owner, 2026-09-27)", () => {
+    const recipient = recipientOf(packageOf(render(printableLabel())));
+    expect(recipient).toMatch(/<span class="label-recipient-line"><span class="label-party-name">Sulastri Penerima<\/span> <span class="label-party-phone">0813-7777-2222<\/span><\/span>/);
+  });
+
   it("composes the area lines from the stored label's hierarchy and never invents a part", () => {
-    expect(formatAddressArea(AREA)).toEqual({ lines: ["Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta"], postalCode: "10240" });
+    expect(formatAddressArea(AREA)).toEqual({ lines: ["Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta"], postalCode: "10240" });
     // No kelurahan: kecamatan, kota / provinsi.
     expect(formatAddressArea("Coblong, Kota Bandung, Jawa Barat, 40135")).toEqual({ lines: ["Kec. Coblong, Kota Bandung", "Jawa Barat"], postalCode: "40135" });
-    // Counted from the end: a comma inside the kelurahan stays in the kelurahan.
+    // Counted from the end, and the kelurahan (with any comma inside it) is left out: the typed
+    // address already carries it; the label composes only the Mengantar pattern (owner, 2026-09-27).
     expect(formatAddressArea("Kebon Jeruk, Blok A, Kebon Jeruk, Jakarta Barat, DKI Jakarta, 11530").lines)
-      .toEqual(["Kebon Jeruk, Blok A, Kec. Kebon Jeruk, Jakarta Barat", "DKI Jakarta"]);
+      .toEqual(["Kec. Kebon Jeruk, Jakarta Barat", "DKI Jakarta"]);
     // Kabupaten keeps its stored name; an already prefixed kecamatan is not prefixed twice.
     expect(formatAddressArea("Caturtunggal, Kecamatan Depok, Kabupaten Sleman, DI Yogyakarta, 55281").lines)
-      .toEqual(["Caturtunggal, Kecamatan Depok, Kabupaten Sleman", "DI Yogyakarta"]);
+      .toEqual(["Kecamatan Depok, Kabupaten Sleman", "DI Yogyakarta"]);
     // Fewer than three parts cannot say which is which: printed as stored, no "Kec.".
     expect(formatAddressArea("Gambir, Jakarta Pusat")).toEqual({ lines: ["Gambir, Jakarta Pusat"], postalCode: null });
     expect(formatAddressArea(" , 10110")).toEqual({ lines: [], postalCode: "10110" });
@@ -310,7 +320,7 @@ describe("T-255 label anatomy", () => {
       expect(recipient).toContain(address.trim());
       // Past 480 characters the two area lines share one line instead of dropping it.
       expect(recipient.match(/class="label-party-area/g)).toHaveLength(1);
-      expect(recipient).toContain("Kebon Kacang, Kec. Tanah Abang, Jakarta Pusat, DKI Jakarta</span> <b class=\"label-postal\">10240</b>");
+      expect(recipient).toContain("Kec. Tanah Abang, Jakarta Pusat, DKI Jakarta</span> <b class=\"label-postal\">10240</b>");
     }
     // In the browser the street clamps last (label.css --street-lines) so the area lines print whole.
     expect(readFileSync("src/app/label.css", "utf8")).toContain('.label-recipient[data-density="ultra"] .label-party-address { -webkit-line-clamp:var(--street-lines,7);');
@@ -332,6 +342,104 @@ describe("T-255 label anatomy", () => {
     const spxWidth = renderToStaticMarkup(createElement(LabelBarcode, { fill: true, heightMm: 10, value: "SPXID048001169536" })).match(/width:([\d.]+)mm/)?.[1];
     expect(Number(spxWidth)).toBe(spx.modules * 0.375);
     expect(renderToStaticMarkup(createElement(LabelBarcode, { fill: true, heightMm: 10, value: "A".repeat(29) }))).toContain(`width:${(20 + 11 * 31 + 13) * 0.25}mm`);
+  });
+});
+
+// T-258 — the recipient's patokan: one small line under the street on the package label,
+// following the address detail switch, never on the stub, and the first text to give way.
+describe("T-258 patokan on the package label", () => {
+  const LANDMARK = "Seberang masjid Al-Ikhlas, pagar hijau";
+  const withLandmark = (landmark: string | null, address = RECIPIENT.address) => printableLabel({ recipient: { ...RECIPIENT, address, landmark } });
+  const recipientOf = (html: string) => html.match(/<div class="label-party label-recipient"[\s\S]*?<\/div>/)?.[0] ?? "";
+
+  it("prints \"Patokan: …\" directly under the street line, at both sizes", () => {
+    for (const size of ["10x15", "10x10"] as const) {
+      const recipient = recipientOf(packageOf(render(withLandmark(LANDMARK), { size })));
+      expect(recipient).toContain(`<p class="label-party-address">${RECIPIENT.address}</p><p class="label-party-landmark"><b>Patokan:</b> ${LANDMARK}</p><p class="label-party-area">`);
+    }
+  });
+
+  it("prints nothing — no line, no gap — when there is no patokan", () => {
+    const without = render(withLandmark(null));
+    expect(without).not.toContain("label-party-landmark");
+    expect(text(without)).not.toContain("Patokan");
+    expect(render(withLandmark(""))).toBe(without);
+  });
+
+  it("follows the address detail switch: off prints only kota and provinsi, without the patokan", () => {
+    const off = { ...DEFAULT_LABEL_FIELDS_BY_SIZE, "10x10": { ...DEFAULT_LABEL_FIELDS, recipientAddressDetail: false } };
+    const hidden = packageOf(render(withLandmark(LANDMARK), { size: "10x10" }, off));
+    expect(text(hidden)).toContain("Jakarta Pusat, DKI Jakarta");
+    expect(hidden).not.toContain("label-party-landmark");
+    expect(text(hidden)).not.toContain(LANDMARK);
+    // Only at the size it was switched off for.
+    expect(text(packageOf(render(withLandmark(LANDMARK), { size: "10x15" }, off)))).toContain(`Patokan: ${LANDMARK}`);
+  });
+
+  it("never prints the patokan on the stub that leaves with the sender", () => {
+    const html = render(withLandmark(LANDMARK), { size: "10x15" });
+    expect(text(packageOf(html))).toContain(LANDMARK);
+    expect(text(stubOf(html))).not.toContain("Patokan");
+    expect(text(stubOf(html))).not.toContain("Al-Ikhlas");
+    expect(stubOf(html)).toBe(stubOf(render(withLandmark(null), { size: "10x15" })));
+  });
+
+  it("keeps a 484-character address with a 160-character patokan on one sheet, area lines whole", () => {
+    const address = "Jl. Raya Kebon Jeruk Gg. Haji Mawar No. 17B RT 004 RW 011 ".repeat(9).slice(0, 484);
+    const landmark = "Belakang pasar lama, masuk gang sebelah toko bangunan Sinar Jaya, rumah cat biru pagar besi hitam, ".repeat(2).slice(0, 160);
+    expect(landmark).toHaveLength(160);
+    for (const size of ["10x15", "10x10"] as const) {
+      const html = render(withLandmark(landmark, address), { size });
+      // One sheet (one printed page): one package, and at 10 × 15 one stub.
+      expect(html.match(/<article/g)).toHaveLength(1);
+      expect(html.match(/class="label-package"/g)).toHaveLength(1);
+      const recipient = recipientOf(packageOf(html));
+      expect(recipient).toContain('data-density="ultra"');
+      expect(recipient).toContain(`<b>Patokan:</b> ${landmark}</p>`);
+      expect(recipient).toContain("Kec. Tanah Abang, Jakarta Pusat, DKI Jakarta</span> <b class=\"label-postal\">10240</b>");
+    }
+    // The patokan clamps through its own variable; the area lines carry no clamp at all.
+    const css = readFileSync("src/app/label.css", "utf8");
+    expect(css).toContain(".label-recipient .label-party-landmark { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:var(--landmark-lines,2);");
+    expect(css.match(/\.label-party-area[^{]*\{[^}]*line-clamp/g)).toBeNull();
+  });
+
+  // A model of the recipient block: the height each part takes at each tier and clamp, so the
+  // ladder's order is pinned without a browser (the browser run measures the real sheet).
+  function fitModel(input: { capacity: number; landmark: boolean }) {
+    const tierScale = { compact: 1, long: 0.85, dense: 0.7, ultra: 0.6 } as const;
+    const state = { landmarkLines: 2, streetLines: 7, tier: "compact" as keyof typeof tierScale };
+    const log: string[] = [];
+    const height = () => {
+      const scale = tierScale[state.tier];
+      return 30 * scale + Math.min(10, state.streetLines) * 6 * scale + (input.landmark ? state.landmarkLines * 5 : 0) + 12 * scale;
+    };
+    const target: RecipientFitTarget = {
+      overflowing: () => height() > input.capacity,
+      setLandmarkLines: (lines) => { state.landmarkLines = lines ?? 2; if (lines !== null) log.push(`landmark:${lines}`); },
+      setStreetLines: (lines) => { state.streetLines = lines ?? 7; if (lines !== null) log.push(`street:${lines}`); },
+      setTier: (tier) => { if (tier !== state.tier) log.push(`tier:${tier}`); state.tier = tier; },
+    };
+    return { log, state, target };
+  }
+
+  it("clamps the patokan first, before the type steps down or the street loses a line", () => {
+    // Room for everything once the patokan gives one line: nothing else changes.
+    const light = fitModel({ capacity: 30 + 42 + 5 + 12, landmark: true });
+    fitRecipientBlock(light.target, "compact", true);
+    expect(light.log).toEqual(["landmark:1"]);
+    // A tight block: the patokan goes to one line first, then the tiers, then the street.
+    const tight = fitModel({ capacity: 40, landmark: true });
+    fitRecipientBlock(tight.target, "compact", true);
+    expect(tight.log[0]).toBe("landmark:1");
+    expect(tight.log.indexOf("tier:ultra")).toBeLessThan(tight.log.findIndex((step) => step.startsWith("street:")));
+    expect(tight.log.findIndex((step) => step.startsWith("street:"))).toBeGreaterThan(0);
+    expect(tight.state.landmarkLines).toBe(1);
+    // Without a patokan the ladder is exactly T-255's.
+    const none = fitModel({ capacity: 40, landmark: false });
+    fitRecipientBlock(none.target, "compact", false);
+    expect(none.log.some((step) => step.startsWith("landmark"))).toBe(false);
+    expect(none.log.slice(0, 3)).toEqual(["tier:long", "tier:dense", "tier:ultra"]);
   });
 });
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { auditEventActions, tenantStatuses } from "@/db/schema";
+import { auditEventActions, auditEventTargetTypes, tenantStatuses } from "@/db/schema";
 import {
   auditActionSentence,
   auditActorLabel,
   auditOutcomeLabel,
+  auditTenantFallbackLabel,
   tenantStatusLabel,
   tenantStatusTone,
 } from "@/lib/labels/audit";
@@ -33,6 +34,16 @@ describe("T-202 audit and tenant-status labels (spec 10 §8, spec 18 /platform/a
       .not.toContain("SOMETHING_NEW");
     expect(auditActorLabel("TENANT_MEMBER")).toBe("Anggota gerai");
     expect(auditActorLabel("toString")).toBe("Sistem");
+  });
+
+  it("T-259: only a PLATFORM target reads \"Platform\" without a gerai; every gerai target reads \"Gerai tidak tercatat\"", () => {
+    expect(auditEventTargetTypes.map((type) => [type, auditTenantFallbackLabel(type)])).toEqual([
+      ["TENANT", "Gerai tidak tercatat"],
+      ["PLATFORM", "Platform"],
+      ["MEMBERSHIP", "Gerai tidak tercatat"],
+      ["OUTLET", "Gerai tidak tercatat"],
+    ]);
+    expect(auditTenantFallbackLabel(null)).toBe("Gerai tidak tercatat");
   });
 
   it("gives tenant statuses and outcomes distinct Indonesian labels and tones", () => {

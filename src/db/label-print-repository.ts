@@ -63,7 +63,11 @@ export type PrintableLabel = {
   /** The shipment's own outlet, printed on the T-176 sender stub. */
   outletName: string;
   sender: { name: string; phone: string; address: string };
-  recipient: { name: string; phone: string; address: string };
+  /**
+   * T-258: `landmark` is the draft's optional patokan (≤ 160 characters), printed under the
+   * street on the package label only — never on the sender stub or the invoice.
+   */
+  recipient: { name: string; phone: string; address: string; landmark: string | null };
   printCount: number;
   lastPrintedAt: Date | null;
 };
@@ -213,6 +217,7 @@ export async function loadPrintableLabel(
       publicReference: shipments.publicReference,
       shipmentStatus: shipments.status,
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
+      recipientAddressLandmark: shipmentDrafts.recipientAddressLandmark,
       packageContent: shipmentDrafts.packageContent,
       packageWeightGrams: shipmentDrafts.packageWeightGrams,
       packageQuantity: shipmentDrafts.packageQuantity,
@@ -383,6 +388,7 @@ export async function loadPrintableLabel(
       name: recipient.name,
       phone: recipient.phone,
       address: recipient.address,
+      landmark: row.recipientAddressLandmark?.trim() || null,
     },
     printCount: summary?.printCount ?? 0,
     lastPrintedAt: summary?.lastPrintedAt

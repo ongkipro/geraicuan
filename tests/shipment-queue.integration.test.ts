@@ -98,6 +98,11 @@ async function deleteAllFixtures() {
     tenantA,
     tenantB,
   ]);
+  // T-259: the first shipment's implicit prefix lock is stored with the gerai (audit FK, 0069).
+  await adminPool.query("DELETE FROM audit_events WHERE tenant_id IN ($1, $2)", [
+    tenantA,
+    tenantB,
+  ]);
   await adminPool.query("DELETE FROM tenants WHERE id IN ($1, $2)", [
     tenantA,
     tenantB,

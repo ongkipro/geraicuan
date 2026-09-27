@@ -33,6 +33,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
     providerService: "REG",
     recipient: {
       address: "Jl. Penerima 1",
+      landmark: null,
       name: "Penerima Label",
       phone: "081299998765",
     },

@@ -93,6 +93,8 @@ export type AuditRow = {
   outcome: "SUCCESS" | "DENIED";
   tenantId: string | null;
   tenantName: string | null;
+  /** `TENANT` | `PLATFORM` | `MEMBERSHIP` | `OUTLET`: tells a platform-wide row from a gerai row stored without its tenant (T-259). */
+  targetType: string;
   actorRole: string | null;
   fromStatus: string | null;
   toStatus: string | null;
@@ -437,8 +439,8 @@ export async function listAuditEvents(tx:PlatformTransaction,filters:PlatformFil
   const count=await tx.execute<{total:string}>(sql`SELECT count(*)::text total FROM ${platformMonitoringAuditEvent} a WHERE a.created_at>=${filters.range.startInclusive} AND a.created_at<${filters.range.endExclusive} ${where}`);
   const total=asNumber(count.rows[0]?.total);if(total===0)return {rows:[],total};
   const offset=Math.min((filters.page-1)*limit,Math.floor((total-1)/limit)*limit);
-  const rows=await tx.execute<Record<string,unknown>>(sql`SELECT a.id,a.created_at,a.action,a.outcome,a.tenant_id,t.name tenant_name,a.actor_role,a.from_status,a.to_status FROM ${platformMonitoringAuditEvent} a LEFT JOIN ${platformMonitoringTenant} t ON t.id=a.tenant_id WHERE a.created_at>=${filters.range.startInclusive} AND a.created_at<${filters.range.endExclusive} ${where} ORDER BY a.created_at DESC,a.id DESC LIMIT ${limit} OFFSET ${offset}`);
-  return {total,rows:rows.rows.map((r)=>({id:String(r.id),createdAt:asDate(r.created_at)!,action:String(r.action),outcome:r.outcome as AuditRow["outcome"],tenantId:r.tenant_id?String(r.tenant_id):null,tenantName:r.tenant_name?String(r.tenant_name):null,actorRole:r.actor_role?String(r.actor_role):null,fromStatus:r.from_status?String(r.from_status):null,toStatus:r.to_status?String(r.to_status):null}))};
+  const rows=await tx.execute<Record<string,unknown>>(sql`SELECT a.id,a.created_at,a.action,a.outcome,a.tenant_id,t.name tenant_name,a.target_type,a.actor_role,a.from_status,a.to_status FROM ${platformMonitoringAuditEvent} a LEFT JOIN ${platformMonitoringTenant} t ON t.id=a.tenant_id WHERE a.created_at>=${filters.range.startInclusive} AND a.created_at<${filters.range.endExclusive} ${where} ORDER BY a.created_at DESC,a.id DESC LIMIT ${limit} OFFSET ${offset}`);
+  return {total,rows:rows.rows.map((r)=>({id:String(r.id),createdAt:asDate(r.created_at)!,action:String(r.action),outcome:r.outcome as AuditRow["outcome"],tenantId:r.tenant_id?String(r.tenant_id):null,tenantName:r.tenant_name?String(r.tenant_name):null,targetType:String(r.target_type),actorRole:r.actor_role?String(r.actor_role):null,fromStatus:r.from_status?String(r.from_status):null,toStatus:r.to_status?String(r.to_status):null}))};
 }
 
 export async function readTenantDetail(tx:PlatformTransaction,filters:PlatformFilters):Promise<{tenant:TenantRow;outlets:OutletHealthRow[];batches:BatchRow[]}|null>{

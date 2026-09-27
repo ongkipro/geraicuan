@@ -1824,8 +1824,55 @@ try {
   if ((await client.query("SELECT (SELECT count(*) FROM tenant_logo_versions) + (SELECT count(*) FROM tenant_brand_settings) AS n")).rows[0].n !== "0") {
     throw new Error("The 0068 probes left a change behind.");
   }
+  // T-259: 0069 (DATA-23, D-35). A pre-0069 implicit prefix lock stored without its gerai stays
+  // exactly as written (CHECK added NOT VALID); every later tenantless row about a gerai is refused,
+  // platform-wide and refused-lifecycle rows still pass; the allocation function now stores
+  // NEW.tenant_id and keeps its privileges (no EXECUTE for the runtime role).
+  const auditTenantIndex = migrations.findIndex((migration) => migration.startsWith("0069_audit_tenant_recorded"));
+  if (auditTenantIndex !== reviewFixIndex + 1) throw new Error("Expected the audit-tenant (0069) upgrade boundary right after 0068.");
+  const allocationAcl = async () => (await client.query("SELECT proacl::text AS acl, pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE oid = 'public.allocate_shipment_reference()'::regprocedure")).rows[0];
+  const legacyLock069 = (await client.query(`INSERT INTO audit_events (action, outcome, target_type, target_id, tenant_id, metadata)
+    VALUES ('SHIPMENT_PREFIX_LOCKED', 'SUCCESS', 'TENANT', '00000000-0000-0000-0000-000000000901', NULL, '{"implicit": true, "prefix": "GC"}') RETURNING id`)).rows[0].id;
+  const auditBefore069 = await auditRows();
+  const aclBefore069 = await allocationAcl();
+  await applyMigrations(migrations.slice(auditTenantIndex, auditTenantIndex + 1));
+  const probe069 = async (values) => {
+    await client.query("SAVEPOINT probe069");
+    try {
+      await client.query(`INSERT INTO audit_events (action, outcome, target_type, target_id, tenant_id) VALUES ${values}`);
+      await client.query("RELEASE SAVEPOINT probe069");
+      return "accepted";
+    } catch (error) {
+      await client.query("ROLLBACK TO SAVEPOINT probe069");
+      return error.code;
+    }
+  };
+  await client.query("BEGIN");
+  const guard069 = {
+    tenantless: await probe069("('SHIPMENT_PREFIX_LOCKED', 'SUCCESS', 'TENANT', '00000000-0000-0000-0000-000000000901', NULL)"),
+    tenantlessOutlet: await probe069("('OUTLET_SETTINGS_CHANGED', 'SUCCESS', 'OUTLET', '00000000-0000-0000-0000-000000000902', NULL)"),
+    withTenant: await probe069("('SHIPMENT_PREFIX_LOCKED', 'SUCCESS', 'TENANT', '00000000-0000-0000-0000-000000000901', '00000000-0000-0000-0000-000000000901')"),
+    platform: await probe069("('ANNOUNCEMENT_SAVED', 'SUCCESS', 'PLATFORM', 'GLOBAL', NULL)"),
+    deniedLifecycle: await probe069("('TENANT_SUSPENDED', 'DENIED', 'TENANT', 'UNSPECIFIED', NULL)"),
+  };
+  await client.query("ROLLBACK");
+  const { rows: [fix069] } = await client.query(`
+    SELECT (SELECT convalidated FROM pg_constraint WHERE conrelid = 'public.audit_events'::regclass AND conname = 'audit_events_tenant_recorded') AS validated,
+      (SELECT prosrc LIKE '%''TENANT_MEMBER'' END, NEW.tenant_id,%' FROM pg_proc WHERE oid = 'public.allocate_shipment_reference()'::regprocedure) AS stores_tenant,
+      (SELECT count(*)::int FROM pg_trigger WHERE tgname = 'shipments_allocate_public_reference' AND tgfoid = 'public.allocate_shipment_reference()'::regprocedure) AS trigger_bound
+  `);
+  if (
+    fix069.validated !== false || fix069.stores_tenant !== true || fix069.trigger_bound !== 1
+    || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore069)
+    || JSON.stringify(await allocationAcl()) !== JSON.stringify(aclBefore069)
+    || guard069.tenantless !== "23514" || guard069.tenantlessOutlet !== "23514" || guard069.withTenant !== "accepted"
+    || guard069.platform !== "accepted" || guard069.deniedLifecycle !== "accepted"
+  ) {
+    throw new Error(`0069 did not upgrade cleanly: ${JSON.stringify({ fix069, guard069, aclBefore069 })}`);
+  }
+  await client.query("DELETE FROM audit_events WHERE id = $1", [legacyLock069]);
   // Later migrations apply on top (each adds its own probes above this line as it lands).
-  await applyMigrations(migrations.slice(reviewFixIndex + 1));
+  await applyMigrations(migrations.slice(auditTenantIndex + 1));
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);
 } finally {

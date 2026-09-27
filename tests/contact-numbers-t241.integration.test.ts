@@ -113,6 +113,8 @@ async function clean() {
   }
   await admin.query("DELETE FROM tenant_contact_counters WHERE tenant_id = ANY($1::uuid[])", [[tenantA, tenantB]]);
   await admin.query("DELETE FROM tenant_shipment_counters WHERE tenant_id = ANY($1::uuid[])", [[tenantA, tenantB]]);
+  // T-259: the first shipment's implicit prefix lock is stored with the gerai (audit FK, 0069).
+  await admin.query("DELETE FROM audit_events WHERE tenant_id = ANY($1::uuid[])", [[tenantA, tenantB]]);
   await admin.query("DELETE FROM tenants WHERE id = ANY($1::uuid[])", [[tenantA, tenantB]]);
   await admin.query("DELETE FROM users WHERE id = ANY($1::text[])", [[adminA, operatorA, adminB]]);
 }

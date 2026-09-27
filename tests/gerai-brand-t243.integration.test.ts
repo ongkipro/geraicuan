@@ -147,7 +147,7 @@ const LABEL: PrintableLabel = {
   providerCodAmountIdr: null,
   providerService: "REG",
   publicReference: "GC-10243",
-  recipient: { address: "Jl. Ir. H. Juanda No. 10 RT 02", name: "Budi Penerima", phone: "081299990243" },
+  recipient: { address: "Jl. Ir. H. Juanda No. 10 RT 02", landmark: null, name: "Budi Penerima", phone: "081299990243" },
   sender: { address: "Ruko Pengirim Blok C3", name: "Gerai Pengirim", phone: "081211110243" },
   shipmentId: "00000000-0000-4000-8000-000000000243",
   shippingAmountIdr: 18_000,

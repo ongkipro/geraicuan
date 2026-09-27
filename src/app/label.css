@@ -39,14 +39,22 @@
 /* Recipient: name, phone and address step down together with the density tier, so a short
    address prints large for a courier at arm's length and the 484-character ceiling fits.
    Up to "long" the name and phone stack; from "dense" they share the PENERIMA line. The
-   street clamps; the area lines (kecamatan, kota, provinsi, kode pos) always print. */
+   patokan clamps first, then the street; the area lines (kecamatan, kota, provinsi, kode pos)
+   always print. */
 .label-recipient { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; margin-top:2.2mm; }
 .label-recipient > * { flex:none; min-width:0; }
 .label-recipient-id > span { display:block; }
 .label-recipient-id .label-eyebrow { margin-bottom:.4mm; }
 .label-recipient .label-party-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:14pt; font-weight:800; line-height:1.12; overflow-wrap:anywhere; }
-.label-recipient .label-party-phone { margin-top:.2mm; font-size:12.5pt; font-weight:700; line-height:1.15; letter-spacing:.02em; white-space:nowrap; }
+.label-recipient .label-party-phone { flex:none; margin-left:auto; font-size:12.5pt; font-weight:700; line-height:1.15; letter-spacing:.02em; white-space:nowrap; }
+/* Name left, phone right on one line (owner, 2026-09-27). */
+.label-recipient-line { display:flex !important; align-items:baseline; gap:2mm; }
+.label-recipient-line .label-party-name { flex:1 1 auto; min-width:0; }
 .label-recipient .label-party-address { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; margin-top:1mm !important; font-size:9.5pt; line-height:1.18; overflow-wrap:anywhere; }
+/* T-258: the patokan, one small line under the street (two when it wraps); the fitting ladder
+   clamps it to one line (--landmark-lines) before the type or the street give way. */
+.label-recipient .label-party-landmark { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:var(--landmark-lines,2); overflow:hidden; margin-top:.3mm; font-size:7.5pt; line-height:1.15; overflow-wrap:anywhere; }
+.label-recipient .label-party-landmark b { font-weight:700; }
 .label-recipient .label-party-area { font-size:9.5pt; font-weight:700; line-height:1.18; overflow-wrap:anywhere; }
 .label-party-region { display:flex; align-items:baseline; justify-content:space-between; gap:3mm; }
 .label-postal { flex:none; font-weight:800; letter-spacing:.04em; }
@@ -55,9 +63,10 @@
 .label-recipient[data-density="long"] .label-party-address { -webkit-line-clamp:4; font-size:8.5pt; line-height:1.15; }
 .label-recipient[data-density="long"] .label-party-area { font-size:8.5pt; line-height:1.15; }
 .label-recipient:is([data-density="dense"], [data-density="ultra"]) { margin-top:1.2mm; }
-.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-id > span { display:inline; }
-.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-id .label-eyebrow { margin-right:1mm; }
-.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-party-phone { margin-left:1.5mm; }
+/* Dense tiers: eyebrow, name and phone share the one line. */
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-id { display:flex; align-items:baseline; gap:1mm; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-id .label-eyebrow { flex:none; margin-bottom:0; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-recipient-line { flex:1 1 auto; min-width:0; }
 .label-recipient[data-density="dense"] .label-recipient-id { font-size:11pt; line-height:1.15; }
 .label-recipient[data-density="dense"] .label-party-name { font-size:11pt; }
 .label-recipient[data-density="dense"] .label-party-phone { font-size:10.5pt; }
@@ -68,6 +77,7 @@
 .label-recipient[data-density="ultra"] .label-party-phone { font-size:9.5pt; }
 .label-recipient[data-density="ultra"] .label-party-address { -webkit-line-clamp:var(--street-lines,7); margin-top:.4mm !important; font-size:7pt; line-height:1.1; }
 .label-recipient[data-density="ultra"] .label-party-area { font-size:7pt; line-height:1.1; }
+.label-recipient:is([data-density="dense"], [data-density="ultra"]) .label-party-landmark { margin-top:.2mm; font-size:7pt; line-height:1.1; }
 /* The only rule on the package: between the recipient and the sender. */
 .label-sender { margin-top:1.2mm; padding-top:1.2mm; border-top:1px solid #000; }
 .label-sender-line { overflow:hidden; font-size:8pt; line-height:1.2; white-space:nowrap; text-overflow:ellipsis; }

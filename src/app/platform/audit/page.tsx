@@ -10,7 +10,7 @@ import { RecordItem, RecordList } from "@/components/app/record-list";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRangeLabel } from "@/lib/analytics-range";
-import { auditActionLabel, auditActionOptions } from "@/lib/labels/audit";
+import { auditActionLabel, auditActionOptions, auditTenantFallbackLabel } from "@/lib/labels/audit";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 
 import { FilterSelect } from "../_components/filter-select";
@@ -103,7 +103,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
                         {row.tenantId && row.tenantName ? (
                           <Link className="text-primary hover:underline" href={`/platform/tenant/${row.tenantId}`} prefetch={false}>{row.tenantName}</Link>
                         ) : (
-                          <span className="text-muted-foreground">Platform</span>
+                          <span className="text-muted-foreground">{auditTenantFallbackLabel(row.targetType)}</span>
                         )}
                       </TableCell>
                       <TableCell><AuditOutcomeBadge outcome={row.outcome} /></TableCell>
@@ -118,7 +118,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
                       key={row.id}
                       meta={tenantStatusChange(row)}
                       status={<AuditOutcomeBadge outcome={row.outcome} />}
-                      subtitle={`${auditActor(row)} · ${row.tenantName ?? "Platform"}`}
+                      subtitle={`${auditActor(row)} · ${row.tenantName ?? auditTenantFallbackLabel(row.targetType)}`}
                       time={[formatWib(row.createdAt), formatAgo(row.createdAt, view.now)].filter(Boolean).join(" · ")}
                       title={<span className="whitespace-normal">{auditActionLabel(row.action)}</span>}
                     />

@@ -103,6 +103,16 @@ export function auditActionOptions(): { label: string; value: AuditAction }[] {
     .sort((a, b) => a.label.localeCompare(b.label, "id-ID"));
 }
 
+/**
+ * T-259: the Gerai cell of a row whose gerai name is missing. Only a PLATFORM target is a
+ * platform-wide event; any other target is about a gerai that was not stored with the row
+ * (implicit prefix locks before migration 0069, refused lifecycle attempts on an unverified
+ * gerai), so it must not read "Platform". Mirrors CHECK `audit_events_tenant_recorded`.
+ */
+export function auditTenantFallbackLabel(targetType: string | null | undefined): string {
+  return targetType === "PLATFORM" ? "Platform" : "Gerai tidak tercatat";
+}
+
 export function auditOutcomeLabel(outcome: string | null | undefined): { label: string; tone: Tone } {
   if (outcome === "SUCCESS") return { label: "Berhasil", tone: "ok" };
   if (outcome === "DENIED") return { label: "Ditolak", tone: "danger" };

@@ -82,7 +82,7 @@ describe("per-tenant shipment numbers (PR-44)", () => {
     expect(rows.every(row => row.publicReference === `GC-${row.tenantNumber}` && row.createdByUserId === users[0])).toBe(true);
     expect(await counter(0)).toMatchObject({ last_number: 10011, shipment_prefix: "GC", shipment_prefix_locked_at: expect.any(Date) });
     const implicit = await admin.query("SELECT actor_id, tenant_id, metadata FROM audit_events WHERE target_id=$1 AND action='SHIPMENT_PREFIX_LOCKED'", [tenants[0]]);
-    expect(implicit.rows).toEqual([{ actor_id: users[0], tenant_id: null, metadata: { implicit: true, prefix: "GC" } }]);
+    expect(implicit.rows).toEqual([{ actor_id: users[0], tenant_id: tenants[0], metadata: { implicit: true, prefix: "GC" } }]);
     // Another tenant starts its own sequence; the same displayed number is not a collision.
     expect((await insert(1)).publicReference).toBe("GC-10000");
   });
@@ -204,8 +204,10 @@ describe("per-tenant shipment numbers (PR-44)", () => {
       expect(await references(4)).toEqual(["OWN-10000"]);
       expect(await inTenant(4, (tx, context) => loadTenantShipmentPrefix(tx, context))).toMatchObject({ prefix: "OWN" });
       await unlockTenantShipmentPrefix(db, superAdmin, tenants[4], randomUUID());
-      const audit = await admin.query<{ action: string }>("SELECT action FROM audit_events WHERE target_id=$1", [tenants[4]]);
+      const audit = await admin.query<{ action: string; tenant_id: string | null }>("SELECT action, tenant_id FROM audit_events WHERE target_id=$1", [tenants[4]]);
       expect(audit.rows.map(row => row.action).sort()).toEqual(["SHIPMENT_PREFIX_LOCKED", "SHIPMENT_PREFIX_LOCKED", "SHIPMENT_PREFIX_UNLOCKED"]);
+      // T-259: the implicit lock, too, is stored with its gerai under a restricted owner (RLS applies).
+      expect(audit.rows.map(row => row.tenant_id)).toEqual([tenants[4], tenants[4], tenants[4]]);
     } finally {
       for (const { proc, owner } of owners.rows) await client.query(`ALTER FUNCTION ${proc} OWNER TO "${owner}"`);
       await client.query("REVOKE ALL ON users, memberships, tenants, outlets, platform_roles, tenant_shipment_counters, shipments, audit_events FROM geraicuan_owner_probe");

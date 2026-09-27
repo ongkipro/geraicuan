@@ -307,6 +307,8 @@ describe("tenant isolation posture", () => {
       await appPool.end();
       await adminPool.query("DELETE FROM shipments WHERE id = $1", [shipmentId]);
       await adminPool.query("DELETE FROM outlets WHERE id = $1", [outletId]);
+      // T-259: the first shipment's implicit prefix lock is stored with the gerai (audit FK, 0069).
+      await adminPool.query("DELETE FROM audit_events WHERE tenant_id = $1", [tenantId]);
       await adminPool.query("DELETE FROM tenants WHERE id = $1", [tenantId]);
     }
   });

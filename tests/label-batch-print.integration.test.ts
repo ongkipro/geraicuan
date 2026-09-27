@@ -110,6 +110,8 @@ async function clean() {
     await adminPool.query(`DELETE FROM ${table} WHERE tenant_id = $1`, [tenantId]);
   }
   await adminPool.query("DELETE FROM tenant_shipment_counters WHERE tenant_id = $1", [tenantId]);
+  // T-259: the first shipment's implicit prefix lock is stored with the gerai (audit FK, 0069).
+  await adminPool.query("DELETE FROM audit_events WHERE tenant_id = $1", [tenantId]);
   await adminPool.query("DELETE FROM tenants WHERE id = $1", [tenantId]);
   await adminPool.query("DELETE FROM users WHERE id = $1", [operatorId]);
 }

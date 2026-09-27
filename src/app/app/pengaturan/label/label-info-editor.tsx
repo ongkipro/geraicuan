@@ -32,8 +32,12 @@ const SIZE_OPTIONS: { description: string; size: LabelSize }[] = [
   { description: "Label paket saja.", size: "10x10" },
 ];
 
-/** Preview data only: the gerai's own name and WhatsApp as the sender, the rest an example. */
-function sampleLabel(geraiName: string, geraiWhatsapp: string | null): PrintableLabel {
+/**
+ * Preview data only: the gerai's own name and WhatsApp as the sender, the rest an example
+ * (T-258: with a patokan, so the preview shows where it prints and that it follows the
+ * address detail switch).
+ */
+export function sampleLabel(geraiName: string, geraiWhatsapp: string | null): PrintableLabel {
   return {
     awb: "JX0012345678",
     codBreakdown: null,
@@ -50,7 +54,12 @@ function sampleLabel(geraiName: string, geraiWhatsapp: string | null): Printable
     providerCodAmountIdr: null,
     providerService: "REG",
     publicReference: "GC-10013",
-    recipient: { address: "Jl. Ir. H. Juanda No. 10, RT 02 RW 05", name: "Budi Santoso", phone: "081234567890" },
+    recipient: {
+      address: "Jl. Ir. H. Juanda No. 10, RT 02 RW 05",
+      landmark: "Seberang masjid, pagar hijau",
+      name: "Budi Santoso",
+      phone: "081234567890",
+    },
     sender: { address: "Alamat titik pickup gerai", name: geraiName, phone: geraiWhatsapp ?? "0812 0000 0000" },
     shipmentId: "00000000-0000-4000-8000-000000000000",
     shippingAmountIdr: 18_000,

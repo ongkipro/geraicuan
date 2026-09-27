@@ -163,8 +163,10 @@ export function formatPhoneGroups(phone: string) {
  * T-255: the destination area as the label's address lines 2 and 3, read from the stored
  * Mengantar area label ("kelurahan, kecamatan, kota/kabupaten, provinsi, kode pos") counted
  * from the end like `formatDistrictCity`, so a comma inside the kelurahan never shifts it.
- * Line 2 is "kelurahan, Kec. kecamatan, kota" and line 3 the province; the postal code is
- * returned apart so it can print bold at the end of the last line. Nothing is invented:
+ * Line 2 is "Kec. kecamatan, kota" and line 3 the province; the postal code is returned apart
+ * so it can print bold at the end of the last line. The kelurahan is left out (owner, 2026-09-27):
+ * the typed address is one field that already carries it, and only the Mengantar pattern
+ * (kecamatan, kota/kabupaten, provinsi, kode pos) is composed here. Nothing is invented:
  * only "Kec." is added before the part that sits in the kecamatan position, and a label
  * with fewer than three area parts cannot say which part is which, so it prints as stored.
  */
@@ -173,7 +175,6 @@ export function formatAddressArea(areaLabel: string): { lines: string[]; postalC
   const postalCode = parts.length > 0 && /^\d{5}$/.test(parts[parts.length - 1]) ? parts.pop()! : null;
   if (parts.length < 3) return { lines: parts.length > 0 ? [parts.join(", ")] : [], postalCode };
   const [district, city, province] = parts.slice(-3);
-  const kelurahan = parts.slice(0, -3).join(", ");
   const kecamatan = /^kec(\.|amatan\b)/i.test(district) ? district : `Kec. ${district}`;
-  return { lines: [[kelurahan, kecamatan, city].filter(Boolean).join(", "), province], postalCode };
+  return { lines: [`${kecamatan}, ${city}`, province], postalCode };
 }

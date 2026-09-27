@@ -3320,6 +3320,19 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
     - With the legend, the strip is 116 px at desktop, not ~80.
     - The loading skeleton is covered only by source, not rendered in a browser.
 
+- [x] **T-258: Recipient patokan on the thermal label.** Done 2026-09-27.
+  - Owner approved (2026-09-27): print the recipient landmark that T-255 left out ("Open" there).
+  - [x] Loader: `loadPrintableLabel` (single label, batch `/app/label/cetak`, invoice) selects `shipment_drafts.recipient_address_landmark` in the existing tenant-scoped query and returns `recipient.landmark` (trimmed, empty → null). No migration, no new query, tenant scope unchanged. The invoice does not print it (it shows only recipient name and district/city).
+  - [x] Sheet (`label-sheet.tsx`, `label.css`): "**Patokan:** text" as one small line (7.5 pt, 7 pt from dense; ≤ 2 lines) directly under the street, both sizes; nothing and no gap when absent; hidden with the street when Detail alamat penerima is off (no new switch); never on the stub.
+  - [x] Fitting ladder extracted to `fitRecipientBlock`: the patokan clamps to one line with "…" first, then the density tiers, then the street (`--street-lines`); the area lines and kode pos are never clamped.
+  - [x] Informasi label preview sample (`sampleLabel`, now exported) carries a patokan.
+  - [x] Specs 10 §10 and 17 T-176 label anatomy.
+  - Evidence (tests): `tests/label-thermal` +6 T-258 cases (under the street at both sizes; absent/empty prints nothing; follows `recipientAddressDetail` per size; never on the stub; 484-character street + 160-character patokan stay one sheet with the area lines whole and no clamp on area lines; ladder order on a modelled block); `tests/label-info-settings` +1 (preview sample patokan, hidden by the switch at both sizes); `tests/label-print` loader returns the trimmed stored patokan. Iso DB under `flock`: 10 files / 108 passed (label-thermal, label-info-settings, label-print, label-batch-print, label-render, gerai-brand-t243, cod-ongkir, shipment-status-copy, system-map-inventory, tenant-isolation-posture).
+  - Evidence (mutation): ladder reordered (patokan clamped after the tiers) → the ladder-order test failed (1 failed), restored.
+  - Evidence (static checks): `tsc --noEmit` 0 and `npx eslint .` 0.
+  - Evidence (browser): own headless Chrome (CDP 9570), dev app 3127, Tenant Admin; GC-10127 (stored patokan "Pagar hitam, rumah pojok") at 10 × 15 and 10 × 10; worst case by editing the rendered street (484 characters) and patokan (160 characters) in place, then a size round-trip so the real ladder ran; batch `?n=10127,10178&isi=label`; Informasi label preview at both sizes. Print emulation + `Page.printToPDF`: 1 page per label (batch 2 → 2), 99.8 × 149.9 / 99.8 × 99.8 mm; recipient overflow 0; no element outside the sheet; smallest text 7 pt; worst case: `--landmark-lines` 1 (clamped with "…"), `--street-lines` 6, area lines whole; stub without "Patokan". Screens, PDFs and `report.json` in session scratchpad `label-landmark/`. No print recorded.
+  - [ ] **Open.** No physical print. The in-page worst case kept the two area lines separate (the density estimate still saw the stored 50-character street), so it is harsher than a real 484-character address, which merges them.
+
 - [x] **T-256: Anggota & akses and Info terbaru — UI/UX pass.** Done 2026-09-27.
   - Owner request (2026-09-26): "kartu anggota ini apa? sama info terbaru kamu sempurnakan ui ux". Coordinator design approved. Server Actions and their contracts, authorization (Super Admin-only writes in server + DB, tenants read published only), read receipts per user, audit events, last-owner and self-edit rules, and the `/app` login landing are unchanged.
   - [x] Anggota & akses: section header with the page's one-line explanation and "Undang anggota" (invite form moved into a dialog; refused → stays open, done → result under the header); the three KPI cards → one stat strip (Total anggota with "n nonaktif" only when > 0 · Pemilik gerai · Operator, active counts); member rows with initials avatar, "Anda" badge beside the name (never under it), email, role, status and "Kelola akses" or its reason; loading skeleton in the new shape. No last-activity column (no such data).
@@ -3349,7 +3362,7 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
   - Evidence (static checks): `tsc --noEmit` 0 and `npx eslint .` 0.
   - Evidence (browser): own headless Chrome (CDP 9540) against dev app 3127 as Tenant Admin; before/after in session scratchpad `label/before`, `label/after` (screens + PDFs). Label pages 10153 (COD, J&T logo), 10127 (COD Ongkir, POS), 10140 (non-COD, SiCepat), 10121 (non-COD, Ninja — no print logo), 10170 (17-character SPX AWB), 10137 at 10 × 15 and 10 × 10; long addresses by editing the rendered recipient text in place and re-rendering (484 characters with 20- and 50-character names, 200 with 30); batch `/app/label/cetak` 4 labels at both sizes; Informasi label preview at both sizes. `Emulation.setEmulatedMedia` print + `Page.printToPDF`: one page per label everywhere (batch 4 → 4 pages), page 99.8 × 149.9 / 99.8 × 99.8 mm; no element outside the sheet; smallest text 7 pt; package barcode 78–93.5 mm wide; the black COD block present in the PDF raster. No print recorded (print control never pressed).
   - [ ] **Open.**
-    - The recipient landmark ("patokan") is not printed: it was not on the label before and `PrintableLabel` does not load it; adding it would change what prints.
+    - The recipient landmark ("patokan") is not printed: it was not on the label before and `PrintableLabel` does not load it; adding it would change what prints. (Resolved by T-258.)
     - With a 50-character name, a two-line sender origin and a 484-character street, the street clamps with an ellipsis (area lines whole); the page's "Alamat melebihi kapasitas" alert still fires only above 484 characters.
     - No real printer or scanner was used; scan-ability of the 0.5 mm module is by specification, not a physical scan.
 
@@ -3479,3 +3492,10 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
   - [x] `Field` in Buat gerai and the suspend confirmation. Specs: 10 §4.6d, 17 UX-v3.7 rows, 18 route rows + `aksi` / `status-gerai`, 19 OPS-FAILURE-COUNT + "Platform pages (T-257)" IDs.
   - Evidence: BUILD-LOG 2026-09-27 T-257; screenshots in the session scratchpad `platform/`.
   - [ ] Open: see BUILD-LOG T-257 "Open".
+- [x] **T-259 — Tenant-scoped audit events always carry the tenant (T-257 open item; owner 2026-09-27: fix forward only, no backfill).** Done 2026-09-27.
+  - [x] Inventory of every audit writer (6 application, 8 SQL functions at their latest definition; spec 05 DATA-23): the only gerai event stored without its tenant was the implicit prefix lock in `allocate_shipment_reference` (0040).
+  - [x] Migration `0069_audit_tenant_recorded.sql`: `allocate_shipment_reference()` re-created with `tenant_id = NEW.tenant_id` (owner, REVOKEs and trigger kept); CHECK `audit_events_tenant_recorded` NOT VALID (tenantless only for a `PLATFORM` target or a refused lifecycle attempt). No audit row read, changed or deleted; no grant or policy changed. Applied to the iso and dev DBs.
+  - [x] `/platform/audit` and the Ringkasan feed: a tenantless non-platform row reads "Gerai tidak tercatat" (`auditTenantFallbackLabel`; `listAuditEvents` returns `targetType`).
+  - [x] Test cleanups in 9 files delete the tenant's audit rows before the tenant (the implicit lock now pins it through the FK).
+  - [x] Specs 05 (DATA-10 note, DATA-23), 10, 17, 18; DECISIONS D-35.
+  - Evidence: BUILD-LOG 2026-09-27 T-259; screenshots in the session scratchpad `audit-tenant/`.
