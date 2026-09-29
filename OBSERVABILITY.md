@@ -1,6 +1,6 @@
 # Observability Contract — geraicuan
 
-Updated: 2026-08-28
+Updated: 2026-09-24
 Status: REQUIRED
 
 Probe format:

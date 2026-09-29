@@ -1,13 +1,13 @@
 # Status — geraicuan
 
-Updated: 2026-08-30
+Updated: 2026-09-24
 Status: Active
-State: PRODUCTION_READY
-Review-Risk: R3
-Independent-Review: PASS
-Primary-Worker: Main
-Independent-Reviewer: Independent task security reviewers
-Independent-Review-Head: b737a874c51cad87c60839760e1bc48014608450
+State: PLANNED
+Review-Risk: R0
+Independent-Review: PENDING
+Primary-Worker: UNSET
+Independent-Reviewer: UNSET
+Independent-Review-Head: UNSET
 
 ## Delivery state machine
 
@@ -23,69 +23,24 @@ Use `BLOCKED` only as an interruption state. Record the blocker and exact state 
 
 ## Current state
 
-T-1 through T-18 are complete with verified delivery evidence. Hosted CI run
-`33308954008` passed on `b737a874c51cad87c60839760e1bc48014608450`. Deployment
-remains explicitly unapproved.
+Repository-local development contract initialized. No implementation claim is recorded until verified against the repository.
+
+Bootstrap evidence: native generator: create-next-app@latest. Selected stack: `Next.js (App Router, TypeScript)`.
+Database `none`, authentication `none`, and deployment target
+`none` are decisions only until their future tasks pass executable checks.
 
 ## Active work
 
-No implementation task is active.
+No active implementation task is recorded.
+
+## Blockers
+
+None recorded.
 
 ## Verification evidence
 
-- 2026-08-28 T-1: fresh PostgreSQL 16 migration, tenant isolation integration,
-  lint, build, and independent security review passed.
-- 2026-08-28 T-2: fresh PostgreSQL 16 applied migrations 0000–0002; seven
-  integration assertions passed for lifecycle transitions, denial audit records,
-  RLS attribution, and platform-role visibility. `pnpm lint` and `pnpm build`
-  passed. Independent security review passed with no blocking/high finding.
-- 2026-08-28 T-15: fresh PostgreSQL 16 applied migrations 0000–0006; ten
-  integration assertions passed for active tenant/user/member authorization.
-  Browser checks covered both public login entries, generic invalid credentials,
-  successful email/password sign-in, authenticated tenant scope, and anonymous
-  CMS redirects. `pnpm lint` and `pnpm build` passed with the required trusted
-  proxy test contract. Independent security review passed.
-- 2026-08-28 T-3: fresh PostgreSQL 16 applied migrations 0000–0007; private
-  credential resolution precedence, platform fallback, tenant-admin-only
-  configuration, and cross-tenant denial integration checks passed. `pnpm lint`
-  and `pnpm build` passed. Independent security review passed.
-- 2026-08-28 T-16: browser verified the static public page at desktop and
-  mobile widths, its two login entry links, no operational controls/data path,
-  one H1, no horizontal overflow, and 44px minimum interactive targets.
-- 2026-08-28 T-4: fresh PostgreSQL 16 applied migrations 0000–0008;
-  15 integration assertions proved draft persistence, immutable parties, input
-  rejection, and cross-tenant outlet denial. Browser checks proved invalid
-  server validation, PRG success, responsive layout, and a no-JavaScript
-  submission. `pnpm lint` and `pnpm build` passed.
-- 2026-08-28 T-5: CSV parser tests and a fresh PostgreSQL 16 integration
-  suite (20 assertions) passed; the suite proved valid-row-only tenant draft
-  persistence and tenant/actor import rate limiting. `pnpm lint` and
-  `pnpm build` passed. Browser route access was not independently exercised
-  because the local fixture session could not be authenticated.
+None recorded.
 
-- 2026-08-28 T-13: fresh PostgreSQL 16 migration through `0009`, contact
-  directory integration assertions, `pnpm lint`, and `pnpm build` passed.
-  Authenticated browser checks created a contact, added a second address, and
-  searched/selected it from a draft with masked picker results. A contact edit
-  between selection and save was server-re-resolved into the immutable party
-  snapshot. Independent security review passed after the snapshot repair.
+## Next verified action
 
-- 2026-08-30 T-7 through T-10, T-12, T-14, T-17, and T-18: focused
-  integration evidence, lint/build, and independent reviews passed. Migrations
-  `0011`–`0019` are additive and verified locally.
-- 2026-08-30 T-11: hosted GitHub Actions run `33308954008` passed empty and
-  representative migration upgrades, integration tests, lint, and build on
-  commit `b737a874c51cad87c60839760e1bc48014608450`.
-
-- 2026-08-29 T-6: one user-approved sandbox non-COD estimate returned HTTP
-  200 and was captured only as a sanitized fixture. Migration `0010` persists
-  immutable, tenant-scoped estimate snapshots and services. Fixture tests prove
-  unsupported services are omitted, provider `price` is preserved without
-  custom price calculation, absent/blocked COD support is unavailable, and
-  re-estimates remain append-only. Fresh PostgreSQL 16 migration, 27 integration
-  assertions, `pnpm lint`, `pnpm build`, and independent security review passed.
-  The authenticated estimate panel could not be browser-exercised because no
-  approved local authenticated fixture session was available; the protected
-  route correctly redirected anonymous access to tenant login.
-
-No implementation task is active. Deployment remains an explicit approval gate.
+Inspect the repository, accept requirements, create bounded tasks, then transition `State` to `READY` before implementation begins.

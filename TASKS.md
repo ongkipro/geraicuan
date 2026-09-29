@@ -1,127 +1,99 @@
-# Tasks: GeraiCUAN
+# Tasks: GeraiCuan Landing Page & Onboarding Acquisition Website
 
-> Status: Planning draft. This queue becomes implementation authority only after the staged specification pack is accepted and promoted into the project repository.
+## Rules for Implementation
+- One task per request / commit. Mark `[x]` upon completion.
+- Do ONLY the task's stated scope. No unrequested abstractions or dependencies.
+- Every task traces to exactly one accepted primary requirement.
+- Verify each task locally with executable evidence before marking complete.
 
-## Rules
+---
 
-- Execute one task at a time and mark it complete only with fresh, recorded test evidence.
-- Each task has one primary requirement. Cross-cutting obligations are constraints, not a second primary outcome.
-- All Mengantar calls originate on the server. Never put the credential-bearing URL, key, or a request containing either into a client bundle, log, fixture, or error message.
-- Every tenant-owned query and mutation requires an authenticated tenant context and must satisfy `TEN-1`, `TEN-2`, `IAM-2`, `IAM-3`, and `SEC-2` as applicable.
+## Task Queue
 
-## Phase 1: Platform foundation
+### T-1 — Bootstrap Layout Shell & Design Tokens
+- **Primary requirement**: REQ-LP-8
+- **Constraints**: REQ-LP-9
+- **Dependencies**: None
+- **Context**: Initialize the Next.js App Router layout shell (`src/app/layout.tsx`, `src/app/globals.css`) with Tailwind CSS v4 design tokens, color variables (`--color-canvas-bg`, `--color-canvas-surface`, `--color-brand-primary`, `--color-profit-emerald`), and font declarations (Inter/Plus Jakarta Sans + JetBrains Mono).
+- **Done when**: Run `pnpm dev` and assert that the base HTML shell renders with correct CSS variables, background `#0B0F17`, and zero console warnings.
 
-- [x] **T-1 — Create tenancy schema and tenant context**
-  - Primary requirement: PR-1
-  - Constraints: TEN-1, TEN-2, IAM-1, IAM-2, IAM-3, SEC-2
-  - Dependencies: None
-  - Done when: Apply the PostgreSQL migration, then execute an integration test proving tenant-owned queries cannot return another tenant's outlet or shipment records.
+---
 
-- [x] **T-2 — Implement super-admin tenant lifecycle**
-  - Primary requirement: PR-1
-  - Constraints: IAM-1, TEN-1, TEN-2, SEC-2, OBS-1
-  - Dependencies: T-1
-  - Done when: An authorized platform super-admin can create, suspend, and reactivate a tenant; an unauthenticated or tenant-scoped actor is denied; all outcomes are audit-recorded.
+### T-2 — Sticky Header, Announcement Bar & Portal Navigation
+- **Primary requirement**: REQ-LP-8
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-1
+- **Context**: Build the top announcement bar (`BETA PRIORITAS — Pendaftaran Gerai Gelombang Pertama`) and sticky navbar (`<Navbar />`) featuring the GeraiCuan logo, section anchor links, and dual portal action links (`/login/tenant` and `/login/super-admin`).
+- **Done when**: Click each navigation link in browser preview; assert that sticky backdrop blur engages on scroll and portal links resolve without dead ends.
 
-- [x] **T-15 — Implement role-specific CMS authentication**
-  - Primary requirement: PR-13
-  - Constraints: TD-8, IAM-1, IAM-2, IAM-3, TEN-1, SEC-2
-  - Dependencies: T-1
-  - Done when: Browser and integration tests prove Tenant Login only opens the authorized tenant CMS, Super Admin Login only opens platform admin, and suspended users/tenants cannot use either operational surface.
+---
 
-- [x] **T-3 — Configure private and default Mengantar resolution**
-  - Primary requirement: PR-10
-  - Constraints: PR-2, TD-5, TEN-2, IAM-2, SEC-1, SEC-2, PRIV-1
-  - Dependencies: T-1
-  - Done when: A tenant administrator configures one outlet default pickup address and a complete private credential reference; a resolver test proves private configuration wins and a missing private configuration uses only the platform environment defaults, without exposing either source.
+### T-3 — Hero Section & Live Counter POS Interactive Mockup Sandbox
+- **Primary requirement**: REQ-LP-1
+- **Constraints**: REQ-LP-8, REQ-LP-9
+- **Dependencies**: T-2
+- **Context**: Construct the 2-column Hero section (`<HeroSection />`). Left column renders high-impact value proposition headlines, sub-copy, trust pills, and dual CTAs. Right column renders an interactive sandbox mockup of the GeraiCuan Counter POS interface allowing visitors to toggle sample package weights (1 kg vs 3 kg), see live rate recalculations with gross margin chips (+Rp2.800), and trigger an instant 100x150 mm thermal label preview modal.
+- **Done when**: Load on desktop and mobile viewports; assert zero horizontal scroll, responsive single-column collapse on `< 768px`, and verify that clicking package weight chips reactively updates the rates and margin display.
 
-- [x] **T-16 — Build public GeraiCUAN sales page**
-  - Primary requirement: PR-14
-  - Constraints: TD-8, SEC-2, UX-1
-  - Dependencies: T-15
-  - Done when: An unauthenticated browser can load the sales page and reach both login entry points, while protected CMS routes redirect/deny without rendering operational data.
+---
 
-## Phase 2: Shipment preparation
+### T-4 — Multi-Carrier Ecosystem Badges & Trust Metrics
+- **Primary requirement**: REQ-LP-2
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-3
+- **Context**: Implement the courier ecosystem section (`<CourierEcosystem />`) displaying official logos of supported logistics partners (J&T, SiCepat, JNE, Ninja, Anteraja, Paxel, ID Express, Lion Parcel) alongside trust metrics (100% genuine carrier AWBs, < 3s issuance time).
+- **Done when**: Inspect rendered badges; assert grayscale-to-color hover transition and accessible `alt` text for screen readers.
 
-- [x] **T-4 — Build validated individual shipment draft**
-  - Primary requirement: PR-3
-  - Constraints: TEN-2, IAM-3, PRIV-1, UX-1
-  - Dependencies: T-1, T-3
-  - Done when: An operator saves a valid tenant-scoped draft with sender, recipient, package, declared value, and COD/non-COD data; invalid phone, address selection, package, or COD values prevent submission and preserve no invalid shipment.
+---
 
-- [x] **T-5 — Build bulk shipment intake validation**
-  - Primary requirement: PR-4
-  - Constraints: TEN-2, IAM-3, PRIV-1, UX-2, RATE-1
-  - Dependencies: T-4
-  - Done when: A tenant operator uploads a documented CSV template, receives row-level validation errors without order creation, and can create only the valid rows as tenant-scoped drafts.
+### T-5 — The Hard Reality & 4-Step Counter Workflow
+- **Primary requirement**: REQ-LP-4
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-4
+- **Context**: Build the operational reality and workflow section (`<CounterWorkflow />`). Includes 3 pain-point warning cards (multi-tab chaos, cashier fraud, scale discrepancies) followed by a 4-step linear progression (Input & Kontak, Timbang Fisik, Terima Bayar, Cetak Resi).
+- **Done when**: Verify section layout in desktop and mobile viewports; assert correct step numbering and sequential visual connector lines.
 
-- [x] **T-6 — Fetch provider estimates and enforce COD eligibility**
-  - Primary requirement: PR-5
-  - Constraints: TD-2, SEC-1, RATE-1, OBS-2
-  - Dependencies: T-4
-  - Done when: A server integration test using a Mengantar contract fixture displays only supported services, disables COD when `unsupported_cod` is true, and persists provider-returned shipping and insurance values without custom price calculation.
+---
 
+### T-6 — Feature Bento Grid Deep-Dive (GeraiCUAN + GeraiCuan Synthesis)
+- **Primary requirement**: REQ-LP-5
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-5
+- **Context**: Implement the 7-card bento grid (`<FeatureBentoGrid />`) detailing the synthesized feature set: (1) Bulk CSV Intake for local olshop, (2) Standard 100x150 mm Thermal Label with Safe Reprint, (3) 1-Click WhatsApp Resi Share via native web-intent, (4) Transparent COD & 11% VAT breakdown, (5) Multi-Branch Organization hierarchy, (6) Outbox Idempotency network fault-tolerance, and (7) Reusable Customer Directory.
+- **Done when**: Render bento grid; verify responsive 3-column (desktop) to 1-column (mobile) reflow and that all 7 feature cards render with unique icons, high-contrast typography, and operational pain-point solutions.
 
-- [x] **T-12 — Calculate and persist COD collection totals**
-  - Primary requirement: PR-9
-  - Constraints: PR-5, TD-2, DATA-3, TEN-2
-  - Dependencies: T-6
-  - Done when: A deterministic IDR test proves that goods Rp100.000 plus Mengantar shipping Rp10.000 produces service fee Rp3.300, VAT Rp363, and provider COD amount Rp113.663; unsupported COD remains unselectable.
+---
 
-- [x] **T-13 — Build tenant reusable contact directory**
-  - Primary requirement: PR-12
-  - Constraints: TD-6, DATA-1, TEN-2, IAM-2, IAM-3, PRIV-1
-  - Dependencies: T-1
-  - Done when: A tenant user can create, search, update, archive, and select sender/recipient contacts with multiple addresses; cross-tenant access is denied and historical shipment snapshots remain unchanged after contact edits.
+### T-7 — Interactive Reactive Profit Simulator Component
+- **Primary requirement**: REQ-LP-3
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-6
+- **Context**: Build the client-side interactive profit calculator (`<ProfitSimulator />`). Implements two range sliders (parcels/day: 10–500; average shipping fee: Rp10,000–Rp50,000) with reactive monetary calculation computing monthly shipping turnover, gross margin (20%), and COD fee additions, rendered with tabular monospace numbers in Indonesian Rupiah.
+- **Done when**: Drag sliders and assert immediate reactive recalculation of monetary values in `< 16ms` without UI lag, accompanied by smooth number transitions and the direct CTA link to the application form.
 
-## Phase 3: Resi and label
+---
 
-- [x] **T-7 — Create serialized Mengantar order batches**
-  - Primary requirement: PR-6
-  - Constraints: TD-3, SEC-1, TEN-2, OBS-2, RATE-1
-  - Dependencies: T-5, T-6
-  - Done when: A contract test proves individual and bulk drafts become one provider batch per courier/pickup context, dynamic-AWB courier requests are serialized per account, duplicate submission is idempotent, and returned `cnote_no` values are persisted as provider AWBs.
+### T-8 — Competitive Comparison Matrix & FAQ Accordion
+- **Primary requirement**: REQ-LP-6
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-7
+- **Context**: Construct the 8-point comparison matrix table (`<ComparisonTable />`) pitting GeraiCuan against Manual Multi-tab and Generic PPOB software, followed by an accessible Radix/shadcn FAQ accordion (`<FaqSection />`) addressing thermal printers, courier agreements, QRIS handling, and Mengantar account pairing.
+- **Done when**: Expand/collapse FAQ items with keyboard (Space/Enter); verify smooth accordion transition and verify responsive horizontal scrollability of the comparison table on mobile screens.
 
-- [x] **T-8 — Recover unpaid non-COD provider batches**
-  - Primary requirement: PR-8
-  - Constraints: TD-4, SEC-1, TEN-2, IAM-2, OBS-2
-  - Dependencies: T-7
-  - Done when: A test fixture with `isPaid:false` and no AWB leaves the shipment awaiting payment; an authorized retry invokes `pay-unpaid`, persists returned AWBs, and rejects any cross-tenant retry.
+---
 
-- [x] **T-9 — Render and record provider AWB labels**
-  - Primary requirement: PR-7
-  - Constraints: TEN-2, IAM-3, PRIV-1, UX-3, OBS-3
-  - Dependencies: T-7
-  - Done when: A browser test prints a 100x150mm label using the provider AWB, selected courier, sender, recipient, package, COD/non-COD, and provider insurance data; each print/reprint increments a tenant-scoped history record.
+### T-9 — Whitelist Lead Capture Form with Zod Validation
+- **Primary requirement**: REQ-LP-7
+- **Constraints**: REQ-LP-9
+- **Dependencies**: T-8
+- **Context**: Build the high-converting whitelist application form (`<LeadCaptureForm />`) with fields: Owner Name, WhatsApp Number, Store Name, City/Regency, Daily Parcel Volume, and Mengantar Status. Implement client/server Zod validation, error handling, loading states, and direct submission feedback.
+- **Done when**: Submit an invalid payload and verify inline error prompts; submit a valid payload and verify success confirmation card display with WhatsApp redirection payload.
 
-- [x] **T-14 — Build Super Admin operations monitoring**
-  - Primary requirement: PR-11
-  - Constraints: TD-7, IAM-1, OBS-1, OBS-2, OBS-4, SEC-1, SEC-2
-  - Dependencies: T-1, T-2, T-3, T-7
-  - Done when: A browser and integration check show filtered global/per-tenant counts, provider/queue/unpaid/error health, usage, and audit records with URL-addressable filters, selected timezone, and no credentials or unnecessary PII.
+---
 
-- [x] **T-17 — Add timezone-safe analytics filters**
-  - Primary requirement: PR-15
-  - Constraints: TD-9, IAM-1, IAM-2, OBS-4, UX-1
-  - Dependencies: T-7, T-8
-  - Done when: Browser and integration checks prove URL-addressable preset/custom ranges, identical timezone boundaries across KPI/trend/table views, and tenant scope enforcement.
-
-- [x] **T-18 — Implement tenant operational ledger**
-  - Primary requirement: PR-16
-  - Constraints: TD-10, DATA-4, TEN-2, IAM-1, IAM-2, SEC-2
-  - Dependencies: T-7, T-8, T-12
-  - Done when: State-transition tests append immutable entries for COD principal, provider cost, COD fee, VAT, unpaid/recovery, and adjustments; reconciliation reports show variance without treating COD principal as revenue.
-
-## Phase 4: Production readiness
-
-- [x] **T-10 — Add tenant-safe telemetry and abuse limits**
-  - Primary requirement: PR-6
-  - Constraints: OBS-1, OBS-2, OBS-3, RATE-1, SEC-1, PRIV-1
-  - Dependencies: T-7
-  - Done when: A smoke test emits structured, redacted shipment lifecycle events with tenant and correlation IDs, while rate-limit tests reject abusive estimate/order retries without leaking PII or credentials.
-
-- [x] **T-11 — Validate migration and release rollback path**
-  - Primary requirement: PR-1
-  - Constraints: DEL-1, MIG-1, TEN-2, SEC-2
-  - Dependencies: T-1, T-2
-  - Done when: CI applies the migration to an empty database and a representative pre-release fixture, verifies tenant isolation, and demonstrates the documented rollback or forward-fix path without data loss.
+### T-10 — Core Web Vitals, Accessibility & Cross-Browser Audit
+- **Primary requirement**: REQ-LP-9
+- **Constraints**: REQ-LP-1, REQ-LP-8
+- **Dependencies**: T-1 through T-9
+- **Context**: Execute production build, inspect bundle sizes, run automated Lighthouse audit, verify color contrast ratios ($\ge 4.5:1$), and test full keyboard navigation flow from top to bottom.
+- **Done when**: Production build passes with zero TypeScript/lint errors; Google Lighthouse achieves score $\ge 95$ across Performance, Accessibility, Best Practices, and SEO.

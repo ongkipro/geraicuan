@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch assets
+logos/temp_*
+logos/test_*
+logos/strip_*
+logos/inspect_*
+logos/verify_*
+logos/*_mask.png
+logos/*_patch*.jpg

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fitur Aplikasi Kasir Loket Multi-Kurir | GeraiCuan</title>
+  <meta name="description" content="Fitur aplikasi kasir loket GeraiCuan: 12+ ekspedisi resmi, cetak resi thermal 100x150 mm, deteksi volumetrik anti-nombok, dan pickup gratis ke toko.">
+  <meta name="theme-color" content="#0B2D5B">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body class="bg-white text-slate-800 antialiased selection:bg-[#1A73E8] selection:text-white font-sans">
+
+  <!-- 1. Header & Navigation -->
+  <header class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 text-slate-900">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <a href="index.html" class="flex items-center py-1 group">
+        <img src="./logos/logo-geraicuan-mengantar-dark.png" alt="GeraiCuan powered by mengantar" class="h-9 sm:h-11 w-auto object-contain">
+      </a>
+
+      <!-- Nav Links -->
+      <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-slate-600">
+        <a href="index.html" class="hover:text-[#1A73E8] transition-colors">Beranda</a>
+        <a href="fitur.html" class="text-[#0B2D5B] font-bold transition-colors">Fitur</a>
+        <a href="simulasi.html" class="hover:text-[#1A73E8] transition-colors">Simulasi Cuan</a>
+        <a href="cara-kerja.html" class="hover:text-[#1A73E8] transition-colors">Alur Kasir</a>
+        <a href="kontak.html" class="hover:text-[#1A73E8] transition-colors">Kontak</a>
+      </nav>
+
+      <!-- Header Actions -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <a href="https://app.geraicuan.id" class="hidden sm:inline-flex text-xs font-bold text-slate-700 hover:text-[#1A73E8] px-3.5 py-2 transition-colors">
+          Masuk Dashboard
+        </a>
+        <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan,%20saya%20ingin%20aktivasi%20loket%20toko" target="_blank" rel="noopener noreferrer" class="text-xs font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-[#1A73E8] hover:bg-[#1557B0] text-white shadow-sm shadow-[#1A73E8]/20 transition-all">
+          Hubungi Kami
+        </a>
+        <!-- Mobile Menu Toggle Button -->
+        <button id="mobileMenuBtn" type="button" class="md:hidden text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 bg-white/80 text-slate-700 hover:bg-slate-50 transition-colors" aria-expanded="false" aria-label="Menu Navigasi">
+          Menu
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Dropdown Navigation Drawer -->
+    <div id="mobileMenu" class="hidden md:hidden border-t border-slate-100 bg-white/95 backdrop-blur-md px-4 pt-3 pb-4 shadow-xl transition-all">
+      <nav class="flex flex-col space-y-1.5 text-sm font-medium text-slate-700">
+        <a href="index.html" class="px-3 py-2 rounded-lg hover:bg-slate-50 hover:text-[#1A73E8] transition-colors">Beranda</a>
+        <a href="fitur.html" class="px-3 py-2 rounded-lg bg-slate-50 text-[#0B2D5B] font-bold">Fitur</a>
+        <a href="simulasi.html" class="px-3 py-2 rounded-lg hover:bg-slate-50 hover:text-[#1A73E8] transition-colors">Simulasi Cuan</a>
+        <a href="cara-kerja.html" class="px-3 py-2 rounded-lg hover:bg-slate-50 hover:text-[#1A73E8] transition-colors">Alur Kasir</a>
+        <a href="kontak.html" class="px-3 py-2 rounded-lg hover:bg-slate-50 hover:text-[#1A73E8] transition-colors">Kontak</a>
+        <a href="https://app.geraicuan.id" class="px-3 py-2 rounded-lg text-[#1A73E8] font-bold hover:bg-[#E3F2FF] transition-colors border-t border-slate-100 mt-1 pt-2.5">Masuk Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- 2. Hero Section -->
+    <section class="py-14 sm:py-20 bg-gradient-to-b from-white via-slate-50/50 to-slate-50/80 border-b border-slate-100">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+        <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-[1.15] mb-5">
+          Semua Kebutuhan Loket Ekspedisi dalam 1 Layar Kasir Praktis
+        </h1>
+        <p class="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed mb-8">
+          GeraiCuan dirancang spesifik untuk operasional meja kasir toko, konter pulsa, dan minimarket. Cek tarif 12+ kurir, cetak resi thermal, hingga nikmati keuntungan diskon ongkir 20% – 25% langsung jadi laba kasir toko Anda.
+        </p>
+        <div>
+          <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan,%20saya%20ingin%20aktivasi%20loket%20toko" target="_blank" rel="noopener noreferrer" class="h-12 rounded-full px-8 inline-flex items-center justify-center bg-[#1A73E8] hover:bg-[#1557B0] text-white font-bold text-sm shadow-md shadow-[#1A73E8]/20 transition-all">
+            <span>Aktivasi Akun Loket Gratis</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Feature Pillar 1: Multi-Ekspedisi -->
+    <section class="py-16 bg-white border-b border-slate-100">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="max-w-2xl mb-12">
+          <span class="text-xs font-bold uppercase tracking-wider text-[#1A73E8] block mb-2">
+            Layanan Ekspedisi Terlengkap
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            12+ Ekspedisi Resmi Langsung dari 1 Dashboard
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
+            Tidak perlu membuka belasan tab browser atau menghafal akun sistem tiap kurir. Kasir Anda cukup menggunakan satu layar GeraiCuan:
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Cek Ongkir Cepat 3 Detik</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Bandingkan ongkir seluruh kurir (J&T, SiCepat, JNE, Lion Parcel, ID Express, Ninja, dll.) secara realtime dalam satu klik. Konsumen bebas memilih tarif termurah atau estimasi tiba tercepat.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Layanan COD Seluruh Indonesia</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Fasilitasi kiriman Bayar di Tempat (COD) untuk online seller sekitar toko Anda. Dana COD masuk otomatis dan transparan ke mutasi saldo dompet loket tanpa potongan tak jelas.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Paket Kargo Berat Besar</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Terima kiriman paket berat di atas 10 kg s/d ratusan kg menggunakan J&T Cargo, Sentral Cargo, dan Lion Parcel Kargo dengan tarif ekonomis dan komisi tebal per transaksi.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Feature Pillar 2: Otomatisasi Kasir -->
+    <section class="py-16 bg-slate-50 border-b border-slate-100">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="max-w-2xl mb-12">
+          <span class="text-xs font-bold uppercase tracking-wider text-[#1A73E8] block mb-2">
+            Otomatisasi Meja Kasir
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Cepat di Meja Kasir, Anti Rugi Salah Timbang
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
+            Dirancang agar karyawan toko baru sekalipun bisa melayani kiriman paket dalam waktu kurang dari 45 detik:
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-6 rounded-2xl bg-white border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Deteksi Berat Volumetrik</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Cukup masukkan ukuran panjang, lebar, dan tinggi paket. Sistem secara otomatis menghitung rumus volumetrik kurir (P×L×T / 6.000). Kasir toko bebas dari risiko nombok denda penyesuaian berat.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-white border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Cetak Resi Thermal 100×150 mm</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Format label cetak standar seluruh ekspedisi resmi di Indonesia. Barcode dan teks tajam langsung keluar dari printer thermal USB maupun Bluetooth tanpa install driver rumit.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-white border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Auto-Fill Nomor WhatsApp</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Pelanggan tetap cukup menyebutkan nomor HP. Nama pengirim, nama penerima, dan alamat tujuan langsung terisi otomatis dari database riwayat pengiriman toko Anda.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Feature Pillar 3: Keamanan & Laporan -->
+    <section class="py-16 bg-white border-b border-slate-100">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="max-w-2xl mb-12">
+          <span class="text-xs font-bold uppercase tracking-wider text-[#1A73E8] block mb-2">
+            Keamanan Kasir & Laporan
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Kasir Terkunci Aman, Pemilik Toko Tenang
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
+            Menghilangkan celah kecurangan kasir atau selisih uang tunai yang sering terjadi pada loket pengiriman biasa:
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Anti Pembatalan Liar</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Resi yang sudah diproses kasir terkunci permanen. Staf kasir tidak bisa membatalkan transaksi diam-diam untuk menggelapkan uang tunai yang sudah dibayar pelanggan toko.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Laporan Laba Real-Time (Diskon 20–25%)</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Pantau jumlah paket harian, omzet kotor, dan keuntungan diskon ongkir 20% – 25% yang otomatis menjadi laba kasir toko Anda secara transparan. Bisa dipantau kapan saja via HP.
+            </p>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-base mb-2">Pickup Kurir Otomatis</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Cukup 1 klik di akhir giliran kasir sore, jadwal penjemputan terkirim otomatis ke kantor cabang kurir terdekat. Mobil operasional kurir resmi datang menjemput seluruh paket langsung ke depan toko.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Call To Action Banner -->
+    <section class="py-16 bg-[#0B2D5B] text-white text-center">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6">
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2.5">
+          Mulai Buka Loket Kasir Ekspedisi di Toko Anda
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed mb-6">
+          Rp 0 biaya franchise selamanya. Cukup gunakan meja kasir dan perangkat komputer atau laptop yang sudah ada di toko.
+        </p>
+        <div>
+          <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan,%20saya%20ingin%20aktivasi%20loket%20toko" target="_blank" rel="noopener noreferrer" class="h-12 px-8 rounded-full bg-[#1A73E8] hover:bg-[#1557B0] text-white font-extrabold text-sm shadow-lg shadow-black/20 inline-flex items-center justify-center transition-all">
+            <span>Hubungi via WhatsApp</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 7. Footer -->
+  <footer class="bg-slate-50 border-t border-slate-200/80 py-12 text-xs text-slate-500">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-slate-200/80">
+        <!-- Brand & Brief -->
+        <div class="max-w-md">
+          <div class="flex items-center mb-3">
+            <img src="./logos/logo-geraicuan-mengantar-dark.png" alt="GeraiCuan powered by mengantar" class="h-9 sm:h-10.5 w-auto object-contain">
+          </div>
+          <p class="text-slate-500 text-xs leading-relaxed">
+            Aplikasi kasir loket pengiriman multi-kurir untuk toko, konter, dan agen ritel di Indonesia. Layani semua kurir dari 1 layar kasir praktis tanpa biaya franchise.
+          </p>
+        </div>
+
+        <!-- Clean Navigation Links (Mobile: 2 cols, Desktop: Flex) -->
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-6 gap-y-2.5 sm:gap-6 text-xs text-slate-600 font-medium">
+          <a href="index.html" class="hover:text-[#1A73E8] transition-colors">Beranda</a>
+          <a href="fitur.html" class="text-[#0B2D5B] font-bold transition-colors">Fitur</a>
+          <a href="simulasi.html" class="hover:text-[#1A73E8] transition-colors">Simulasi Cuan</a>
+          <a href="cara-kerja.html" class="hover:text-[#1A73E8] transition-colors">Alur Kasir</a>
+          <a href="kontak.html" class="hover:text-[#1A73E8] transition-colors">Kontak</a>
+          <a href="https://app.geraicuan.id" class="hover:text-[#1A73E8] transition-colors">Masuk Dashboard</a>
+          <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan" target="_blank" rel="noopener noreferrer" class="text-[#1A73E8] hover:text-[#1557B0] font-bold transition-colors col-span-2 sm:col-span-1">WhatsApp</a>
+        </div>
+      </div>
+
+      <!-- Bottom Credits & Localization -->
+      <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left text-slate-400 text-[11px]">
+        <p>© 2026 GeraiCuan. Hak Cipta Dilindungi. Platform Operasional Kasir Loket Multi-Kurir.</p>
+        <div class="flex items-center gap-4 text-slate-500 font-medium">
+          <span>Indonesia</span>
+          <span>·</span>
+          <span>Rupiah (IDR)</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
+    if (mobileMenuBtn && mobileMenu) {
+      mobileMenuBtn.addEventListener('click', function () {
+        const isHidden = mobileMenu.classList.contains('hidden');
+        if (isHidden) {
+          mobileMenu.classList.remove('hidden');
+          mobileMenuBtn.textContent = 'Tutup';
+          mobileMenuBtn.setAttribute('aria-expanded', 'true');
+        } else {
+          mobileMenu.classList.add('hidden');
+          mobileMenuBtn.textContent = 'Menu';
+          mobileMenuBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

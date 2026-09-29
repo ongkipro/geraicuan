@@ -1,15 +1,15 @@
 # Architecture — geraicuan
 
-Updated: 2026-08-28
+Updated: 2026-09-24
 Expected stack: Next.js (App Router, TypeScript)
 
 ## Selected capabilities
 
 | Capability | Decision | Proven operational |
 |---|---|---|
-| Database | `postgres` | No |
-| Authentication | `better-auth` | No |
-| Deployment target | `coolify` | No |
+| Database | `none` | No |
+| Authentication | `none` | No |
+| Deployment target | `none` | No |
 
 Bootstrap source state: native generator: create-next-app@latest. These selections constrain future
 architecture work but do not create services, credentials, schemas, or remote

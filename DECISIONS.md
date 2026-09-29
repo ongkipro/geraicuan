@@ -1,6 +1,6 @@
 # Decision Register — geraicuan
 
-Updated: 2026-08-28
+Updated: 2026-09-24
 
 Record accepted decisions that materially constrain product behavior,
 architecture, security, data, operations, or delivery. Repository evidence must

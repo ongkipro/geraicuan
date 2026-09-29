@@ -1,34 +1,21 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GeraiCuan — Platform Kasir & Operasional Agen Pengiriman Multi-Kurir
 
-## Getting Started
+Website landing page dan sistem kasir loket pengiriman multi-kurir untuk toko ritel, konter, minimarket, dan agen pengiriman di Indonesia.
 
-First, run the development server:
+## Fitur Utama
+
+- **12+ Ekspedisi Resmi Terpadu**: J&T, SiCepat, JNE, Lion Parcel, Ninja Xpress, ID Express, Pos Indonesia, Anteraja, SAP, Paxel, J&T Cargo, Sentral Cargo.
+- **Rp 0 Biaya Franchise**: Tanpa biaya kemitraan, royalti bulanan, maupun paksaan membeli hardware mahal.
+- **Drop Point Resmi Marketplace**: Menerima titipan drop-off Shopee, Tokopedia, TikTok Shop, dan Lazada.
+- **Proteksi Timbangan Volumetrik**: Menghindarkan pemilik toko dari denda selisih berat kurir.
+- **Cetak Resi Thermal 100x150 mm**: Standar resmi barcode kurir sekali klik.
+- **Notifikasi Resi WhatsApp Otomatis**: Tanpa perlu simpan nomor kontak manual.
+- **Kasir Terkunci & Rekap Harian**: Mencegah kebocoran uang kasir di loket.
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm dev --port 3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Akses di browser: `http://localhost:3001`
