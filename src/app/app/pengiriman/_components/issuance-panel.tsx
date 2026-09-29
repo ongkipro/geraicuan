@@ -22,12 +22,13 @@ import {
   type ShipmentIssuanceActionState,
 } from "@/app/app/pengiriman/[shipmentId]/actions";
 import { CourierLogo } from "@/components/app/courier-logo";
+import { StatusBadge } from "@/components/app/status-badge";
 import { formatIdr } from "@/components/app/money";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
 import { COD_FORMULA_RETIRED_MESSAGE } from "@/lib/mengantar-cod-fee";
-import { courierDisplayName, mengantarCourierOfService } from "@/lib/mengantar-couriers";
+import { courierDisplayName, mengantarCourierOfService, mengantarOrderableService } from "@/lib/mengantar-couriers";
 import type { PaymentMethod } from "@/lib/payment-method";
 import {
   codOngkirAmount,
@@ -82,6 +83,11 @@ export function useIssuance() {
 }
 
 /** The courier a service belongs to; a service no known courier claims is its own group. */
+/** T-260: whether Mengantar can take an order for this service (the rule `buildMengantarOrderRequest` enforces). */
+export function isOrderableOption(option: Pick<ShipmentEstimateOption, "providerService">) {
+  return mengantarOrderableService(option.providerService) !== null;
+}
+
 export function courierOfOption(option: Pick<ShipmentEstimateOption, "providerService">) {
   return mengantarCourierOfService(option.providerService) ?? option.providerService;
 }
@@ -117,7 +123,9 @@ export function IssuanceProvider({
   const [consentFor, setConsentFor] = useState<string | null>(null);
   const isCod = paymentMethod !== "NON_COD";
   const selected = options.find((option) => option.estimateServiceId === selectedId) ?? null;
-  const eligibleCount = options.filter((option) => !isCod || option.codEligible).length;
+  // T-260 (owner 2026-09-28, "hold dulu"): a quotable service Mengantar cannot take an order for
+  // (spx, paxel, SAPLite) is shown but not selectable; the server refuses it too.
+  const eligibleCount = options.filter((option) => isOrderableOption(option) && (!isCod || option.codEligible)).length;
   // D-28: ongkir + biaya COD, computed from the chosen service; the server records the same figure.
   const codOngkir = paymentMethod === "COD_ONGKIR" ? codOngkirAmount(selected?.shippingDeductedIdr) : null;
   const codOngkirBlocked = paymentMethod === "COD_ONGKIR" && selected !== null && codOngkir === null;
@@ -181,7 +189,7 @@ export function IssuanceServiceChooser({ context }: {
   const issuance = useIssuance();
   const { options, isCod, selected, paymentMethod } = issuance;
   const couriers = [...new Set(options.map(courierOfOption))];
-  const firstEligible = options.find((option) => !isCod || option.codEligible);
+  const firstEligible = options.find((option) => isOrderableOption(option) && (!isCod || option.codEligible));
   const [activeCourier, setActiveCourier] = useState<string | null>(null);
   const shownCourier = activeCourier
     ?? (selected ? courierOfOption(selected) : null)
@@ -196,7 +204,9 @@ export function IssuanceServiceChooser({ context }: {
         <CircleAlert aria-hidden="true" />
         <AlertTitle>Tidak ada layanan yang bisa dipilih</AlertTitle>
         <AlertDescription>
-          {isCod ? "Tidak ada layanan yang mendukung COD untuk rute ini." : "Tarif terbaru tidak memuat layanan untuk kiriman ini."}
+          {options.length > 0 && !options.some(isOrderableOption)
+            ? "Layanan untuk rute ini belum bisa dipesan lewat Mengantar."
+            : isCod ? "Tidak ada layanan yang mendukung COD untuk rute ini." : "Tarif terbaru tidak memuat layanan untuk kiriman ini."}
         </AlertDescription>
       </Alert>
     );
@@ -266,7 +276,8 @@ export function IssuanceServiceChooser({ context }: {
               role="radiogroup"
             >
               {options.filter((option) => courierOfOption(option) === courier).map((option) => {
-                const eligible = !isCod || option.codEligible;
+                const orderable = isOrderableOption(option);
+                const eligible = orderable && (!isCod || option.codEligible);
                 const checked = selected?.estimateServiceId === option.estimateServiceId;
                 return (
                   <label
@@ -296,6 +307,12 @@ export function IssuanceServiceChooser({ context }: {
                       <span className={cn("text-sm wrap-anywhere", checked ? "font-bold text-accent-foreground" : "font-medium")}>
                         {serviceDisplayName(option.providerService)}
                       </span>
+                      {orderable ? null : (
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <StatusBadge label="Segera hadir" tone="neutral" />
+                          <span className="text-xs text-muted-foreground">Belum bisa dipesan lewat Mengantar</span>
+                        </span>
+                      )}
                       <span className="text-xs text-muted-foreground md:hidden">
                         {deliveryEstimateLabel(option.deliveryEstimate)}
                         {option.insuranceAmountIdr === null ? null : ` · Asuransi ${formatIdr(option.insuranceAmountIdr)}`}

@@ -43,9 +43,10 @@ describe("Cek tarif (T-242)", () => {
     expect(estimateDays("Next day")).toBeNull();
   });
 
-  it("picks the cheapest and the fastest (smallest upper bound, then lower bound, then price)", () => {
+  it("picks the cheapest and the fastest among orderable services (smallest upper bound, then lower bound, then price)", () => {
     const { cheapest, fastest } = rateHighlights(services);
-    expect(cheapest?.providerService).toBe("SAPLite");
+    // T-260: SAPLite (17 500) and spx are quote-only, so the cheapest to recommend is JNE.
+    expect(cheapest?.providerService).toBe("JNE");
     expect(fastest?.providerService).toBe("JT");
     const tie = rateHighlights([
       { codEligible: true, deliveryEstimate: "1-2 Hari", providerService: "JT", shippingAmountIdr: 24_000 },
@@ -54,6 +55,8 @@ describe("Cek tarif (T-242)", () => {
     expect(tie.fastest?.providerService).toBe("JNE");
     expect(rateHighlights([{ codEligible: true, deliveryEstimate: "-", providerService: "JNE", shippingAmountIdr: 1 }]).fastest).toBeNull();
     expect(rateHighlights([]).cheapest).toBeNull();
+    // With nothing orderable the highlight still names the cheapest quote.
+    expect(rateHighlights(services.slice(2)).cheapest?.providerService).toBe("SAPLite");
   });
 
   it("marks exactly the services the order builder refuses (spx, paxel, SAPLite) as not orderable", () => {
@@ -72,15 +75,16 @@ describe("Cek tarif (T-242)", () => {
     const plain = text(html);
     expect(html).toContain(">Estimasi</span>");
     expect(plain).toContain("Tarif resmi tercatat saat resi diterbitkan.");
-    expect(plain).toMatch(/Termurah Rp\s?17\.500 SAP Lite · 3–5 hari/);
+    expect(plain).toMatch(/Termurah Rp\s?22\.000 JNE · 2–3 hari/);
     expect(plain).toMatch(/Tercepat 1–2 hari J&amp;T · Rp\s?24\.000/);
     expect(plain).toContain("4 layanan");
     expect(plain).toContain("4 kurir · 2 bisa COD");
     expect(html).toContain('aria-label="Saring kurir"');
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
     expect(plain).toContain("Semua 4 layanan");
-    // Two services (desktop row + phone card each) carry the note; JNE and J&T do not.
-    expect(html.match(/belum bisa dipesan lewat API Mengantar/g)).toHaveLength(4);
+    // Two services (desktop row + phone card each) carry the badge and note; JNE and J&T do not.
+    expect(html.match(/belum bisa dipesan lewat Mengantar/g)).toHaveLength(4);
+    expect(html.match(/>Segera hadir</g)).toHaveLength(4);
     expect(plain).toContain("Menampilkan 4 dari 4 layanan");
   });
 

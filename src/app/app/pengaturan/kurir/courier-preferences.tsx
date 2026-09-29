@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 
 import { saveCourierPreferences, type CourierPreferencesActionState } from "@/app/app/pengaturan/actions";
 import { CourierLogo } from "@/components/app/courier-logo";
+import { StatusBadge } from "@/components/app/status-badge";
 import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { SELECTABLE_COURIERS } from "@/lib/gerai-settings";
-import { courierDisplayName } from "@/lib/mengantar-couriers";
+import { courierDisplayName, mengantarDocumentedOrderCourier } from "@/lib/mengantar-couriers";
 import { cn } from "@/lib/utils";
 
 const FORM_ID = "courier-preferences-form";
@@ -75,6 +76,8 @@ export function CourierPreferences({ disabled }: { disabled: readonly string[] }
         {SELECTABLE_COURIERS.map((courier) => {
           const id = `kurir-${courier}`;
           const on = !off.has(courier);
+          // T-260: a courier Mengantar documents no order value for (spx, paxel) is quoted only.
+          const quoteOnly = mengantarDocumentedOrderCourier(courier) === null;
           return (
             // The switch's ::after covers the whole row (relative li, static switch): the logo, name
             // and state line all toggle it, a ≥ 44px target on touch, one tab stop.
@@ -85,8 +88,13 @@ export function CourierPreferences({ disabled }: { disabled: readonly string[] }
                     <CourierLogo className={cn("max-h-8 max-w-16 transition-[filter,opacity] motion-reduce:transition-none", !on && "opacity-50 grayscale")} courier={courier} decorative />
                   </span>
                   <span className="grid gap-0.5">
-                    <FieldLabel htmlFor={id}>{courierDisplayName(courier)}</FieldLabel>
-                    <span className="text-xs text-muted-foreground">{on ? "Ditawarkan" : "Tidak ditawarkan"}</span>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <FieldLabel htmlFor={id}>{courierDisplayName(courier)}</FieldLabel>
+                      {quoteOnly ? <StatusBadge label="Segera hadir" tone="neutral" /> : null}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {on ? (quoteOnly ? "Ditawarkan di cek tarif; belum bisa dipesan" : "Ditawarkan") : "Tidak ditawarkan"}
+                    </span>
                   </span>
                 </FieldContent>
                 <Switch

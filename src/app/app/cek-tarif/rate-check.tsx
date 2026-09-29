@@ -54,7 +54,11 @@ export function estimateDays(deliveryEstimate: string): [number, number] | null 
  * The cheapest and the fastest quoted service (ties: the cheaper, then quote order). "Fastest" is
  * the smallest upper bound of the courier's own estimate, so it is null when no estimate names days.
  */
-export function rateHighlights(services: RateService[]) {
+export function rateHighlights(allServices: RateService[]) {
+  // T-260: a highlight recommends what can be booked, so it skips a quote-only service (spx,
+  // paxel, SAPLite) whenever an orderable one exists; with none orderable it still says which is cheapest.
+  const orderable = allServices.filter((service) => mengantarOrderableService(service.providerService) !== null);
+  const services = orderable.length > 0 ? orderable : allServices;
   const cheapest = services.reduce<RateService | null>((best, service) => (!best || service.shippingAmountIdr < best.shippingAmountIdr ? service : best), null);
   let fastest: { days: [number, number]; service: RateService } | null = null;
   for (const service of services) {
@@ -263,7 +267,12 @@ function ServiceTags({ cheapest, fastest, service }: { cheapest: boolean; fastes
     <span className="flex flex-wrap items-center gap-1.5">
       {cheapest ? <StatusBadge icon={BadgePercent} label="Termurah" tone="success" /> : null}
       {fastest ? <StatusBadge icon={Zap} label="Tercepat" tone="info" /> : null}
-      {orderable ? null : <span className="text-xs text-muted-foreground">Hanya cek tarif; belum bisa dipesan lewat API Mengantar</span>}
+      {orderable ? null : (
+        <>
+          <StatusBadge label="Segera hadir" tone="neutral" />
+          <span className="text-xs text-muted-foreground">Hanya cek tarif; belum bisa dipesan lewat Mengantar</span>
+        </>
+      )}
     </span>
   );
 }
