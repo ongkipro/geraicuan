@@ -16,8 +16,8 @@ import {
   platformMonitoringUnpaidRecovery,
 } from "@/db/platform-views";
 import { shipmentStatuses, type tenantStatuses } from "@/db/schema";
-import { buildTrendBuckets } from "@/lib/analytics-range";
-import type { PlatformFilters, PlatformScope, ShipmentStatus } from "@/lib/platform-monitoring-filters";
+import { buildTrendBuckets, parseAnalyticsRange } from "@/lib/analytics-range";
+import type { AuditAction, PlatformFilters, PlatformScope, ShipmentStatus } from "@/lib/platform-monitoring-filters";
 
 export const PLATFORM_HEALTH_THRESHOLDS = {
   queueStuckMs: 15 * 60_000,
@@ -430,17 +430,40 @@ export async function listTenantUsage(tx: PlatformTransaction, filters: Platform
 }
 
 /**
- * `hideMonitoringViews` (T-257): the short feeds on Ringkasan and tenant detail leave out
- * PLATFORM_MONITORING_VIEWED, which every platform page view writes; /platform/audit lists them all.
+ * High-volume audit actions the short feeds leave out: every platform page view (T-257) and one
+ * row per parcel handed over or undone (T-268). /platform/audit lists them, filterable by `aksi`.
  */
-export async function listAuditEvents(tx:PlatformTransaction,filters:PlatformFilters,limit:number,{hideMonitoringViews=false}:{hideMonitoringViews?:boolean}={}):Promise<{rows:AuditRow[];total:number}>{
+const ROUTINE_AUDIT_ACTIONS = ["PLATFORM_MONITORING_VIEWED", "SHIPMENT_HANDOVER_RECORDED", "SHIPMENT_HANDOVER_UNDONE"] as const satisfies readonly AuditAction[];
+
+const actionList = (actions: readonly AuditAction[]) => sql.join(actions.map((action) => sql`${action}`), sql`,`);
+
+/**
+ * `hideRoutineEvents`: the short feeds on Ringkasan and tenant detail (ROUTINE_AUDIT_ACTIONS out).
+ * `actions`: only these actions, filtered in SQL so the page and total count only them.
+ */
+export async function listAuditEvents(tx:PlatformTransaction,filters:PlatformFilters,limit:number,{hideRoutineEvents=false,actions}:{hideRoutineEvents?:boolean;actions?:readonly AuditAction[]}={}):Promise<{rows:AuditRow[];total:number}>{
   if(!Number.isInteger(limit)||limit<1||limit>100)throw new RangeError("Audit limit is invalid.");
-  const where=sql`${scopeClause("a",filters.scope)} ${filters.outcome?sql`AND a.outcome=${filters.outcome}`:EMPTY} ${filters.action?sql`AND a.action=${filters.action}`:EMPTY} ${hideMonitoringViews?sql`AND a.action<>'PLATFORM_MONITORING_VIEWED'`:EMPTY}`;
+  if(actions&&actions.length===0)return {rows:[],total:0};
+  const where=sql`${scopeClause("a",filters.scope)} ${filters.outcome?sql`AND a.outcome=${filters.outcome}`:EMPTY} ${filters.action?sql`AND a.action=${filters.action}`:EMPTY} ${actions?sql`AND a.action IN (${actionList(actions)})`:EMPTY} ${hideRoutineEvents?sql`AND a.action NOT IN (${actionList(ROUTINE_AUDIT_ACTIONS)})`:EMPTY}`;
   const count=await tx.execute<{total:string}>(sql`SELECT count(*)::text total FROM ${platformMonitoringAuditEvent} a WHERE a.created_at>=${filters.range.startInclusive} AND a.created_at<${filters.range.endExclusive} ${where}`);
   const total=asNumber(count.rows[0]?.total);if(total===0)return {rows:[],total};
   const offset=Math.min((filters.page-1)*limit,Math.floor((total-1)/limit)*limit);
   const rows=await tx.execute<Record<string,unknown>>(sql`SELECT a.id,a.created_at,a.action,a.outcome,a.tenant_id,t.name tenant_name,a.target_type,a.actor_role,a.from_status,a.to_status FROM ${platformMonitoringAuditEvent} a LEFT JOIN ${platformMonitoringTenant} t ON t.id=a.tenant_id WHERE a.created_at>=${filters.range.startInclusive} AND a.created_at<${filters.range.endExclusive} ${where} ORDER BY a.created_at DESC,a.id DESC LIMIT ${limit} OFFSET ${offset}`);
   return {total,rows:rows.rows.map((r)=>({id:String(r.id),createdAt:asDate(r.created_at)!,action:String(r.action),outcome:r.outcome as AuditRow["outcome"],tenantId:r.tenant_id?String(r.tenant_id):null,tenantName:r.tenant_name?String(r.tenant_name):null,targetType:String(r.target_type),actorRole:r.actor_role?String(r.actor_role):null,fromStatus:r.from_status?String(r.from_status):null,toStatus:r.to_status?String(r.to_status):null}))};
+}
+
+/**
+ * "Riwayat keputusan" on /platform/pendaftaran: the newest successful approve/reject decisions of
+ * the past year (WIB days), at most `limit`. Filtered by action in SQL (T-268): per-parcel handover
+ * rows and page views never push a decision out of the window.
+ */
+export async function listRegistrationDecisions(tx:PlatformTransaction,limit:number):Promise<AuditRow[]>{
+  const now=await readPlatformClock(tx);
+  const today=parseAnalyticsRange({rentang:"hari-ini"},now).startDate;
+  const from=new Date(`${today}T00:00:00Z`);from.setUTCDate(from.getUTCDate()-365);
+  const range=parseAnalyticsRange({dari:from.toISOString().slice(0,10),rentang:"kustom",sampai:today},now);
+  const filters:PlatformFilters={courier:null,outcome:"SUCCESS",outletId:null,page:1,query:null,range,scope:{kind:"global"},status:null};
+  return (await listAuditEvents(tx,filters,limit,{actions:["TENANT_REGISTRATION_APPROVED","TENANT_REGISTRATION_REJECTED"]})).rows;
 }
 
 export async function readTenantDetail(tx:PlatformTransaction,filters:PlatformFilters):Promise<{tenant:TenantRow;outlets:OutletHealthRow[];batches:BatchRow[]}|null>{

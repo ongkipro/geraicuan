@@ -1,8 +1,9 @@
-import { Printer, Search } from "lucide-react";
+import { Handshake, Printer, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BatchPrintDialog, BatchSelectionProvider, SelectionNote, SelectPageCheckbox, SelectRowCheckbox, SelectUnprintedButton } from "@/app/app/label/batch-selection";
+import { HandoverDialog, HandoverNotice, SelectReadyButton } from "@/app/app/label/handover-dialog";
 import { AWB_SUFFIX_ERROR, DEFAULT_PRINT_STATE, LABEL_PAGE_SIZE, labelIndexHref, labelTileShareBase, parseLabelQuery } from "@/app/app/label/label-query";
 import { ListPagination } from "@/app/app/pengiriman/_list/list-pagination";
 import { AdjustedFilterAlert, PeriodFilter, rangeIssueMessages } from "@/app/app/pengiriman/_list/period-filter";
@@ -22,10 +23,12 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db/client";
 import { loadLabelIndexPage, type LabelIndexPage, type LabelPrintStateFilter } from "@/db/label-print-repository";
+import { countHandedOverToday } from "@/db/shipment-handover-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { loadTenantBrand } from "@/db/tenant-settings-repository";
 import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatWibDateTime } from "@/lib/label-format";
+import { formatHandoverTime } from "@/lib/shipment-handover";
 import { shipmentDetailHref, shipmentLabelHref, shipmentNumberFromReference } from "@/lib/shipment-number";
 
 export const metadata: Metadata = { title: "Cetak resi", robots: { index: false } };
@@ -33,17 +36,21 @@ export const metadata: Metadata = { title: "Cetak resi", robots: { index: false 
 const PRINT_STATE_TILES = [
   { hint: "Siap dicetak", label: "Semua resi", metricId: "LBL-ALL", value: "semua" },
   { hint: "Perlu dicetak", label: "Belum dicetak", metricId: "LBL-UNPRINTED", value: "belum" },
-  // T-263 (owner 2026-09-30): printed and still "Resi terbit" — the courier has not picked it up
-  // (ISSUED → IN_TRANSIT on pickup), so it waits at the counter. No handover is recorded.
-  { hint: "Sudah dicetak, belum dijemput kurir", label: "Siap diserahkan", metricId: "LBL-PRINTED", value: "sudah" },
+  // T-263 (owner 2026-09-30): printed and still "Resi terbit", waiting at the counter.
+  // T-267: and no handover recorded — "Tandai sudah diserahkan" empties it.
+  { hint: "Sudah dicetak, belum diserahkan", label: "Siap diserahkan", metricId: "LBL-PRINTED", value: "sudah" },
+  // T-267: handed over, still ISSUED until Mengantar reports the courier's pickup scan (→ IN_TRANSIT).
+  { hint: "Menunggu scan kurir", label: "Diserahkan", metricId: "LBL-HANDED-OVER", value: "diserahkan" },
   // T-238 (owner): resi Mengantar cancelled after issuance; listed, never printable.
   { hint: "Tidak dapat dicetak", label: "Dibatalkan", metricId: "LBL-CANCELLED", value: "batal" },
 ] as const satisfies readonly { hint: string; label: string; metricId: keyof LabelIndexPage["summary"]; value: LabelPrintStateFilter }[];
 
-const EMPTY_PAGE: LabelIndexPage = { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 } };
+const EMPTY_PAGE: LabelIndexPage = { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0, "LBL-HANDED-OVER": 0, "LBL-CANCELLED": 0 } };
 
-function PrintCountBadge({ cancelled, count }: { cancelled?: boolean; count: number }) {
+function PrintCountBadge({ cancelled, count, handedOverAt }: { cancelled?: boolean; count: number; handedOverAt?: Date | null }) {
   if (cancelled) return <ShipmentStatusBadge status="CANCELLED" />;
+  // T-267: the sub-state "Diserahkan · menunggu scan kurir" until Mengantar reports the pickup.
+  if (handedOverAt) return <StatusBadge icon={Handshake} label="Diserahkan" tone={PRINT_STATE_TONE.diserahkan} />;
   return count === 0
     ? <StatusBadge label="Belum dicetak" tone={PRINT_STATE_TONE.belum} />
     : <StatusBadge icon={Printer} label={`${count}× dicetak`} tone={PRINT_STATE_TONE.sudah} />;
@@ -65,6 +72,18 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
         range,
         status: "issued",
       }));
+
+  // T-267: the closing moment. "Siap diserahkan" emptied today (no suffix filter) → count the
+  // parcels handed over today (LBL-HANDED-OVER-TODAY); an empty day is never celebrated.
+  const handoverQueue = query.printState === "sudah";
+  // The closing line says "hari ini", so it shows only when the chosen period reaches today (WIB);
+  // an emptied queue for a past period gets the ordinary empty state instead.
+  const todayWib = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+  const readyQueueEmpty = handoverQueue && !query.awbSuffix && !query.awbSuffixError && data.summary["LBL-PRINTED"] === 0;
+  const periodReachesToday = range.lastIncludedDate >= todayWib;
+  const handedOverToday = readyQueueEmpty && periodReachesToday
+    ? await withTenantContext(db, principal.userId, principal.tenantId, countHandedOverToday)
+    : 0;
 
   // T-243: the batch dialog preselects the gerai's default label size (Informasi label).
   const { defaultLabelSize } = await withTenantContext(db, principal.userId, principal.tenantId, loadTenantBrand);
@@ -116,6 +135,10 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
   const offerUnprinted = !query.awbSuffixError && unprintedTotal > 0
     && (query.printState === "semua" || (query.printState === "belum" && unprintedTotal > unprintedHere));
   const unprintedParams = { ...carry, ...(query.awbSuffix ? { q: query.awbSuffix } : {}) };
+  // T-267 "Pilih semua siap diserahkan (N)": on Siap diserahkan when the queue is longer than this page.
+  const readyTotal = data.summary["LBL-PRINTED"];
+  const offerReady = handoverQueue && !query.awbSuffixError && readyTotal > selectable.length;
+  const handedOverTab = query.printState === "diserahkan";
 
   return (
     <>
@@ -156,7 +179,7 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
           count: data.summary[tile.metricId],
           hint: tile.hint,
           href: labelIndexHref({ awbSuffix: query.awbSuffix, printState: tile.value }, carry),
-          icon: tile.value === "batal" ? shipmentStatusIcon("CANCELLED") ?? undefined : undefined,
+          icon: tile.value === "batal" ? shipmentStatusIcon("CANCELLED") ?? undefined : tile.value === "diserahkan" ? Handshake : undefined,
           key: tile.metricId,
           label: tile.label,
           selected: query.printState === tile.value,
@@ -165,8 +188,13 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
       />
 
       {/* T-266: picks can reach past this page, so a new filter always starts a new selection. */}
-      <BatchSelectionProvider key={labelIndexHref({ awbSuffix: query.awbSuffix, printState: query.printState }, carry)} numbers={selectable.map((row) => row.number)}>
+      <BatchSelectionProvider
+        key={labelIndexHref({ awbSuffix: query.awbSuffix, printState: query.printState }, carry)}
+        numbers={selectable.map((row) => row.number)}
+        types={Object.fromEntries(selectable.map((row) => [row.number, row.handoverType]))}
+      >
       <Card aria-label="Daftar resi" className="gap-0 py-0 outline-none" id="daftar-resi" role="region" tabIndex={-1}>
+        <HandoverNotice />
         {/* T-266: on phones the toolbar box dissolves (its search lives in the filter sheet); the
             print control inside it is the selection bar, pinned while resi are chosen. */}
         <div className={`flex flex-col gap-3 border-b p-4 md:flex-row md:items-start md:justify-between ${selectable.length > 0 ? "max-md:contents" : "max-md:hidden"}`}>
@@ -174,13 +202,26 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
           {selectable.length > 0 ? (
             <div className="flex items-start gap-3 max-md:contents">
               {offerUnprinted ? <SelectUnprintedButton className="max-md:hidden" params={unprintedParams} total={unprintedTotal} /> : null}
-              <BatchPrintDialog defaultSize={defaultLabelSize} />
+              {offerReady ? <SelectReadyButton className="max-md:hidden" params={unprintedParams} total={readyTotal} /> : null}
+              {/* T-267: the handover queue's bar records the handover; every other tab's prints. */}
+              {handoverQueue ? <HandoverDialog /> : <BatchPrintDialog defaultSize={defaultLabelSize} />}
             </div>
           ) : null}
         </div>
         {selectable.length > 0 ? <SelectionNote className="border-b px-4 py-2 text-right max-lg:hidden" /> : null}
 
-        {rows.length === 0 ? (
+        {rows.length === 0 && readyQueueEmpty && handedOverToday > 0 ? (
+          <EmptyState
+            action={(
+              <Button asChild variant="outline">
+                <Link href={labelIndexHref({ printState: "diserahkan" }, carry)}>Lihat yang diserahkan</Link>
+              </Button>
+            )}
+            description={<><span className="tabular-nums" data-metric-id="LBL-HANDED-OVER-TODAY">{handedOverToday}</span> paket diserahkan hari ini. Paket keluar dari daftar setelah Mengantar mencatat scan kurir.</>}
+            icon={Handshake}
+            title="Semua paket hari ini sudah diserahkan"
+          />
+        ) : rows.length === 0 ? (
           <EmptyState
             action={filtered ? (
               <Button asChild variant="outline">
@@ -192,7 +233,11 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
               ? "Akhiran resi tidak dapat dicari."
               : query.printState === "belum" && !query.awbSuffix
                 ? "Semua resi pada periode ini sudah dicetak."
-                : filtered
+                : readyQueueEmpty
+                  ? "Belum ada paket yang siap diserahkan."
+                  : handedOverTab && !query.awbSuffix
+                    ? "Tidak ada paket yang menunggu scan kurir."
+                    : filtered
                   ? "Tidak ada resi yang cocok dengan filter ini."
                   : "Belum ada resi yang terbit pada periode ini."}
           />
@@ -233,10 +278,15 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
                         {paymentText({ ...row, declaredValueIdr: null })}
                       </TableCell>
                       <TableCell className="align-top">
-                        <PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} />
+                        <PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} handedOverAt={row.handedOverAt} />
+                        {row.handedOverAt ? (
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            <time className="tabular-nums" dateTime={row.handedOverAt.toISOString()}>{formatHandoverTime(row.handedOverAt)}</time> · menunggu scan kurir
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="align-top text-right">
-                        {row.status === "CANCELLED" ? (
+                        {row.status === "CANCELLED" || (handedOverTab && row.handedOverAt) ? (
                           <Button asChild variant="outline">
                             <Link aria-label={`Detail kiriman ${row.publicReference}`} href={shipmentDetailHref(row.publicReference)}>Detail</Link>
                           </Button>
@@ -259,6 +309,7 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
                 <div className="grid border-b pr-4">
                   <SelectPageCheckbox visibleLabel />
                   {offerUnprinted ? <SelectUnprintedButton className="pb-3 pl-4 *:w-full" params={unprintedParams} total={unprintedTotal} /> : null}
+                  {offerReady ? <SelectReadyButton className="pb-3 pl-4 *:w-full" params={unprintedParams} total={readyTotal} /> : null}
                 </div>
               ) : null}
               {/* T-266 (critique #4): dense queue rows — resi + print state, recipient · area, courier
@@ -267,17 +318,19 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
                 {rows.map((row) => (
                   <RecordItem
                     dense
-                    href={row.status === "CANCELLED" ? shipmentDetailHref(row.publicReference) : shipmentLabelHref(row.publicReference)}
+                    href={row.status === "CANCELLED" || (handedOverTab && row.handedOverAt) ? shipmentDetailHref(row.publicReference) : shipmentLabelHref(row.publicReference)}
                     key={row.shipmentId}
                     leading={row.awb && row.status !== "CANCELLED" ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} visibleLabel /> : <span aria-hidden="true" />}
                     meta={<>
                       {row.providerService || row.courier ? <CourierLogo className="h-4 shrink-0" courier={row.providerService ?? row.courier!} /> : null}
                       <span className="truncate tabular-nums">
                         {paymentText({ ...row, declaredValueIdr: null })}
-                        {row.issuedAt ? <> · <time dateTime={row.issuedAt.toISOString()}>{formatWibDateTime(row.issuedAt)}</time></> : null}
+                        {row.handedOverAt
+                          ? <> · diserahkan <time dateTime={row.handedOverAt.toISOString()}>{formatHandoverTime(row.handedOverAt)}</time></>
+                          : row.issuedAt ? <> · <time dateTime={row.issuedAt.toISOString()}>{formatWibDateTime(row.issuedAt)}</time></> : null}
                       </span>
                     </>}
-                    status={<PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} />}
+                    status={<PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} handedOverAt={row.handedOverAt} />}
                     subtitle={<><span className="font-semibold">{row.recipientName}</span> · {areaText(row.destinationAreaLabel)}</>}
                     title={<span className="font-mono">{row.awb}</span>}
                   />

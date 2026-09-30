@@ -7,6 +7,7 @@ import { listOutletPickupPoints } from "@/db/outlet-pickup-point-repository";
 import { providerOrderSnapshots, providerOrderStatusObservations, shipmentCodTotals } from "@/db/schema";
 import { loadShipmentFlowDraft } from "@/db/shipment-draft-repository";
 import { listProviderHistoryEvents } from "@/db/provider-tracking-repository";
+import { loadShipmentHandover } from "@/db/shipment-handover-repository";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { storedCodCharge, type ShipmentMoneyFacts } from "@/lib/shipment-money";
@@ -99,6 +100,9 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
       .limit(OBSERVATION_LIMIT)
     : [];
 
+  // T-267: the current handover (both roles; they both record it).
+  const handover = await loadShipmentHandover(tx, context, shipmentId);
+
   // T-238: the courier's own tracking history is operational, so both roles read it.
   const historyEvents = await listProviderHistoryEvents(tx, context, shipmentId);
   // Attention signals come from the newest *pull* (a webhook row carries none).
@@ -109,6 +113,7 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
     codFormulaRetired,
     detail,
     draft,
+    handover,
     historyEvents,
     moneyFacts,
     observations,

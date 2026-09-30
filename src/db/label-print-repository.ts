@@ -23,6 +23,7 @@ import {
   shipments,
   users,
 } from "@/db/schema";
+import { handedOverAtSql, handedOverPredicate } from "@/db/shipment-handover-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
 import type { CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
@@ -76,6 +77,11 @@ export type PrintableLabel = {
   recipient: { name: string; phone: string; address: string; landmark: string | null };
   printCount: number;
   lastPrintedAt: Date | null;
+  /**
+   * T-267: the recorded handover's server time, printed on the sender stub as "Diserahkan";
+   * absent or null when none is recorded (the stub then claims no handover time).
+   */
+  handedOverAt?: Date | null;
 };
 
 export type PrintEventRecord = {
@@ -103,20 +109,35 @@ export type PrintableShipmentRow = {
   paymentMethod: PaymentMethod;
   providerCodAmountIdr: number | null;
   printCount: number;
+  /** T-267: the current handover (null = none recorded); the queue's "Diserahkan" sub-state. */
+  handedOverAt: Date | null;
+  /** T-267: Buat kiriman's planned handover (null on older drafts), the dialog's default method. */
+  handoverType: "PICKUP" | "DROP_OFF" | null;
 };
 
 /**
  * PR-52 print-state entry on Cetak resi; `semua` is every printable (ISSUED) resi.
  * T-238: `batal` lists resi Mengantar has since cancelled (shipment CANCELLED, order
  * still ISSUED with its AWB); they are never printable and never in `semua`.
+ * T-267: `sudah` ("Siap diserahkan") is printed and not handed over; `diserahkan` is handed over
+ * and still ISSUED — waiting for the courier's pickup scan. belum + sudah + diserahkan = semua.
  */
-export type LabelPrintStateFilter = "semua" | "belum" | "sudah" | "batal";
+export type LabelPrintStateFilter = "semua" | "belum" | "sudah" | "diserahkan" | "batal";
 
 export type LabelPrintSummary = {
   "LBL-ALL": number;
   "LBL-PRINTED": number;
   "LBL-UNPRINTED": number;
+  "LBL-HANDED-OVER": number;
   "LBL-CANCELLED": number;
+};
+
+export const EMPTY_LABEL_PRINT_SUMMARY: LabelPrintSummary = {
+  "LBL-ALL": 0,
+  "LBL-PRINTED": 0,
+  "LBL-UNPRINTED": 0,
+  "LBL-HANDED-OVER": 0,
+  "LBL-CANCELLED": 0,
 };
 
 export type LabelIndexPage = {
@@ -247,6 +268,7 @@ export async function loadPrintableLabel(
       codShippingAmountIdr: shipmentCodTotals.shippingAmountIdr,
       calculatedProviderCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
       codFormulaVersion: shipmentCodTotals.codFormulaVersion,
+      handedOverAt: handedOverAtSql(context),
     })
     .from(shipments)
     .innerJoin(
@@ -400,6 +422,7 @@ export async function loadPrintableLabel(
     lastPrintedAt: summary?.lastPrintedAt
       ? new Date(summary.lastPrintedAt)
       : null,
+    handedOverAt: row.handedOverAt ? new Date(row.handedOverAt) : null,
   };
 }
 
@@ -788,7 +811,8 @@ function printStatePredicate(
   context: TenantContext,
   printState: LabelPrintStateFilter | undefined,
 ) {
-  if (printState === "sudah") return printedPredicate(context);
+  if (printState === "sudah") return sql`(${printedPredicate(context)} AND NOT ${handedOverPredicate(context)})`;
+  if (printState === "diserahkan") return handedOverPredicate(context);
   if (printState === "belum") return sql`NOT ${printedPredicate(context)}`;
   return undefined;
 }
@@ -833,6 +857,8 @@ export async function listPrintableShipments(
           AND history.shipment_id = ${shipments.id}
           AND history.outcome = 'PRINTED'
       )`.mapWith(Number),
+      handedOverAt: handedOverAtSql(context),
+      handoverType: shipmentDrafts.handoverType,
     })
     .from(shipments)
     .innerJoin(
@@ -897,6 +923,8 @@ export async function listPrintableShipments(
     paymentMethod: paymentMethodOf(row.isCod, row.codShippingOnly),
     providerCodAmountIdr: row.providerCodAmountIdr,
     printCount: row.printCount,
+    handedOverAt: row.handedOverAt ? new Date(row.handedOverAt) : null,
+    handoverType: row.handoverType === "PICKUP" || row.handoverType === "DROP_OFF" ? row.handoverType : null,
   }));
 }
 
@@ -920,18 +948,20 @@ export async function loadLabelIndexPage(
 ): Promise<LabelIndexPage> {
   const awbSuffix = filter.awbSuffix?.trim();
   if (awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix)) {
-    return { rows: [], summary: { "LBL-ALL": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 } };
+    return { rows: [], summary: { ...EMPTY_LABEL_PRINT_SUMMARY } };
   }
 
   const status = filter.status === "issued" ? "ISSUED" : "AWAITING_UPSTREAM_PAYMENT";
   const printed = printedPredicate(context);
+  const handedOver = handedOverPredicate(context);
   // One pass over both cohorts: the printable one (shipment still `status`) and, for
   // issued resi, the one Mengantar cancelled since (T-238).
   const printable = sql`${shipments.status} = ${status}`;
   const [summaryRow] = await tx
     .select({
       all: sql<number>`count(*) FILTER (WHERE ${printable})::int`.mapWith(Number),
-      printed: sql<number>`count(*) FILTER (WHERE ${printable} AND ${printed})::int`.mapWith(Number),
+      printed: sql<number>`count(*) FILTER (WHERE ${printable} AND ${printed} AND NOT ${handedOver})::int`.mapWith(Number),
+      handedOver: sql<number>`count(*) FILTER (WHERE ${printable} AND ${handedOver})::int`.mapWith(Number),
       unprinted: sql<number>`count(*) FILTER (WHERE ${printable} AND NOT ${printed})::int`.mapWith(Number),
       cancelled: sql<number>`count(*) FILTER (WHERE ${shipments.status} = 'CANCELLED')::int`.mapWith(Number),
     })
@@ -992,6 +1022,7 @@ export async function loadLabelIndexPage(
       "LBL-ALL": summaryRow?.all ?? 0,
       "LBL-PRINTED": summaryRow?.printed ?? 0,
       "LBL-UNPRINTED": summaryRow?.unprinted ?? 0,
+      "LBL-HANDED-OVER": summaryRow?.handedOver ?? 0,
       "LBL-CANCELLED": summaryRow?.cancelled ?? 0,
     },
   };

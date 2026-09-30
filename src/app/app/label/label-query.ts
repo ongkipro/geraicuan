@@ -40,7 +40,7 @@ export function parseLabelQuery(params: Record<string, SearchValue>): LabelQuery
     awbSuffix,
     awbSuffixError: awbSuffix && !AWB_SUFFIX_PATTERN.test(awbSuffix) ? AWB_SUFFIX_ERROR : null,
     page: Number.isSafeInteger(requestedPage) && requestedPage >= 1 ? requestedPage : 1,
-    printState: cetak === "semua" || cetak === "belum" || cetak === "sudah" || cetak === "batal" ? cetak : DEFAULT_PRINT_STATE,
+    printState: cetak === "semua" || cetak === "belum" || cetak === "sudah" || cetak === "diserahkan" || cetak === "batal" ? cetak : DEFAULT_PRINT_STATE,
   };
 }
 

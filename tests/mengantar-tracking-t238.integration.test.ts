@@ -595,7 +595,7 @@ describe("T-238 CANCELLED (owner 2026-09-26)", () => {
     const load = (printState: "semua" | "batal") => withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState }));
     const all = await load("semua");
-    expect(all.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 0, "LBL-UNPRINTED": 1, "LBL-CANCELLED": 1 });
+    expect(all.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 0, "LBL-UNPRINTED": 1, "LBL-HANDED-OVER": 0, "LBL-CANCELLED": 1 });
     expect(all.rows.map((row) => row.awb)).toEqual(["AWB-KEEP-7"]);
     expect((await load("batal")).rows.map((row) => row.awb)).toEqual(["AWB-CANCEL-6"]);
   });

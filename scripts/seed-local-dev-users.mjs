@@ -597,7 +597,7 @@ const TENANT_SCOPED_TABLES = [
   "shipment_drafts", "shipment_parties", "shipment_estimate_snapshots", "shipment_estimate_services",
   "shipment_cod_totals", "provider_batches", "provider_order_snapshots", "provider_unpaid_recoveries",
   "shipment_invoices", "print_events", "shipment_rts_events", "provider_settlement_pulls", "provider_settlement_items",
-  "provider_order_status_observations", "ledger_entries", "reconciliation_runs", "mengantar_connections",
+  "provider_order_status_observations", "provider_order_history_events", "shipment_handover_events", "ledger_entries", "reconciliation_runs", "mengantar_connections",
   "managed_secret_payloads", "shipment_rate_limits", "tenant_shipment_counters", "audit_events",
 ];
 
@@ -659,6 +659,10 @@ async function purgeOperationalRows(tenantIds, scope) {
     [tenantIds, all, runs],
   );
   await deleteByShipment("shipment_invoices");
+  // Both refer to shipments ON DELETE RESTRICT (0063, 0070); after any tracking poll or
+  // handover a re-seed would otherwise fail with 23503.
+  await deleteByShipment("shipment_handover_events");
+  await deleteByShipment("provider_order_history_events");
   await deleteByShipment("print_events");
   for (const table of ["provider_order_status_observations", "provider_settlement_items"]) {
     await query(

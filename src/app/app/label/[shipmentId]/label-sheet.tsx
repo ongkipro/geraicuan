@@ -304,8 +304,9 @@ function LabelPackage({ label, logoSrc, note, shown }: {
  * The stub leaves the building with the sender, so it carries what proves and traces
  * the handover and nothing that only the parcel needs: no recipient name, street
  * address, patokan (T-258) or phone, no sender contact, no package value and no COD breakdown.
- * T-265 (owner 2026-09-30): no "Diserahkan" line — GeraiCUAN records no handover yet, so the
- * stub claimed a time nobody confirmed. It returns with the handover feature.
+ * T-265 (owner 2026-09-30): no "Diserahkan" line while no handover is recorded — the stub never
+ * claims a time nobody confirmed. T-267: once a handover is recorded ("Tandai sudah
+ * diserahkan"), the row returns with that recorded server time in WIB; an undone handover removes it.
  */
 function LabelSenderStub({ label }: { label: PrintableLabel }) {
   return (
@@ -331,6 +332,9 @@ function LabelSenderStub({ label }: { label: PrintableLabel }) {
       <dl className="label-stub-facts">
         <div><dt>No. kiriman</dt><dd>{label.publicReference}</dd></div>
         <div><dt>Tujuan</dt><dd>{formatDistrictCity(label.destinationAreaLabel)}</dd></div>
+        {label.handedOverAt ? (
+          <div><dt>Diserahkan</dt><dd><time dateTime={label.handedOverAt.toISOString()}>{formatWibDateTime(label.handedOverAt)}</time></dd></div>
+        ) : null}
       </dl>
     </section>
   );

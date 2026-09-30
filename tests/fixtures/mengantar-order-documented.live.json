@@ -1,5 +1,5 @@
 {
-  "contract": "POST /api/public/{key}/order — documented body (D-26), one non-COD dropOff. Allow-list sanitized: key names kept; only structural values and the test order's own ids verbatim, everything else a shape.",
+  "contract": "POST /api/public/{key}/order — documented body (D-26), one non-COD dropOff. Allow-list sanitized: key names kept; only structural values verbatim, everything else a shape. The test order's own ids (_id, ORDER_ID, cnote_no, batch, batch_id) were replaced after capture (T-268) with synthetic values of the same length and character classes; a repeated id keeps one replacement.",
   "capturedAt": "2026-09-28",
   "host": "api-public.mengantar.com",
   "request": {
@@ -84,7 +84,7 @@
           "isProductFromOrderHistory": "boolean",
           "isExcluded": "boolean",
           "productOrdersManual": [],
-          "_id": "6aba21bb52ea696eac7f3a8e",
+          "_id": "5e1f0c3a9b7d2e4f6a8c0b1e",
           "RETURN_NAME": "string(10)",
           "RETURN_ADDR1": "string(30)",
           "RETURN_ADDR2": "string(28)",
@@ -111,7 +111,7 @@
           "PICKUP_VEHICLE": "string(5)",
           "BRANCH": "string(6)",
           "CUST_ID": "string(8)",
-          "ORDER_ID": "260928IC4IED",
+          "ORDER_ID": "260101AB1CDE",
           "SHIPPER_NAME": "string(10)",
           "SHIPPER_ADDR1": "string(30)",
           "SHIPPER_ADDR2": "string(30)",
@@ -151,15 +151,15 @@
           "address_id": "string(24)",
           "RECEIVER_SUBDISTRICT": "string(11)",
           "RECEIVER_DISTRICT": "string(11)",
-          "cnote_no": "0363192600087650",
+          "cnote_no": "0300000000000001",
           "user_id": "string(24)",
           "user": {
             "email": "string(19)",
             "name": "string(5)",
             "isTaggedVerified": "boolean"
           },
-          "batch_id": "6aba21bb52ea696eac7f3a80",
-          "batch": "26092815WNAHEY",
+          "batch_id": "5e1f0c3a9b7d2e4f6a8c0b10",
+          "batch": "26010100ABCDEF",
           "estimatedPrice": "integer",
           "estimatedSpecialPrice": "integer",
           "discountPercent": "integer",
@@ -188,8 +188,8 @@
         }
       ],
       "courier": "JNE",
-      "batch": "26092815WNAHEY",
-      "batch_id": "6aba21bb52ea696eac7f3a80",
+      "batch": "26010100ABCDEF",
+      "batch_id": "5e1f0c3a9b7d2e4f6a8c0b10",
       "errors": [],
       "jtOrdersUnsuported": null,
       "ordersClosedDestination": []

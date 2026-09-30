@@ -69,12 +69,17 @@ export const auditEventActions = [
   "ANNOUNCEMENT_SAVED",
   "ANNOUNCEMENT_PUBLISHED",
   "ANNOUNCEMENT_UNPUBLISHED",
+  // T-267 (0070): one row per recorded handover or undo, bound to its shipment_handover_events row.
+  "SHIPMENT_HANDOVER_RECORDED",
+  "SHIPMENT_HANDOVER_UNDONE",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
   "PLATFORM",
   "MEMBERSHIP",
   "OUTLET",
+  // T-267 (0070): the handover audit rows name the shipment.
+  "SHIPMENT",
 ] as const;
 
 export const shipmentPartyRoles = ["SENDER", "RECIPIENT"] as const;
@@ -1694,6 +1699,57 @@ export const printEvents = pgTable(
   ],
 );
 
+/**
+ * T-267 / DATA-24 (migration 0070): "Tandai sudah diserahkan" — the counter records that a
+ * printed parcel went to the courier (picked up at the gerai or dropped at a courier outlet).
+ * Append-only (no UPDATE/DELETE grant); the current handover state of a shipment is its event
+ * with the highest `sequence` (1, 2, 3 … per shipment, alternating HANDED_OVER / UNDONE, the
+ * INSERT policy enforces both). Mengantar's pickup scan (ISSUED → IN_TRANSIT) is what takes the
+ * parcel off the queue; a handover never changes the shipment's status.
+ */
+export const shipmentHandoverEventKinds = ["HANDED_OVER", "UNDONE"] as const;
+export const shipmentHandoverMethods = ["PICKUP", "DROP_OFF"] as const;
+
+export const shipmentHandoverEvents = pgTable(
+  "shipment_handover_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    shipmentId: uuid("shipment_id").notNull(),
+    sequence: integer("sequence").notNull(),
+    kind: text("kind", { enum: shipmentHandoverEventKinds }).notNull(),
+    method: text("method", { enum: shipmentHandoverMethods }),
+    note: text("note"),
+    actorUserId: text("actor_user_id").notNull(),
+    actorRole: text("actor_role", { enum: membershipRoles }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "shipment_handover_events_shipment_tenant_fkey",
+      columns: [table.shipmentId, table.tenantId],
+      foreignColumns: [shipments.id, shipments.tenantId],
+    }).onDelete("restrict"),
+    unique("shipment_handover_events_shipment_sequence_key").on(table.shipmentId, table.sequence),
+    unique("shipment_handover_events_id_tenant_key").on(table.id, table.tenantId),
+    index("shipment_handover_events_tenant_shipment_idx").on(table.tenantId, table.shipmentId, table.sequence),
+    index("shipment_handover_events_tenant_created_idx").on(table.tenantId, table.createdAt),
+    check("shipment_handover_events_sequence_positive", sql`sequence > 0`),
+    check("shipment_handover_events_kind_valid", sql`kind IN ('HANDED_OVER', 'UNDONE')`),
+    check("shipment_handover_events_actor_role_valid", sql`actor_role IN ('TENANT_ADMIN', 'OPERATOR')`),
+    check(
+      "shipment_handover_events_shape_valid",
+      sql`(
+        kind = 'HANDED_OVER'
+        AND method IN ('PICKUP', 'DROP_OFF')
+        AND (note IS NULL OR (char_length(note) BETWEEN 1 AND 160 AND note = btrim(note)))
+      ) OR (
+        kind = 'UNDONE' AND method IS NULL AND note IS NULL
+      )`,
+    ),
+  ],
+);
+
 export const invoiceCollectionModes = ["NON_COD", "COD_SHIPPING_ONLY", "COD"] as const;
 
 /**
@@ -2168,9 +2224,13 @@ export const auditEvents = pgTable(
         sql`(${table.metadata} ->> 'attemptId')`,
       )
       .where(sql`${table.action} IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED') AND ${table.metadata} ? 'attemptId'`),
+    // T-267 (0070): one audit row per handover event.
+    uniqueIndex("audit_events_shipment_handover_event_key")
+      .on(sql`(${table.metadata} ->> 'eventId')`)
+      .where(sql`${table.action} IN ('SHIPMENT_HANDOVER_RECORDED', 'SHIPMENT_HANDOVER_UNDONE')`),
     check(
       "audit_events_target_type_valid",
-      sql`target_type IN ('TENANT', 'PLATFORM', 'MEMBERSHIP', 'OUTLET')`,
+      sql`target_type IN ('TENANT', 'PLATFORM', 'MEMBERSHIP', 'OUTLET', 'SHIPMENT')`,
     ),
     check(
       "audit_events_action_valid",
@@ -2194,7 +2254,9 @@ export const auditEvents = pgTable(
         'TENANT_CONTACT_UPDATED',
         'ANNOUNCEMENT_SAVED',
         'ANNOUNCEMENT_PUBLISHED',
-        'ANNOUNCEMENT_UNPUBLISHED'
+        'ANNOUNCEMENT_UNPUBLISHED',
+        'SHIPMENT_HANDOVER_RECORDED',
+        'SHIPMENT_HANDOVER_UNDONE'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),

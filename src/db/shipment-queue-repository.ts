@@ -4,6 +4,7 @@ import { and, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 
 import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
 import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
+import { handoverOverduePredicate } from "@/db/shipment-handover-repository";
 import {
   outlets,
   printEvents,
@@ -59,6 +60,8 @@ export type ShipmentQueueRow = {
   publicReference: string;
   status: ShipmentStatus;
   updatedAt: Date;
+  /** T-267 QUE-HANDOVER-OVERDUE: handed over ≥ 24 h ago, still no pickup scan from Mengantar. */
+  handoverOverdue: boolean;
 };
 
 export type ShipmentQueuePage = {
@@ -69,6 +72,8 @@ export type ShipmentQueuePage = {
   status: ShipmentQueueStatusFilter;
   /** PR-52 panel counts, one per metric ID, in the same scope as `rows`. */
   summary: ShipmentQueueSummary;
+  /** T-267 QUE-HANDOVER-OVERDUE in the same scope: inside both QUE-AWAITING-PICKUP and QUE-ATTENTION. */
+  handoverOverdueCount: number;
   totalCount: number;
   totalPages: number;
 };
@@ -220,7 +225,8 @@ function shipmentFilter(
       ]);
       break;
     case "NEEDS_ATTENTION":
-      statusPredicate = inArray(shipments.status, [...NEEDS_ATTENTION_STATUSES]);
+      // T-267: plus the parcels handed over ≥ 24 h ago that Mengantar has not scanned (QUE-HANDOVER-OVERDUE).
+      statusPredicate = or(inArray(shipments.status, [...NEEDS_ATTENTION_STATUSES]), handoverOverduePredicate(context));
       break;
     case "READY_TO_PROGRESS":
       statusPredicate = inArray(shipments.status, ["DRAFT", "ESTIMATED"]);
@@ -313,6 +319,36 @@ export async function loadShipmentQueuePage(
     .where(and(eq(shipments.tenantId, context.tenantId), createdWithin(input.range), searchPredicate(input.search)))
     .groupBy(shipments.status);
 
+  // T-267: QUE-HANDOVER-OVERDUE, same cohort and joins; always ISSUED, so it never overlaps the
+  // other QUE-ATTENTION statuses and adds to them without double counting.
+  const [overdueRow] = await tx
+    .select({ count: sql<number>`count(*)::int`.mapWith(Number) })
+    .from(shipments)
+    .leftJoin(
+      providerOrderSnapshots,
+      and(
+        eq(providerOrderSnapshots.shipmentId, shipments.id),
+        eq(providerOrderSnapshots.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      shipmentDrafts,
+      and(
+        eq(shipmentDrafts.shipmentId, shipments.id),
+        eq(shipmentDrafts.tenantId, shipments.tenantId),
+      ),
+    )
+    .innerJoin(
+      shipmentParties,
+      and(
+        eq(shipmentParties.shipmentId, shipments.id),
+        eq(shipmentParties.tenantId, shipments.tenantId),
+        eq(shipmentParties.role, "RECIPIENT"),
+      ),
+    )
+    .where(and(eq(shipments.tenantId, context.tenantId), createdWithin(input.range), searchPredicate(input.search), handoverOverduePredicate(context)));
+  const handoverOverdueCount = overdueRow?.count ?? 0;
+
   const countByStatus = new Map(summaryRows.map((row) => [row.status, row.count]));
   const summary = Object.fromEntries(
     SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => [
@@ -322,7 +358,7 @@ export async function loadShipmentQueuePage(
         : entry.statuses.reduce(
             (total, status) => total + (countByStatus.get(status) ?? 0),
             0,
-          ),
+          ) + (entry.metricId === "QUE-ATTENTION" ? handoverOverdueCount : 0),
     ]),
   ) as ShipmentQueueSummary;
 
@@ -370,6 +406,7 @@ export async function loadShipmentQueuePage(
       rows: [],
       status: input.status,
       summary,
+      handoverOverdueCount,
       totalCount,
       totalPages,
     };
@@ -394,6 +431,7 @@ export async function loadShipmentQueuePage(
       providerService: providerOrderSnapshots.providerService,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       awb: providerOrderSnapshots.cnoteNo,
+      handoverOverdue: sql<boolean>`${handoverOverduePredicate(context)}`.mapWith((value) => value === true || value === "t" || value === "true"),
     })
     .from(shipments)
     .innerJoin(
@@ -440,6 +478,7 @@ export async function loadShipmentQueuePage(
     })),
     status: input.status,
     summary,
+    handoverOverdueCount,
     totalCount,
     totalPages,
   };

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 
 import { PlatformContextDeniedError, withPlatformContext } from "@/db/platform-context";
-import { listAuditEvents, listTenantUsage, PLATFORM_HEALTH_THRESHOLDS, readPlatformCounts, readPlatformHealth, readTrend } from "@/db/platform-monitoring-repository";
+import { listAuditEvents, listRegistrationDecisions, listTenantUsage, PLATFORM_HEALTH_THRESHOLDS, readPlatformCounts, readPlatformHealth, readTrend } from "@/db/platform-monitoring-repository";
 import * as schema from "@/db/schema";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { parsePlatformFilters } from "@/lib/platform-monitoring-filters";
@@ -74,6 +74,7 @@ describe("platform monitoring trust boundary",()=>{
 
   it("T-257: binds each status strip count to the rows its filter lists, the audit filters, trend totals and member counts",async()=>{
     await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,created_at) VALUES ('monitor-super','SUPER_ADMIN',$1,'TENANT_SUSPENDED','TENANT',$2,'SUCCESS','2026-08-29T00:00:00Z'),('monitor-super','SUPER_ADMIN',NULL,'PLATFORM_MONITORING_VIEWED','PLATFORM','platform','SUCCESS','2026-08-29T01:00:00Z')",[tenantB,tenantB]);
+    await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,metadata,created_at) VALUES ('monitor-member','TENANT_MEMBER',$1,'SHIPMENT_HANDOVER_RECORDED','SHIPMENT','30000000-0000-4000-8000-000000000001','SUCCESS','{\"eventId\":\"50000000-0000-4000-8000-000000000001\"}','2026-08-29T02:00:00Z'),('monitor-member','TENANT_MEMBER',$1,'SHIPMENT_HANDOVER_UNDONE','SHIPMENT','30000000-0000-4000-8000-000000000001','SUCCESS','{\"eventId\":\"50000000-0000-4000-8000-000000000002\"}','2026-08-29T03:00:00Z')",[tenantA]);
     const range=parseAnalyticsRange({rentang:"30-hari",tz:"Asia/Jakarta"},now);
     const filters={range,scope:{kind:"global"} as const,outletId:null,courier:null,status:null,outcome:null,query:null,page:1};
     const r=await withPlatformContext(appDb,"monitor-super",async tx=>{
@@ -83,10 +84,11 @@ describe("platform monitoring trust boundary",()=>{
       const searched=await listTenantUsage(tx,{...filters,query:"alp"},25);
       const suspended=await listAuditEvents(tx,{...filters,action:"TENANT_SUSPENDED"},25);
       const everything=await listAuditEvents(tx,filters,25);
-      const feed=await listAuditEvents(tx,filters,25,{hideMonitoringViews:true});
+      const feed=await listAuditEvents(tx,filters,25,{hideRoutineEvents:true});
+      const handovers=await listAuditEvents(tx,{...filters,action:"SHIPMENT_HANDOVER_RECORDED"},25);
       const trend=await readTrend(tx,filters);const counts=await readPlatformCounts(tx,filters);
       const tenantCounts=await readPlatformCounts(tx,{...filters,scope:{kind:"tenant",tenantId:tenantA}});
-      return{all,byStatus,searched,suspended,everything,feed,trend,counts,tenantCounts};
+      return{all,byStatus,searched,suspended,everything,feed,handovers,trend,counts,tenantCounts};
     });
     // PLT-TEN-*: each count equals the rows (and total) its status filter returns; the four sum to Semua.
     expect(r.all.statusCounts).toEqual({all:2,ACTIVE:1,SUSPENDED:1,PROVISIONING:0,ARCHIVED:0});
@@ -98,13 +100,28 @@ describe("platform monitoring trust boundary",()=>{
     // aksi filter and the Ringkasan/detail feed without monitoring views.
     expect(r.suspended.rows.map(row=>[row.action,row.tenantId])).toEqual([["TENANT_SUSPENDED",tenantB]]);
     expect(r.everything.rows.some(row=>row.action==="PLATFORM_MONITORING_VIEWED")).toBe(true);
-    expect(r.feed.rows.some(row=>row.action==="PLATFORM_MONITORING_VIEWED")).toBe(false);
-    expect(r.feed.total).toBe(r.everything.total-r.everything.rows.filter(row=>row.action==="PLATFORM_MONITORING_VIEWED").length);
+    // T-268 (M2): the short feeds leave out page views and the per-parcel handover rows; the full
+    // trail keeps both, and `aksi` finds a handover row.
+    const routine=["PLATFORM_MONITORING_VIEWED","SHIPMENT_HANDOVER_RECORDED","SHIPMENT_HANDOVER_UNDONE"];
+    for(const action of routine)expect(r.everything.rows.some(row=>row.action===action)).toBe(true);
+    expect(r.feed.rows.filter(row=>routine.includes(row.action))).toEqual([]);
+    expect(r.feed.total).toBe(r.everything.total-r.everything.rows.filter(row=>routine.includes(row.action)).length);
+    expect(r.feed.rows.map(row=>row.action)).toContain("TENANT_SUSPENDED");
+    expect(r.handovers.rows.map(row=>[row.action,row.tenantId])).toEqual([["SHIPMENT_HANDOVER_RECORDED",tenantA]]);
     // PLT-TREND-TOTALS equal SHP-CREATED / SHP-ISSUED of the same filters.
     expect(r.trend.reduce((sum,bucket)=>sum+bucket.created,0)).toBe(r.counts.lifecycle.shipments);
     expect(r.trend.reduce((sum,bucket)=>sum+bucket.issued,0)).toBe(r.counts.lifecycle.issued);
     // PLT-TD-MEMBER-ACTIVE: the gerai's own active members by role, never another gerai's.
     expect(r.tenantCounts.memberships).toMatchObject({active:1,tenantAdmins:1,operators:0});
     expect(r.tenantCounts.outlets).toMatchObject({total:1,configured:1});
+  });
+  it("T-268 (M1): Riwayat keputusan keeps a decision behind more than 500 later handover audit rows",async()=>{
+    await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,created_at) VALUES ('monitor-super','SUPER_ADMIN',$1,'TENANT_REGISTRATION_APPROVED','TENANT',$2,'SUCCESS',now()-interval '2 days'),('monitor-super','SUPER_ADMIN',$1,'TENANT_REGISTRATION_REJECTED','TENANT',$2,'DENIED',now()-interval '1 day')",[tenantA,tenantA]);
+    await admin.query(`INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,metadata,created_at)
+      SELECT 'monitor-member','TENANT_MEMBER',$1,'SHIPMENT_HANDOVER_RECORDED','SHIPMENT','30000000-0000-4000-8000-000000000001','SUCCESS',jsonb_build_object('eventId',gen_random_uuid()::text),now()-interval '1 hour'-n*interval '1 second'
+      FROM generate_series(1,600) n`,[tenantA]);
+    const decisions=await withPlatformContext(appDb,"monitor-super",tx=>listRegistrationDecisions(tx,10));
+    expect(decisions.map(row=>[row.action,row.outcome,row.tenantId])).toEqual([["TENANT_REGISTRATION_APPROVED","SUCCESS",tenantA]]);
+    await admin.query("DELETE FROM audit_events WHERE action IN ('SHIPMENT_HANDOVER_RECORDED','TENANT_REGISTRATION_APPROVED','TENANT_REGISTRATION_REJECTED')");
   });
 });

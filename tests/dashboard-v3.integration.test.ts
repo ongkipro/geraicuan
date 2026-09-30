@@ -14,6 +14,7 @@ type Row = Parameters<typeof RecentList>[0]["rows"][number];
 const row = (id: string, status: Row["status"], minutesAgo: number, awb: string | null = null): Row => ({
   awb,
   destinationAreaLabel: "Panakkukang, Kota Makassar, Sulawesi Selatan, 90231",
+  handoverOverdue: false,
   outletName: "Outlet Solo",
   publicReference: `GC-${id}`,
   recipientName: `Penerima ${id}`,

@@ -36,6 +36,7 @@ import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
+import { HANDOVER_ATTENTION_LABEL, handoverOverdue, handoverRecordText, handoverUndoAllowed } from "@/lib/shipment-handover";
 
 import { loadShipmentDetailView, type ShipmentDetailView } from "./detail-data";
 import {
@@ -47,6 +48,7 @@ import {
   type DetailNextStep,
 } from "./detail-model";
 import { AttentionSignals, BackToQueue, DefinitionGrid, DetailCard, IdentityStrip, RouteHeader, TrackingTimeline, type DefinitionItem } from "./detail-parts";
+import { HandoverUndoButton } from "./handover-undo";
 import { ReconciliationAction, StaleCheckAction, UnpaidRecoveryAction } from "./rail-actions";
 
 export const metadata: Metadata = { title: "Detail kiriman", robots: { index: false } };
@@ -224,7 +226,13 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
             <ShipmentStatusBadge status={detail.status} />
           </div>
           <p className="text-sm font-medium text-foreground">{status.guidance}</p>
-          <AttentionSignals signals={attentionSignals(view.attention)} />
+          <AttentionSignals signals={[
+            // T-267: handed over ≥ 24 hours ago and Mengantar still reports no pickup scan.
+            ...(handoverOverdue({ handedOverAt: view.handover?.handedOverAt ?? null, status: detail.status }, detail.generatedAt)
+              ? [{ key: "handover", label: HANDOVER_ATTENTION_LABEL, urgent: true }]
+              : []),
+            ...attentionSignals(view.attention),
+          ]} />
           <dl className="flex flex-col gap-1 border-t pt-2 text-xs text-muted-foreground">
             <div className="flex justify-between gap-3"><dt>Aktivitas terakhir</dt><dd>{formatWibDateTime(detail.updatedAt)}</dd></div>
             {responseCode ? <div className="flex justify-between gap-3"><dt>Respons Mengantar</dt><dd className="text-right">{providerResponseLabel(responseCode)}</dd></div> : null}
@@ -320,6 +328,9 @@ function packageItems(view: ShipmentDetailView, deliveryEstimate: string | null)
   const provider = detail.provider;
   const dimensions = formatDimensions(detail.package.lengthCm, detail.package.widthCm, detail.package.heightCm);
   const handover = draft ? handoverSummary(draft) : "Belum dicatat";
+  // T-267: the recorded handover to the courier (who, when, method, note), once the resi exists.
+  const record = view.handover;
+  const undo = handoverUndoAllowed({ handedOverAt: record?.handedOverAt ?? null, status: detail.status });
   return [
     {
       label: "Layanan",
@@ -337,8 +348,21 @@ function packageItems(view: ShipmentDetailView, deliveryEstimate: string | null)
       label: "Penyerahan",
       value: (
         <span className="flex flex-col gap-0.5">
-          <span>{handover}</span>
-          {draft?.handoverType ? <span className="text-xs font-normal text-muted-foreground">Belum dikirim ke Mengantar</span> : null}
+          {record ? (
+            // T-267: the recorded handover leads; the planned one (Buat kiriman) follows as context.
+            <span className="flex flex-col items-start gap-1" data-slot="handover-record">
+              <span className="font-semibold">{handoverRecordText(record)}</span>
+              {record.note ? <span className="text-xs font-normal wrap-anywhere text-muted-foreground">Catatan: {record.note}</span> : null}
+              {draft?.handoverType ? <span className="text-xs font-normal text-muted-foreground">Rencana: {handover}</span> : null}
+              {undo ? <HandoverUndoButton publicReference={detail.publicReference} shipmentId={detail.shipmentId} /> : null}
+            </span>
+          ) : (
+            <>
+              <span>{handover}</span>
+              {draft?.handoverType ? <span className="text-xs font-normal text-muted-foreground">Belum dikirim ke Mengantar</span> : null}
+              {provider?.awb ? <span className="text-xs font-normal text-muted-foreground" data-slot="handover-record">Belum ditandai diserahkan ke kurir</span> : null}
+            </>
+          )}
         </span>
       ),
       wide: true,

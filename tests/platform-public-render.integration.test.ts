@@ -25,7 +25,7 @@ const { AuthShell } = await import("@/app/login/_components/auth-shell");
 const { LoginForm } = await import("@/app/login/_components/login-form");
 const { firstRegistrationError, RegistrationForm, registrationFormData, registrationStepErrors, registrationStepOf } = await import("@/app/daftar/registration-form");
 const { PasswordResetForm } = await import("@/app/atur-ulang-password/reset-form");
-const { attentionItems, filtersChanged, platformTrendTotals, registrationDecisions } = await import("@/app/platform/_components/platform-logic");
+const { attentionItems, filtersChanged, platformTrendTotals } = await import("@/app/platform/_components/platform-logic");
 const { auditActor, formatAgo, formatSeconds, formatWib, severityBadge, tenantStatusChange } = await import("@/app/platform/_components/platform-format");
 const { AuditFeed, PlatformPagination, TimeCell } = await import("@/app/platform/_components/platform-ui");
 const { FilterSelect } = await import("@/app/platform/_components/filter-select");
@@ -181,17 +181,6 @@ describe("platform logic", () => {
     expect(filtersChanged({ ...base, query: "ge" })).toBe(true);
     expect(filtersChanged({ ...base, range: { ...base.range, presetId: "7-hari" } })).toBe(true);
     expect(filtersChanged({ ...base, scope: { kind: "tenant", tenantId: "x" } })).toBe(true);
-  });
-
-  it("keeps successful registration decisions only, newest first, capped", () => {
-    const rows = [
-      { action: "PLATFORM_MONITORING_VIEWED", outcome: "SUCCESS" },
-      { action: "TENANT_REGISTRATION_APPROVED", outcome: "SUCCESS" },
-      { action: "TENANT_REGISTRATION_REJECTED", outcome: "DENIED" },
-      { action: "TENANT_REGISTRATION_REJECTED", outcome: "SUCCESS" },
-    ];
-    expect(registrationDecisions(rows).map((row) => row.action)).toEqual(["TENANT_REGISTRATION_APPROVED", "TENANT_REGISTRATION_REJECTED"]);
-    expect(registrationDecisions(rows, 1)).toHaveLength(1);
   });
 
   it("words severities, durations, status changes and actors", () => {

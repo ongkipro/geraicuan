@@ -227,8 +227,8 @@ describe("D-26 documented POST /order response", () => {
   });
 
   it("reads the live production response of the T-237a probe (2026-09-28) the same way", () => {
-    // The allow-list-sanitized capture keeps the test order's own identifiers verbatim and
-    // turns everything else into shapes; the parser reads only the verbatim fields.
+    // The allow-list-sanitized capture keeps structural values, replaces the test order's own
+    // identifiers with same-shape synthetic ones (T-268) and turns everything else into shapes.
     const live = JSON.parse(readFileSync("tests/fixtures/mengantar-order-documented.live.json", "utf8")) as {
       response: { status: number; body: unknown };
       observed: { batchIdLocation: string };
@@ -238,10 +238,10 @@ describe("D-26 documented POST /order response", () => {
     expect(live.observed.batchIdLocation).toBe("both");
     expect(normalizeMengantarOrderResponse(live.response.body, [order])).toEqual([{
       shipmentId: order.shipmentId,
-      providerOrderId: "6aba21bb52ea696eac7f3a8e",
-      providerBatchId: "6aba21bb52ea696eac7f3a80",
+      providerOrderId: "5e1f0c3a9b7d2e4f6a8c0b1e",
+      providerBatchId: "5e1f0c3a9b7d2e4f6a8c0b10",
       isPaid: true,
-      cnoteNo: "0363192600087650",
+      cnoteNo: "0300000000000001",
     }]);
     // On success the envelope's extras arrive empty (`jtOrdersUnsuported` as null) and are not read;
     // a closed destination drops an item, which the cardinality check turns into SUBMISSION_UNKNOWN.

@@ -1871,8 +1871,225 @@ try {
     throw new Error(`0069 did not upgrade cleanly: ${JSON.stringify({ fix069, guard069, aclBefore069 })}`);
   }
   await client.query("DELETE FROM audit_events WHERE id = $1", [legacyLock069]);
+  // T-267: 0070 (DATA-24, D-36). Additive: a new append-only tenant table (forced RLS, runtime
+  // INSERT/SELECT only), a BEFORE INSERT order trigger, two audit actions + the SHIPMENT target,
+  // a partial unique index and a restrictive audit guard. No existing row changes; every existing
+  // audit row still passes both CHECKs. Probes (all rolled back): a printed ISSUED resi is handed
+  // over and undone by its gerai's member; another gerai, UPDATE/DELETE, an unprinted resi, a
+  // skipped sequence, a repeated kind, a forged or duplicate audit row are all refused.
+  const handoverIndex = migrations.findIndex((migration) => migration.startsWith("0070_shipment_handover_events"));
+  if (handoverIndex !== auditTenantIndex + 1) throw new Error("Expected the shipment-handover (0070) upgrade boundary right after 0069.");
+  const auditBefore070 = await auditRows();
+  const shipmentsBefore070 = (await client.query("SELECT to_jsonb(s) AS row FROM shipments s ORDER BY id")).rows;
+  await applyMigrations(migrations.slice(handoverIndex, handoverIndex + 1));
+  const { rows: [fix070] } = await client.query(`
+    SELECT (SELECT count(*)::int FROM shipment_handover_events) AS rows,
+      (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relname = 'shipment_handover_events') AS forced,
+      (SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.table_privileges
+        WHERE table_name = 'shipment_handover_events' AND grantee = 'geraicuan_app') AS privileges,
+      (SELECT count(*)::int FROM information_schema.column_privileges
+        WHERE table_name = 'shipment_handover_events' AND grantee = 'geraicuan_app' AND privilege_type IN ('UPDATE', 'DELETE')) AS mutable,
+      (SELECT count(*)::int FROM pg_trigger WHERE tgname = 'shipment_handover_events_enforce_order' AND NOT tgisinternal) AS trigger_bound,
+      (SELECT count(*)::int FROM pg_policies WHERE tablename = 'audit_events' AND policyname = 'audit_events_shipment_handover_guard' AND permissive = 'RESTRICTIVE') AS audit_guard,
+      (SELECT convalidated FROM pg_constraint WHERE conrelid = 'public.audit_events'::regclass AND conname = 'audit_events_action_valid') AS actions_validated,
+      (SELECT convalidated FROM pg_constraint WHERE conrelid = 'public.audit_events'::regclass AND conname = 'audit_events_target_type_valid') AS targets_validated
+  `);
+  const handover070 = {};
+  await client.query("BEGIN");
+  try {
+    const step = async (name, userId, tenantId, statement, values = []) => {
+      await client.query("SAVEPOINT probe070");
+      try {
+        if (userId) {
+          await client.query("SET LOCAL ROLE geraicuan_app");
+          await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", [userId, tenantId]);
+        }
+        const result = await client.query(statement, values);
+        await client.query("RESET ROLE");
+        await client.query("RELEASE SAVEPOINT probe070");
+        handover070[name] = result.rows[0]?.id ? "accepted" : `accepted:${result.rowCount}`;
+        return result.rows[0];
+      } catch (error) {
+        await client.query("ROLLBACK TO SAVEPOINT probe070");
+        await client.query("RESET ROLE");
+        handover070[name] = error.code;
+        return null;
+      }
+    };
+    const T901 = "00000000-0000-0000-0000-000000000901";
+    const S903 = "00000000-0000-0000-0000-000000000903";
+    const insert = `INSERT INTO shipment_handover_events (tenant_id, shipment_id, sequence, kind, method, note, actor_user_id, actor_role)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`;
+    const admin = "migration-fixture-user";
+    await client.query("UPDATE shipments SET status = 'ISSUED' WHERE id = $1", [S903]);
+    await client.query("UPDATE provider_order_snapshots SET status = 'ISSUED', cnote_no = 'MIG070AWB', provider_order_id = 'MIG070', resolved_at = now(), is_paid = true, safe_response_code = 'FIXTURE_ACCEPTED' WHERE id = '00000000-0000-0000-0000-000000000907'");
+    await step("unprinted", admin, T901, insert, [T901, S903, 1, "HANDED_OVER", "PICKUP", null, admin, "TENANT_ADMIN"]);
+    await client.query(`INSERT INTO print_events (tenant_id, shipment_id, provider_order_snapshot_id, sequence, outcome, awb_snapshot, actor_user_id, actor_role)
+      VALUES ($1, $2, '00000000-0000-0000-0000-000000000907', (SELECT coalesce(max(sequence), 0) + 1 FROM print_events WHERE shipment_id = $2), 'PRINTED', 'MIG070AWB', $3, 'TENANT_ADMIN')`, [T901, S903, admin]);
+    await step("foreignTenant", admin, "00000000-0000-0000-0000-000000000911", insert, [T901, S903, 1, "HANDED_OVER", "PICKUP", null, admin, "TENANT_ADMIN"]);
+    await step("wrongRole", admin, T901, insert, [T901, S903, 1, "HANDED_OVER", "PICKUP", null, admin, "OPERATOR"]);
+    const marked = await step("marked", admin, T901, insert, [T901, S903, 1, "HANDED_OVER", "DROP_OFF", "Kurir", admin, "TENANT_ADMIN"]);
+    await step("repeatKind", admin, T901, insert, [T901, S903, 2, "HANDED_OVER", "PICKUP", null, admin, "TENANT_ADMIN"]);
+    await step("skipSequence", admin, T901, insert, [T901, S903, 3, "UNDONE", null, null, admin, "TENANT_ADMIN"]);
+    await step("update", admin, T901, "UPDATE shipment_handover_events SET note = 'x'");
+    await step("delete", admin, T901, "DELETE FROM shipment_handover_events");
+    const audit = `INSERT INTO audit_events (actor_id, actor_role, tenant_id, action, target_type, target_id, outcome, metadata)
+      VALUES ($1, 'TENANT_MEMBER', $2, $3, 'SHIPMENT', $4, 'SUCCESS', $5)`;
+    await step("forgedAudit", admin, T901, audit, [admin, T901, "SHIPMENT_HANDOVER_RECORDED", S903, { eventId: "00000000-0000-4000-8000-000000000000" }]);
+    await step("audit", admin, T901, audit, [admin, T901, "SHIPMENT_HANDOVER_RECORDED", S903, { eventId: marked?.id }]);
+    await step("duplicateAudit", admin, T901, audit, [admin, T901, "SHIPMENT_HANDOVER_RECORDED", S903, { eventId: marked?.id }]);
+    await step("undone", admin, T901, insert, [T901, S903, 2, "UNDONE", null, null, admin, "TENANT_ADMIN"]);
+    await client.query("UPDATE shipments SET status = 'IN_TRANSIT' WHERE id = $1", [S903]);
+    await step("afterScan", admin, T901, insert, [T901, S903, 3, "HANDED_OVER", "PICKUP", null, admin, "TENANT_ADMIN"]);
+  } finally {
+    await client.query("ROLLBACK");
+  }
+  if (
+    fix070.rows !== 0 || fix070.forced !== true || fix070.privileges !== "INSERT,SELECT" || fix070.mutable !== 0
+    || fix070.trigger_bound !== 1 || fix070.audit_guard !== 1 || fix070.actions_validated !== true || fix070.targets_validated !== true
+    || JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore070)
+    || JSON.stringify((await client.query("SELECT to_jsonb(s) AS row FROM shipments s ORDER BY id")).rows) !== JSON.stringify(shipmentsBefore070)
+    || JSON.stringify(handover070) !== JSON.stringify({
+      unprinted: "42501", foreignTenant: "42501", wrongRole: "42501", marked: "accepted", repeatKind: "23514", skipSequence: "23514",
+      update: "42501", delete: "42501", forgedAudit: "42501", audit: "accepted:1", duplicateAudit: "23505", undone: "accepted", afterScan: "42501",
+    })
+  ) {
+    throw new Error(`0070 did not upgrade cleanly: ${JSON.stringify({ fix070, handover070 })}`);
+  }
+  if ((await client.query("SELECT count(*)::int AS n FROM shipment_handover_events")).rows[0].n !== 0) {
+    throw new Error("The 0070 probes left a change behind.");
+  }
+  // T-267 follow-up: 0071 moves the audit guard's event lookup into a SECURITY DEFINER function,
+  // so SECURITY DEFINER audit writers owned by a non-superuser keep working. Same probes after it
+  // (rolled back): the guard still binds the audit row to a real event, once per event, and an
+  // unrelated audit action written by a role without SELECT on the handover table is judged
+  // without touching that table.
+  const guardIndex = migrations.findIndex((migration) => migration.startsWith("0071_handover_audit_guard_definer"));
+  if (guardIndex !== handoverIndex + 1) throw new Error("Expected the handover audit-guard (0071) upgrade boundary right after 0070.");
+  const auditBefore071 = await auditRows();
+  await applyMigrations(migrations.slice(guardIndex, guardIndex + 1));
+  const guard071 = {};
+  await client.query("BEGIN");
+  try {
+    const step = async (name, statement, values = [], role = "geraicuan_app") => {
+      await client.query("SAVEPOINT probe071");
+      try {
+        await client.query(`SET LOCAL ROLE ${role}`);
+        await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-fixture-user", "00000000-0000-0000-0000-000000000901"]);
+        const result = await client.query(statement, values);
+        await client.query("RESET ROLE");
+        await client.query("RELEASE SAVEPOINT probe071");
+        guard071[name] = "accepted";
+        return result.rows[0];
+      } catch (error) {
+        await client.query("ROLLBACK TO SAVEPOINT probe071");
+        await client.query("RESET ROLE");
+        // The other action is refused by its own rules (42501 policy); what matters is that the
+        // refusal never comes from a missing privilege on the handover table.
+        guard071[name] = name === "otherAction"
+          ? (/shipment_handover_events/.test(error.message) ? "needs-handover-table" : "independent")
+          : error.code;
+        return null;
+      }
+    };
+    const T901 = "00000000-0000-0000-0000-000000000901";
+    const S903 = "00000000-0000-0000-0000-000000000903";
+    await client.query("UPDATE shipments SET status = 'ISSUED' WHERE id = $1", [S903]);
+    await client.query("UPDATE provider_order_snapshots SET status = 'ISSUED', cnote_no = 'MIG071AWB', provider_order_id = 'MIG071', resolved_at = now(), is_paid = true, safe_response_code = 'FIXTURE_ACCEPTED' WHERE id = '00000000-0000-0000-0000-000000000907'");
+    await client.query(`INSERT INTO print_events (tenant_id, shipment_id, provider_order_snapshot_id, sequence, outcome, awb_snapshot, actor_user_id, actor_role)
+      VALUES ($1, $2, '00000000-0000-0000-0000-000000000907', (SELECT coalesce(max(sequence), 0) + 1 FROM print_events WHERE shipment_id = $2), 'PRINTED', 'MIG071AWB', 'migration-fixture-user', 'TENANT_ADMIN')`, [T901, S903]);
+    const marked = await step("marked", `INSERT INTO shipment_handover_events (tenant_id, shipment_id, sequence, kind, method, actor_user_id, actor_role)
+      VALUES ($1, $2, 1, 'HANDED_OVER', 'PICKUP', 'migration-fixture-user', 'TENANT_ADMIN') RETURNING id`, [T901, S903]);
+    const audit = `INSERT INTO audit_events (actor_id, actor_role, tenant_id, action, target_type, target_id, outcome, metadata)
+      VALUES ('migration-fixture-user', 'TENANT_MEMBER', $1, $2, $3, $4, 'SUCCESS', $5)`;
+    await step("forgedAudit", audit, [T901, "SHIPMENT_HANDOVER_RECORDED", "SHIPMENT", S903, { eventId: "00000000-0000-4000-8000-000000000000" }]);
+    await step("wrongKind", audit, [T901, "SHIPMENT_HANDOVER_UNDONE", "SHIPMENT", S903, { eventId: marked?.id }]);
+    await step("audit", audit, [T901, "SHIPMENT_HANDOVER_RECORDED", "SHIPMENT", S903, { eventId: marked?.id }]);
+    await step("duplicateAudit", audit, [T901, "SHIPMENT_HANDOVER_RECORDED", "SHIPMENT", S903, { eventId: marked?.id }]);
+    // A role with no privilege on shipment_handover_events writing another audit action: the guard
+    // must not need that table (the 0070 regression).
+    await client.query("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'migration_probe_071') THEN CREATE ROLE migration_probe_071 NOLOGIN; END IF; END $$");
+    // Every table except the new one, like a function owner created before 0070.
+    await client.query("GRANT SELECT ON ALL TABLES IN SCHEMA public TO migration_probe_071");
+    await client.query("REVOKE ALL ON shipment_handover_events FROM migration_probe_071");
+    await client.query("GRANT INSERT ON audit_events TO migration_probe_071");
+    await step("otherAction", audit, [T901, "MEMBER_INVITED", "MEMBERSHIP", "migration-probe-071", {}], "migration_probe_071");
+  } finally {
+    await client.query("ROLLBACK");
+  }
+  if (
+    JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore071)
+    || (await client.query("SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'audit_events' AND policyname = 'audit_events_shipment_handover_guard' AND permissive = 'RESTRICTIVE' AND with_check NOT LIKE '%shipment_handover_events event%'")).rows[0].n !== 1
+    || JSON.stringify(guard071) !== JSON.stringify({ marked: "accepted", forgedAudit: "42501", wrongKind: "42501", audit: "accepted", duplicateAudit: "23505", otherAction: "independent" })
+  ) {
+    throw new Error(`0071 did not upgrade cleanly: ${JSON.stringify({ guard071 })}`);
+  }
+  // T-268 (review L1): 0072 keeps 0071's lookup but answers only for the context tenant and lets
+  // only the runtime role call it (0071 granted EXECUTE to PUBLIC; its owner bypasses RLS). Probes
+  // (rolled back): the gerai's own event is found and its audit row accepted; the same arguments
+  // under another gerai's context find nothing; a forged row is still refused; a role without the
+  // grant cannot call the lookup.
+  const scopeIndex = migrations.findIndex((migration) => migration.startsWith("0072_handover_audit_guard_tenant_scope"));
+  if (scopeIndex !== guardIndex + 1) throw new Error("Expected the handover lookup tenant-scope (0072) upgrade boundary right after 0071.");
+  const auditBefore072 = await auditRows();
+  const policyBefore072 = (await client.query("SELECT with_check FROM pg_policies WHERE tablename = 'audit_events' AND policyname = 'audit_events_shipment_handover_guard'")).rows;
+  await applyMigrations(migrations.slice(scopeIndex, scopeIndex + 1));
+  const { rows: [acl072] } = await client.query(`
+    SELECT string_agg(CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END, ',' ORDER BY 1) AS grantees,
+      bool_and(p.prosecdef) AS definer, bool_and(p.proconfig @> ARRAY['search_path=pg_catalog, public']) AS pinned
+    FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    WHERE p.oid = 'public.shipment_handover_audit_event_matches(text, uuid, text, text, text)'::regprocedure
+      AND acl.privilege_type = 'EXECUTE' AND acl.grantee <> p.proowner`);
+  const scope072 = {};
+  await client.query("BEGIN");
+  try {
+    const T901 = "00000000-0000-0000-0000-000000000901";
+    const S903 = "00000000-0000-0000-0000-000000000903";
+    const step = async (name, statement, values = [], { role = "geraicuan_app", tenant = T901 } = {}) => {
+      await client.query("SAVEPOINT probe072");
+      try {
+        await client.query(`SET LOCAL ROLE ${role}`);
+        await client.query("SELECT set_config('app.user_id', $1, true), set_config('app.tenant_id', $2, true)", ["migration-fixture-user", tenant]);
+        const result = await client.query(statement, values);
+        await client.query("RESET ROLE");
+        await client.query("RELEASE SAVEPOINT probe072");
+        scope072[name] = result.rows[0] && "found" in result.rows[0] ? String(result.rows[0].found) : "accepted";
+        return result.rows[0];
+      } catch (error) {
+        await client.query("ROLLBACK TO SAVEPOINT probe072");
+        await client.query("RESET ROLE");
+        scope072[name] = error.code;
+        return null;
+      }
+    };
+    await client.query("UPDATE shipments SET status = 'ISSUED' WHERE id = $1", [S903]);
+    await client.query("UPDATE provider_order_snapshots SET status = 'ISSUED', cnote_no = 'MIG072AWB', provider_order_id = 'MIG072', resolved_at = now(), is_paid = true, safe_response_code = 'FIXTURE_ACCEPTED' WHERE id = '00000000-0000-0000-0000-000000000907'");
+    await client.query(`INSERT INTO print_events (tenant_id, shipment_id, provider_order_snapshot_id, sequence, outcome, awb_snapshot, actor_user_id, actor_role)
+      VALUES ($1, $2, '00000000-0000-0000-0000-000000000907', (SELECT coalesce(max(sequence), 0) + 1 FROM print_events WHERE shipment_id = $2), 'PRINTED', 'MIG072AWB', 'migration-fixture-user', 'TENANT_ADMIN')`, [T901, S903]);
+    const marked = await step("marked", `INSERT INTO shipment_handover_events (tenant_id, shipment_id, sequence, kind, method, actor_user_id, actor_role)
+      VALUES ($1, $2, 1, 'HANDED_OVER', 'PICKUP', 'migration-fixture-user', 'TENANT_ADMIN') RETURNING id`, [T901, S903]);
+    const lookup = "SELECT public.shipment_handover_audit_event_matches($1, $2, $3, 'migration-fixture-user', 'HANDED_OVER') AS found";
+    await step("ownTenant", lookup, [marked?.id, T901, S903]);
+    await step("otherTenant", lookup, [marked?.id, T901, S903], { tenant: "00000000-0000-0000-0000-000000000911" });
+    const audit = `INSERT INTO audit_events (actor_id, actor_role, tenant_id, action, target_type, target_id, outcome, metadata)
+      VALUES ('migration-fixture-user', 'TENANT_MEMBER', $1, 'SHIPMENT_HANDOVER_RECORDED', 'SHIPMENT', $2, 'SUCCESS', $3)`;
+    await step("forgedAudit", audit, [T901, S903, { eventId: "00000000-0000-4000-8000-000000000000" }]);
+    await step("audit", audit, [T901, S903, { eventId: marked?.id }]);
+    await client.query("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'migration_probe_072') THEN CREATE ROLE migration_probe_072 NOLOGIN; END IF; END $$");
+    await step("ungranted", lookup, [marked?.id, T901, S903], { role: "migration_probe_072" });
+  } finally {
+    await client.query("ROLLBACK");
+  }
+  if (
+    JSON.stringify(await auditRows()) !== JSON.stringify(auditBefore072)
+    || JSON.stringify((await client.query("SELECT with_check FROM pg_policies WHERE tablename = 'audit_events' AND policyname = 'audit_events_shipment_handover_guard'")).rows) !== JSON.stringify(policyBefore072)
+    || JSON.stringify(acl072) !== JSON.stringify({ grantees: "geraicuan_app", definer: true, pinned: true })
+    || JSON.stringify(scope072) !== JSON.stringify({ marked: "accepted", ownTenant: "true", otherTenant: "false", forgedAudit: "42501", audit: "accepted", ungranted: "42501" })
+  ) {
+    throw new Error(`0072 did not upgrade cleanly: ${JSON.stringify({ acl072, scope072 })}`);
+  }
   // Later migrations apply on top (each adds its own probes above this line as it lands).
-  await applyMigrations(migrations.slice(auditTenantIndex + 1));
+  await applyMigrations(migrations.slice(scopeIndex + 1));
 
   console.log(`Migration upgrade check passed through ${migrations.at(-1)}.`);
 } finally {

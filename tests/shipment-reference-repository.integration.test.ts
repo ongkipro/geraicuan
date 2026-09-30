@@ -195,6 +195,8 @@ describe("per-tenant shipment numbers (PR-44)", () => {
       await client.query("GRANT INSERT ON audit_events TO geraicuan_owner_probe");
       // Existing RLS policies call these helpers; a real migration owner owns them, the probe needs EXECUTE.
       await client.query("GRANT EXECUTE ON FUNCTION public.tenant_member_governance_authorized(uuid) TO geraicuan_owner_probe");
+      // 0072: the audit guard's handover lookup, owned by the migration owner in production.
+      await client.query("GRANT EXECUTE ON FUNCTION public.shipment_handover_audit_event_matches(text, uuid, text, text, text) TO geraicuan_owner_probe");
       for (const fn of PREFIX_FUNCTIONS) await client.query(`ALTER FUNCTION ${fn} OWNER TO geraicuan_owner_probe`);
 
       const first = await insert(4);
@@ -212,6 +214,7 @@ describe("per-tenant shipment numbers (PR-44)", () => {
       for (const { proc, owner } of owners.rows) await client.query(`ALTER FUNCTION ${proc} OWNER TO "${owner}"`);
       await client.query("REVOKE ALL ON users, memberships, tenants, outlets, platform_roles, tenant_shipment_counters, shipments, audit_events FROM geraicuan_owner_probe");
       await client.query("REVOKE ALL ON FUNCTION public.tenant_member_governance_authorized(uuid) FROM geraicuan_owner_probe");
+      await client.query("REVOKE ALL ON FUNCTION public.shipment_handover_audit_event_matches(text, uuid, text, text, text) FROM geraicuan_owner_probe");
       client.release();
     }
   });

@@ -778,6 +778,8 @@ describe("Super Admin review (PR-61)", () => {
       await client.query("GRANT SELECT ON platform_roles TO geraicuan_owner_probe");
       await client.query("GRANT EXECUTE ON FUNCTION public.tenant_member_governance_authorized(uuid) TO geraicuan_owner_probe");
       await client.query("GRANT EXECUTE ON FUNCTION public.tenant_member_invitation_allowed(uuid, text) TO geraicuan_owner_probe");
+      // 0072: the audit guard's handover lookup, owned by the migration owner in production.
+      await client.query("GRANT EXECUTE ON FUNCTION public.shipment_handover_audit_event_matches(text, uuid, text, text, text) TO geraicuan_owner_probe");
       for (const fn of functions) await client.query(`ALTER FUNCTION ${fn} OWNER TO geraicuan_owner_probe`);
 
       const registered = await registerSelfServiceTenant(runtimeDb, {
@@ -831,6 +833,7 @@ describe("Super Admin review (PR-61)", () => {
       await client.query("REVOKE ALL ON users, accounts, memberships, outlets, audit_events, tenants, platform_roles FROM geraicuan_owner_probe");
       await client.query("REVOKE ALL ON FUNCTION public.tenant_member_governance_authorized(uuid) FROM geraicuan_owner_probe");
       await client.query("REVOKE ALL ON FUNCTION public.tenant_member_invitation_allowed(uuid, text) FROM geraicuan_owner_probe");
+      await client.query("REVOKE ALL ON FUNCTION public.shipment_handover_audit_event_matches(text, uuid, text, text, text) FROM geraicuan_owner_probe");
       client.release();
     }
   });

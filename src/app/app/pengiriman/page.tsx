@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { ListFilterSheet } from "@/components/app/list-filter-sheet";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
+import { HANDOVER_ATTENTION_LABEL } from "@/lib/shipment-handover";
 import { ShipmentStatusBadge, shipmentStatusIcon, shipmentStatusTone } from "@/components/app/status-badge";
 import { StatusTiles } from "@/components/app/status-tiles";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export const metadata: Metadata = { title: "Histori kiriman", robots: { index: f
 /** One short line per tile (spec 10 §4.6); the full meaning of each status lives on the detail page. */
 const TILE_HINTS: Record<(typeof SHIPMENT_QUEUE_SUMMARY_ENTRIES)[number]["metricId"], string> = {
   "QUE-ALL": "Semua tahap",
-  "QUE-ATTENTION": "Kendala/pelunasan",
+  "QUE-ATTENTION": "Kendala/pelunasan/serah",
   "QUE-AWAITING-PICKUP": "Tunggu dijemput",
   "QUE-DELIVERED": "Sampai penerima",
   "QUE-CANCELLED": "Dibatalkan Mengantar",
@@ -162,6 +163,8 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
         total={data.summary["QUE-ALL"]}
         tiles={SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => ({
           count: data.summary[entry.metricId],
+          // T-267: an overdue handover is still Resi terbit and also Perlu perhatian; the bar draws it once, there.
+          compositionCount: entry.metricId === "QUE-AWAITING-PICKUP" ? data.summary[entry.metricId] - data.handoverOverdueCount : undefined,
           hint: TILE_HINTS[entry.metricId],
           href: shipmentQueueHref(entry.value, 1, carry),
           icon: shipmentStatusIcon(entry.value) ?? undefined,
@@ -244,6 +247,8 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
                         </TableCell>
                         <TableCell className="align-top">
                           <ShipmentStatusBadge status={row.status} />
+                          {/* T-267: the one attention reason a status badge cannot carry. */}
+                          {row.handoverOverdue ? <span className="mt-1 block text-xs font-medium text-warn">{HANDOVER_ATTENTION_LABEL}</span> : null}
                           <span className="mt-1 block text-xs font-medium tabular-nums">{paymentText(row)}</span>
                         </TableCell>
                         <TableCell className="align-top whitespace-normal">
@@ -276,6 +281,7 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
               <RecordList label="Daftar kiriman">
                 {data.rows.map((row) => (
                   <RecordItem
+                    detail={row.handoverOverdue ? <span className="text-xs font-medium text-warn">{HANDOVER_ATTENTION_LABEL}</span> : undefined}
                     href={shipmentDetailHref(row.publicReference, carry)}
                     key={row.shipmentId}
                     meta={<>{carrierText(row.providerService) ?? "Belum memilih kurir"} · {row.awb ? <span className="font-mono">{row.awb}</span> : "Belum ada resi"}</>}

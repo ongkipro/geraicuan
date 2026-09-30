@@ -13,6 +13,12 @@ import { cn } from "@/lib/utils";
 
 export type StatusTile = {
   count: number;
+  /**
+   * T-267: the tile's part of the composition bar when some of its rows are also counted by a
+   * later tile (Histori: an overdue handover is Resi terbit and Perlu perhatian); drawn once,
+   * under the later tile. Defaults to `count`.
+   */
+  compositionCount?: number;
   hint?: string;
   href: string;
   /** Overrides the icon; defaults to the §4.12 status icon when `key` is a status, else the tone's. */
@@ -158,9 +164,9 @@ export function StatusTiles({ className, label, tiles, total }: { className?: st
  * overlapping caller would get no remainder rather than a negative one.
  */
 export function compositionSegments(tiles: StatusTile[], total: number) {
-  const parts = tiles.slice(1).filter((tile) => tile.count > 0).map((tile) => ({
+  const parts = tiles.slice(1).filter((tile) => (tile.compositionCount ?? tile.count) > 0).map((tile) => ({
     bar: TONE[toneOf(tile)].bar,
-    count: tile.count,
+    count: tile.compositionCount ?? tile.count,
     key: tile.key,
     label: tile.label,
   }));

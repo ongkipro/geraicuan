@@ -52,7 +52,7 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
   // upstream payment, so the panel entry covers every kiriman an operator has
   // to look at rather than only the two ACT-NEEDED acts on.
   NEEDS_ATTENTION: {
-    guidance: "Rekonsiliasi, kendala kurir, kegagalan, dan menunggu pelunasan dikumpulkan di sini.",
+    guidance: "Rekonsiliasi, kendala kurir, kegagalan, menunggu pelunasan, dan paket diserahkan yang 24 jam belum discan kurir dikumpulkan di sini.",
     label: "Perlu perhatian",
     tone: "danger",
   },

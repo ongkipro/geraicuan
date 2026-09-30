@@ -8,15 +8,17 @@ export const RECENT_ROWS = 6;
 /** The dashboard's default period; the filter row offers "Hapus filter" only away from it. */
 export const DASHBOARD_DEFAULT_PRESET = "7-hari";
 
-type RecentRow = { publicReference: string; shipmentId: string; status: ShipmentStatus; updatedAt: Date };
+type RecentRow = { handoverOverdue?: boolean; publicReference: string; shipmentId: string; status: ShipmentStatus; updatedAt: Date };
 
 /**
  * The next step of a recent shipment, per role. Every row gets a link; a shipment with nothing
  * to do opens its detail ("Lihat detail", as the reference does for Resi terbit / Terkirim).
  */
-export function recentNextStep(row: { publicReference: string; shipmentId: string; status: ShipmentStatus }, role: TenantShipmentRole) {
+export function recentNextStep(row: { handoverOverdue?: boolean; publicReference: string; shipmentId: string; status: ShipmentStatus }, role: TenantShipmentRole) {
   const detail = shipmentDetailHref(row.publicReference);
   const draft = `/app/pengiriman/baru?draft=${encodeURIComponent(row.shipmentId)}`;
+  // T-267: handed over ≥ 24 h ago and Mengantar still reports no pickup scan.
+  if (row.handoverOverdue) return { actionable: true, href: `${detail}#detail-paket`, label: "Periksa penyerahan" };
   switch (row.status) {
     case "DRAFT":
       return { actionable: true, href: draft, label: "Lanjutkan draf" };
@@ -45,7 +47,7 @@ const EXCEPTIONS: ReadonlySet<ShipmentStatus> = new Set(["AWAITING_UPSTREAM_PAYM
 export function mergeRecentShipments<T extends RecentRow>(actionable: readonly T[], recent: readonly T[], role: TenantShipmentRole, limit = RECENT_ROWS): T[] {
   const byId = new Map<string, T>();
   for (const row of [...actionable, ...recent]) if (!byId.has(row.shipmentId)) byId.set(row.shipmentId, row);
-  const rank = (row: T) => (EXCEPTIONS.has(row.status) ? 0 : recentNextStep(row, role).actionable ? 1 : 2);
+  const rank = (row: T) => (EXCEPTIONS.has(row.status) || row.handoverOverdue ? 0 : recentNextStep(row, role).actionable ? 1 : 2);
   return [...byId.values()]
     .sort((a, b) => rank(a) - rank(b) || b.updatedAt.getTime() - a.updatedAt.getTime() || (a.shipmentId < b.shipmentId ? 1 : -1))
     .slice(0, limit);

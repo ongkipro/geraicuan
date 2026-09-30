@@ -23,7 +23,8 @@
  * Output: a sanitized request/response on stdout and in
  * tests/fixtures/mengantar-order-documented.live.json. T-247 (review L7): sanitizing is an
  * ALLOW-LIST (`scripts/mengantar-probe-sanitize.mjs`): every key name is kept, but only
- * structural values and the test order's own identifiers are kept verbatim; names,
+ * structural values are kept verbatim, the test order's own identifiers become same-shape
+ * synthetic values (T-268: they are real provider records); names,
  * addresses, phones, free text and account identifiers become shapes, so no personal data
  * can reach tests/fixtures. Cancel the created order in the Mengantar app afterwards (the
  * parcel content says so).
@@ -87,6 +88,9 @@ const body = {
   }],
 };
 
+// T-268: one map per capture, so an order id repeated in the envelope and the item keeps one
+// synthetic replacement.
+const syntheticIds = new Map();
 function sanitize(value) {
   return sanitizeProbeCapture(value, [
     [apiKey, "[API_KEY]"],
@@ -94,7 +98,7 @@ function sanitize(value) {
     [pickupAddressId, "[PICKUP_ADDRESS_ID]"],
     [destinationAreaId, "[AREA_ID]"],
     [TEST_PHONE, "[PHONE]"],
-  ]);
+  ], syntheticIds);
 }
 
 function batchIdLocation(response) {
@@ -132,7 +136,7 @@ try {
 const sanitizedResponse = sanitize(responseBody);
 const item = Array.isArray(sanitizedResponse?.data) ? sanitizedResponse.data[0] : null;
 const capture = {
-  contract: "POST /api/public/{key}/order — documented body (D-26), one non-COD dropOff. Allow-list sanitized: key names kept; only structural values and the test order's own ids verbatim, everything else a shape.",
+  contract: "POST /api/public/{key}/order — documented body (D-26), one non-COD dropOff. Allow-list sanitized: key names kept; only structural values verbatim, the test order's own ids (_id, ORDER_ID, cnote_no, batch, batch_id) replaced with same-shape synthetic values (one replacement per repeated id), everything else a shape.",
   capturedAt: new Date().toISOString().slice(0, 10),
   host: base.hostname,
   request: sanitize(body),

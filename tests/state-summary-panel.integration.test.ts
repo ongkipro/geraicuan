@@ -365,7 +365,7 @@ describe("Cetak resi panel counts", () => {
     const all = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua" }),
     );
-    expect(all.summary).toEqual({ "LBL-ALL": 3, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1, "LBL-CANCELLED": 1 });
+    expect(all.summary).toEqual({ "LBL-ALL": 3, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1, "LBL-HANDED-OVER": 0, "LBL-CANCELLED": 1 });
     // A cancelled resi is never in the printable list.
     expect(all.rows.map((row) => row.status)).not.toContain("CANCELLED");
 
@@ -424,7 +424,7 @@ describe("Cetak resi panel counts", () => {
     const other = await withTenantContext(appDb, adminB, tenantB, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua" }),
     );
-    expect(other.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 });
+    expect(other.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0, "LBL-HANDED-OVER": 0, "LBL-CANCELLED": 0 });
   });
 });
 
@@ -555,13 +555,13 @@ describe("list pages respect the PR-53 range", () => {
     const inSeptember = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua", range: september }),
     );
-    expect(inSeptember.summary).toEqual({ "LBL-ALL": 2, "LBL-PRINTED": 1, "LBL-UNPRINTED": 1, "LBL-CANCELLED": 1 });
+    expect(inSeptember.summary).toEqual({ "LBL-ALL": 2, "LBL-PRINTED": 1, "LBL-UNPRINTED": 1, "LBL-HANDED-OVER": 0, "LBL-CANCELLED": 1 });
     expect(inSeptember.rows).toHaveLength(2);
 
     const inJune = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua", range: june }),
     );
-    expect(inJune.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0, "LBL-CANCELLED": 0 });
+    expect(inJune.summary).toEqual({ "LBL-ALL": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 0, "LBL-HANDED-OVER": 0, "LBL-CANCELLED": 0 });
     expect(inJune.rows).toHaveLength(1);
 
     for (const [printState, metricId] of [

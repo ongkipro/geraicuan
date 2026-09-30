@@ -28,7 +28,7 @@ vi.mock("@/app/app/pengiriman/_list/tenant-page", () => ({
 vi.mock("@/db/tenant-settings-repository", () => ({ loadTenantBrand: async () => ({ defaultLabelSize: "10x15" }) }));
 
 const issuedAt = new Date("2026-09-26T03:00:00.000Z");
-const summary = vi.hoisted(() => ({ current: { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-PRINTED": 1, "LBL-UNPRINTED": 2 } }));
+const summary = vi.hoisted(() => ({ current: { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 1, "LBL-UNPRINTED": 2 } }));
 const rows = [10178, 10177, 10175].map((number, index) => ({
   awb: `AWB266${number}`,
   courier: "JNE",
@@ -117,16 +117,16 @@ describe("dense phone rows", () => {
 
 describe("Pilih semua belum dicetak", () => {
   it("shows the true unprinted count on Semua, once per layout, beside Pilih semua di halaman ini", async () => {
-    summary.current = { "LBL-ALL": 40, "LBL-CANCELLED": 0, "LBL-PRINTED": 3, "LBL-UNPRINTED": 37 };
+    summary.current = { "LBL-ALL": 40, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 3, "LBL-UNPRINTED": 37 };
     const html = await render({ cetak: "semua" });
     expect(html.match(/Pilih semua belum dicetak <span class="tabular-nums" data-metric-id="LBL-UNPRINTED">\(37\)<\/span>/g)).toHaveLength(2);
     expect(html).toContain("Pilih semua di halaman ini");
   });
 
   it("on Belum dicetak only when the queue is longer than the page; never on Siap diserahkan", async () => {
-    summary.current = { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-PRINTED": 1, "LBL-UNPRINTED": 2 };
+    summary.current = { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 1, "LBL-UNPRINTED": 2 };
     expect(await render()).not.toContain("Pilih semua belum dicetak");
-    summary.current = { "LBL-ALL": 30, "LBL-CANCELLED": 0, "LBL-PRINTED": 1, "LBL-UNPRINTED": 29 };
+    summary.current = { "LBL-ALL": 30, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 1, "LBL-UNPRINTED": 29 };
     expect(await render()).toContain("Pilih semua belum dicetak");
     expect(await render({ cetak: "sudah" })).not.toContain("Pilih semua belum dicetak");
   });

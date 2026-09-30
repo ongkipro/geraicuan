@@ -310,9 +310,11 @@ describe("label page: preview first, one print button, handover time", () => {
     expect([...html.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].filter((match) => /cetak/i.test(text(match[1])))).toHaveLength(1);
   });
 
-  it("puts no handover time on the stub: none is recorded (T-265 removed 'Diserahkan')", () => {
+  it("puts no print-time handover on the stub: 'Diserahkan' only from a recorded handover (T-265, T-267)", () => {
     const sheet = read("src/app/app/label/[shipmentId]/label-sheet.tsx");
-    expect(sheet).not.toMatch(/<dt>Diserahkan|HandoverTime/);
+    expect(sheet).not.toMatch(/HandoverTime/);
+    // T-267: the row returns, bound to the recorded handover only (rendered cases: handover-render-t267).
+    expect(sheet).toMatch(/\{label\.handedOverAt \? \(\s*<div><dt>Diserahkan<\/dt>/);
     expect(read("src/app/app/label/[shipmentId]/label-print-context.tsx")).not.toMatch(/printedAt|HandoverTime/);
   });
 

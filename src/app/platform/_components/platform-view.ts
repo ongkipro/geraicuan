@@ -80,7 +80,7 @@ export async function loadPlatformView(kind: PlatformPageKind, rawParams: Search
     const usageLimit = kind === "overview" ? 5 : PLATFORM_PAGE_SIZE;
     const auditLimit = kind === "audit" ? PLATFORM_PAGE_SIZE : kind === "overview" ? 5 : 10;
     return {
-      audit: await settle(is("overview", "audit", "tenant-detail"), () => listAuditEvents(tx, filters, auditLimit, { hideMonitoringViews: kind !== "audit" })),
+      audit: await settle(is("overview", "audit", "tenant-detail"), () => listAuditEvents(tx, filters, auditLimit, { hideRoutineEvents: kind !== "audit" })),
       counts: await settle(is("overview", "tenant-detail"), () => readPlatformCounts(tx, filters)),
       detail: await settle(is("tenant-detail"), () => readTenantDetail(tx, filters)),
       filters,

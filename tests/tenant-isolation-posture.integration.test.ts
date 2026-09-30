@@ -142,6 +142,8 @@ describe("tenant isolation posture", () => {
       "shipment_cod_totals",
       "shipment_estimate_services",
       "shipment_estimate_snapshots",
+      // T-267 / 0070: the handover record is append-only; the current state is the latest event.
+      "shipment_handover_events",
       "shipment_invoices",
       "shipment_parties",
       "shipment_rts_events",
@@ -323,5 +325,19 @@ describe("tenant isolation posture", () => {
       // Keep the exemption honest: it only applies to tables that really are tenant-keyed.
       expect(rows[0]?.exists, table).toBe(true);
     }
+  });
+
+  it("lets PUBLIC execute no SECURITY DEFINER function (T-268: 0071's lookup was granted to PUBLIC)", async () => {
+    // A definer runs with its owner's rights, usually past RLS: only the named roles may call one.
+    const { rows } = await adminPool.query<{ proc: string }>(
+      `SELECT p.oid::regprocedure::text AS proc
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace,
+              aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+        WHERE n.nspname = 'public' AND p.prosecdef AND acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+        ORDER BY 1`);
+    expect(rows.map((row) => row.proc)).toEqual([]);
+    const { rows: [count] } = await adminPool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.prosecdef");
+    expect(count.n).toBeGreaterThan(0);
   });
 });

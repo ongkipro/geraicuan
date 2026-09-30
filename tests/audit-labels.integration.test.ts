@@ -42,6 +42,8 @@ describe("T-202 audit and tenant-status labels (spec 10 §8, spec 18 /platform/a
       ["PLATFORM", "Platform"],
       ["MEMBERSHIP", "Gerai tidak tercatat"],
       ["OUTLET", "Gerai tidak tercatat"],
+      // T-267: the handover audit rows name the shipment; always stored with the gerai.
+      ["SHIPMENT", "Gerai tidak tercatat"],
     ]);
     expect(auditTenantFallbackLabel(null)).toBe("Gerai tidak tercatat");
   });

@@ -18,6 +18,7 @@ import type {
 } from "@/db/tenant-dashboard-repository";
 import { areaDisplayCase, formatDistrictCity } from "@/lib/label-format";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
+import { HANDOVER_ATTENTION_LABEL } from "@/lib/shipment-handover";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import type { TenantShipmentRole } from "@/lib/shipment-queue";
 import { cn } from "@/lib/utils";
@@ -184,6 +185,7 @@ export function RecentList({ multipleOutlets, role, rows }: { multipleOutlets: b
               <Link className="inline-flex min-h-11 items-center font-mono text-sm font-semibold text-primary underline-offset-4 hover:underline md:min-h-6" href={shipmentDetailHref(row.publicReference)}>{row.publicReference}</Link>
               <ShipmentStatusBadge status={row.status} />
             </div>
+            {row.handoverOverdue ? <p className="text-xs font-medium text-warn">{HANDOVER_ATTENTION_LABEL}</p> : null}
             <p className="min-w-0 text-sm font-medium wrap-anywhere">
               {row.recipientName} · {areaDisplayCase(formatDistrictCity(row.destinationAreaLabel))}{multipleOutlets ? ` · ${row.outletName}` : ""}
             </p>

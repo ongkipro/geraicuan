@@ -12,20 +12,34 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DEFAULT_LABEL_SIZE, LABEL_SIZES, type LabelSize } from "@/lib/label-size";
 import { cn } from "@/lib/utils";
 
+/** T-267: Buat kiriman's planned handover per shipment number, the handover dialog's default. */
+export type PlannedHandoverTypes = Readonly<Record<number, "PICKUP" | "DROP_OFF" | null>>;
+
+/** T-267: the last handover outcome, shown above the list until the next selection. */
+export type SelectionNotice = { tone: "success" | "warning" | "danger"; title: string; lines: string[] };
+
 type Selection = {
   /** The selectable rows of this page. */
   numbers: readonly number[];
+  /** Planned handover types of this page's rows plus any a "Pilih semua" brought in. */
+  types: PlannedHandoverTypes;
+  notice: SelectionNotice | null;
+  setNotice: (notice: SelectionNotice | null) => void;
   /** The chosen shipment numbers: this page's, plus any "Pilih semua belum dicetak" took from other pages. */
   selected: ReadonlySet<number>;
   /** A line about the last "Pilih semua belum dicetak" when the cap cut it short. */
   note: string | null;
   toggle: (number: number, on: boolean) => void;
   setAll: (on: boolean) => void;
-  replace: (numbers: readonly number[], note: string | null) => void;
+  replace: (numbers: readonly number[], note: string | null, types?: PlannedHandoverTypes) => void;
   clear: () => void;
 };
 
 const SelectionContext = createContext<Selection | null>(null);
+
+export function useBatchSelection() {
+  return useSelection();
+}
 
 function useSelection() {
   const selection = useContext(SelectionContext);
@@ -34,15 +48,20 @@ function useSelection() {
 }
 
 /** PR-87: the rows chosen on Cetak resi, by shipment number. */
-export function BatchSelectionProvider({ children, numbers }: { children: ReactNode; numbers: readonly number[] }) {
+export function BatchSelectionProvider({ children, numbers, types = {} }: { children: ReactNode; numbers: readonly number[]; types?: PlannedHandoverTypes }) {
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [note, setNote] = useState<string | null>(null);
+  const [notice, setNotice] = useState<SelectionNotice | null>(null);
+  const [extraTypes, setExtraTypes] = useState<PlannedHandoverTypes>({});
   const value: Selection = {
     clear: () => { setSelected(new Set()); setNote(null); },
     note,
+    notice,
     numbers,
-    replace: (next, nextNote) => { setSelected(new Set(next)); setNote(nextNote); },
+    replace: (next, nextNote, nextTypes) => { setSelected(new Set(next)); setNote(nextNote); if (nextTypes) setExtraTypes(nextTypes); },
     selected,
+    setNotice,
+    types: { ...extraTypes, ...types },
     // The page box adds or removes this page's rows; picks from other pages stay.
     setAll: (on) => { setNote(null); setSelected((current) => {
       const next = new Set(current);

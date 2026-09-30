@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 
 import {
   ledgerEntries,
@@ -21,6 +21,7 @@ import {
   type ProviderDeliveryStatusBasis,
 } from "@/db/provider-settlement-repository";
 import { RTS_STATUSES } from "@/db/rts-repository";
+import { handoverOverduePredicate } from "@/db/shipment-handover-repository";
 
 const DEFAULT_RECENT_LIMIT = 6;
 /** Statuses the dashboard's `actionable` read returns: every shipment with a next step. */
@@ -61,6 +62,8 @@ export type TenantDashboardRecentShipment = {
   publicReference: string;
   status: (typeof shipments.$inferSelect)["status"];
   updatedAt: Date;
+  /** T-267 QUE-HANDOVER-OVERDUE. */
+  handoverOverdue: boolean;
 };
 
 export type TenantDashboardPeriodMetrics = {
@@ -764,6 +767,8 @@ export async function loadTenantDashboardShipments(
       publicReference: shipments.publicReference,
       status: shipments.status,
       updatedAt: shipments.updatedAt,
+      // T-267: handed over ≥ 24 h ago, no pickup scan yet — an exception like the statuses below.
+      handoverOverdue: sql<boolean>`${handoverOverduePredicate(context)}`.mapWith((value) => value === true || value === "t" || value === "true"),
     })
     .from(shipments)
     .innerJoin(
@@ -799,12 +804,12 @@ export async function loadTenantDashboardShipments(
       and(
         eq(shipments.tenantId, context.tenantId),
         mode === "actionable"
-          ? inArray(shipments.status, [...TENANT_DASHBOARD_ACTIONABLE_STATUSES])
+          ? or(inArray(shipments.status, [...TENANT_DASHBOARD_ACTIONABLE_STATUSES]), handoverOverduePredicate(context))
           : undefined,
       ),
     )
     .orderBy(
-      sql`case when ${shipments.status} in ('AWAITING_UPSTREAM_PAYMENT', 'SUBMISSION_UNKNOWN', 'FAILED') then 0 else 1 end`,
+      sql`case when ${shipments.status} in ('AWAITING_UPSTREAM_PAYMENT', 'SUBMISSION_UNKNOWN', 'FAILED') or ${handoverOverduePredicate(context)} then 0 else 1 end`,
       desc(shipments.updatedAt),
       desc(shipments.id),
     )

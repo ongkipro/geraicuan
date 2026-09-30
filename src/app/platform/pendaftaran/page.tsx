@@ -11,14 +11,11 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db/client";
 import { withPlatformContext } from "@/db/platform-context";
-import { listAuditEvents, readPlatformClock, type AuditRow } from "@/db/platform-monitoring-repository";
+import { listRegistrationDecisions, readPlatformClock, type AuditRow } from "@/db/platform-monitoring-repository";
 import { listRegistrationQueue, type RegistrationQueueEntry } from "@/db/tenant-registration-repository";
-import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { auditActorLabel } from "@/lib/labels/audit";
-import type { PlatformFilters } from "@/lib/platform-monitoring-filters";
 
 import { formatAgo, formatWib } from "../_components/platform-format";
-import { registrationDecisions } from "../_components/platform-logic";
 import { DESKTOP_ONLY, FLUSH_TABLE, PHONE_ONLY, PlatformCard, RegionError, TimeCell } from "../_components/platform-ui";
 import { requirePlatformPrincipal } from "../_components/platform-view";
 import { RegistrationReview } from "./_components/registration-review";
@@ -27,8 +24,6 @@ export const metadata: Metadata = { robots: { index: false }, title: "Pendaftara
 export const dynamic = "force-dynamic";
 
 const HISTORY_SIZE = 10;
-const HISTORY_PAGE = 100;
-const HISTORY_PAGES = 5;
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join("").toLocaleUpperCase("id-ID") || "?";
@@ -36,27 +31,6 @@ function initials(name: string) {
 
 function formatWhatsapp(value: string | null) {
   return value ? value.replace(/^(\d{4})(\d{4})(\d+)$/, "$1-$2-$3") : "—";
-}
-
-/**
- * The last decisions on the queue, from the audit trail of the past year. lazy: scans at most
- * 5 × 100 audit events (monitoring views are audited too); a dedicated repository query of
- * TENANT_REGISTRATION_* events is the upgrade path.
- */
-async function readDecisions(tx: Parameters<Parameters<typeof withPlatformContext>[2]>[0]): Promise<AuditRow[]> {
-  const now = await readPlatformClock(tx);
-  const today = parseAnalyticsRange({ rentang: "hari-ini" }, now).startDate;
-  const from = new Date(`${today}T00:00:00Z`);
-  from.setUTCDate(from.getUTCDate() - 365);
-  const range = parseAnalyticsRange({ dari: from.toISOString().slice(0, 10), rentang: "kustom", sampai: today }, now);
-  const found: AuditRow[] = [];
-  for (let page = 1; page <= HISTORY_PAGES && found.length < HISTORY_SIZE; page += 1) {
-    const filters: PlatformFilters = { courier: null, outcome: "SUCCESS", outletId: null, page, query: null, range, scope: { kind: "global" }, status: null };
-    const { rows, total } = await listAuditEvents(tx, filters, HISTORY_PAGE);
-    found.push(...registrationDecisions(rows, HISTORY_SIZE - found.length));
-    if (page * HISTORY_PAGE >= total) break;
-  }
-  return found;
 }
 
 function RegistrationCard({ entry, now }: { entry: RegistrationQueueEntry; now: Date }) {
@@ -143,7 +117,7 @@ export default async function RegistrationQueuePage() {
     const queue = await listRegistrationQueue(tx);
     let history: AuditRow[] | null = null;
     try {
-      history = await readDecisions(tx);
+      history = await listRegistrationDecisions(tx, HISTORY_SIZE);
     } catch {
       history = null;
     }

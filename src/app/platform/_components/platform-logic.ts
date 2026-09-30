@@ -61,13 +61,6 @@ export function filtersChanged(filters: PlatformFilters, { ignoreTenant = false 
   );
 }
 
-const REGISTRATION_DECISIONS = ["TENANT_REGISTRATION_APPROVED", "TENANT_REGISTRATION_REJECTED"];
-
-/** Successful approve/reject events of the registration queue, newest first, at most `limit`. */
-export function registrationDecisions<T extends { action: string; outcome: string }>(rows: readonly T[], limit = 10): T[] {
-  return rows.filter((row) => row.outcome === "SUCCESS" && REGISTRATION_DECISIONS.includes(row.action)).slice(0, limit);
-}
-
 /**
  * Spec 19 PLT-TREND-TOTALS (T-257): the period totals beside the trend legend — the sums of the
  * trend's buckets, which equal PLT/SHP-CREATED and SHP-ISSUED for the same filters.

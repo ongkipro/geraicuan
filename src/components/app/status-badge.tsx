@@ -90,8 +90,10 @@ export function shipmentStatusIcon(value: string): LucideIcon | null {
 export const PRINT_STATE_TONE = {
   batal: SHIPMENT_STATUS_BADGE.CANCELLED.tone,
   belum: "warning",
+  // T-267: handed over, waiting for the courier's pickup scan — in progress, its own hue.
+  diserahkan: "info",
   sudah: "success",
-} as const satisfies Record<"batal" | "belum" | "sudah", StatusTone>;
+} as const satisfies Record<"batal" | "belum" | "diserahkan" | "sudah", StatusTone>;
 
 export function ShipmentStatusBadge({ className, status }: { className?: string; status: ShipmentStatus }) {
   const { icon, tone } = SHIPMENT_STATUS_BADGE[status];
