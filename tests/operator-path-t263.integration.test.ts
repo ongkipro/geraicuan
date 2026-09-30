@@ -169,10 +169,13 @@ describe("record card as the tap target", () => {
     expect(html).not.toMatch(/class="[^"]*\brelative\b/);
   });
 
-  it("gives the Cetak resi selection a full-width 44px row", () => {
+  // T-266 (critique #4) replaced the full-width "Pilih untuk cetak" line with a 44px leading
+  // column, full card height, whose whole area is the label (see label-selection-bar-t266).
+  it("gives the Cetak resi selection a 44px, full-height tap target", () => {
     const source = read("src/app/app/label/batch-selection.tsx");
-    expect(source).toMatch(/visibleLabel \? "flex min-h-11 w-full items-center gap-3"/);
-    expect(source).toMatch(/<label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm" htmlFor=\{id\}>\s*Pilih untuk cetak<span className="sr-only"> resi \{awb\}<\/span>/);
+    expect(source).toMatch(/<span className="relative flex w-11 flex-1 justify-center pt-3">/);
+    expect(source).toMatch(/<label className="absolute inset-0 cursor-pointer" htmlFor=\{id\}>\s*<span className="sr-only">Pilih untuk cetak resi \{awb\}<\/span>/);
+    expect(read("src/components/app/record-list.tsx")).toContain('<div className="relative z-10 flex w-11 shrink-0 self-stretch" data-slot="record-leading">');
   });
 });
 

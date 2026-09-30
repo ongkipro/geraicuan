@@ -25,7 +25,7 @@ import {
   mengantarCodFeeIdr,
   shippingMengantarDeductsIdr,
 } from "../src/lib/mengantar-cod-fee.ts";
-import { mengantarCourierOfService } from "../src/lib/mengantar-couriers.ts";
+import { mengantarCourierOfService, mengantarOrderableService } from "../src/lib/mengantar-couriers.ts";
 import { paymentMethodOf } from "../src/lib/payment-method.ts";
 import { resolveLocalSeedTarget } from "./local-database-target.mjs";
 
@@ -290,7 +290,9 @@ const contactById = new Map(contacts.map((contact) => [contact.index, contact]))
 // ---------------------------------------------------------------------------
 // Catalogue and couriers. Service keys are the ones Mengantar quotes
 // (tests/fixtures/mengantar-couriers.catalogue.json); COD eligibility follows
-// that capture's codSupportedOn (JNE, SiCepat and Ninja quote no COD).
+// that capture's codSupportedOn (JNE and SiCepat quote no COD). Ninja is gone
+// (D-29), and spx is quote-only (T-260): it may appear in a quote list but a
+// seeded shipment always selects an orderable service.
 // ---------------------------------------------------------------------------
 const products = [
   { content: "Kemeja batik pria lengan panjang", grams: 350, dims: [30, 25, 5], value: 285_000 },
@@ -306,7 +308,6 @@ const products = [
 const services = {
   JNE: { factor: 100, discount: 30, eta: "2-3 hari", cod: false },
   SiCepat: { factor: 95, discount: 30, eta: "1-2 hari", cod: false },
-  Ninja: { factor: 100, discount: 25, eta: "2-4 hari", cod: false },
   JT: { factor: 100, discount: 25, eta: "2-3 hari", cod: true },
   spx: { factor: 90, discount: 20, eta: "2-4 hari", cod: true },
   SAP: { factor: 95, discount: 25, eta: "2-3 hari", cod: true },
@@ -315,7 +316,7 @@ const services = {
   lion: { factor: 92, discount: 20, eta: "3-5 hari", cod: true },
   pos: { factor: 105, discount: 10, eta: "3-6 hari", cod: true },
 };
-const NON_COD_SERVICES = ["JNE", "SiCepat", "JT", "JNE", "spx", "SiCepat", "Ninja", "anteraja"];
+const NON_COD_SERVICES = ["JNE", "SiCepat", "JT", "JNE", "spx", "SiCepat", "lion", "anteraja"];
 const COD_SERVICES = ["JT", "spx", "SAP", "anteraja", "iDexpress", "lion", "pos"];
 const PER_KG_IDR = { JABODETABEK: 10_000, JAWA: 18_000, LUAR_JAWA: 34_000 };
 
@@ -478,7 +479,7 @@ const shipmentDefinitions = fullPlan.map(([status, paymentMethod, daysAgo, flags
   const pool = isCod ? COD_SERVICES : NON_COD_SERVICES;
   const serviceKeys = [0, 1, 2].map((offset) => pool[(index + offset * 3) % pool.length]);
   const quotes = [...new Set(serviceKeys)].map((key) => quote(key, recipientAddress.area, grams));
-  const selected = quotes[0];
+  const selected = quotes.find((option) => mengantarOrderableService(option.providerService)) ?? quotes[0];
   const courier = mengantarCourierOfService(selected.providerService);
   if (!courier) throw new Error(`No courier claims ${selected.providerService}.`);
   const estimated = status !== "DRAFT";

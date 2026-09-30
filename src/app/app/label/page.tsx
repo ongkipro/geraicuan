@@ -2,13 +2,14 @@ import { Printer, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { BatchPrintDialog, BatchSelectionProvider, SelectPageCheckbox, SelectRowCheckbox } from "@/app/app/label/batch-selection";
+import { BatchPrintDialog, BatchSelectionProvider, SelectionNote, SelectPageCheckbox, SelectRowCheckbox, SelectUnprintedButton } from "@/app/app/label/batch-selection";
 import { AWB_SUFFIX_ERROR, DEFAULT_PRINT_STATE, LABEL_PAGE_SIZE, labelIndexHref, labelTileShareBase, parseLabelQuery } from "@/app/app/label/label-query";
 import { ListPagination } from "@/app/app/pengiriman/_list/list-pagination";
 import { AdjustedFilterAlert, PeriodFilter, rangeIssueMessages } from "@/app/app/pengiriman/_list/period-filter";
 import { activeFilterCount, type SearchValue } from "@/app/app/pengiriman/_list/search-params";
 import { areaText, carrierText, idLinkClassName, paymentText, StackedDateTime } from "@/app/app/pengiriman/_list/shipment-cells";
 import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
+import { CourierLogo } from "@/components/app/courier-logo";
 import { EmptyState } from "@/components/app/empty-state";
 import { ListFilterSheet } from "@/components/app/list-filter-sheet";
 import { PageHeader } from "@/components/app/page-header";
@@ -107,6 +108,14 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
   // PR-87: rows are selected by shipment number; a row without a resi is never listed here.
   // A cancelled resi (T-238) is never selectable.
   const selectable = rows.flatMap((row) => (row.awb && row.status !== "CANCELLED" ? [{ ...row, awb: row.awb, number: Number(shipmentNumberFromReference(row.publicReference)) }] : []));
+  // T-266: "Pilih semua belum dicetak" reaches past this page (Server Action, same filter). It is
+  // offered on Belum dicetak when the queue is longer than this page, and on Semua whenever any
+  // resi is unprinted; Siap diserahkan and Dibatalkan hold none.
+  const unprintedTotal = data.summary["LBL-UNPRINTED"];
+  const unprintedHere = selectable.filter((row) => row.printCount === 0).length;
+  const offerUnprinted = !query.awbSuffixError && unprintedTotal > 0
+    && (query.printState === "semua" || (query.printState === "belum" && unprintedTotal > unprintedHere));
+  const unprintedParams = { ...carry, ...(query.awbSuffix ? { q: query.awbSuffix } : {}) };
 
   return (
     <>
@@ -155,12 +164,21 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
         }))}
       />
 
-      <BatchSelectionProvider numbers={selectable.map((row) => row.number)}>
-      <Card aria-label="Daftar resi" className="gap-0 py-0" role="region">
-        <div className={`flex flex-col gap-3 border-b p-4 md:flex-row md:items-start md:justify-between ${selectable.length > 0 ? "" : "max-md:hidden"}`}>
+      {/* T-266: picks can reach past this page, so a new filter always starts a new selection. */}
+      <BatchSelectionProvider key={labelIndexHref({ awbSuffix: query.awbSuffix, printState: query.printState }, carry)} numbers={selectable.map((row) => row.number)}>
+      <Card aria-label="Daftar resi" className="gap-0 py-0 outline-none" id="daftar-resi" role="region" tabIndex={-1}>
+        {/* T-266: on phones the toolbar box dissolves (its search lives in the filter sheet); the
+            print control inside it is the selection bar, pinned while resi are chosen. */}
+        <div className={`flex flex-col gap-3 border-b p-4 md:flex-row md:items-start md:justify-between ${selectable.length > 0 ? "max-md:contents" : "max-md:hidden"}`}>
           <div className="max-md:hidden">{searchForm("q-resi", "Akhiran resi, mis. 123ABC")}</div>
-          {selectable.length > 0 ? <BatchPrintDialog defaultSize={defaultLabelSize} /> : null}
+          {selectable.length > 0 ? (
+            <div className="flex items-start gap-3 max-md:contents">
+              {offerUnprinted ? <SelectUnprintedButton className="max-md:hidden" params={unprintedParams} total={unprintedTotal} /> : null}
+              <BatchPrintDialog defaultSize={defaultLabelSize} />
+            </div>
+          ) : null}
         </div>
+        {selectable.length > 0 ? <SelectionNote className="border-b px-4 py-2 text-right max-lg:hidden" /> : null}
 
         {rows.length === 0 ? (
           <EmptyState
@@ -237,19 +255,31 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
               </Table>
             </div>
             <div className="md:hidden">
-              {selectable.length > 0 ? <div className="border-b px-4 py-1"><SelectPageCheckbox visibleLabel /></div> : null}
+              {selectable.length > 0 ? (
+                <div className="grid border-b pr-4">
+                  <SelectPageCheckbox visibleLabel />
+                  {offerUnprinted ? <SelectUnprintedButton className="pb-3 pl-4 *:w-full" params={unprintedParams} total={unprintedTotal} /> : null}
+                </div>
+              ) : null}
+              {/* T-266 (critique #4): dense queue rows — resi + print state, recipient · area, courier
+                  logo · payment · issued; the selection is the 44px leading column. */}
               <RecordList label="Daftar resi">
                 {rows.map((row) => (
                   <RecordItem
-                    detail={row.awb && row.status !== "CANCELLED" ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} visibleLabel /> : undefined}
+                    dense
                     href={row.status === "CANCELLED" ? shipmentDetailHref(row.publicReference) : shipmentLabelHref(row.publicReference)}
                     key={row.shipmentId}
-                    meta={<>{carrierText(row.providerService, row.courier)} · <span className="font-mono">{row.publicReference}</span></>}
+                    leading={row.awb && row.status !== "CANCELLED" ? <SelectRowCheckbox awb={row.awb} number={Number(shipmentNumberFromReference(row.publicReference))} visibleLabel /> : <span aria-hidden="true" />}
+                    meta={<>
+                      {row.providerService || row.courier ? <CourierLogo className="h-4 shrink-0" courier={row.providerService ?? row.courier!} /> : null}
+                      <span className="truncate tabular-nums">
+                        {paymentText({ ...row, declaredValueIdr: null })}
+                        {row.issuedAt ? <> · <time dateTime={row.issuedAt.toISOString()}>{formatWibDateTime(row.issuedAt)}</time></> : null}
+                      </span>
+                    </>}
                     status={<PrintCountBadge cancelled={row.status === "CANCELLED"} count={row.printCount} />}
-                    subtitle={<span className="font-semibold">{row.recipientName} · {areaText(row.destinationAreaLabel)}</span>}
-                    time={row.issuedAt ? <time dateTime={row.issuedAt.toISOString()}>{formatWibDateTime(row.issuedAt)}</time> : "—"}
+                    subtitle={<><span className="font-semibold">{row.recipientName}</span> · {areaText(row.destinationAreaLabel)}</>}
                     title={<span className="font-mono">{row.awb}</span>}
-                    value={paymentText({ ...row, declaredValueIdr: null }, " ")}
                   />
                 ))}
               </RecordList>

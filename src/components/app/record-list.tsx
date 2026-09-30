@@ -42,8 +42,10 @@ export function RecordList({ children, label }: { children: ReactNode; label: st
  * above the stretched link and keeps its own tap.
  */
 export function RecordItem({
+  dense = false,
   detail,
   href,
+  leading,
   meta,
   status,
   subtitle,
@@ -51,8 +53,15 @@ export function RecordItem({
   title,
   value,
 }: {
+  /** T-266: queue rows (Cetak resi) — tighter rhythm, one-line subtitle and meta. */
+  dense?: boolean;
   detail?: ReactNode;
   href?: string;
+  /**
+   * T-266: a 44px column at the card's left edge, full card height, above the stretched link —
+   * the Cetak resi selection target. The card keeps its identity link for the rest.
+   */
+  leading?: ReactNode;
   meta?: ReactNode;
   status?: ReactNode;
   subtitle?: ReactNode;
@@ -60,30 +69,25 @@ export function RecordItem({
   title: ReactNode;
   value?: ReactNode;
 }) {
-  return (
-    <li
-      className={cn(
-        "grid gap-1 px-4 py-3",
-        href && "relative transition-colors active:bg-accent has-[a[data-slot=record-link]:focus-visible]:ring-3 has-[a[data-slot=record-link]:focus-visible]:ring-ring/50 has-[a[data-slot=record-link]:focus-visible]:ring-inset",
-      )}
-      data-slot="record-item"
-    >
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-3">
         {href ? (
           <Link
-            className="min-w-0 truncate text-base font-semibold text-primary outline-none after:absolute after:inset-0 after:content-[''] hover:underline"
+            // Dense rows wrap the identifier rather than cut a resi short.
+            className={cn("min-w-0 text-base font-semibold text-primary outline-none after:absolute after:inset-0 after:content-[''] hover:underline", dense ? "wrap-anywhere" : "truncate")}
             data-slot="record-link"
             href={href}
           >
             {title}
           </Link>
         ) : (
-          <span className="min-w-0 truncate text-base font-semibold">{title}</span>
+          <span className={cn("min-w-0 text-base font-semibold", dense ? "wrap-anywhere" : "truncate")}>{title}</span>
         )}
         {status ? <span className="shrink-0">{status}</span> : null}
       </div>
-      {subtitle ? <p className="text-sm text-foreground">{subtitle}</p> : null}
-      {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
+      {subtitle ? <p className={cn("text-sm text-foreground", dense && "truncate")}>{subtitle}</p> : null}
+      {meta ? <p className={cn("text-xs text-muted-foreground", dense && "flex min-w-0 items-center gap-1.5 whitespace-nowrap")}>{meta}</p> : null}
       {detail ? <div className="relative z-10" data-slot="record-detail">{detail}</div> : null}
       {value || time ? (
         <div className="flex items-baseline justify-between gap-3">
@@ -91,6 +95,22 @@ export function RecordItem({
           <span className="text-xs text-muted-foreground">{time}</span>
         </div>
       ) : null}
+    </>
+  );
+  return (
+    <li
+      className={cn(
+        leading ? "flex pr-4" : cn("grid px-4", dense ? "gap-0.5 py-2" : "gap-1 py-3"),
+        href && "relative transition-colors active:bg-accent has-[a[data-slot=record-link]:focus-visible]:ring-3 has-[a[data-slot=record-link]:focus-visible]:ring-ring/50 has-[a[data-slot=record-link]:focus-visible]:ring-inset",
+      )}
+      data-slot="record-item"
+    >
+      {leading ? (
+        <>
+          <div className="relative z-10 flex w-11 shrink-0 self-stretch" data-slot="record-leading">{leading}</div>
+          <div className={cn("grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)]", dense ? "gap-0.5 py-2" : "gap-1 py-3")}>{body}</div>
+        </>
+      ) : body}
     </li>
   );
 }
