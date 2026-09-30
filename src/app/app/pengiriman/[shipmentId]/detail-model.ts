@@ -1,10 +1,8 @@
-import { mengantarCodFeeIdr } from "@/lib/mengantar-cod-fee";
-import type { PaymentMethod } from "@/lib/payment-method";
 import { SHIPMENT_STATUS_PRESENTATION, type ShipmentStatus, type TenantShipmentRole } from "@/lib/shipment-queue";
 
 /**
  * T-213 pure rules of the shipment detail (spec 17 §UX-v3.6 `/app/pengiriman/[n]`): the rail's one
- * next step per status, the tracking timeline and the COD net amount. No database, no provider.
+ * next step per status and the tracking timeline (the money lines are `shipmentMoney`, T-261). No database, no provider.
  */
 
 /** Resi terbit and every later state: the resi exists, so label and invoice can be printed. */
@@ -196,29 +194,14 @@ export function buildTrackingTimeline(input: {
     entries.push({ at, detail, key: `obs-${observation.observedAt.getTime()}-${entries.length}`, title });
   }
   if (input.issuedAt && input.awb) {
-    entries.push({ at: input.issuedAt, detail: `AWB ${input.awb} diterima dari Mengantar`, key: "issued", title: "Resi terbit" });
+    entries.push({ at: input.issuedAt, detail: `Resi ${input.awb} diterima dari Mengantar`, key: "issued", title: "Resi terbit" });
   }
   entries.push({ at: input.createdAt, detail: null, key: "created", title: "Kiriman dibuat" });
   return entries.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
-/**
- * "Jumlah bersih" (estimasi pencairan) of a COD or COD Ongkir order: the amount the courier
- * collects, less the shipping Mengantar deducts at settlement and its 3.33% COD fee — the same
- * identity as COD-SELLER-PAYOUT-IDR (`deriveDraftProviderMoneyLines`). Null outside COD, before an
- * order exists, on legacy snapshots without the deducted shipping, or when it would be negative.
- */
-export function codNetAmountIdr(input: {
-  chargedShippingIdr: number | null;
-  paymentMethod: PaymentMethod;
-  providerCodAmountIdr: number | null;
-}) {
-  if (input.paymentMethod === "NON_COD" || input.providerCodAmountIdr === null || input.chargedShippingIdr === null) {
-    return null;
-  }
-  const net = input.providerCodAmountIdr - input.chargedShippingIdr - mengantarCodFeeIdr(input.providerCodAmountIdr);
-  return net < 0 ? null : net;
-}
+/** T-261: "Estimasi cair" (formerly "Jumlah bersih") lives with the rest of "Rincian uang". */
+export { codNetAmountIdr } from "@/lib/shipment-money";
 
 /** Only the queue's own range keys travel back, and only as single string values (PR-53). */
 export function queueBackHref(searchParams: Record<string, string | string[] | undefined>) {

@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-26
+Updated: 2026-09-29
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -31,14 +31,16 @@ security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
 
 
-## Current — Phase 18/19 (2026-09-26)
+## Current — 2026-09-29 (branch `feat/phase14-completion`, head `ce03512`)
 
-- Product: free SaaS for gerai ekspedisi with three cores — kirim, cetak resi (masked label), invoice (spec 02 §v3.1, D-14).
-- Phase 18: UI v3 rebuilt from zero (ADR-0001). T-209 committed; T-210 foundation and screens T-211–T-218 in progress (uncommitted); T-219 screening/review open.
-- Phase 19: T-220 docs and T-221 invoice data/action done (tests re-run by the coordinator); T-223 Mengantar precision in progress; T-222, T-224, T-225, T-226 open.
-- Provider: `POST /order` still blocked (T-153); the AdsBookCMS-shape probe is deferred by the owner (D-16).
-- T-245 (D-32, 2026-09-26): local wilayah suggestions (kecamatan, kelurahan/desa, kode pos) with one guarded Mengantar lookup per pick; migration `0067` and the full import are on the dev (55461) and isolated test databases only. **Release gate open:** `pg_trgm` on the production Coolify PostgreSQL is not confirmed by the owner (RELEASE.md "Before every deploy" step 6).
-- The review attestations below are historical (pre-v3).
+- **Product scope built:** kirim (Buat kiriman with section progress + one-screen summary rail), cetak resi (thermal label redesign T-255/T-258: recipient name + phone on one line, Mengantar area pattern, patokan, courier/gerai logos), invoice, Histori/Retur/Cetak resi stat strips (T-248), Pengirim/Penerima (T-241/T-250), Laporan (T-251/T-254), Pengaturan (T-243/T-252/T-253), Info terbaru (T-244/T-256), Super Admin pages (T-257), wilayah suggestions (T-245, D-32), audit tenant id guard (T-259, D-35).
+- **Mengantar, proven live (2026-09-28, T-237a):** `POST /order` with the documented body (non-COD dropOff JNE) accepted on production; `cnote_no` issued in the create response; `_id`, `ORDER_ID`, `batch_id` (item + envelope) captured and read by `normalizeMengantarOrderResponse`. A read-only `GET /order?tracking_id=` on 2026-09-29 returned the same resi and `ORDER_ID` with `status: "active"`, which the pull maps to "waiting" (no lifecycle change). The test order is **still active — the owner must cancel it** (resi 0363192600087650, ORDER_ID 260928IC4IED).
+- **Mengantar, not proven live:** scheduled pickup (`POST /time`), COD and COD Ongkir orders, cargo, pay-unpaid, status pull across a real delivery (status words beyond `active`; "ON PROCESS" seen only in dev data is unmapped on purpose), the webhook (built, off by default), the SPX `courier` value (SPX/Paxel/SAP Lite on hold as "Segera hadir", T-260).
+- **Verification at `ce03512`:** `tsc --noEmit` 0, `npx eslint .` 0, full integration suite on the isolated DB 128 files / 1,598 passed; migrations through `0069` applied to the dev DB and checked by `scripts/verify-migration-upgrade.mjs`.
+- **Independent review:** last adversarial review covered `6901379` (T-237–T-247; no Critical/High, findings fixed in T-247). **T-248–T-260 (`ff005a2`..`ce03512`) have test, lint, type and browser evidence but no independent review yet.**
+- **Release gates open:** independent review of T-248–T-260; `pg_trgm` availability on the production Coolify Postgres (owner checks, RELEASE.md step 6); owner cancels the T-237a test order; M1 unpaid-cancel matching by provider order id (T-247 open item); `Backup-Proof` for every migration since the last release boundary.
+- **Dev environment:** dev app `http://100.127.67.86:3127` on the dev DB (55461), fixture password `admin123` (README); the isolated test DB is on 55462.
+
 ## COD money and the thermal label — T-175, T-176, T-177, T-178, T-91, T-150, T-151, T-174 (2026-09-17)
 
 The owner narrowed the product's purpose — "GeraiCUAN is for creating orders with our thermal label and for shipment reports" — and asked that COD be exact and never lose money. Everything here was derived from the owner's own Mengantar account rather than from documentation, as counts only.

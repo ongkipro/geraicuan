@@ -3,16 +3,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BatchPrintDialog, BatchSelectionProvider, SelectPageCheckbox, SelectRowCheckbox } from "@/app/app/label/batch-selection";
-import { AWB_SUFFIX_ERROR, LABEL_PAGE_SIZE, labelIndexHref, labelTileShareBase, parseLabelQuery } from "@/app/app/label/label-query";
+import { AWB_SUFFIX_ERROR, DEFAULT_PRINT_STATE, LABEL_PAGE_SIZE, labelIndexHref, labelTileShareBase, parseLabelQuery } from "@/app/app/label/label-query";
 import { ListPagination } from "@/app/app/pengiriman/_list/list-pagination";
 import { AdjustedFilterAlert, PeriodFilter, rangeIssueMessages } from "@/app/app/pengiriman/_list/period-filter";
-import { type SearchValue } from "@/app/app/pengiriman/_list/search-params";
+import { activeFilterCount, type SearchValue } from "@/app/app/pengiriman/_list/search-params";
 import { areaText, carrierText, idLinkClassName, paymentText, StackedDateTime } from "@/app/app/pengiriman/_list/shipment-cells";
 import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { EmptyState } from "@/components/app/empty-state";
+import { ListFilterSheet } from "@/components/app/list-filter-sheet";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
-import { ShipmentStatusBadge, shipmentStatusIcon, StatusBadge } from "@/components/app/status-badge";
+import { PRINT_STATE_TONE, ShipmentStatusBadge, shipmentStatusIcon, StatusBadge } from "@/components/app/status-badge";
 import { StatusTiles } from "@/components/app/status-tiles";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,7 +23,7 @@ import { db } from "@/db/client";
 import { loadLabelIndexPage, type LabelIndexPage, type LabelPrintStateFilter } from "@/db/label-print-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { loadTenantBrand } from "@/db/tenant-settings-repository";
-import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatWibDateTime } from "@/lib/label-format";
 import { shipmentDetailHref, shipmentLabelHref, shipmentNumberFromReference } from "@/lib/shipment-number";
 
@@ -31,7 +32,9 @@ export const metadata: Metadata = { title: "Cetak resi", robots: { index: false 
 const PRINT_STATE_TILES = [
   { hint: "Siap dicetak", label: "Semua resi", metricId: "LBL-ALL", value: "semua" },
   { hint: "Perlu dicetak", label: "Belum dicetak", metricId: "LBL-UNPRINTED", value: "belum" },
-  { hint: "Minimal sekali", label: "Sudah dicetak", metricId: "LBL-PRINTED", value: "sudah" },
+  // T-263 (owner 2026-09-30): printed and still "Resi terbit" — the courier has not picked it up
+  // (ISSUED → IN_TRANSIT on pickup), so it waits at the counter. No handover is recorded.
+  { hint: "Sudah dicetak, belum dijemput kurir", label: "Siap diserahkan", metricId: "LBL-PRINTED", value: "sudah" },
   // T-238 (owner): resi Mengantar cancelled after issuance; listed, never printable.
   { hint: "Tidak dapat dicetak", label: "Dibatalkan", metricId: "LBL-CANCELLED", value: "batal" },
 ] as const satisfies readonly { hint: string; label: string; metricId: keyof LabelIndexPage["summary"]; value: LabelPrintStateFilter }[];
@@ -41,8 +44,8 @@ const EMPTY_PAGE: LabelIndexPage = { rows: [], summary: { "LBL-ALL": 0, "LBL-PRI
 function PrintCountBadge({ cancelled, count }: { cancelled?: boolean; count: number }) {
   if (cancelled) return <ShipmentStatusBadge status="CANCELLED" />;
   return count === 0
-    ? <StatusBadge label="Belum dicetak" tone="warning" />
-    : <StatusBadge icon={Printer} label={`${count}× dicetak`} tone="success" />;
+    ? <StatusBadge label="Belum dicetak" tone={PRINT_STATE_TONE.belum} />
+    : <StatusBadge icon={Printer} label={`${count}× dicetak`} tone={PRINT_STATE_TONE.sudah} />;
 }
 
 export default async function LabelIndexPage({ searchParams }: { searchParams: Promise<Record<string, SearchValue>> }) {
@@ -71,23 +74,73 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
   const rows = data.rows.slice((page - 1) * LABEL_PAGE_SIZE, page * LABEL_PAGE_SIZE);
   const selectedCount = data.summary[PRINT_STATE_TILES.find((tile) => tile.value === query.printState)!.metricId];
   const filtered = Boolean(query.awbSuffix) || query.printState !== "semua";
+  // The print state the URL carries: the default ("Belum dicetak") is the one it leaves out.
+  const cetakParam = query.printState === DEFAULT_PRINT_STATE ? undefined : query.printState;
+  const selectedTile = PRINT_STATE_TILES.find((tile) => tile.value === query.printState)!;
+  const { periodLabel, presetLabel } = formatRangeLabel(range);
+  const allHref = labelIndexHref({ awbSuffix: query.awbSuffix, printState: "semua" }, carry);
+  const searchForm = (id: string, placeholder: string) => (
+    <form action="/app/label" className="flex items-start gap-3" method="get" role="search">
+      {Object.entries(carry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
+      {cetakParam ? <input name="cetak" type="hidden" value={cetakParam} /> : null}
+      <div className="grid min-w-0 flex-1 gap-1 sm:w-72 sm:flex-none">
+        <label className="sr-only" htmlFor={id}>Akhiran nomor resi</label>
+        <div className="relative">
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-describedby={query.awbSuffixError ? `${id}-error` : undefined}
+            aria-invalid={Boolean(query.awbSuffixError) || undefined}
+            className="pl-9"
+            defaultValue={query.awbSuffix}
+            id={id}
+            maxLength={24}
+            name="q"
+            placeholder={placeholder}
+            type="search"
+          />
+        </div>
+        {query.awbSuffixError ? <p className="text-xs text-destructive" id={`${id}-error`}>{AWB_SUFFIX_ERROR}</p> : null}
+      </div>
+      <Button type="submit" variant="outline">Cari</Button>
+    </form>
+  );
   // PR-87: rows are selected by shipment number; a row without a resi is never listed here.
   // A cancelled resi (T-238) is never selectable.
   const selectable = rows.flatMap((row) => (row.awb && row.status !== "CANCELLED" ? [{ ...row, awb: row.awb, number: Number(shipmentNumberFromReference(row.publicReference)) }] : []));
 
   return (
     <>
-      <PageHeader eyebrow="Pengiriman" title="Cetak resi" />
+      <PageHeader description="Resi yang perlu dicetak dan paket yang menunggu kurir." eyebrow="Pengiriman" title="Cetak resi" />
 
       <AdjustedFilterAlert issues={rangeIssueMessages(range)} />
 
-      <PeriodFilter
-        clearHref={labelIndexHref({ awbSuffix: query.awbSuffix, printState: query.printState })}
-        hidden={{ cetak: query.printState === "semua" ? undefined : query.printState, q: query.awbSuffix || undefined }}
-        range={range}
+      {/* T-263: phones get search + one Filter sheet; the filter row and tiles are from 768px. */}
+      <ListFilterSheet
+        action="/app/label"
+        allHref={query.printState === "semua" ? undefined : allHref}
+        allLabel="Tampilkan semua resi"
+        clearHref={labelIndexHref({ awbSuffix: query.awbSuffix })}
+        count={activeFilterCount({ defaultStatus: DEFAULT_PRINT_STATE, presetId: range.presetId, status: query.printState })}
+        hidden={{ q: query.awbSuffix || undefined }}
+        options={PRINT_STATE_TILES.map((tile) => ({ count: data.summary[tile.metricId], label: tile.label, value: tile.value }))}
+        range={{ endDate: range.lastIncludedDate, presetId: range.presetId, startDate: range.startDate }}
+        search={searchForm("q-resi-ponsel", "Akhiran resi")}
+        statusLegend="Status cetak"
+        statusName="cetak"
+        summary={`${selectedTile.label} · ${range.presetId === "kustom" ? periodLabel : presetLabel}`}
+        value={query.printState}
       />
 
+      <div className="max-md:hidden">
+        <PeriodFilter
+          clearHref={labelIndexHref({ awbSuffix: query.awbSuffix, printState: query.printState })}
+          hidden={{ cetak: cetakParam, q: query.awbSuffix || undefined }}
+          range={range}
+        />
+      </div>
+
       <StatusTiles
+        className="max-md:hidden"
         label="Ringkasan status cetak resi"
         total={labelTileShareBase(data.summary)}
         tiles={PRINT_STATE_TILES.map((tile) => ({
@@ -98,35 +151,14 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
           key: tile.metricId,
           label: tile.label,
           selected: query.printState === tile.value,
+          tone: tile.value === "semua" ? undefined : PRINT_STATE_TONE[tile.value],
         }))}
       />
 
       <BatchSelectionProvider numbers={selectable.map((row) => row.number)}>
       <Card aria-label="Daftar resi" className="gap-0 py-0" role="region">
-        <div className="flex flex-col gap-3 border-b p-4 md:flex-row md:items-start md:justify-between">
-          <form action="/app/label" className="flex items-start gap-3" method="get" role="search">
-            {Object.entries(carry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
-            {query.printState !== "semua" ? <input name="cetak" type="hidden" value={query.printState} /> : null}
-            <div className="grid min-w-0 flex-1 gap-1 sm:w-72 sm:flex-none">
-              <label className="sr-only" htmlFor="q-resi">Akhiran nomor resi</label>
-              <div className="relative">
-                <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-describedby={query.awbSuffixError ? "q-resi-error" : undefined}
-                  aria-invalid={Boolean(query.awbSuffixError) || undefined}
-                  className="pl-9"
-                  defaultValue={query.awbSuffix}
-                  id="q-resi"
-                  maxLength={24}
-                  name="q"
-                  placeholder="Akhiran resi, mis. 123ABC"
-                  type="search"
-                />
-              </div>
-              {query.awbSuffixError ? <p className="text-xs text-destructive" id="q-resi-error">{AWB_SUFFIX_ERROR}</p> : null}
-            </div>
-            <Button type="submit" variant="outline">Cari</Button>
-          </form>
+        <div className={`flex flex-col gap-3 border-b p-4 md:flex-row md:items-start md:justify-between ${selectable.length > 0 ? "" : "max-md:hidden"}`}>
+          <div className="max-md:hidden">{searchForm("q-resi", "Akhiran resi, mis. 123ABC")}</div>
           {selectable.length > 0 ? <BatchPrintDialog defaultSize={defaultLabelSize} /> : null}
         </div>
 
@@ -134,15 +166,17 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
           <EmptyState
             action={filtered ? (
               <Button asChild variant="outline">
-                <Link href={labelIndexHref({}, carry)}>Tampilkan semua resi</Link>
+                <Link href={labelIndexHref({ printState: "semua" }, carry)}>Tampilkan semua resi</Link>
               </Button>
             ) : undefined}
             icon={Printer}
             title={query.awbSuffixError
               ? "Akhiran resi tidak dapat dicari."
-              : filtered
-                ? "Tidak ada resi yang cocok dengan filter ini."
-                : "Belum ada resi yang terbit pada periode ini."}
+              : query.printState === "belum" && !query.awbSuffix
+                ? "Semua resi pada periode ini sudah dicetak."
+                : filtered
+                  ? "Tidak ada resi yang cocok dengan filter ini."
+                  : "Belum ada resi yang terbit pada periode ini."}
           />
         ) : (
           <>

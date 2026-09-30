@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { Calculator, ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { reportTrendTotals, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
@@ -7,8 +7,7 @@ import { DataCard } from "@/components/app/data-card";
 import { SectionHelp } from "@/components/app/help-hint";
 import { formatIdr } from "@/components/app/money";
 import { STAT_CELL, STAT_LABEL, STAT_NOTE, STAT_VALUE } from "@/components/app/stat-strip";
-import { ShipmentStatusBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
+import { ShipmentStatusBadge, StatusBadge } from "@/components/app/status-badge";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ShipmentReportLifecycleTotal } from "@/db/shipment-report-repository";
@@ -119,8 +118,9 @@ const moneyCell = "flex min-w-0 flex-wrap items-center justify-between gap-x-3 g
  * Spec 10 §4.6b report summary (T-251, owner 2026-09-26: "ini card sepertinya perlu di rapikan
  * juga"): two panels instead of six cards, side by side from a 64rem summary (1440 px viewport;
  * at 1280 px the volume row would be 632 px and wrap its labels), stacked below. Volume is a §4.6 stat strip (not links, so no hover or
- * selected state) over one composition bar; the dot before each outcome label is the bar's
- * legend. Uang COD holds Nilai COD (a liability, never revenue) and Estimasi cair. Every figure
+ * selected state); the dot before each outcome label is its colour in Distribusi status, which
+ * owns the composition (T-262 removed the bar that repeated it). Every rate names its base.
+ * Uang COD holds Nilai COD (a liability, never revenue) and Estimasi cair. Every figure
  * keeps its spec 19 RPT-SHP-* ID and sits in a <dd> after its <dt> label.
  */
 export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) {
@@ -151,19 +151,6 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
               </div>
             ))}
           </dl>
-          {kpis.shipmentCount > 0 ? (
-            <div aria-hidden="true" className="flex h-1.5 gap-0.5" data-slot="kpi-composition">
-              {composition.filter((part) => part.count > 0).map((part) => (
-                <span
-                  className={cn("block h-full", part.bar)}
-                  data-count={part.count}
-                  data-segment={part.key}
-                  key={part.key}
-                  style={{ width: `${(part.count / kpis.shipmentCount) * 100}%` }}
-                />
-              ))}
-            </div>
-          ) : null}
           <p className="sr-only">Terkirim, retur, gagal dan masih berjalan berjumlah {number.format(kpis.shipmentCount)} kiriman.</p>
         </div>
         <div aria-label="Uang COD" className="@container overflow-hidden rounded-2xl bg-card shadow-card" role="group">
@@ -174,12 +161,14 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
               <dd className={cn(statNote, "basis-full")}>Ditagih kurir dari {number.format(kpis.codOrderCount)} kiriman COD</dd>
             </div>
             <div className={moneyCell} data-kpi="cod-disbursement-estimate">
-              <dt className={statLabel}>
-                Estimasi cair
-                <Badge className="h-5 px-2" variant="secondary">Estimasi</Badge>
-              </dt>
+              <dt className={statLabel}>Estimasi cair</dt>
               <dd className={cn(statValue, "whitespace-nowrap")}>{formatIdr(kpis.codDisbursementEstimateIdr)}</dd>
-              <dd className={cn(statNote, "basis-full")}>Perkiraan, bukan dana diterima</dd>
+              {/* Spec 10 §4.15: the same "Estimasi" info badge as every Rincian uang. It sits on the
+                  note line so the label and amount share one line like Nilai COD's. */}
+              <dd className={cn(statNote, "flex basis-full flex-wrap items-center gap-x-1.5 gap-y-1")}>
+                <StatusBadge className="h-5 px-1.5" icon={Calculator} label="Estimasi" tone="info" />
+                Perkiraan, bukan dana diterima
+              </dd>
             </div>
           </dl>
         </div>
@@ -193,7 +182,7 @@ export function ReportKpiHelp() {
   return (
     <SectionHelp label="Cara membaca ringkasan laporan">
       <p>Status terkini kiriman yang dibuat pada periode ini, sama dengan Dasbor. Retur mencakup antre retur, retur dalam perjalanan dan retur diterima; persentasenya dihitung dari kiriman yang selesai (terkirim + retur). Gagal mencakup kiriman gagal dan dibatalkan. Masih berjalan adalah sisanya: belum terkirim, retur atau gagal.</p>
-      <p>Garis warna di bawah angka membagi total kiriman menjadi terkirim, retur, gagal dan masih berjalan.</p>
+      <p>Warna titik sama dengan kelompok di Distribusi status, yang menunjukkan pembagian total kiriman.</p>
       <p>Nilai COD adalah jumlah yang ditagih kurir untuk kiriman COD yang resinya sudah terbit. Estimasi cair = nilai COD dikurangi ongkir dan biaya COD Mengantar.</p>
     </SectionHelp>
   );
@@ -286,11 +275,15 @@ function ShareBar({ className, value }: { className: string; value: number }) {
   );
 }
 
+/**
+ * A count and its share, the share naming its base inline (T-262): "63 · 47,0% dari 134 kiriman".
+ * One unbroken block; in a row too narrow for the label beside it, it wraps whole to the right.
+ */
 function CountShare({ count, total }: { count: number; total: number }) {
   return (
-    <span className="shrink-0 text-sm tabular-nums">
-      <span className="font-semibold">{number.format(count)}</span>
-      <span className="text-muted-foreground"> · {share(count, total)}</span>
+    <span className="ml-auto text-right text-sm whitespace-nowrap tabular-nums">
+      <span className="font-semibold">{number.format(count)}</span>{" "}
+      <span className="text-xs text-muted-foreground">· {share(count, total)} dari {number.format(total)} kiriman</span>
     </span>
   );
 }
@@ -308,7 +301,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
       action={(
         <SectionHelp label="Penjelasan distribusi status">
           <p>Status terkini kiriman pada periode ini, dikelompokkan seperti Ringkasan: Terkirim, Retur, Gagal dan Masih berjalan. Buka kelompok untuk melihat statusnya.</p>
-          <p>Persen dihitung dari semua kiriman pada periode ini.</p>
+          <p>Persen dihitung dari semua kiriman pada periode ini, tidak seperti persen retur di Ringkasan yang dihitung dari kiriman selesai.</p>
         </SectionHelp>
       )}
       title="Distribusi status"
@@ -317,7 +310,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
         {groups.map((group) => {
           const head = (
             <span className="grid w-full gap-2">
-              <span className="flex items-center justify-between gap-3">
+              <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span className="flex min-w-0 items-center gap-2 font-medium">
                   <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", group.bar)} />
                   {group.label}
@@ -338,7 +331,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
                   </summary>
                   <ul aria-label={`Status ${group.label}`} className="mt-3 grid gap-2 border-l-2 pl-3">
                     {group.statuses.map((row) => (
-                      <li className="flex items-center justify-between gap-3" data-status={row.status} key={row.status}>
+                      <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1" data-status={row.status} key={row.status}>
                         <ShipmentStatusBadge status={row.status} />
                         <CountShare count={row.count} total={total} />
                       </li>

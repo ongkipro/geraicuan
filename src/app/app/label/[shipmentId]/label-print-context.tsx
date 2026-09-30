@@ -1,7 +1,7 @@
 "use client";
 
 import { Scissors } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 import { formatWibDateTime } from "@/lib/label-format";
 import { DEFAULT_LABEL_SIZE, LABEL_SIZES, type LabelSize } from "@/lib/label-size";
@@ -49,21 +49,13 @@ export function LabelSheetFrame({ children, stub }: { children: ReactNode; stub:
 }
 
 /**
- * Handover time on the stub: the recorded print request's time once one exists in
- * this view, otherwise the current WIB minute, so the preview always shows what a
- * print started now would carry.
+ * Handover time on the stub: the recorded print request's time once one exists in this view,
+ * otherwise "Saat label dicetak". T-263 (critique 2026-09-29, Operator gerai): it used to show the
+ * current WIB minute and re-tick every 15 s, so merely opening the page changed "Diserahkan".
+ * `recordLabelPrint` records first and the print dialog opens after, so a printed sheet always
+ * carries the recorded time.
  */
 export function HandoverTime() {
   const { printedAt } = useContext(LabelPrintContext);
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    if (printedAt) return;
-    const tick = () => setNow(new Date());
-    tick();
-    const timer = setInterval(tick, 15_000);
-    return () => clearInterval(timer);
-  }, [printedAt]);
-
-  if (printedAt) return <>{formatWibDateTime(printedAt)}</>;
-  return <>{now ? formatWibDateTime(now) : "Saat label dicetak"}</>;
+  return <>{printedAt ? formatWibDateTime(printedAt) : "Saat label dicetak"}</>;
 }

@@ -25,8 +25,9 @@ import {
 } from "@/db/schema";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
-import { codChargeBreakdown, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import type { CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
 import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
+import { storedCodCharge } from "@/lib/shipment-money";
 
 export type PrintableLabel = {
   shipmentId: string;
@@ -42,6 +43,11 @@ export type PrintableLabel = {
    */
   paymentMethod: PaymentMethod;
   shippingAmountIdr: number;
+  /**
+   * T-261: `provider_order_snapshots.provider_charged_shipping_idr`, the shipping Mengantar
+   * deducts — read for the page's "Rincian uang" panel only, never printed on the sheet.
+   */
+  chargedShippingIdr: number | null;
   insuranceAmountIdr: number | null;
   providerCodAmountIdr: number | null;
   /**
@@ -234,6 +240,7 @@ export async function loadPrintableLabel(
       issuedAt: providerOrderSnapshots.resolvedAt,
       isCod: providerOrderSnapshots.isCod,
       shippingAmountIdr: providerOrderSnapshots.shippingAmountIdr,
+      chargedShippingIdr: providerOrderSnapshots.providerChargedShippingIdr,
       insuranceAmountIdr: providerOrderSnapshots.insuranceAmountIdr,
       providerCodAmountIdr: providerOrderSnapshots.providerCodAmountIdr,
       goodsValueIdr: shipmentCodTotals.goodsValueIdr,
@@ -342,18 +349,16 @@ export async function loadPrintableLabel(
   const paymentMethod = paymentMethodOf(row.isCod, row.codShippingOnly);
   // The goods + shipping + fee breakdown belongs to full COD only; printing it
   // on COD Ongkir would tell the courier to collect goods the buyer paid for.
-  const codBreakdown =
-    paymentMethod === "COD" &&
-    row.goodsValueIdr !== null &&
-    row.codShippingAmountIdr !== null &&
-    row.providerCodAmountIdr !== null &&
-    row.providerCodAmountIdr === row.calculatedProviderCodAmountIdr
-      ? codChargeBreakdown({
-          goodsValueIdr: row.goodsValueIdr,
-          shippingAmountIdr: row.codShippingAmountIdr,
-          providerCodAmountIdr: row.providerCodAmountIdr,
-        })
-      : null;
+  // T-261: the same rule the shipment detail's "Rincian uang" applies.
+  const codBreakdown = storedCodCharge({
+    codTotals: {
+      goodsValueIdr: row.goodsValueIdr,
+      providerCodAmountIdr: row.calculatedProviderCodAmountIdr,
+      shippingAmountIdr: row.codShippingAmountIdr,
+    },
+    paymentMethod,
+    providerCodAmountIdr: row.providerCodAmountIdr,
+  }).breakdown;
 
   return {
     shipmentId: row.shipmentId,
@@ -365,6 +370,7 @@ export async function loadPrintableLabel(
     isCod: row.isCod,
     paymentMethod,
     shippingAmountIdr: row.shippingAmountIdr,
+    chargedShippingIdr: row.chargedShippingIdr,
     insuranceAmountIdr: row.insuranceAmountIdr,
     providerCodAmountIdr: row.providerCodAmountIdr,
     codBreakdown,

@@ -57,6 +57,10 @@
   /* In progress / waiting on the provider (spec 10 v3.1 §2.1, from GeraiOS v0.5). */
   --info:#245a85;
   --info-surface:#e9f1f8;
+  /* T-262: Resi terbit — issued, waiting for pickup. A brighter blue than --info (Dalam perjalanan)
+     so the two neighbouring stages stay apart in the stat-strip bar (OKLab ΔE 0.17; 5.41:1 on card). */
+  --pending:#155eef;
+  --pending-surface:#eff4ff;
   /* Okabe-Ito categorical series; each series also carries a marker or label. */
   --chart-1:#0072b2;
   --chart-2:#009e73;
@@ -138,6 +142,8 @@
   --color-warn-surface:var(--warn-surface);
   --color-info:var(--info);
   --color-info-surface:var(--info-surface);
+  --color-pending:var(--pending);
+  --color-pending-surface:var(--pending-surface);
   --color-danger:var(--danger);
   --color-danger-surface:var(--danger-surface);
   --color-table-stripe:var(--table-stripe);

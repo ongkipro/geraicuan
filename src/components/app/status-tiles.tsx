@@ -26,11 +26,15 @@ export type StatusTile = {
 
 const number = new Intl.NumberFormat("id-ID");
 
-/** Spec 10 v3.2 §2.1: the ink (icon) and bar colour of each meaning. */
+/**
+ * Spec 10 v3.2 §2.1: the ink (icon) and bar colour of each meaning. T-262: one hue per tone, so a
+ * strip whose tiles carry different tones (the §4.12 mapping) never paints two stages alike.
+ */
 const TONE: Record<StatusTone, { ink: string; bar: string; icon: LucideIcon }> = {
   danger: { bar: "bg-danger", icon: TriangleAlert, ink: "text-danger" },
   info: { bar: "bg-info", icon: Truck, ink: "text-info" },
   neutral: { bar: "bg-muted-foreground", icon: Layers, ink: "text-primary" },
+  pending: { bar: "bg-pending", icon: Clock, ink: "text-pending" },
   success: { bar: "bg-ok", icon: CircleCheck, ink: "text-ok" },
   warning: { bar: "bg-warn", icon: Clock, ink: "text-warn" },
 };
@@ -69,14 +73,14 @@ export function tileShare(count: number, total: number) {
  * primary bottom indicator, primary text, aria-current. T-247 (review L9): `total` is the page's
  * explicit base (spec 19 QUE-SHARE / RTS-SHARE / LBL-SHARE), never inferred from the largest count.
  */
-export function StatusTiles({ label, tiles, total }: { label: string; tiles: StatusTile[]; total: number }) {
+export function StatusTiles({ className, label, tiles, total }: { className?: string; label: string; tiles: StatusTile[]; total: number }) {
   const layout = STATUS_TILE_LAYOUT[tiles.length] ?? STATUS_TILE_LAYOUT[6];
   const segments = compositionSegments(tiles, total);
   const active = tiles.slice(1).find((tile) => tile.selected)?.key;
   const breakdown = segments.map((segment) =>
     `${segment.label} ${number.format(segment.count)} (${tileShare(segment.count, total)}%${segment.key === active ? ", dipilih" : ""})`);
   return (
-    <nav aria-label={label} className="@container overflow-hidden rounded-2xl bg-card shadow-card">
+    <nav aria-label={label} className={cn("@container overflow-hidden rounded-2xl bg-card shadow-card", className)}>
       <ul className={cn("grid gap-px bg-border", layout.grid)}>
         {tiles.map((tile, index) => {
           const toneKey = toneOf(tile);

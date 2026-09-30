@@ -49,6 +49,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
     sender: SENDER,
     shipmentId: "00000000-0000-4000-8000-000000000176",
     shippingAmountIdr: 17_000,
+    chargedShippingIdr: null,
     ...overrides,
   };
 }

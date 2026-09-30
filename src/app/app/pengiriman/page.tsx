@@ -15,11 +15,12 @@ import {
 } from "@/app/app/pengiriman/_list/shipment-cells";
 import { StatusPull } from "@/app/app/pengiriman/_list/status-pull";
 import { StatusSelect } from "@/app/app/pengiriman/_list/status-select";
-import { type SearchValue } from "@/app/app/pengiriman/_list/search-params";
+import { activeFilterCount, type SearchValue } from "@/app/app/pengiriman/_list/search-params";
 import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { pullMengantarStatus } from "@/app/app/pengiriman/status-sync-actions";
 import { CourierLogo } from "@/components/app/courier-logo";
 import { EmptyState } from "@/components/app/empty-state";
+import { ListFilterSheet } from "@/components/app/list-filter-sheet";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
 import { ShipmentStatusBadge, shipmentStatusIcon, shipmentStatusTone } from "@/components/app/status-badge";
@@ -33,7 +34,7 @@ import { loadProviderDeliveryStatusBasis } from "@/db/provider-settlement-reposi
 import { loadShipmentQueuePage } from "@/db/shipment-queue-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { listTenantOutlets } from "@/db/tenant-repository";
-import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatWeight, formatWibDateTime, formatWibDateTimeParts } from "@/lib/label-format";
 import {
   isStaleShipmentFilter,
@@ -96,6 +97,20 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
       ? `Status Mengantar diperbarui ${formatWibDateTime(basis.lastObservedAt)}`
       : "Status Mengantar belum pernah diperbarui"
     : `Diperbarui ${formatWibDateTime(data.generatedAt)}`;
+  const { periodLabel, presetLabel } = formatRangeLabel(range);
+  const tileValues = new Set<string>(SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => entry.value));
+  const searchForm = (id: string, placeholder: string) => (
+    <form action="/app/pengiriman" className="flex gap-2 max-md:w-full" method="get" role="search">
+      {Object.entries(rangeCarry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
+      {statusParam ? <input name="status" type="hidden" value={statusParam} /> : null}
+      <label className="sr-only" htmlFor={id}>Nomor kiriman atau resi</label>
+      <div className="relative min-w-0 flex-1 md:w-64 md:flex-none">
+        <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input className="pl-9" defaultValue={query.search} id={id} maxLength={40} name="cari" placeholder={placeholder} type="search" />
+      </div>
+      <Button type="submit" variant="outline">Cari</Button>
+    </form>
+  );
 
   return (
     <>
@@ -114,13 +129,34 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
 
       <AdjustedFilterAlert issues={issues} />
 
-      <PeriodFilter
-        clearHref={shipmentQueueHref(query.status)}
-        hidden={{ status: statusParam }}
-        range={range}
+      {/* T-263: phones get search + one Filter sheet; the filter row, tiles and status select are from 768px. */}
+      <ListFilterSheet
+        action="/app/pengiriman"
+        allHref={statusParam ? shipmentQueueHref("ALL", 1, carry) : undefined}
+        allLabel="Tampilkan semua kiriman"
+        clearHref={shipmentQueueHref("ALL", 1, query.search ? { cari: query.search } : undefined)}
+        count={activeFilterCount({ defaultStatus: "ALL", presetId: range.presetId, status: query.status })}
+        hidden={{ cari: query.search }}
+        moreOptions={statusOptions.filter((option) => !tileValues.has(option.value))}
+        options={SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => ({ count: data.summary[entry.metricId], label: entry.label, value: entry.value }))}
+        range={{ endDate: range.lastIncludedDate, presetId: range.presetId, startDate: range.startDate }}
+        search={searchForm("cari-kiriman-ponsel", "No. kiriman / resi")}
+        statusLegend="Status kiriman"
+        statusName="status"
+        summary={`${selectedLabel ?? "Semua status"} · ${range.presetId === "kustom" ? periodLabel : presetLabel}`}
+        value={query.status}
       />
 
+      <div className="max-md:hidden">
+        <PeriodFilter
+          clearHref={shipmentQueueHref(query.status)}
+          hidden={{ status: statusParam }}
+          range={range}
+        />
+      </div>
+
       <StatusTiles
+        className="max-md:hidden"
         label="Ringkasan status kiriman"
         // Spec 19 QUE-SHARE: every tile is a subset of QUE-ALL.
         total={data.summary["QUE-ALL"]}
@@ -132,12 +168,13 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
           key: entry.metricId,
           label: entry.label,
           selected: query.status === entry.value,
-          tone: entry.value === "NEEDS_ATTENTION" ? "danger" : shipmentStatusTone(entry.value) ?? undefined,
+          tone: shipmentStatusTone(entry.value) ?? undefined,
         }))}
       />
 
       <Card aria-label="Daftar kiriman" className="gap-0 py-0" role="region">
         <div className="flex flex-wrap items-center gap-3 border-b p-4">
+          <div className="max-md:hidden">
           <StatusSelect
             label="Status kiriman"
             options={statusOptions.map((option) => ({
@@ -147,6 +184,7 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
             }))}
             value={query.status}
           />
+          </div>
           {isAdmin ? (
             <StatusPull
               action={pullMengantarStatus}
@@ -155,16 +193,7 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
               range={{ lastIncludedDate: range.lastIncludedDate, presetId: range.presetId, startDate: range.startDate, timezone: range.timezone }}
             />
           ) : null}
-          <form action="/app/pengiriman" className="flex gap-2 max-md:w-full" method="get" role="search">
-            {Object.entries(rangeCarry).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)}
-            {statusParam ? <input name="status" type="hidden" value={statusParam} /> : null}
-            <label className="sr-only" htmlFor="cari-kiriman">Nomor kiriman atau resi</label>
-            <div className="relative min-w-0 flex-1 md:w-64 md:flex-none">
-              <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" defaultValue={query.search} id="cari-kiriman" maxLength={40} name="cari" placeholder="Nomor kiriman / resi" type="search" />
-            </div>
-            <Button type="submit" variant="outline">Cari</Button>
-          </form>
+          <div className="max-md:hidden">{searchForm("cari-kiriman", "Nomor kiriman / resi")}</div>
           <div className="md:ml-auto">
             <FreshnessLine generatedAtIso={data.generatedAt.toISOString()} key={data.generatedAt.toISOString()} text={freshness} />
           </div>

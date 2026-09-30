@@ -57,7 +57,7 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     tone: "danger",
   },
   ISSUED_TODAY: {
-    guidance: "AWB diterbitkan pada hari operasional WIB saat ini.",
+    guidance: "Resi diterbitkan pada hari operasional WIB saat ini.",
     label: "Resi terbit hari ini",
     tone: "ok",
   },
@@ -67,7 +67,7 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     tone: "neutral",
   },
   ESTIMATED: {
-    guidance: "Estimasi terakhir tersimpan. Tinjau layanan sebelum konfirmasi penerbitan AWB.",
+    guidance: "Estimasi terakhir tersimpan. Tinjau layanan sebelum konfirmasi penerbitan resi.",
     label: "Diestimasi",
     tone: "neutral",
   },
@@ -82,12 +82,12 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     tone: "danger",
   },
   ISSUED: {
-    guidance: "AWB sudah diterbitkan dan label dapat dibuka atau dicetak ulang.",
+    guidance: "Resi sudah diterbitkan dan label dapat dibuka atau dicetak ulang.",
     label: "Resi terbit",
     tone: "ok",
   },
   AWAITING_UPSTREAM_PAYMENT: {
-    guidance: "Kiriman non-COD menunggu pelunasan Mengantar sebelum AWB tersedia.",
+    guidance: "Kiriman non-COD menunggu pelunasan Mengantar sebelum resi tersedia.",
     label: "Menunggu pembayaran",
     tone: "warn",
   },

@@ -30,7 +30,8 @@ const navigationGroups: readonly {
   {
     label: "Utama",
     items: [
-      // T-244 (D-31): Info terbaru sits above Dasbor, for both roles; login still lands on /app.
+      // T-244 (D-31): Info terbaru sits above Dasbor, for both roles; the Tenant Admin's login
+      // still lands on /app (the Operator's lands on Cetak resi, T-263: `tenantLandingPath`).
       {
         href: "/app/info",
         key: "announcements",
@@ -224,6 +225,16 @@ function contactNavigationPath(pathname: string, search: SearchParamsReader | un
   if (segment === "pengirim" || segment === "penerima") return pathname;
   const role = parseContactRole(search?.get(segment === "baru" ? "peran" : "dari")) ?? DEFAULT_CONTACT_ROLE;
   return `/app/kontak/${role}`;
+}
+
+/**
+ * T-263 (owner 2026-09-29): where a tenant sign-in lands. The Operator starts at the counter's
+ * queue — Cetak resi, which opens on "Belum dicetak" — and the Tenant Admin at Dasbor (T-244).
+ * A gerai still awaiting approval lands on Dasbor for both roles: its setup steps live there and
+ * every shipment page refuses it. `/app` itself is unchanged, so Dasbor stays one menu item away.
+ */
+export function tenantLandingPath(role: TenantCmsRole, tenantStatus: string): "/app" | "/app/label" {
+  return role === "OPERATOR" && tenantStatus === "ACTIVE" ? "/app/label" : "/app";
 }
 
 export function tenantCmsNavigation(

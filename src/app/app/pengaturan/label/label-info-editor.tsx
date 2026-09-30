@@ -63,6 +63,7 @@ export function sampleLabel(geraiName: string, geraiWhatsapp: string | null): Pr
     sender: { address: "Alamat titik pickup gerai", name: geraiName, phone: geraiWhatsapp ?? "0812 0000 0000" },
     shipmentId: "00000000-0000-4000-8000-000000000000",
     shippingAmountIdr: 18_000,
+    chargedShippingIdr: null,
   };
 }
 

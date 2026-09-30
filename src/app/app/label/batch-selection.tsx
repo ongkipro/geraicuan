@@ -46,7 +46,8 @@ export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: 
   const { selected, toggle } = useSelection();
   const id = `pilih-${number}`;
   return (
-    <span className="inline-flex min-h-11 items-center gap-3 md:min-h-6">
+    // T-263: on the phone card the whole row (≥ 44px, full width) toggles the selection.
+    <span className={visibleLabel ? "flex min-h-11 w-full items-center gap-3" : "inline-flex min-h-11 items-center gap-3 md:min-h-6"}>
       <Checkbox
         className="relative after:absolute after:-inset-3.5 after:content-['']"
         aria-label={visibleLabel ? undefined : `Pilih resi ${awb}`}
@@ -54,7 +55,7 @@ export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: 
         id={id}
         onCheckedChange={(checked) => toggle(number, checked === true)}
       />
-      {visibleLabel ? <label className="text-sm" htmlFor={id}>Pilih untuk cetak</label> : null}
+      {visibleLabel ? <label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm" htmlFor={id}>Pilih untuk cetak</label> : null}
     </span>
   );
 }
@@ -73,9 +74,9 @@ export function SelectPageCheckbox({ visibleLabel = false }: { visibleLabel?: bo
   );
   if (!visibleLabel) return box;
   return (
-    <span className="inline-flex min-h-11 items-center gap-3">
+    <span className="flex min-h-11 w-full items-center gap-3">
       {box}
-      <label className="text-sm font-medium" htmlFor="pilih-semua">Pilih semua di halaman ini</label>
+      <label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm font-medium" htmlFor="pilih-semua">Pilih semua di halaman ini</label>
     </span>
   );
 }

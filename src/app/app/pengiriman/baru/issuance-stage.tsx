@@ -134,7 +134,7 @@ function IssuanceBottomBar({ draftHref, rail }: { draftHref: string; rail: Issua
           <Button asChild size="lg" variant="outline">
             <Link href={draftHref}><Save aria-hidden="true" />Draf</Link>
           </Button>
-          <IssuanceSubmitButton label="Terbitkan AWB" showGate={false} />
+          <IssuanceSubmitButton label="Terbitkan resi" showGate={false} />
         </>
       )}
       caption={gateMessage ?? `${selected ? serviceDisplayName(selected.providerService) : "—"} · ${PAYMENT_METHOD_LABELS[paymentMethod]}`}

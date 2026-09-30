@@ -6,6 +6,7 @@ import { useRef, useState, useTransition, type FormEvent } from "react";
 import { AUTH_FIELD, AUTH_LABEL } from "@/app/login/_components/auth-shell";
 import { LOGIN_NOTICES, type LoginNotice } from "@/app/login/_components/login-notices";
 import { PasswordInput } from "@/app/login/_components/password-input";
+import { tenantLandingAction } from "@/app/login/actions";
 import { resendVerificationEmail } from "@/app/verifikasi-email/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -77,7 +78,8 @@ export function LoginForm({
         setPending(false);
         return;
       }
-      window.location.assign(destination);
+      // T-263: a tenant sign-in opens the role's landing (Operator: Cetak resi; Tenant Admin: Dasbor).
+      window.location.assign(tenant ? await tenantLandingAction().catch(() => destination) : destination);
     } catch {
       setError("unavailable");
       setPending(false);

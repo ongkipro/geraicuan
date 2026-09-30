@@ -198,7 +198,7 @@ describe("Laporan pengiriman view", () => {
     expect(filledButtons(html)).toBe(0);
     expect(html).toContain('href="/app/laporan/pengiriman/export.csv?kurir=JNE&amp;rentang=30-hari&amp;tz=Asia%2FJakarta"');
     expect(tableHeaders(html, "Daftar kiriman")).toEqual(["Nomor", "Dibuat", "Penerima", "Kurir/Layanan", "Status", "Pembayaran", "Biaya Mengantar"]);
-    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Ongkir Mengantar", "Biaya COD", "Estimasi cair"]);
+    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Biaya kirim Mengantar", "Biaya COD", "Estimasi cair"]);
     // JNE: 6 of 10 delivered; 2 of 8 finished returned. The logo alone names the courier.
     expect(html).toContain("60,0%");
     expect(html).toContain("25,0%");
@@ -233,13 +233,17 @@ describe("Laporan pengiriman view", () => {
       expect(summary, label).toMatch(new RegExp(`${label}</dt><dd[^>]*>${value}</dd>`));
     }
     expect(summary).toMatch(/Nilai COD<\/dt><dd[^>]*>Rp\s666\.480<\/dd><dd[^>]*>Ditagih kurir dari 3 kiriman COD<\/dd>/);
-    expect(summary).toMatch(/Estimasi cair<span[^>]*data-slot="badge"[^>]*>Estimasi<\/span><\/dt><dd[^>]*>Rp\s201\.762<\/dd><dd[^>]*>Perkiraan, bukan dana diterima<\/dd>/);
-    // The composition bar: Terkirim, Retur, Gagal, Masih berjalan, summing to the total (widths to 100%).
-    const segments = [...summary.matchAll(/data-count="(\d+)" data-segment="([a-z-]+)" style="width:([\d.]+)%"/g)];
-    expect(segments.map((match) => [match[2], Number(match[1])])).toEqual([["delivered", 4], ["returned", 2], ["failed", 1], ["in-progress", 20]]);
-    expect(segments.reduce((sum, match) => sum + Number(match[1]), 0)).toBe(27);
-    expect(segments.reduce((sum, match) => sum + Number(match[3]), 0)).toBeCloseTo(100, 6);
+    // Spec 10 §4.15: the info "Estimasi" badge (icon + word, as in every Rincian uang) on the note line.
+    expect(summary).toMatch(/Estimasi cair<\/dt><dd[^>]*>Rp\s201\.762<\/dd><dd[^>]*><span[^>]*data-slot="badge"[^>]*data-tone="info"[^>]*><svg[\s\S]*?<\/svg>Estimasi<\/span>Perkiraan, bukan dana diterima<\/dd>/);
+    // The four outcome cells, in order, sum to the total (RPT-SHP-OUTCOME-COMPOSITION).
+    const outcomes = [...summary.matchAll(/data-kpi="(delivered|returned|failed|in-progress)"[\s\S]*?<\/dt><dd[^>]*>(\d+)<\/dd>/g)];
+    expect(outcomes.map((match) => [match[1], Number(match[2])])).toEqual([["delivered", 4], ["returned", 2], ["failed", 1], ["in-progress", 20]]);
+    expect(outcomes.reduce((sum, match) => sum + Number(match[2]), 0)).toBe(27);
     expect(summary).toContain("berjumlah 27 kiriman");
+    // T-262: Distribusi status is the one composition display. The Ringkasan draws no share bar of
+    // its own (it repeated Distribusi's four groups): no segment and no width-sized element.
+    expect(summary).not.toMatch(/data-segment=|style="[^"]*width:/);
+    expect(html.match(/<ul aria-label="Distribusi status"/g)).toHaveLength(1);
     // Tabs are real tabs: a labelled tablist, keyboard-reachable triggers.
     expect(html).toContain('role="tablist"');
     expect(html).toContain('aria-label="Tampilan tren"');
@@ -260,9 +264,14 @@ describe("Laporan pengiriman view", () => {
     expect(html).not.toContain("Total per status");
     const distribution = html.slice(html.indexOf('<ul aria-label="Distribusi status"'), html.indexOf('<p class="sr-only">', html.indexOf('<ul aria-label="Distribusi status"')));
     expect([...distribution.matchAll(/data-outcome="([a-z-]+)"/g)].map((match) => match[1])).toEqual(["in-progress"]);
-    expect(distribution).toMatch(/Masih berjalan[\s\S]*?<span class="font-semibold">2<\/span><span[^>]*> · 4,4%<\/span>/);
-    expect([...distribution.matchAll(/data-status="([A-Z_]+)"[\s\S]*?data-slot="badge"[\s\S]*?<span class="font-semibold">(\d+)<\/span><span[^>]*> · ([\d,]+%)/g)].map((match) => match.slice(1)))
+    expect(distribution).toMatch(/Masih berjalan[\s\S]*?<span class="font-semibold">2<\/span> <span[^>]*>· 4,4% dari 45 kiriman<\/span>/);
+    expect([...distribution.matchAll(/data-status="([A-Z_]+)"[\s\S]*?data-slot="badge"[\s\S]*?<span class="font-semibold">(\d+)<\/span> <span[^>]*>· ([\d,]+%) dari 45 kiriman/g)].map((match) => match.slice(1)))
       .toEqual([["DRAFT", "1", "2,2%"], ["ISSUED", "1", "2,2%"]]);
+    // T-262: every percentage at the top of Laporan names its base inline — Retur's rate of the
+    // finished shipments beside Distribusi's shares of all shipments read "31,0%" vs "14,0%" before.
+    const rates = [...(summary + distribution).replace(/<[^>]+>/g, "").matchAll(/(\d+(?:,\d)?%)(.{0,24})/g)];
+    expect(rates.length).toBeGreaterThanOrEqual(4);
+    for (const [, rate, after] of rates) expect(`${rate}${after}`).toMatch(/^[\d,]+% dari \d+ (kiriman|selesai)/);
     expect(distribution).toContain("<details");
     // Wilayah: top 10 visible, the rest behind the disclosure, unknown named. T-254: the volume bar
     // sits in the table (no separate chart), and below md each wilayah is a record, not a squeezed table.

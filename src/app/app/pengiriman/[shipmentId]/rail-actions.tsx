@@ -145,7 +145,7 @@ export function ReconciliationAction({ fixtureEnabled, shipmentId }: { fixtureEn
           <CircleCheck aria-hidden="true" className="text-ok" />
           <AlertTitle>Hasil resmi: {RECONCILED_LABEL[state.reconciled.status]}</AlertTitle>
           <AlertDescription>
-            {state.reconciled.awb ? `AWB ${state.reconciled.awb} tersimpan.` : "Muat ulang untuk tindakan berikutnya."}
+            {state.reconciled.awb ? `Resi ${state.reconciled.awb} tersimpan.` : "Muat ulang untuk tindakan berikutnya."}
           </AlertDescription>
         </Alert>
       ) : null}

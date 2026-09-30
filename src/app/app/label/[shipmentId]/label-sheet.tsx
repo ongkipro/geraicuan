@@ -8,6 +8,7 @@ import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
 import { HandoverTime, LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
+import { MONEY_LABELS, MONEY_METRIC_IDS, shippingCostIdr } from "@/lib/shipment-money";
 import {
   DEFAULT_LABEL_FIELDS_BY_SIZE,
   formatCityProvince,
@@ -263,7 +264,10 @@ function LabelPackage({ label, logoSrc, note, shown }: {
               <span>NON-COD — JANGAN TAGIH PENERIMA</span>
             </div>
             <div className="label-money">
-              <div><span>Ongkir Mengantar</span><span>{formatIdr(label.shippingAmountIdr)}</span></div>
+              {/* T-263: the same line and amount as the Rincian uang panel (RPT-SHP-SHIPPING-COST-IDR). */}
+              <div data-metric-id={MONEY_METRIC_IDS.shippingCost}>
+                <span>{MONEY_LABELS.shippingCost}</span><span>{formatIdr(shippingCostIdr(label))}</span>
+              </div>
             </div>
           </>
         )}

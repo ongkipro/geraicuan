@@ -391,6 +391,35 @@ describe("Cetak resi panel counts", () => {
     expect(printed.rows.map((row) => row.printCount).sort()).toEqual([1, 2]);
   });
 
+  it("T-263 queue: Belum dicetak then Siap diserahkan hold only resi the courier has not picked up", async () => {
+    const queue = async (printState: "belum" | "sudah") => (await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
+      loadLabelIndexPage(tx, context, { status: "issued", printState }))).rows.map((row) => row.awb).sort();
+    // Seq 3 printed twice, seq 14 printed once (June), seq 4 never printed; all still Resi terbit.
+    expect(await queue("belum")).toEqual(["PANEL-AWB-4"]);
+    expect(await queue("sudah")).toEqual(["PANEL-AWB-14", "PANEL-AWB-3"]);
+
+    // The pickup scan (ISSUED → IN_TRANSIT) is what takes a printed parcel off "Siap diserahkan";
+    // nothing else records a handover. Moved directly (lifecycle trigger bypassed), then restored.
+    const move = async (status: string) => {
+      const client = await admin.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SET LOCAL session_replication_role = replica");
+        await client.query("UPDATE shipments SET status = $1 WHERE id = $2", [status, uuid("3730", 3)]);
+        await client.query("COMMIT");
+      } finally {
+        client.release();
+      }
+    };
+    await move("IN_TRANSIT");
+    try {
+      expect(await queue("sudah")).toEqual(["PANEL-AWB-14"]);
+      expect(await queue("belum")).toEqual(["PANEL-AWB-4"]);
+    } finally {
+      await move("ISSUED");
+    }
+  });
+
   it("counts only the reading tenant's labels", async () => {
     const other = await withTenantContext(appDb, adminB, tenantB, (tx, context) =>
       loadLabelIndexPage(tx, context, { status: "issued", printState: "semua" }),

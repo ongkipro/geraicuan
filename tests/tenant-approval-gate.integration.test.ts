@@ -252,6 +252,9 @@ describe("store setup is the only caller allowed to reach a pending tenant", () 
     "src/app/app/info/page.tsx",
     // T-244: marks those announcements read for the caller only; no shipment row.
     "src/app/app/info/actions.ts",
+    // T-263: names the sign-in's landing from the member's role; reads no row, and sends a
+    // pending gerai to Dasbor (its setup steps), never to a shipment page.
+    "src/app/login/actions.ts",
   ]);
 
   function walk(directory: string): string[] {

@@ -739,6 +739,7 @@ describe("T-186 the draft validation, the charge rule and the label keep each me
       sender: { address: "Ruko", name: "Pengirim", phone: "081255553333" },
       shipmentId: randomUUID(),
       shippingAmountIdr: 12_000,
+      chargedShippingIdr: null,
     };
     const text = visible(renderToStaticMarkup(createElement(LabelSheet, { label })));
     expect(text).toContain(`COD ONGKIR — TAGIH ONGKIR SAJA ${idr(20_000)}`);

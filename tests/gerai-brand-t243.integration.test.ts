@@ -151,6 +151,7 @@ const LABEL: PrintableLabel = {
   sender: { address: "Ruko Pengirim Blok C3", name: "Gerai Pengirim", phone: "081211110243" },
   shipmentId: "00000000-0000-4000-8000-000000000243",
   shippingAmountIdr: 18_000,
+  chargedShippingIdr: null,
 };
 
 const BRAND: GeraiBrand = { defaultLabelSize: "10x15", logoSrc: "/app/brand/logo?v=abc", note: "Terima kasih sudah belanja" };

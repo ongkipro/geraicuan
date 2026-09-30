@@ -118,7 +118,7 @@ export async function confirmShipmentIssuance(
     !UUID_PATTERN.test(estimateServiceId) ||
     confirmation !== "confirmed"
   ) {
-    return { error: "Pilih layanan yang tersedia dan centang konfirmasi penerbitan AWB." };
+    return { error: "Pilih layanan yang tersedia dan centang konfirmasi penerbitan resi." };
   }
   // Absent means the form showed no COD Ongkir field; anything present must be
   // whole rupiah, and the repository decides whether this shipment may carry it.
@@ -169,7 +169,7 @@ export async function confirmShipmentIssuance(
         error:
           result.status === "SUBMISSION_UNKNOWN"
             ? "Hasil penyedia belum pasti. Jangan konfirmasi ulang sebelum rekonsiliasi selesai."
-            : "AWB belum diterbitkan. Muat ulang detail untuk melihat status terbaru.",
+            : "Resi belum diterbitkan. Muat ulang detail untuk melihat status terbaru.",
       };
     }
 

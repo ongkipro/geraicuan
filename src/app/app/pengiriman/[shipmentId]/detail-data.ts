@@ -4,11 +4,12 @@ import { and, desc, eq } from "drizzle-orm";
 
 import { shipmentCodFormulaRetired } from "@/db/cod-totals-repository";
 import { listOutletPickupPoints } from "@/db/outlet-pickup-point-repository";
-import { providerOrderSnapshots, providerOrderStatusObservations } from "@/db/schema";
+import { providerOrderSnapshots, providerOrderStatusObservations, shipmentCodTotals } from "@/db/schema";
 import { loadShipmentFlowDraft } from "@/db/shipment-draft-repository";
 import { listProviderHistoryEvents } from "@/db/provider-tracking-repository";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
+import { storedCodCharge, type ShipmentMoneyFacts } from "@/lib/shipment-money";
 
 import type { AttentionEvidence, StatusObservation } from "./detail-model";
 
@@ -43,6 +44,36 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
     .from(providerOrderSnapshots)
     .where(and(eq(providerOrderSnapshots.tenantId, context.tenantId), eq(providerOrderSnapshots.shipmentId, shipmentId)))
     .limit(1);
+
+  // T-261 "Rincian uang": the stored COD totals, read so the detail judges consistency exactly
+  // as the label does (`storedCodCharge`).
+  const [codTotals] = detail.isCod
+    ? await tx
+      .select({
+        goodsValueIdr: shipmentCodTotals.goodsValueIdr,
+        providerCodAmountIdr: shipmentCodTotals.providerCodAmountIdr,
+        shippingAmountIdr: shipmentCodTotals.shippingAmountIdr,
+      })
+      .from(shipmentCodTotals)
+      .where(and(eq(shipmentCodTotals.tenantId, context.tenantId), eq(shipmentCodTotals.shipmentId, shipmentId)))
+      .limit(1)
+    : [];
+  const provider = detail.provider;
+  const codCharge = storedCodCharge({
+    codTotals: codTotals ?? null,
+    paymentMethod: detail.paymentMethod,
+    providerCodAmountIdr: provider?.providerCodAmountIdr ?? null,
+  });
+  const moneyFacts: ShipmentMoneyFacts = {
+    chargedShippingIdr: order?.chargedShippingIdr ?? null,
+    codCharge: codCharge.breakdown,
+    codConsistent: codCharge.consistent,
+    declaredValueIdr: detail.package.declaredValueIdr,
+    insuranceAmountIdr: provider?.insuranceAmountIdr ?? null,
+    paymentMethod: detail.paymentMethod,
+    providerCodAmountIdr: provider?.providerCodAmountIdr ?? null,
+    shippingAmountIdr: provider?.shippingAmountIdr ?? null,
+  };
 
   const observations: (StatusObservation & AttentionEvidence & { source: "PULL" | "WEBHOOK" })[] = context.role === "TENANT_ADMIN"
     ? await tx
@@ -79,6 +110,7 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
     detail,
     draft,
     historyEvents,
+    moneyFacts,
     observations,
     observationsVisible: context.role === "TENANT_ADMIN",
     order: order ?? null,

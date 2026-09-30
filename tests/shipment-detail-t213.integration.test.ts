@@ -112,7 +112,7 @@ describe("Detail pelacakan", () => {
   it("renders time (WIB), status and description; the newest entry is marked", () => {
     const html = renderToStaticMarkup(createElement(TrackingTimeline, {
       entries: [
-        { at: issued, detail: "AWB 11LP1700187536 diterima dari Mengantar", key: "a", title: "Resi terbit" },
+        { at: issued, detail: "Resi 11LP1700187536 diterima dari Mengantar", key: "a", title: "Resi terbit" },
         { at: created, detail: null, key: "b", title: "Kiriman dibuat" },
       ],
     }));
@@ -123,7 +123,7 @@ describe("Detail pelacakan", () => {
   });
 });
 
-describe("Jumlah bersih (estimasi pencairan)", () => {
+describe("Estimasi cair (formerly Jumlah bersih)", () => {
   it("is COD − shipping Mengantar deducts − 3.33% COD fee, COD methods only", () => {
     expect(codNetAmountIdr({ chargedShippingIdr: 21_000, paymentMethod: "COD", providerCodAmountIdr: 119_479 }))
       .toBe(119_479 - 21_000 - mengantarCodFeeIdr(119_479));

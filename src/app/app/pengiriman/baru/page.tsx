@@ -57,7 +57,7 @@ function steps(stage: "fill" | "estimate" | "issue" | "done"): FlowStep[] {
   return [
     { detail: "Alamat & rincian paket", label: "Isi data" },
     { detail: "Tarif tiap ekspedisi", label: "Cek tarif" },
-    { detail: "Pilih layanan & AWB", label: "Terbitkan resi" },
+    { detail: "Pilih layanan & resi", label: "Terbitkan resi" },
   ].map((step, index) => ({ ...step, state: index < at ? "done" : index === at ? "current" : "pending" }));
 }
 
@@ -280,7 +280,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
           <SummaryRail
             actions={(
               <>
-                <Button className="w-full" disabled size="lg">Konfirmasi &amp; terbitkan AWB</Button>
+                <Button className="w-full" disabled size="lg">Konfirmasi &amp; terbitkan resi</Button>
                 <p className="text-center text-xs text-muted-foreground">Menunggu tarif Mengantar.</p>
                 <Button asChild className="w-full" variant="outline"><Link href={detailHref}>Simpan draf</Link></Button>
               </>

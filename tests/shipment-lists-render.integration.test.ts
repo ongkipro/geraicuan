@@ -42,7 +42,8 @@ describe("list URL state", () => {
   it("accepts only an AWB suffix as the Cetak resi search, never recipient data", () => {
     expect(parseLabelQuery({ cetak: "belum", q: " 123ABC " })).toEqual({ awbSuffix: "123ABC", awbSuffixError: null, page: 1, printState: "belum" });
     expect(parseLabelQuery({ q: "Budi Santoso" }).awbSuffixError).toMatch(/3–24 huruf atau angka/);
-    expect(parseLabelQuery({ cetak: "lain", page: "x" })).toMatchObject({ page: 1, printState: "semua" });
+    // T-263: an unknown or missing `cetak` opens the queue default, Belum dicetak.
+    expect(parseLabelQuery({ cetak: "lain", page: "x" })).toMatchObject({ page: 1, printState: "belum" });
     expect(labelIndexHref({ awbSuffix: "123", page: 2, printState: "sudah" }, carry)).toBe("/app/label?rentang=7-hari&tz=Asia%2FJakarta&q=123&cetak=sudah&page=2");
     expect(labelIndexHref({})).toBe("/app/label");
   });

@@ -395,8 +395,8 @@ export function IssuanceConsent({ packageLabel }: { packageLabel?: string }) {
   );
 }
 
-/** The primary "Konfirmasi & terbitkan AWB"; its unmet guard is one line beside it (spec 10 §4.11). */
-export function IssuanceSubmitButton({ className, label = "Konfirmasi & terbitkan AWB", showGate = true }: {
+/** The primary "Konfirmasi & terbitkan resi"; its unmet guard is one line beside it (spec 10 §4.11). */
+export function IssuanceSubmitButton({ className, label = "Konfirmasi & terbitkan resi", showGate = true }: {
   className?: string;
   label?: string;
   showGate?: boolean;
@@ -415,7 +415,7 @@ export function IssuanceSubmitButton({ className, label = "Konfirmasi & terbitka
         type="submit"
       >
         <ShieldCheck aria-hidden="true" />
-        {issuance.pending ? "Menerbitkan AWB…" : label}
+        {issuance.pending ? "Menerbitkan resi…" : label}
       </Button>
       {showGate && issuance.gateMessage ? <p className="text-center text-xs text-muted-foreground" id={gateId}>{issuance.gateMessage}</p> : null}
     </div>
@@ -466,7 +466,7 @@ export function IssuanceOutcome() {
         <Alert role="status">
           <ShieldCheck aria-hidden="true" />
           <AlertTitle>Tujuan sudah terverifikasi</AlertTitle>
-          <AlertDescription>Konfirmasi ulang penerbitan AWB.</AlertDescription>
+          <AlertDescription>Konfirmasi ulang penerbitan resi.</AlertDescription>
         </Alert>
       ) : null}
       {state.issued ? (

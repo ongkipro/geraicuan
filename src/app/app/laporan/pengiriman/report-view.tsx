@@ -13,6 +13,7 @@ import { DateRangePicker } from "@/components/app/date-range-picker";
 import { EmptyState } from "@/components/app/empty-state";
 import { FilterBar } from "@/components/app/filter-bar";
 import { Money } from "@/components/app/money";
+import { MoneyBreakdownCompact } from "@/components/app/money-breakdown";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
 import { ShipmentStatusBadge } from "@/components/app/status-badge";
@@ -25,6 +26,7 @@ import { serviceDisplayName } from "@/lib/labels/courier";
 import { areaDisplayCase, formatDistrictCity, formatWibDateTimeParts } from "@/lib/label-format";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
+import { reportRowMoneyLines } from "@/lib/shipment-money";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import { shipmentReportHref } from "@/lib/shipment-report";
 import { deliveredRate, formatRate, returnRate } from "@/lib/shipment-report-analytics";
@@ -175,7 +177,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
     <DataCard
       action={(
         <SectionHelp label="Penjelasan total per kurir">
-          <p>Ongkir dan biaya COD adalah tagihan Mengantar per kiriman.</p>
+          <p>Biaya kirim dan biaya COD adalah tagihan Mengantar per kiriman.</p>
           <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dan biaya COD. Jumlah pasti mengikuti pencairan Mengantar.</p>
           <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman yang selesai (terkirim + retur).</p>
         </SectionHelp>
@@ -198,7 +200,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
             </p>
             <LowVolumeNote shipmentCount={total.shipmentCount} />
             <p className="text-xs text-muted-foreground">
-              Ongkir Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
+              Biaya kirim Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
             </p>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-muted-foreground">Estimasi cair</span>
@@ -215,7 +217,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
             <TableHead className="px-2 text-right">Kiriman</TableHead>
             <TableHead className="px-2 text-right">% terkirim</TableHead>
             <TableHead className="px-2 text-right">% retur</TableHead>
-            <TableHead className="px-2 text-right">Ongkir Mengantar</TableHead>
+            <TableHead className="px-2 text-right">Biaya kirim Mengantar</TableHead>
             <TableHead className="px-2 text-right">Biaya COD</TableHead>
             <TableHead className="pr-0 pl-2 text-right">Estimasi cair</TableHead>
           </TableRow>
@@ -311,7 +313,7 @@ function ShipmentRows({ carry, count, data }: { carry: Record<string, string>; c
                 subtitle={areaDisplayCase(formatDistrictCity(row.destinationAreaLabel))}
                 time={<time dateTime={row.createdAt.toISOString()}>{created.date}, {created.time}</time>}
                 title={<span className="font-mono">{row.publicReference}</span>}
-                value={<>Ongkir <Money amount={row.shippingCostIdr} /></>}
+                value={<MoneyBreakdownCompact align="start" lines={reportRowMoneyLines(row)} />}
               />
             );
           })}
@@ -358,10 +360,7 @@ function ShipmentRows({ carry, count, data }: { carry: Record<string, string>; c
                 <TableCell><ShipmentStatusBadge status={row.status} /></TableCell>
                 <TableCell>{PAYMENT_METHOD_LABELS[row.paymentMethod]}</TableCell>
                 <TableCell className="pr-6 text-right">
-                  <Money amount={row.shippingCostIdr} className="block font-medium" />
-                  {row.codFeeIdr !== null ? (
-                    <span className="block text-xs text-muted-foreground">COD <Money amount={row.codFeeIdr} /></span>
-                  ) : null}
+                  <MoneyBreakdownCompact lines={reportRowMoneyLines(row)} showFirstLabel={false} />
                 </TableCell>
               </TableRow>
             );

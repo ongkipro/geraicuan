@@ -13,6 +13,8 @@ Status: BLOCKED
 
 ## Why this manifest is BLOCKED
 
+**Update 2026-09-29 (head `ce03512`, branch `feat/phase14-completion`).** Still BLOCKED. Since the notes below, migrations `0038`–`0069` landed (latest: `0067` wilayah + `pg_trgm`, `0068` unpaid cancel + invoice logo versions, `0069` audit tenant guard), the documented Mengantar order was proven live once (T-237a), and T-248–T-260 changed UI, label and audit code. Open before any release: (1) independent review of `ff005a2..ce03512`; (2) `pg_trgm` confirmed on the production Postgres (step 6); (3) `Backup-Proof` covering `0032`–`0069`; (4) the T-237a test order cancelled by the owner; (5) a fresh `pnpm build` with the production env block. `STATUS.md` → "Current — 2026-09-29" holds the evidence.
+
 `RC-1` was prepared against `2b3bd18` and marked READY by T-62. That boundary no
 longer describes this repository. Commit `67beb92` then shipped the Phase 9
 market features without independent review or a passing test suite, and the

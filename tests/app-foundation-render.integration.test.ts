@@ -108,6 +108,7 @@ describe("StatusBadge", () => {
     ["warning", "Antre retur", "text-warn"],
     ["danger", "Gagal", "text-danger"],
     ["neutral", "Draf", "text-muted-foreground"],
+    ["pending", "Resi terbit", "text-pending"],
   ] as const)("renders %s as an icon plus the word", (tone, label, textClass) => {
     const html = renderToStaticMarkup(createElement(StatusBadge, { label, tone }));
     expect(html).toContain(`data-tone="${tone}"`);
@@ -288,6 +289,58 @@ describe("Mengantar look (v3.2)", () => {
       { active: false, dim: true, key: "OTHER", tall: false },
     ]);
     expect(html).toContain("Komposisi dari 10: A 2 (20%), B 3 (30%, dipilih), C 1 (10%), Lainnya 4 (40%).");
+  });
+
+  // T-262 (critique P2): "Resi terbit" and "Terkirim" shared one green, and Cetak resi's "Belum" and
+  // "Sudah dicetak" one grey, so the bar and its legend could not be read. Each strip's tiles are
+  // built the way its page builds them; every status a strip shows gets its own bar colour, none of
+  // them Lainnya's grey, and a status tile's tone is its row badge's tone (one §4.12 mapping).
+  it("gives every status in a strip its own bar colour, the same tone as its badge", async () => {
+    const { StatusTiles } = await import("@/components/app/status-tiles");
+    const { PRINT_STATE_TONE, ShipmentStatusBadge, shipmentStatusTone } = await import("@/components/app/status-badge");
+    const { SHIPMENT_QUEUE_SUMMARY_ENTRIES } = await import("@/lib/shipment-queue");
+    type Tone = NonNullable<ReturnType<typeof shipmentStatusTone>>;
+    const bars = (tiles: { key: string; tone?: Tone }[]) => {
+      const html = renderToStaticMarkup(createElement(StatusTiles, {
+        label: "R",
+        tiles: [{ key: "ALL", tone: undefined }, ...tiles].map((tile) => ({ ...tile, count: 1, href: `/${tile.key}`, label: tile.key, selected: false })),
+        // One more than the status tiles, so Lainnya is drawn and must differ from each of them.
+        total: tiles.length + 2,
+      }));
+      return Object.fromEntries([...html.matchAll(/<span class="block h-1\.5 [^"]*?\b(bg-[a-z-]+)"[^>]*data-segment="([^"]+)"/g)].map(([, bar, key]) => [key, bar]));
+    };
+    const distinct = (strip: Record<string, string>, keys: number) => {
+      expect(Object.keys(strip)).toHaveLength(keys + 1);
+      expect(new Set(Object.values(strip)).size, JSON.stringify(strip)).toBe(keys + 1);
+      expect(strip.OTHER).toBe("bg-input");
+    };
+
+    // Histori: the page passes shipmentStatusTone(entry.value) for every status tile.
+    const histori = SHIPMENT_QUEUE_SUMMARY_ENTRIES.slice(1).map((entry) => ({ key: entry.value, tone: shipmentStatusTone(entry.value) ?? undefined }));
+    expect(histori.every((tile) => tile.tone)).toBe(true);
+    const historiBars = bars(histori);
+    distinct(historiBars, 5);
+    expect(historiBars.ISSUED).not.toBe(historiBars.DELIVERED);
+    // Retur: the tiles are statuses and take their tone from the key.
+    distinct(bars(["RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED", "PROBLEM"].map((key) => ({ key }))), 4);
+    // Cetak resi: the page passes PRINT_STATE_TONE; Belum and Sudah dicetak must differ.
+    const cetak = bars((["belum", "sudah", "batal"] as const).map((key) => ({ key, tone: PRINT_STATE_TONE[key] })));
+    distinct(cetak, 3);
+    expect(cetak.belum).not.toBe(cetak.sudah);
+    expect(PRINT_STATE_TONE.batal).toBe(shipmentStatusTone("CANCELLED"));
+
+    // One mapping: the strip tile of a status carries the tone its row badge carries.
+    for (const status of ["ISSUED", "IN_TRANSIT", "DELIVERED", "CANCELLED", "RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED", "PROBLEM"] as const) {
+      const badge = renderToStaticMarkup(createElement(ShipmentStatusBadge, { status })).match(/data-tone="(\w+)"/)?.[1];
+      const strip = renderToStaticMarkup(createElement(StatusTiles, { label: "R", tiles: [{ count: 1, href: "/", key: status, label: status, selected: false }], total: 1 }));
+      expect(strip.match(/data-tone="(\w+)"/)?.[1], status).toBe(badge);
+    }
+
+    // The pages pass exactly those inputs (no page-local override such as the old "danger").
+    const { readFileSync } = await import("node:fs");
+    const tilesProp = (path: string) => readFileSync(path, "utf8").match(/<StatusTiles[\s\S]*?\/>/)![0];
+    expect(tilesProp("src/app/app/pengiriman/page.tsx")).toMatch(/\btone: shipmentStatusTone\(entry\.value\) \?\? undefined,/);
+    expect(tilesProp("src/app/app/label/page.tsx")).toMatch(/\btone: tile\.value === "semua" \? undefined : PRINT_STATE_TONE\[tile\.value\],/);
   });
 
   // Spec 19 QUE-OTHER / RTS-OTHER / LBL-OTHER: base − Σ status tiles, never negative.

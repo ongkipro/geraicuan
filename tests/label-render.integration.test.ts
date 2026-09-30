@@ -45,6 +45,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
     shipmentId: SHIPMENT_ID,
     publicReference: "GC-10431",
     shippingAmountIdr: 8_000,
+    chargedShippingIdr: null,
     ...overrides,
   };
 }

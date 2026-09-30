@@ -16,11 +16,12 @@ import {
   RecipientCell,
 } from "@/app/app/pengiriman/_list/shipment-cells";
 import { StatusPull } from "@/app/app/pengiriman/_list/status-pull";
-import { type SearchValue } from "@/app/app/pengiriman/_list/search-params";
+import { activeFilterCount, type SearchValue } from "@/app/app/pengiriman/_list/search-params";
 import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { parseRtsQuery, RTS_PAGE_SIZE, rtsHref } from "@/app/app/pengiriman/rts/rts-query";
 import { pullMengantarStatus } from "@/app/app/pengiriman/status-sync-actions";
 import { EmptyState } from "@/components/app/empty-state";
+import { ListFilterSheet } from "@/components/app/list-filter-sheet";
 import { PageHeader } from "@/components/app/page-header";
 import { RecordItem, RecordList } from "@/components/app/record-list";
 import { ShipmentStatusBadge } from "@/components/app/status-badge";
@@ -32,7 +33,7 @@ import { db } from "@/db/client";
 import { loadRtsShipmentsPage, type RtsFilterStatus } from "@/db/rts-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { listTenantOutlets } from "@/db/tenant-repository";
-import { parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
+import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { formatWeight, formatWibDateTime } from "@/lib/label-format";
 import { SHIPMENT_STATUS_PRESENTATION, type ShipmentStatus } from "@/lib/shipment-queue";
 import { shipmentDetailHref } from "@/lib/shipment-number";
@@ -68,6 +69,7 @@ export default async function RtsPage({ searchParams }: { searchParams: Promise<
     { count: data.summary.problemCount, hint: "Laporan kurir", key: "PROBLEM", label: SHIPMENT_STATUS_PRESENTATION.PROBLEM.label },
   ];
   const selected = tiles.find((tile) => tile.key === query.status);
+  const { periodLabel, presetLabel } = formatRangeLabel(range);
   const freshness = data.basis.observationVisible
     ? data.basis.lastObservedAt
       ? `Status Mengantar diperbarui ${formatWibDateTime(data.basis.lastObservedAt)}`
@@ -91,9 +93,27 @@ export default async function RtsPage({ searchParams }: { searchParams: Promise<
 
       <AdjustedFilterAlert issues={issues} />
 
-      <PeriodFilter clearHref={rtsHref(query.status)} hidden={{ status: query.status === "ALL" ? undefined : query.status }} range={range} />
+      {/* T-263: phones get one Filter sheet (Retur has no search); the filter row and tiles are from 768px. */}
+      <ListFilterSheet
+        action="/app/pengiriman/rts"
+        allHref={query.status === "ALL" ? undefined : rtsHref("ALL", 1, carry)}
+        allLabel="Tampilkan semua retur"
+        clearHref={rtsHref("ALL")}
+        count={activeFilterCount({ defaultStatus: "ALL", presetId: range.presetId, status: query.status })}
+        options={tiles.map((tile) => ({ count: tile.count, label: tile.label, value: tile.key }))}
+        range={{ endDate: range.lastIncludedDate, presetId: range.presetId, startDate: range.startDate }}
+        statusLegend="Status retur"
+        statusName="status"
+        summary={`${selected?.label ?? "Semua retur"} · ${range.presetId === "kustom" ? periodLabel : presetLabel}`}
+        value={query.status}
+      />
+
+      <div className="max-md:hidden">
+        <PeriodFilter clearHref={rtsHref(query.status)} hidden={{ status: query.status === "ALL" ? undefined : query.status }} range={range} />
+      </div>
 
       <StatusTiles
+        className="max-md:hidden"
         label="Ringkasan status retur"
         // Spec 19 RTS-SHARE: every tile is a subset of RTS-ALL.
         total={data.summary.totalRtsCount}

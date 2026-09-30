@@ -90,7 +90,7 @@ export async function checkShippingRates(
   if (weightClass) {
     fieldErrors.weightGrams = weightClass;
   } else if (!Number.isSafeInteger(weightGrams) || weightGrams < 1 || weightGrams > 100_000) {
-    fieldErrors.weightGrams = "Masukkan berat bulat antara 1 dan 100.000 gram.";
+    fieldErrors.weightGrams = "Masukkan berat antara 0,001 dan 100 kg.";
   }
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
   // The field checks above also narrow the values used at the provider boundary.

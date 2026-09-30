@@ -100,7 +100,10 @@ describe("Cek tarif (T-242)", () => {
     expect(idle).toContain("Tarif muncul di sini");
     expect(filledPrimaries(idle)).toBe(1);
     expect(idle).toContain('id="rate-weight-help"');
-    expect(text(idle)).toContain("Setara 1 kg.");
+    expect(text(idle)).toContain("Berat paket (kg)");
+    // T-261: kg like Buat kiriman; the grams the action receives ride in a hidden field.
+    expect(text(idle)).toContain("Setara 1.000 gram.");
+    expect(idle).toMatch(/<input[^>]*name="weightGrams"[^>]*value="1000"|<input[^>]*value="1000"[^>]*name="weightGrams"/);
     const failed = render(createElement(RateCheck, { canManageSettings: false, initialState: { error: "Tarif belum dapat dimuat dari Mengantar. Coba lagi." }, outlets }));
     expect(failed).toContain('role="alert"');
     expect(text(failed)).toContain("Coba lagi");

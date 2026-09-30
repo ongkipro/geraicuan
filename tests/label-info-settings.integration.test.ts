@@ -89,6 +89,7 @@ const LABEL: PrintableLabel = {
   sender: { address: "Ruko Pengirim Blok C3", name: "Gerai Pengirim", phone: "081211110229" },
   shipmentId: "00000000-0000-4000-8000-000000000229",
   shippingAmountIdr: 18_000,
+  chargedShippingIdr: null,
 };
 
 const RECIPIENT_PHONE = "0812-9999-0229";

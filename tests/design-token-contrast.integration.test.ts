@@ -388,9 +388,38 @@ describe("design token contrast", () => {
       ["--danger", "--danger-surface"],
       ["--ok", "--ok-surface"],
       ["--warn", "--warn-surface"],
+      ["--info", "--info-surface"],
+      ["--pending", "--pending-surface"],
     ] as const) {
       expect(contrast(token(ink), token(surface)), `${ink} on ${surface}`)
         .toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  /**
+   * T-262 (critique P2): the stat-strip composition bar painted "Resi terbit" and "Terkirim" in one
+   * green. Every tone a strip bar can take (spec 10 §4.6: pending, info, ok, warn, danger, and
+   * `--input` for Lainnya) holds the 3:1 non-text floor on the card, as ink holds 4.5:1 for the
+   * tile icon, and every two of them differ perceptibly: OKLab distance ≥ 0.1 (warn/danger, the
+   * closest pair already accepted, is 0.11), measured rather than compared by name.
+   */
+  it("keeps every stat-strip bar tone visible on the card and apart from every other", () => {
+    const oklab = ({ r, g, b }: Rgb) => {
+      const lin = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      const [lr, lg, lb] = [lin(r), lin(g), lin(b)];
+      const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+      const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+      const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+      return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+    };
+    const bars = ["--pending", "--info", "--ok", "--warn", "--danger", "--input"] as const;
+    for (const bar of bars) expect(contrast(token(bar), token("--card")), `${bar} on --card`).toBeGreaterThanOrEqual(3);
+    for (const ink of bars.slice(0, -1)) expect(contrast(token(ink), token("--card")), `${ink} icon on --card`).toBeGreaterThanOrEqual(4.5);
+    for (const [i, a] of bars.entries()) {
+      for (const b of bars.slice(i + 1)) {
+        const [x, y] = [oklab(token(a)), oklab(token(b))];
+        expect(Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]), `${a} vs ${b}`).toBeGreaterThanOrEqual(0.1);
+      }
     }
   });
 

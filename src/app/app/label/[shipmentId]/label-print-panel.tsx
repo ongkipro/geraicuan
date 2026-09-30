@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleAlert, CircleCheck, FileText, Printer } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
@@ -32,10 +33,21 @@ const SIZE_OPTIONS: { description: string; size: LabelSize }[] = [
   { description: "Label paket saja, tanpa bukti pengirim.", size: "10x10" },
 ];
 
+/**
+ * Below 1024px the preview fills the first screen, so the page's one primary print control is
+ * pinned to the bottom of the viewport instead of being duplicated: the same element, restyled
+ * (`max-lg:fixed`), keeps its place in the tab order after the size choice. It carries the 44px
+ * target and the safe-area inset (the Buat kiriman bar's pattern), and never prints — the whole
+ * card is `label-hide`, and the bar is `print:hidden` as well.
+ */
+const MOBILE_PRINT_BAR =
+  "max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:flex max-lg:flex-col max-lg:items-end max-lg:border-t max-lg:bg-card max-lg:px-4 max-lg:pt-3 max-lg:pb-[max(--spacing(3),env(safe-area-inset-bottom))] max-lg:shadow-lg max-sm:items-stretch print:hidden";
+const BAR_BUTTON = "max-sm:w-full max-lg:h-11";
+
 function PrintButton({ outline, reprint, size }: { outline?: boolean; reprint: boolean; size: LabelSize }) {
   const { pending } = useFormStatus();
   return (
-    <Button className="max-sm:w-full" disabled={pending} type="submit" variant={outline ? "outline" : "default"}>
+    <Button className={BAR_BUTTON} disabled={pending} type="submit" variant={outline ? "outline" : "default"}>
       <Printer aria-hidden="true" />
       {pending ? "Menyiapkan cetak…" : `${reprint ? "Cetak ulang label" : "Cetak label"} ${LABEL_SIZES[size].name}`}
     </Button>
@@ -52,12 +64,17 @@ function PrintButton({ outline, reprint, size }: { outline?: boolean; reprint: b
  * it (idempotent). Once it exists the label and the nota print as two ordered jobs because
  * their media differ: step 1 records and prints the label, step 2 prints the invoice; the
  * primary moves to step 2 once step 1 is recorded.
+ *
+ * T-263: the preview comes first in the DOM, so a phone shows it before the print card (from
+ * 1024px it still sits in the right column), and the page has one print button per job: the
+ * invoice is a mode switch in the card (`invoiceToggle`), not a second print entry in the header.
  */
 export function LabelPrintPanel({
   children,
   both,
   history,
   initialAttemptId,
+  invoiceToggle,
   lastPrintedAt,
   operatorId,
   printCount,
@@ -68,6 +85,8 @@ export function LabelPrintPanel({
   both?: { invoice: ShipmentInvoice | null; shipmentNumber: string };
   history: ReactNode;
   initialAttemptId: string;
+  /** "Sertakan invoice" / "Tanpa invoice": the link between the two modes. */
+  invoiceToggle: { href: string; label: string };
   lastPrintedAt: string | null;
   operatorId: string;
   printCount: number;
@@ -105,10 +124,38 @@ export function LabelPrintPanel({
   const recordedAt = state.printed?.printedAt ?? lastPrintedAt;
   const invoice = both?.invoice ?? null;
   const issuing = Boolean(both && !invoice);
+  // The one control the mobile bar pins: issue the invoice, else the label until it is recorded,
+  // then (with an invoice) step 2's invoice print.
+  const barHolder = issuing ? "issue" : invoice && state.printed ? "invoice" : "label";
 
   return (
-    <div className="grid gap-6 print:block lg:grid-cols-3 lg:items-start">
-      <div className="label-hide grid min-w-0 gap-6 lg:col-span-2">
+    // max-lg:pb-24 keeps the page's last card clear of the fixed print bar.
+    <div className="grid gap-6 print:block print:pb-0 max-lg:pb-24 lg:grid-cols-3 lg:items-start">
+      {/* T-243: a lone label preview stays beside the size cards while the history scrolls. */}
+      <div className={cn("grid min-w-0 gap-6 print:static print:block lg:col-start-3 lg:row-start-1", !invoice && "lg:sticky lg:top-20")}>
+        <div className="label-print-group grid min-w-0 gap-2 print:block">
+          <LabelPrintContext.Provider value={{ printedAt: state.printed?.printedAt ?? null, size }}>
+            <LabelPreviewFrame
+              label={`Pratinjau label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
+              size={size}
+              title="Pratinjau kertas termal"
+            >
+              {children}
+            </LabelPreviewFrame>
+          </LabelPrintContext.Provider>
+        </div>
+        {invoice ? (
+          <div className="invoice-print-group grid min-w-0 gap-2 print:block">
+            <p aria-hidden="true" className="label-hide text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Pratinjau invoice {INVOICE_MEDIA[medium].name}
+            </p>
+            <InvoicePreview label={`Pratinjau invoice ${INVOICE_MEDIA[medium].name}, sama dengan hasil cetak`}>
+              <InvoiceSheet invoice={invoice} medium={medium} />
+            </InvoicePreview>
+          </div>
+        ) : null}
+      </div>
+      <div className="label-hide grid min-w-0 gap-6 lg:col-span-2 lg:col-start-1 lg:row-start-1">
         <Card>
           <CardHeader>
             <CardTitle>
@@ -142,11 +189,17 @@ export function LabelPrintPanel({
             </fieldset>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               {issuing && both ? (
-                <IssueInvoiceButton className="max-sm:w-full" icon={<Printer aria-hidden="true" />} shipmentNumber={both.shipmentNumber}>
-                  Cetak resi + invoice
-                </IssueInvoiceButton>
+                <div className={MOBILE_PRINT_BAR} data-slot="mobile-print-bar">
+                  <IssueInvoiceButton className={BAR_BUTTON} icon={<Printer aria-hidden="true" />} shipmentNumber={both.shipmentNumber}>
+                    Cetak resi + invoice
+                  </IssueInvoiceButton>
+                </div>
               ) : (
-                <form action={action}>
+                <form
+                  action={action}
+                  className={barHolder === "label" ? MOBILE_PRINT_BAR : undefined}
+                  data-slot={barHolder === "label" ? "mobile-print-bar" : undefined}
+                >
                   <input name="shipmentId" type="hidden" value={shipmentId} />
                   <input name="attemptId" type="hidden" value={state.nextAttemptId ?? initialAttemptId} />
                   <PrintButton outline={Boolean(invoice && state.printed)} reprint={recordedCount > 0} size={size} />
@@ -158,6 +211,13 @@ export function LabelPrintPanel({
                   : `${recordedCount}× dicetak${recordedAt ? ` · terakhir ${formatWibDateTime(recordedAt)}` : ""}`}
               </p>
             </div>
+            <Link
+              className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm font-semibold text-primary underline-offset-4 hover:underline md:min-h-6"
+              href={invoiceToggle.href}
+            >
+              <FileText aria-hidden="true" className="size-4" />
+              {invoiceToggle.label}
+            </Link>
             {state.printed || state.blocked || state.error ? (
               <div ref={resultRef} tabIndex={-1}>
                 {state.printed ? (
@@ -195,45 +255,26 @@ export function LabelPrintPanel({
             <CardContent className="grid gap-4">
               <InvoiceMediaCards labelledBy="media-invoice" medium={medium} onChange={setMedium} />
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <Button
-                  className="max-sm:w-full"
-                  onClick={() => printGroup("invoice")}
-                  type="button"
-                  variant={state.printed ? "default" : "outline"}
+                <div
+                  className={barHolder === "invoice" ? MOBILE_PRINT_BAR : undefined}
+                  data-slot={barHolder === "invoice" ? "mobile-print-bar" : undefined}
                 >
-                  <FileText aria-hidden="true" />
-                  Cetak invoice {INVOICE_MEDIA[medium].name}
-                </Button>
+                  <Button
+                    className={BAR_BUTTON}
+                    onClick={() => printGroup("invoice")}
+                    type="button"
+                    variant={state.printed ? "default" : "outline"}
+                  >
+                    <FileText aria-hidden="true" />
+                    Cetak invoice {INVOICE_MEDIA[medium].name}
+                  </Button>
+                </div>
                 <p className="font-mono text-xs text-muted-foreground">{invoice.invoiceNumber}</p>
               </div>
             </CardContent>
           </Card>
         ) : null}
         {history}
-      </div>
-      {/* T-243: a lone label preview stays beside the size cards while the history scrolls. */}
-      <div className={cn("grid min-w-0 gap-6 print:static print:block", !invoice && "lg:sticky lg:top-20")}>
-        <div className="label-print-group grid min-w-0 gap-2 print:block">
-          <LabelPrintContext.Provider value={{ printedAt: state.printed?.printedAt ?? null, size }}>
-            <LabelPreviewFrame
-              label={`Pratinjau label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
-              size={size}
-              title="Pratinjau kertas termal"
-            >
-              {children}
-            </LabelPreviewFrame>
-          </LabelPrintContext.Provider>
-        </div>
-        {invoice ? (
-          <div className="invoice-print-group grid min-w-0 gap-2 print:block">
-            <p aria-hidden="true" className="label-hide text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Pratinjau invoice {INVOICE_MEDIA[medium].name}
-            </p>
-            <InvoicePreview label={`Pratinjau invoice ${INVOICE_MEDIA[medium].name}, sama dengan hasil cetak`}>
-              <InvoiceSheet invoice={invoice} medium={medium} />
-            </InvoicePreview>
-          </div>
-        ) : null}
       </div>
     </div>
   );

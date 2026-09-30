@@ -1,6 +1,7 @@
 import { Check, Lock } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -157,9 +158,21 @@ export function SectionStatus({ missing, state }: { missing: number; state: Sect
   return <span className="text-xs text-muted-foreground">{missing} isian belum diisi</span>;
 }
 
+/**
+ * T-263: below 768px a complete section can fold to one summary line. The disclosure button
+ * ("Ubah" / "Selesai") carries `aria-expanded`; the folded body is hidden on phones only, so
+ * from 768px every section always shows its fields.
+ */
+export type SectionCollapse = {
+  collapsed: boolean;
+  onToggle: () => void;
+  summary: ReactNode;
+};
+
 export function SectionCard({
   aside,
   children,
+  collapse,
   connector,
   emphasis = false,
   id,
@@ -169,6 +182,8 @@ export function SectionCard({
 }: {
   aside?: ReactNode;
   children: ReactNode;
+  /** Only for a complete section (or one already folded). */
+  collapse?: SectionCollapse;
   /** The spine segment down to the next section (none on the last one). */
   connector?: "done" | "todo";
   /** Section 5 when it is the active step: primary-tinted frame. */
@@ -211,7 +226,25 @@ export function SectionCard({
           </div>
           {aside}
         </header>
-        {children}
+        {collapse ? (
+          <div className="flex items-center justify-between gap-3 md:hidden" data-slot="section-fold">
+            {collapse.collapsed ? <p className="min-w-0 flex-1 text-sm wrap-anywhere" data-slot="section-summary">{collapse.summary}</p> : <span />}
+            <Button
+              aria-controls={`${id}-body`}
+              aria-expanded={!collapse.collapsed}
+              className="h-11 shrink-0 px-0 font-semibold"
+              onClick={collapse.onToggle}
+              type="button"
+              variant="link"
+            >
+              {collapse.collapsed ? "Ubah" : "Selesai"}
+              <span className="sr-only">{` ${title}`}</span>
+            </Button>
+          </div>
+        ) : null}
+        <div className={cn("flex flex-col gap-5", collapse?.collapsed && "max-md:hidden")} data-slot="section-body" id={`${id}-body`}>
+          {children}
+        </div>
       </section>
     </div>
   );

@@ -333,10 +333,13 @@ describe("Cek tarif", () => {
     expect(operator).not.toContain('href="/app/pengaturan"');
   });
 
-  it("has one filled primary and the weight locked to digits when an outlet is ready", () => {
+  it("has one filled primary and the weight entered in kg, posted as whole grams, when an outlet is ready", () => {
     const html = render(createElement(RateCheck, { canManageSettings: false, initialState: { error: "Tarif belum dapat dimuat dari Mengantar. Coba lagi." }, outlets: [{ id: "o1", name: "Outlet Utama" }] }));
     expect(filledPrimaries(html)).toBe(1);
-    expect(html).toContain('data-character-class="NUMERIC_INTEGER"');
+    // T-261: kg like Buat kiriman (PR-72); the field keeps a numeric keypad and the server still gets grams.
+    expect(html).toContain("Berat paket (kg)");
+    expect(html).toMatch(/id="rate-weight"[^>]*inputMode="decimal"|inputMode="decimal"[^>]*id="rate-weight"/i);
+    expect(html).toContain('<input type="hidden" name="weightGrams" value="1000"/>');
     expect(html).toContain("Tarif belum tersedia");
   });
 });

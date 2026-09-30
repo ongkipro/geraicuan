@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Children, type ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
+
 const INITIAL_VISIBLE = 10;
 
 /**
@@ -33,6 +35,11 @@ export function RecordList({ children, label }: { children: ReactNode; label: st
 /**
  * One record card: identity link (16/600) + status right · who/where (15px) · courier and resi
  * (13px muted) · value left + time right.
+ *
+ * T-263: with `href`, the whole card is the tap target — the identity link stretches over the
+ * card (its `::after`), so the link stays one named link for assistive technology and the
+ * keyboard, and its focus ring draws around the card. `detail` (e.g. a selection checkbox) sits
+ * above the stretched link and keeps its own tap.
  */
 export function RecordItem({
   detail,
@@ -54,10 +61,20 @@ export function RecordItem({
   value?: ReactNode;
 }) {
   return (
-    <li className="grid gap-1 px-4 py-3" data-slot="record-item">
+    <li
+      className={cn(
+        "grid gap-1 px-4 py-3",
+        href && "relative transition-colors active:bg-accent has-[a[data-slot=record-link]:focus-visible]:ring-3 has-[a[data-slot=record-link]:focus-visible]:ring-ring/50 has-[a[data-slot=record-link]:focus-visible]:ring-inset",
+      )}
+      data-slot="record-item"
+    >
       <div className="flex items-start justify-between gap-3">
         {href ? (
-          <Link className="min-w-0 truncate text-base font-semibold text-primary hover:underline" href={href}>
+          <Link
+            className="min-w-0 truncate text-base font-semibold text-primary outline-none after:absolute after:inset-0 after:content-[''] hover:underline"
+            data-slot="record-link"
+            href={href}
+          >
             {title}
           </Link>
         ) : (
@@ -67,7 +84,7 @@ export function RecordItem({
       </div>
       {subtitle ? <p className="text-sm text-foreground">{subtitle}</p> : null}
       {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
-      {detail}
+      {detail ? <div className="relative z-10" data-slot="record-detail">{detail}</div> : null}
       {value || time ? (
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-sm font-semibold tabular-nums">{value}</span>

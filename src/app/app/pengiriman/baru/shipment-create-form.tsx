@@ -294,8 +294,47 @@ export function ShipmentCreateForm({
     source: "Estimasi",
     total: { amountIdr: null, label: cod ? "Total tagihan COD" : "Ongkir", note: "Tarif muncul setelah data disimpan" },
   };
+  // T-263: on phones a section that is complete when the form opens (usually 1, pre-filled from
+  // the outlet) folds to one line with "Ubah"; any complete section can be folded again with
+  // "Selesai". A server error unfolds every section so each message sits beside its field.
+  const [folded, setFolded] = useState<boolean[]>(() => missing.map((fields) => fields.length === 0));
+  // "Ubah" moves focus to the first control of the section it opened, once the body is shown.
+  const unfoldedSection = useRef<number | null>(null);
+  useEffect(() => {
+    const index = unfoldedSection.current;
+    if (index === null) return;
+    unfoldedSection.current = null;
+    document.getElementById(`${FLOW_SECTIONS[index].id}-body`)
+      ?.querySelector<HTMLElement>("input:not([type=hidden]):not([disabled]), button:not([disabled]), textarea, [tabindex]:not([tabindex='-1'])")
+      ?.focus();
+  }, [folded]);
+  const selectedDate = dateOptions.find((option) => option.value === pickupDate)?.label;
+  const foldSummaries: ReactNode[] = [
+    <>
+      <span className="font-semibold">{handoverType === "PICKUP" ? HANDOVER_TYPE_LABELS.PICKUP : HANDOVER_TYPE_LABELS.DROP_OFF}</span>
+      {handoverType === "PICKUP" ? ` · ${selectedDate ?? "—"}, ${effectiveSlot ? pickupSlotLabel(effectiveSlot) : "—"}` : null}
+      {outlet ? <span className="block text-muted-foreground">{outlet.name}{pickup?.originAreaLabel ? ` · ${pickup.originAreaLabel}` : ""}</span> : null}
+    </>,
+    <>{sender.name || "—"} → <span className="font-semibold">{recipient.name || "—"}</span>{destinationLabel ? ` · ${destinationLabel}` : ""}</>,
+    <><span className="font-semibold">{PAYMENT_METHOD_LABELS[paymentMethod]}</span> · Nilai barang Rp {declaredValue || "—"}</>,
+    <>{composed.packageContent || "—"} · {weightGrams ? gramsToKilogramLabel(Number(weightGrams)) : "— kg"}</>,
+  ];
+  const foldFor = (index: number) => {
+    if (index >= foldSummaries.length) return undefined;
+    const collapsed = folded[index] === true && errorEntries.length === 0;
+    if (!collapsed && (missing[index]?.length ?? 1) > 0) return undefined;
+    return {
+      collapsed,
+      onToggle: () => {
+        setFolded((current) => current.map((value, position) => (position === index ? !collapsed : value)));
+        if (collapsed) unfoldedSection.current = index;
+      },
+      summary: foldSummaries[index],
+    };
+  };
   const section = (index: number) => ({
     aside: <SectionStatus missing={missing[index]?.length ?? 0} state={states[index]} />,
+    collapse: foldFor(index),
     connector: connectors[index],
     id: FLOW_SECTIONS[index].id,
     number: index + 1,

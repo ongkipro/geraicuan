@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ArrowLeft, CircleAlert, FileText, Printer, Tag } from "lucide-react";
+import { ArrowLeft, CircleAlert, FileText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -13,6 +13,7 @@ import { printEventOutcome } from "@/app/app/label/[shipmentId]/print-event";
 import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { resolveShipmentRoute } from "@/app/app/shipment-route";
 import { DataCard } from "@/components/app/data-card";
+import { MoneyBreakdown, MoneyInconsistentAlert } from "@/components/app/money-breakdown";
 import { PageHeader } from "@/components/app/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import { loadShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { loadPrintBrand, loadTenantLabelFields } from "@/db/tenant-settings-repository";
 import { formatWibDateTime, recipientDensity } from "@/lib/label-format";
+import { labelMoneyFacts, shipmentMoney } from "@/lib/shipment-money";
 
 export const metadata: Metadata = { title: "Label kiriman", robots: { index: false } };
 
@@ -43,7 +45,7 @@ export default async function LabelDetailPage({
 }) {
   const principal = await requireTenantPrincipal();
   const { shipmentId: routeKey } = await params;
-  // UX-v3.9 "Cetak resi + invoice": `?invoice=1` (from the detail rail) adds the nota.
+  // UX-v3.9: `?invoice=1` (the detail rail's "Cetak resi + invoice", or "Sertakan invoice" here) adds the nota.
   const withInvoice = (await searchParams).invoice === "1";
   // PR-44: a UUID or `GC-10013` redirects to `/app/label/10013`; unknown or foreign is 404.
   const shipmentId = await resolveShipmentRoute(principal, routeKey, "/app/label");
@@ -120,27 +122,17 @@ export default async function LabelDetailPage({
     areaLabelLength: label.destinationAreaLabel.length,
     nameLength: label.recipient.name.length,
   });
+  // T-261: the same "Rincian uang" the shipment detail shows, from the label's own facts.
+  const money = shipmentMoney(labelMoneyFacts(label));
 
   return (
     <>
       <div className="label-hide">
+        {/* T-263: no print action in the header — the card below holds the page's one print button
+            per job, and the invoice is a mode switch there ("Sertakan invoice" / "Tanpa invoice"). */}
         <PageHeader
           back={<BackToList />}
-          actions={withInvoice ? (
-            <>
-              <Button asChild variant="outline">
-                <Link href={labelHref}><Tag aria-hidden="true" />Cetak label saja</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={`/app/invoice/${routeKey}`}><FileText aria-hidden="true" />Cetak invoice saja</Link>
-              </Button>
-            </>
-          ) : (
-            <Button asChild variant="outline">
-              <Link href={`${labelHref}?invoice=1`}><Printer aria-hidden="true" />Cetak resi + invoice</Link>
-            </Button>
-          )}
-          description={withInvoice ? "Cetak label, lalu invoice." : "Pilih ukuran label, periksa pratinjau, lalu cetak."}
+          description={withInvoice ? "Periksa pratinjau, cetak label, lalu invoice." : "Periksa pratinjau, pilih ukuran, lalu cetak."}
           eyebrow="Pengiriman"
           title={<>Label <span className="font-mono">{label.awb}</span></>}
         />
@@ -159,12 +151,15 @@ export default async function LabelDetailPage({
           </AlertDescription>
         </Alert>
       ) : null}
-      {label.isCod && !label.codBreakdown ? (
-        <Alert className="label-hide" role="status">
-          <CircleAlert aria-hidden="true" />
-          <AlertTitle>Rincian COD tidak konsisten</AlertTitle>
-          <AlertDescription>Total COD dari Mengantar tetap dicetak, rinciannya disembunyikan. Periksa kiriman sebelum menyerahkan paket.</AlertDescription>
-        </Alert>
+      {/* A COD label whose breakdown does not add up still prints the Mengantar total and hides
+          the lines (label-sheet.tsx); this warning is advisory and never blocks the print. */}
+      {money.kind === "inconsistent" ? (
+        <MoneyInconsistentAlert
+          amountIdr={money.collect.amountIdr}
+          checkHref={`/app/pengiriman/${routeKey}`}
+          className="label-hide"
+          method={money.method}
+        />
       ) : null}
       {awbBarcodeFits(label.awb) ? null : (
         <Alert className="label-hide" role="status">
@@ -178,6 +173,12 @@ export default async function LabelDetailPage({
       <LabelPrintPanel
         both={withInvoice ? { invoice, shipmentNumber: routeKey } : undefined}
         history={
+          <>
+          {money.kind === "inconsistent" ? null : (
+            <DataCard title="Rincian uang">
+              <MoneyBreakdown money={money} />
+            </DataCard>
+          )}
           <DataCard title="Riwayat permintaan cetak">
             {events.length === 0 ? (
               <p className="text-sm text-muted-foreground">Belum ada riwayat cetak.</p>
@@ -201,8 +202,10 @@ export default async function LabelDetailPage({
               </ol>
             )}
           </DataCard>
+          </>
         }
         initialAttemptId={randomUUID()}
+        invoiceToggle={withInvoice ? { href: labelHref, label: "Tanpa invoice" } : { href: `${labelHref}?invoice=1`, label: "Sertakan invoice" }}
         lastPrintedAt={label.lastPrintedAt?.toISOString() ?? null}
         operatorId={principal.userId}
         printCount={label.printCount}

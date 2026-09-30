@@ -14,7 +14,7 @@ import {
 import { handoverSummary } from "@/app/app/pengiriman/baru/saved-draft-sections";
 import { resolveShipmentRoute } from "@/app/app/shipment-route";
 import { CourierLogo } from "@/components/app/courier-logo";
-import { Money } from "@/components/app/money";
+import { MoneyBreakdown } from "@/components/app/money-breakdown";
 import { PageHeader } from "@/components/app/page-header";
 import { ShipmentStatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -26,12 +26,12 @@ import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatDimensions, formatWibDateTime } from "@/lib/label-format";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
 import { providerResponseLabel } from "@/lib/labels/provider";
-import { mengantarCodFeeIdr } from "@/lib/mengantar-cod-fee";
-import { PAYMENT_AMOUNT_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
+import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture";
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 import { isSanctionedUnpaidRecoveryFixtureEnabled } from "@/lib/sanctioned-unpaid-recovery-fixture";
-import { gramsToKilogramLabel, MENGANTAR_COD_FEE_RATE_LABEL } from "@/lib/shipment-draft-logic";
+import { gramsToKilogramLabel } from "@/lib/shipment-draft-logic";
+import { shipmentMoney } from "@/lib/shipment-money";
 import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
@@ -41,7 +41,6 @@ import { loadShipmentDetailView, type ShipmentDetailView } from "./detail-data";
 import {
   attentionSignals,
   buildTrackingTimeline,
-  codNetAmountIdr,
   detailNextStep,
   queueBackHref,
   staleCheckAvailable,
@@ -183,6 +182,10 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
         <DefinitionGrid items={packageItems(view, orderedService?.deliveryEstimate ?? null)} />
       </DetailCard>
 
+      <DetailCard id="rincian-uang" title="Rincian uang">
+        <MoneyBreakdown money={shipmentMoney(view.moneyFacts)} />
+      </DetailCard>
+
       <DetailCard id="detail-penerima" title="Detail penerima">
         <DefinitionGrid
           items={[
@@ -315,13 +318,6 @@ function NextStepActions({ shipmentId, step }: { shipmentId: string; step: Detai
 function packageItems(view: ShipmentDetailView, deliveryEstimate: string | null): DefinitionItem[] {
   const { detail, draft } = view;
   const provider = detail.provider;
-  const cod = detail.paymentMethod !== "NON_COD";
-  const codAmount = provider?.providerCodAmountIdr ?? null;
-  const net = codNetAmountIdr({
-    chargedShippingIdr: view.order?.chargedShippingIdr ?? null,
-    paymentMethod: detail.paymentMethod,
-    providerCodAmountIdr: codAmount,
-  });
   const dimensions = formatDimensions(detail.package.lengthCm, detail.package.widthCm, detail.package.heightCm);
   const handover = draft ? handoverSummary(draft) : "Belum dicatat";
   return [
@@ -331,17 +327,12 @@ function packageItems(view: ShipmentDetailView, deliveryEstimate: string | null)
         ? `${serviceDisplayName(provider.providerService)}${deliveryEstimate ? ` · ${deliveryEstimateLabel(deliveryEstimate)}` : ""}`
         : "Belum dipilih",
     },
+    // T-261: every amount lives in "Rincian uang"; the parcel card names only the method.
     { label: "Pembayaran", value: PAYMENT_METHOD_LABELS[detail.paymentMethod] },
-    ...(cod ? [{ label: PAYMENT_AMOUNT_LABELS[detail.paymentMethod], value: <Money amount={codAmount} /> }] : []),
-    { label: "Nilai barang", value: <Money amount={detail.package.declaredValueIdr} /> },
     { label: "Isi paket", value: detail.package.content, wide: true },
     { label: "Jumlah", value: `${detail.package.quantity} barang` },
     { label: "Berat", value: gramsToKilogramLabel(detail.package.weightGrams) },
     ...(dimensions ? [{ label: "Dimensi", value: dimensions }] : []),
-    { label: "Ongkir", value: <Money amount={provider?.shippingAmountIdr ?? null} /> },
-    ...(provider?.insuranceAmountIdr ? [{ label: "Asuransi", value: <Money amount={provider.insuranceAmountIdr} /> }] : []),
-    ...(cod && codAmount !== null ? [{ label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}`, value: <Money amount={mengantarCodFeeIdr(codAmount)} /> }] : []),
-    ...(cod ? [{ label: "Jumlah bersih (estimasi pencairan)", value: <Money amount={net} className="text-base font-bold" /> }] : []),
     {
       label: "Penyerahan",
       value: (

@@ -14,7 +14,6 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter } from "@/components/ui/card";
-import { useCharacterClass, CharacterClassHint } from "@/components/ui/character-class-input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,6 +23,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
 import { areaDisplayCase, formatWeight, formatWibDateTime } from "@/lib/label-format";
 import { courierDisplayName, mengantarCourierOfService, mengantarOrderableService } from "@/lib/mengantar-couriers";
+import { kilogramsToGrams } from "@/lib/shipment-draft-logic";
 import { cn } from "@/lib/utils";
 
 export type RateQuote = NonNullable<ShippingRateActionState["quote"]>;
@@ -85,10 +85,8 @@ export function RateCheck({ canManageSettings, initialState = {}, outlets }: {
   outlets: DestinationAreaOutlet[];
 }) {
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
-  const [weight, setWeight] = useState("1000");
-  const { hint: weightHint, ...weightLock } = useCharacterClass<HTMLInputElement>("NUMERIC_INTEGER", {
-    onChange: (event) => setWeight(event.target.value),
-  });
+  // T-261: berat in kg like Buat kiriman (PR-72); the action still receives whole grams.
+  const [weight, setWeight] = useState("1");
   const [stale, setStale] = useState(false);
   const revision = useRef(0);
   const outcomeRef = useRef<HTMLDivElement>(null);
@@ -101,7 +99,7 @@ export function RateCheck({ canManageSettings, initialState = {}, outlets }: {
     return result;
   }, initialState);
   const visible = stale ? {} : state;
-  const weightGrams = /^\d+$/.test(weight) ? Number(weight) : 0;
+  const weightGramsValue = kilogramsToGrams(weight);
 
   const shownState = useRef(state);
   useEffect(() => {
@@ -167,28 +165,29 @@ export function RateCheck({ canManageSettings, initialState = {}, outlets }: {
             />
           </div>
           <Field className="gap-2 sm:max-w-60" data-invalid={Boolean(errors.weightGrams)}>
-            <FieldLabel htmlFor="rate-weight">Berat paket</FieldLabel>
+            <FieldLabel htmlFor="rate-weight">Berat paket (kg)</FieldLabel>
             <div className="relative">
               <Input
-                aria-describedby="rate-weight-help rate-weight-error rate-weight-character-hint"
+                aria-describedby="rate-weight-help rate-weight-error"
                 aria-invalid={Boolean(errors.weightGrams)}
-                className="pr-16 tabular-nums"
-                data-character-class="NUMERIC_INTEGER"
+                className="pr-12 tabular-nums"
                 disabled={pending}
                 id="rate-weight"
-                maxLength={6}
-                name="weightGrams"
-                {...weightLock}
-                onChange={(event) => { weightLock.onChange(event); invalidate(); }}
+                inputMode="decimal"
+                maxLength={10}
+                onChange={(event) => { setWeight(event.target.value.replace(/[^\d.,]/g, "")); invalidate(); }}
+                placeholder="0,5"
                 required
                 value={weight}
               />
-              <span aria-hidden="true" className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">gram</span>
+              <span aria-hidden="true" className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">kg</span>
             </div>
+            <input name="weightGrams" type="hidden" value={weightGramsValue} />
             <FieldDescription className="text-xs" id="rate-weight-help">
-              {weightGrams > 0 ? `Setara ${formatWeight(weightGrams)}. Isi berat dalam gram.` : "Isi berat dalam gram, misalnya 1000 untuk 1 kg."}
+              {weightGramsValue
+                ? `Setara ${new Intl.NumberFormat("id-ID").format(Number(weightGramsValue))} gram.`
+                : "Isi berat dalam kg, misalnya 0,5 untuk 500 gram."}
             </FieldDescription>
-            <CharacterClassHint hint={weightHint} id="rate-weight" />
             <div className="min-h-5"><FieldError id="rate-weight-error">{errors.weightGrams}</FieldError></div>
           </Field>
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
