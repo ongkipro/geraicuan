@@ -31,7 +31,6 @@ import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture"
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 import { isSanctionedUnpaidRecoveryFixtureEnabled } from "@/lib/sanctioned-unpaid-recovery-fixture";
 import { gramsToKilogramLabel } from "@/lib/shipment-draft-logic";
-import { shipmentMoney } from "@/lib/shipment-money";
 import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
@@ -185,7 +184,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
       </DetailCard>
 
       <DetailCard id="rincian-uang" title="Rincian uang">
-        <MoneyBreakdown money={shipmentMoney(view.moneyFacts)} />
+        <MoneyBreakdown money={view.money} />
       </DetailCard>
 
       <DetailCard id="detail-penerima" title="Detail penerima">

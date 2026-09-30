@@ -170,8 +170,8 @@ function asTenantA<T>(read: Parameters<typeof withTenantContext<T>>[3]) {
   return withTenantContext(appDb, userA, tenantA, read);
 }
 
-const ONGKIR_CELL = ["COD_ONGKIR", `COD Ongkir Ongkir ditagih ${rp(CHARGE)}`];
-const COD_CELL = ["COD", `COD Total COD ${rp(codTotal)}`];
+const ONGKIR_CELL = ["COD_ONGKIR", `COD Ongkir Ditagih ke penerima ${rp(CHARGE)}`];
+const COD_CELL = ["COD", `COD Ditagih ke penerima ${rp(codTotal)}`];
 
 beforeAll(async () => {
   await ensureIntegrationRuntimeRole(adminPool, appDatabaseUrl);
@@ -219,7 +219,7 @@ describe("T-190 COD Ongkir on every shipment surface", () => {
     expect(cells).toHaveLength(4);
     expect(cells.filter(([method]) => method === "COD_ONGKIR")).toEqual([ONGKIR_CELL, ONGKIR_CELL]);
     expect(cells).toContainEqual(COD_CELL);
-    expect(cells).toContainEqual(["NON_COD", `Non-COD Nilai asuransi ${rp(NON_COD_VALUE)}`]);
+    expect(cells).toContainEqual(["NON_COD", `Non-COD Nilai barang ${rp(NON_COD_VALUE)}`]);
   });
 
   it("RTS: a returned COD Ongkir parcel shows the charge, not the goods value", async () => {
@@ -234,7 +234,7 @@ describe("T-190 COD Ongkir on every shipment surface", () => {
     const page = await asTenantA((tx, context) => loadLabelIndexPage(tx, context, { status: "issued" }));
     const cells = paymentCells(page.rows.map((row) => ({ ...row, declaredValueIdr: null })));
     expect(cells.filter(([method]) => method !== "NON_COD")).toEqual(expect.arrayContaining([ONGKIR_CELL, COD_CELL]));
-    expect(cells.some(([, text]) => text!.startsWith("COD Total COD") && text!.endsWith(rp(CHARGE)))).toBe(false);
+    expect(cells.some(([, text]) => text!.startsWith("COD Ditagih") && text!.endsWith(rp(CHARGE)))).toBe(false);
   });
 
   it("Cek resi: the lookup names COD Ongkir and its charge", async () => {

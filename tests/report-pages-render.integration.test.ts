@@ -198,7 +198,7 @@ describe("Laporan pengiriman view", () => {
     expect(filledButtons(html)).toBe(0);
     expect(html).toContain('href="/app/laporan/pengiriman/export.csv?kurir=JNE&amp;rentang=30-hari&amp;tz=Asia%2FJakarta"');
     expect(tableHeaders(html, "Daftar kiriman")).toEqual(["Nomor", "Dibuat", "Penerima", "Kurir/Layanan", "Status", "Pembayaran", "Biaya Mengantar"]);
-    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Ongkir dibayar ke Mengantar", "Biaya COD", "Estimasi cair"]);
+    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Ongkir dibayar ke Mengantar", "Biaya COD (termasuk PPN)", "Estimasi cair"]);
     // JNE: 6 of 10 delivered; 2 of 8 finished returned. The logo alone names the courier.
     expect(html).toContain("60,0%");
     expect(html).toContain("25,0%");

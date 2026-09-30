@@ -8,7 +8,6 @@ import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { db } from "@/db/client";
 import { loadLabelIndexPage } from "@/db/label-print-repository";
 import { withTenantContext } from "@/db/tenant-context";
-import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
 
 export type BatchLabelPrintResult = {
@@ -66,24 +65,18 @@ export type UnprintedSelection = {
 
 /**
  * T-266 "Pilih semua belum dicetak": every unprinted resi the Cetak resi list would show for the
- * caller's own filter (period, resi suffix), across its pages. The tenant is the session's, never
- * an input; the filter is re-parsed here from the page's search parameters, and the print state
- * is always "belum" whatever the URL says. The same loader as the list, so the two cannot differ.
+ * caller's own resi-suffix filter, across its pages. The tenant is the session's, never an input;
+ * the suffix is re-parsed here from the page's search parameters, and the print state is always
+ * "belum" whatever the URL says. The same loader as the list, so the two cannot differ. T-270:
+ * Belum dicetak is a work queue without a period, so none is read.
  */
 export async function selectUnprintedLabels(params: Record<string, string>): Promise<UnprintedSelection> {
   const principal = await requireTenantPrincipal();
-  const search: Record<string, string> = {};
-  if (params && typeof params === "object") {
-    for (const key of ["q", "rentang", "khusus", "dari", "sampai", "tz"]) {
-      const value = (params as Record<string, unknown>)[key];
-      if (typeof value === "string") search[key] = value.slice(0, 64);
-    }
-  }
-  const query = parseLabelQuery(search);
+  const q = params && typeof params === "object" ? (params as Record<string, unknown>).q : undefined;
+  const query = parseLabelQuery(typeof q === "string" ? { q: q.slice(0, 64) } : {});
   if (query.awbSuffixError) return { numbers: [], total: 0 };
-  const range = parseAnalyticsRange(search, new Date());
   const page = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-    loadLabelIndexPage(tx, context, { awbSuffix: query.awbSuffix || undefined, printState: "belum", range, status: "issued" }));
+    loadLabelIndexPage(tx, context, { awbSuffix: query.awbSuffix || undefined, printState: "belum", status: "issued" }));
   return {
     numbers: page.rows.slice(0, MAX_BATCH_SHIPMENTS).map((row) => Number(shipmentNumberFromReference(row.publicReference))),
     total: page.summary["LBL-UNPRINTED"],

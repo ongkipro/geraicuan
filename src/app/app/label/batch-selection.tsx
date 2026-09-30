@@ -21,8 +21,10 @@ export type SelectionNotice = { tone: "success" | "warning" | "danger"; title: s
 type Selection = {
   /** The selectable rows of this page. */
   numbers: readonly number[];
-  /** Planned handover types of this page's rows plus any a "Pilih semua" brought in. */
+  /** Planned handover types of this page's rows plus any a "Pilih semua" or a scan brought in. */
   types: PlannedHandoverTypes;
+  /** T-270: the resi per shipment number — this page's rows plus any a "Pilih semua" or a scan brought in. */
+  awbs: Readonly<Record<number, string>>;
   notice: SelectionNotice | null;
   setNotice: (notice: SelectionNotice | null) => void;
   /** The chosen shipment numbers: this page's, plus any "Pilih semua belum dicetak" took from other pages. */
@@ -31,7 +33,9 @@ type Selection = {
   note: string | null;
   toggle: (number: number, on: boolean) => void;
   setAll: (on: boolean) => void;
-  replace: (numbers: readonly number[], note: string | null, types?: PlannedHandoverTypes) => void;
+  replace: (numbers: readonly number[], note: string | null, types?: PlannedHandoverTypes, awbs?: Readonly<Record<number, string>>) => void;
+  /** T-270: one scanned parcel joins the selection (from any page), with its resi and planned handover. */
+  add: (number: number, awb: string, type: "PICKUP" | "DROP_OFF" | null) => void;
   clear: () => void;
 };
 
@@ -48,17 +52,30 @@ function useSelection() {
 }
 
 /** PR-87: the rows chosen on Cetak resi, by shipment number. */
-export function BatchSelectionProvider({ children, numbers, types = {} }: { children: ReactNode; numbers: readonly number[]; types?: PlannedHandoverTypes }) {
+export function BatchSelectionProvider({ awbs = {}, children, numbers, types = {} }: { awbs?: Readonly<Record<number, string>>; children: ReactNode; numbers: readonly number[]; types?: PlannedHandoverTypes }) {
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [note, setNote] = useState<string | null>(null);
   const [notice, setNotice] = useState<SelectionNotice | null>(null);
   const [extraTypes, setExtraTypes] = useState<PlannedHandoverTypes>({});
+  const [extraAwbs, setExtraAwbs] = useState<Readonly<Record<number, string>>>({});
   const value: Selection = {
+    add: (number, awb, type) => {
+      setNote(null);
+      setExtraTypes((current) => ({ ...current, [number]: type }));
+      setExtraAwbs((current) => ({ ...current, [number]: awb }));
+      setSelected((current) => new Set(current).add(number));
+    },
+    awbs: { ...extraAwbs, ...awbs },
     clear: () => { setSelected(new Set()); setNote(null); },
     note,
     notice,
     numbers,
-    replace: (next, nextNote, nextTypes) => { setSelected(new Set(next)); setNote(nextNote); if (nextTypes) setExtraTypes(nextTypes); },
+    replace: (next, nextNote, nextTypes, nextAwbs) => {
+      setSelected(new Set(next));
+      setNote(nextNote);
+      if (nextTypes) setExtraTypes(nextTypes);
+      if (nextAwbs) setExtraAwbs(nextAwbs);
+    },
     selected,
     setNotice,
     types: { ...extraTypes, ...types },

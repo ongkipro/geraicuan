@@ -92,7 +92,8 @@ export function ContactCreateForm({ canManageSettings, outlets, role }: {
       </DataCard>
 
       <DataCard title="Alamat pertama">
-        <div className="grid gap-2">
+        {/* T-269: a zero-minimum track, so the area combobox's placeholder cannot widen the card at 360–390. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
           <Field className="gap-2" data-invalid={Boolean(errors.addressLabel)}>
             <FieldLabel htmlFor="addressLabel">Label alamat</FieldLabel>
             <CharacterClassInput

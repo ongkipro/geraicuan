@@ -134,6 +134,7 @@ const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><s
 const LABEL: PrintableLabel = {
   awb: "JX0012345243",
   codBreakdown: null,
+  collectBreakdown: null,
   courier: "JNE",
   destinationAreaLabel: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
   insuranceAmountIdr: null,

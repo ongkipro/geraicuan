@@ -4,12 +4,13 @@ import type { LabelPrintStateFilter } from "@/db/label-print-repository";
 export const LABEL_PAGE_SIZE = 20;
 
 /**
- * Spec 19 LBL-SHARE (T-247, review L9): the base every Cetak resi tile's share is taken of —
- * all issued resi in scope, LBL-ALL (still printable) plus LBL-CANCELLED (cancelled since).
- * LBL-CANCELLED is never inside LBL-ALL, so LBL-ALL alone let Dibatalkan exceed 100 %.
+ * Spec 19 LBL-SHARE: the base the queue tiles' shares are taken of. T-270 (owner 2026-10-01): the
+ * three queues (Belum dicetak, Siap diserahkan, Diserahkan) ignore the period and partition every
+ * printable resi, so their sum is the base; Semua resi and Dibatalkan follow the period and carry
+ * no share (was T-247: LBL-ALL + LBL-CANCELLED, when every tile shared one period).
  */
-export function labelTileShareBase(summary: { "LBL-ALL": number; "LBL-CANCELLED": number }) {
-  return summary["LBL-ALL"] + summary["LBL-CANCELLED"];
+export function labelTileShareBase(summary: { "LBL-UNPRINTED": number; "LBL-PRINTED": number; "LBL-HANDED-OVER": number }) {
+  return summary["LBL-UNPRINTED"] + summary["LBL-PRINTED"] + summary["LBL-HANDED-OVER"];
 }
 
 /** The repository's own rule for an AWB suffix; a value outside it lists nothing. */

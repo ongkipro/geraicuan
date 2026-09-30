@@ -32,6 +32,8 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
     awb: "JX1234567890",
     // T-193: goods 425 000 + shipping 17 000, formula version 2: COD 457 226, Mengantar's fee 15 226, no rounding.
     codBreakdown: { codFeeIdr: 15_226, codFeeVatIncludedIdr: 1_509, goodsValueIdr: 425_000, providerCodAmountIdr: 457_226, roundingIdr: 0, shippingAmountIdr: 17_000 },
+    // T-270: the sheet's customer view — Ongkir = 457 226 − 425 000 (fee inside).
+    collectBreakdown: { goodsValueIdr: 425_000, ongkirIdr: 32_226 },
     courier: "JNE",
     destinationAreaLabel: AREA,
     insuranceAmountIdr: 2_000,
@@ -133,24 +135,27 @@ describe("thermal sheet layouts", () => {
       "REG", "JX1234567890", RECIPIENT.name, "0813-7777-2222", RECIPIENT.address,
       "Kec. Tanah Abang, Jakarta Pusat", "DKI Jakarta 10240",
       SENDER.name, "0812-5555-3333", SENDER.address, "COD — TAGIH KE PENERIMA", "Rp 457.226",
-      "Nilai barang", "Rp 425.000", "Ongkir Mengantar", "Rp 17.000", "Biaya COD (termasuk PPN)", "Rp 15.226",
+      "Nilai barang Rp 425.000", "Ongkir Rp 32.226",
       "Kain batik tulis", "2,125 kg · 2 koli", "25 × 18 × 12 cm", "Asuransi Mengantar", "Rp 2.000",
       "GC-10024", formatWibDateTime(new Date("2026-09-14T08:24:00.000Z")),
     ]) {
       expect(pkg).toContain(expected);
     }
-    // T-193: one COD fee — never a separate VAT line that reads as added on top — and a
-    // rounding line only when the round-up leaves one.
-    expect(pkg).not.toMatch(/PPN biaya COD|Pembulatan/);
+    // T-270 (owner 2026-10-01): the gerai's fee, its VAT and the rounding are never printed, nor
+    // the seller-side shipping; the two customer lines add up to the amount collected.
+    expect(pkg).not.toMatch(/Biaya COD|PPN|Pembulatan|Ongkir ditagih ke penerima|Ongkir dibayar ke Mengantar|Estimasi cair|Rp 15\.226|Rp 17\.000/);
+    expect(pkg).not.toContain("Ongkir Mengantar");
     const rounded = text(packageOf(render(printableLabel({
       codBreakdown: { codFeeIdr: 3_789, codFeeVatIncludedIdr: 375, goodsValueIdr: 100_000, providerCodAmountIdr: 113_790, roundingIdr: 1, shippingAmountIdr: 10_000 },
+      collectBreakdown: { goodsValueIdr: 100_000, ongkirIdr: 13_790 },
       providerCodAmountIdr: 113_790,
     }))));
-    for (const expected of ["Rp 113.790", "Nilai barang Rp 100.000", "Ongkir Mengantar Rp 10.000", "Biaya COD (termasuk PPN) Rp 3.789", "Pembulatan Rp 1 "]) {
+    for (const expected of ["Rp 113.790", "Nilai barang Rp 100.000", "Ongkir Rp 13.790"]) {
       expect(rounded).toContain(expected);
     }
+    expect(rounded).not.toMatch(/Biaya COD|Pembulatan|Rp 3\.789|Rp 10\.000|Rp 1 /);
     expect(packageOf(render(printableLabel())).match(/<svg[^>]*class="label-barcode"/g)).toHaveLength(1);
-    expect(text(packageOf(render(printableLabel({ codBreakdown: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))))).toContain("NON-COD — JANGAN TAGIH PENERIMA");
+    expect(text(packageOf(render(printableLabel({ codBreakdown: null, collectBreakdown: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))))).toContain("NON-COD — JANGAN TAGIH PENERIMA");
   });
 
   it("puts on the sender stub exactly what proves and traces the handover", () => {
@@ -188,7 +193,7 @@ describe("thermal sheet layouts", () => {
   });
 
   it("shows no money on a non-COD stub", () => {
-    const stub = text(stubOf(render(printableLabel({ codBreakdown: null, insuranceAmountIdr: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))));
+    const stub = text(stubOf(render(printableLabel({ codBreakdown: null, collectBreakdown: null, insuranceAmountIdr: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))));
 
     expect(stub).toContain("NON-COD");
     expect(stub).not.toContain("Rp");
@@ -298,8 +303,8 @@ describe("T-255 label anatomy", () => {
   it("inverts only an amount to collect: COD and COD Ongkir in the black block, non-COD as plain text", () => {
     const payment = (label: PrintableLabel) => packageOf(render(label)).match(/<div class="label-payment"[^>]*>/g) ?? [];
     expect(payment(printableLabel())).toEqual(['<div class="label-payment" data-cod="">']);
-    expect(payment(printableLabel({ codBreakdown: null, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: 20_000 }))).toEqual(['<div class="label-payment" data-cod="">']);
-    const nonCod = printableLabel({ codBreakdown: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null });
+    expect(payment(printableLabel({ codBreakdown: null, collectBreakdown: null, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: 20_000 }))).toEqual(['<div class="label-payment" data-cod="">']);
+    const nonCod = printableLabel({ codBreakdown: null, collectBreakdown: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null });
     expect(payment(nonCod)).toEqual(['<div class="label-payment">']);
     expect(text(packageOf(render(nonCod)))).toContain("NON-COD — JANGAN TAGIH PENERIMA");
     // The stylesheet fills only [data-cod], and keeps that fill when printing.

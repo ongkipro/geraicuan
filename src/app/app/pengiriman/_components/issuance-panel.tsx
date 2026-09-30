@@ -360,7 +360,7 @@ function CodOngkirAmountRow() {
         {formatIdr(codOngkir.chargeIdr)}
       </output>
       <p className="text-xs text-muted-foreground" id={`${id}-hint`}>
-        Dihitung otomatis: ongkir dipotong Mengantar {formatIdr(codOngkir.shippingIdr)} + biaya COD {MENGANTAR_COD_FEE_RATE_LABEL} {formatIdr(codOngkir.codFeeIdr)}
+        Dihitung otomatis: ongkir ditagih ke penerima {formatIdr(codOngkir.shippingIdr)} + biaya COD {MENGANTAR_COD_FEE_RATE_LABEL} (termasuk PPN) {formatIdr(codOngkir.codFeeIdr)}
         {codOngkir.roundingIdr > 0 ? ` + pembulatan ${formatIdr(codOngkir.roundingIdr)}` : ""}
       </p>
     </div>

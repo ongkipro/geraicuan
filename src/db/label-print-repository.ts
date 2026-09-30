@@ -23,12 +23,14 @@ import {
   shipments,
   users,
 } from "@/db/schema";
+import { wibDayStart } from "@/db/shipment-event-predicates";
 import { handedOverAtSql, handedOverPredicate } from "@/db/shipment-handover-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
+import { printStateIgnoresPeriod } from "@/lib/label-queue";
 import type { CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
 import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
-import { storedCodCharge } from "@/lib/shipment-money";
+import { customerCollectBreakdown, labelMoneyFacts, moneyForRole, shipmentMoney, storedCodCharge, type ShipmentMoney } from "@/lib/shipment-money";
 
 export type PrintableLabel = {
   shipmentId: string;
@@ -47,6 +49,7 @@ export type PrintableLabel = {
   /**
    * T-261: `provider_order_snapshots.provider_charged_shipping_idr`, the shipping Mengantar
    * deducts — read for the page's "Rincian uang" panel only, never printed on the sheet.
+   * T-269: null for an Operator (seller-side; `loadPrintableLabel` decides by role).
    */
   chargedShippingIdr: number | null;
   insuranceAmountIdr: number | null;
@@ -57,6 +60,14 @@ export type PrintableLabel = {
    * amount, whose lines cannot add up with Mengantar's actual fee.
    */
   codBreakdown: CodChargeBreakdown | null;
+  /**
+   * T-270 (owner 2026-10-01): what the sheet prints under a COD amount — Nilai barang + Ongkir
+   * (CUSTOMER-ONGKIR-IDR = the amount − Nilai barang), never Biaya COD or Pembulatan. From
+   * `customerCollectBreakdown`; null for Non-COD, COD Ongkir (the sheet prints the charge alone)
+   * and a COD amount without its breakdown. `codBreakdown` above is the seller-side detail behind
+   * the Tenant Admin's Rincian uang: null for an Operator.
+   */
+  collectBreakdown: { goodsValueIdr: number; ongkirIdr: number } | null;
   package: {
     content: string;
     weightGrams: number;
@@ -113,6 +124,10 @@ export type PrintableShipmentRow = {
   handedOverAt: Date | null;
   /** T-267: Buat kiriman's planned handover (null on older drafts), the dialog's default method. */
   handoverType: "PICKUP" | "DROP_OFF" | null;
+  /** T-270: the first PRINTED event — when the parcel joined the handover queue (null = never printed). */
+  firstPrintedAt: Date | null;
+  /** T-270: first printed today (WIB, transaction clock): Siap diserahkan's "Hari ini" group, else "Tertunda". */
+  printedToday: boolean;
 };
 
 /**
@@ -120,9 +135,12 @@ export type PrintableShipmentRow = {
  * T-238: `batal` lists resi Mengantar has since cancelled (shipment CANCELLED, order
  * still ISSUED with its AWB); they are never printable and never in `semua`.
  * T-267: `sudah` ("Siap diserahkan") is printed and not handed over; `diserahkan` is handed over
- * and still ISSUED — waiting for the courier's pickup scan. belum + sudah + diserahkan = semua.
+ * and still ISSUED — waiting for the courier's pickup scan.
+ * T-270 (owner 2026-10-01): belum, sudah and diserahkan are work queues — a state, not a period —
+ * so they ignore the page's period; semua and batal are history and keep it.
  */
 export type LabelPrintStateFilter = "semua" | "belum" | "sudah" | "diserahkan" | "batal";
+
 
 export type LabelPrintSummary = {
   "LBL-ALL": number;
@@ -130,6 +148,9 @@ export type LabelPrintSummary = {
   "LBL-UNPRINTED": number;
   "LBL-HANDED-OVER": number;
   "LBL-CANCELLED": number;
+  /** T-270: LBL-PRINTED split by first print — today (WIB) and before today; they sum to LBL-PRINTED. */
+  "LBL-READY-TODAY": number;
+  "LBL-READY-PENDING": number;
 };
 
 export const EMPTY_LABEL_PRINT_SUMMARY: LabelPrintSummary = {
@@ -138,6 +159,8 @@ export const EMPTY_LABEL_PRINT_SUMMARY: LabelPrintSummary = {
   "LBL-UNPRINTED": 0,
   "LBL-HANDED-OVER": 0,
   "LBL-CANCELLED": 0,
+  "LBL-READY-TODAY": 0,
+  "LBL-READY-PENDING": 0,
 };
 
 export type LabelIndexPage = {
@@ -235,7 +258,7 @@ export async function loadPrintableLabel(
   tx: TenantTransaction,
   context: TenantContext,
   shipmentId: string,
-): Promise<PrintableLabel> {
+): Promise<PrintableLabel & { money: ShipmentMoney }> {
   await loadPrintCandidate(tx, context, shipmentId);
 
   const [row] = await tx
@@ -382,7 +405,7 @@ export async function loadPrintableLabel(
     providerCodAmountIdr: row.providerCodAmountIdr,
   }).breakdown;
 
-  return {
+  const label: PrintableLabel = {
     shipmentId: row.shipmentId,
     publicReference: row.publicReference,
     awb,
@@ -396,6 +419,7 @@ export async function loadPrintableLabel(
     insuranceAmountIdr: row.insuranceAmountIdr,
     providerCodAmountIdr: row.providerCodAmountIdr,
     codBreakdown,
+    collectBreakdown: paymentMethod === "COD" ? codCollectBreakdown(row.providerCodAmountIdr, codBreakdown) : null,
     package: {
       content: row.packageContent,
       weightGrams: row.packageWeightGrams,
@@ -424,6 +448,21 @@ export async function loadPrintableLabel(
       : null,
     handedOverAt: row.handedOverAt ? new Date(row.handedOverAt) : null,
   };
+  // T-269 (owner 2026-09-30): the page's "Rincian uang" is built from every fact, then an Operator
+  // gets it without the seller-side lines and a label without the seller-side amounts — decided
+  // here, before anything is rendered or serialized to the browser.
+  const money = moneyForRole(shipmentMoney(labelMoneyFacts(label)), context.role);
+  // T-270 (owner 2026-10-01): the sheet is the courier's and recipient's document and prints no
+  // seller-side amount for any role, so the label itself carries none.
+  if (context.role === "TENANT_ADMIN") return { ...label, money };
+  // T-270: an Operator's label carries neither the fee nor the rounding (inside `codBreakdown`).
+  return { ...label, chargedShippingIdr: null, codBreakdown: null, money };
+}
+
+/** T-270: the COD sheet's customer-facing lines; null without a breakdown to split. */
+function codCollectBreakdown(amountIdr: number | null, breakdown: CodChargeBreakdown | null) {
+  const split = customerCollectBreakdown({ codCharge: breakdown, paymentMethod: "COD", providerCodAmountIdr: amountIdr });
+  return split && split.goodsValueIdr !== null ? { goodsValueIdr: split.goodsValueIdr, ongkirIdr: split.ongkirIdr } : null;
 }
 
 /** PR-55 Riwayat cetak resi row: one recorded print attempt. */
@@ -786,6 +825,22 @@ function printedPredicate(context: TenantContext) {
   )`;
 }
 
+/** T-270: the first PRINTED event's instant, or NULL — when the parcel joined the handover queue. */
+function firstPrintedAtSql(context: TenantContext) {
+  return sql<string | null>`(
+    SELECT min(first_print.printed_at)
+    FROM ${printEvents} AS first_print
+    WHERE first_print.tenant_id = ${context.tenantId}
+      AND first_print.shipment_id = ${shipments.id}
+      AND first_print.outcome = 'PRINTED'
+  )`;
+}
+
+/** T-270: first printed today (WIB), on the transaction's clock, so a group's count and rows agree. */
+function printedTodaySql(context: TenantContext) {
+  return sql`coalesce(${firstPrintedAtSql(context)} >= ${wibDayStart}, false)`;
+}
+
 /**
  * PR-53 issued basis for Cetak resi. `resolved_at` is the instant the provider
  * settled the order; an order still waiting on upstream payment has no settled
@@ -859,6 +914,8 @@ export async function listPrintableShipments(
       )`.mapWith(Number),
       handedOverAt: handedOverAtSql(context),
       handoverType: shipmentDrafts.handoverType,
+      firstPrintedAt: firstPrintedAtSql(context),
+      printedToday: sql<boolean>`${printedTodaySql(context)}`,
     })
     .from(shipments)
     .innerJoin(
@@ -902,10 +959,16 @@ export async function listPrintableShipments(
           ? ilike(providerOrderSnapshots.cnoteNo, `%${awbSuffix}`)
           : undefined,
         printStatePredicate(context, filter.printState),
-        issuedWithin(filter.range),
+        printStateIgnoresPeriod(filter.printState) ? undefined : issuedWithin(filter.range),
       ),
     )
-    .orderBy(desc(providerOrderSnapshots.resolvedAt), desc(shipments.createdAt))
+    // T-270: Siap diserahkan is ordered by when each parcel joined the queue (first print), newest
+    // first, so "Hari ini" precedes "Tertunda"; every other state by issuance.
+    .orderBy(
+      ...(filter.printState === "sudah" ? [sql`${firstPrintedAtSql(context)} DESC`] : []),
+      desc(providerOrderSnapshots.resolvedAt),
+      desc(shipments.createdAt),
+    )
     .limit(100);
 
   return rows.map((row) => ({
@@ -925,6 +988,8 @@ export async function listPrintableShipments(
     printCount: row.printCount,
     handedOverAt: row.handedOverAt ? new Date(row.handedOverAt) : null,
     handoverType: row.handoverType === "PICKUP" || row.handoverType === "DROP_OFF" ? row.handoverType : null,
+    firstPrintedAt: row.firstPrintedAt ? new Date(row.firstPrintedAt) : null,
+    printedToday: row.printedToday === true,
   }));
 }
 
@@ -933,7 +998,9 @@ export async function listPrintableShipments(
  *
  * The counts are scoped exactly like the list they filter — the same tenant,
  * the same status facet and the same AWB suffix — so an entry's number always
- * equals the number of rows choosing it returns.
+ * equals the number of rows choosing it returns. T-270: the period applies to
+ * the history entries (semua, batal) only; the queue entries (belum, sudah,
+ * diserahkan) count every parcel in that state, as their lists do.
  */
 export async function loadLabelIndexPage(
   tx: TenantTransaction,
@@ -957,13 +1024,18 @@ export async function loadLabelIndexPage(
   // One pass over both cohorts: the printable one (shipment still `status`) and, for
   // issued resi, the one Mengantar cancelled since (T-238).
   const printable = sql`${shipments.status} = ${status}`;
+  const inPeriod = issuedWithin(filter.range) ?? sql`true`;
+  const ready = sql`${printable} AND ${printed} AND NOT ${handedOver}`;
+  const printedToday = printedTodaySql(context);
   const [summaryRow] = await tx
     .select({
-      all: sql<number>`count(*) FILTER (WHERE ${printable})::int`.mapWith(Number),
-      printed: sql<number>`count(*) FILTER (WHERE ${printable} AND ${printed} AND NOT ${handedOver})::int`.mapWith(Number),
+      all: sql<number>`count(*) FILTER (WHERE ${printable} AND ${inPeriod})::int`.mapWith(Number),
+      printed: sql<number>`count(*) FILTER (WHERE ${ready})::int`.mapWith(Number),
+      readyToday: sql<number>`count(*) FILTER (WHERE ${ready} AND ${printedToday})::int`.mapWith(Number),
+      readyPending: sql<number>`count(*) FILTER (WHERE ${ready} AND NOT ${printedToday})::int`.mapWith(Number),
       handedOver: sql<number>`count(*) FILTER (WHERE ${printable} AND ${handedOver})::int`.mapWith(Number),
       unprinted: sql<number>`count(*) FILTER (WHERE ${printable} AND NOT ${printed})::int`.mapWith(Number),
-      cancelled: sql<number>`count(*) FILTER (WHERE ${shipments.status} = 'CANCELLED')::int`.mapWith(Number),
+      cancelled: sql<number>`count(*) FILTER (WHERE ${shipments.status} = 'CANCELLED' AND ${inPeriod})::int`.mapWith(Number),
     })
     .from(shipments)
     // The same four joins the list makes, or a shipment without a draft, batch
@@ -1010,7 +1082,6 @@ export async function loadLabelIndexPage(
         awbSuffix
           ? ilike(providerOrderSnapshots.cnoteNo, `%${awbSuffix}`)
           : undefined,
-        issuedWithin(filter.range),
       ),
     );
 
@@ -1024,6 +1095,8 @@ export async function loadLabelIndexPage(
       "LBL-UNPRINTED": summaryRow?.unprinted ?? 0,
       "LBL-HANDED-OVER": summaryRow?.handedOver ?? 0,
       "LBL-CANCELLED": summaryRow?.cancelled ?? 0,
+      "LBL-READY-TODAY": summaryRow?.readyToday ?? 0,
+      "LBL-READY-PENDING": summaryRow?.readyPending ?? 0,
     },
   };
 }

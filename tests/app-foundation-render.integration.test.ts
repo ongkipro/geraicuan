@@ -364,11 +364,13 @@ describe("Mengantar look (v3.2)", () => {
     expect(retur.map((segment) => segment.key)).not.toContain("OTHER");
     expect(widths(retur, 24)).toBeCloseTo(100, 9);
 
-    // Cetak resi: base LBL-ALL + LBL-CANCELLED; LBL-ALL = LBL-UNPRINTED + LBL-PRINTED, so LBL-OTHER = 0.
-    const summary = { "LBL-ALL": 3, "LBL-CANCELLED": 1, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 };
+    // Cetak resi (T-270): base = the three period-free queues, which partition every printable resi,
+    // so LBL-OTHER = 0; Dibatalkan follows the period and draws no segment (share: false).
+    const summary = { "LBL-ALL": 2, "LBL-CANCELLED": 1, "LBL-HANDED-OVER": 1, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 };
     const base = labelTileShareBase(summary);
-    const cetak = compositionSegments([tile("LBL-ALL", 3), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 2), tile("LBL-CANCELLED", 1)], base);
-    expect(cetak.map((segment) => segment.key)).toEqual(["LBL-UNPRINTED", "LBL-PRINTED", "LBL-CANCELLED"]);
+    expect(base).toBe(4);
+    const cetak = compositionSegments([tile("LBL-ALL", 2), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 2), tile("LBL-HANDED-OVER", 1), { ...tile("LBL-CANCELLED", 1), share: false }], base);
+    expect(cetak.map((segment) => segment.key)).toEqual(["LBL-UNPRINTED", "LBL-PRINTED", "LBL-HANDED-OVER"]);
     expect(widths(cetak, base)).toBeCloseTo(100, 9);
 
     // An overlapping caller gets no remainder, never a negative one.
@@ -390,13 +392,14 @@ describe("Mengantar look (v3.2)", () => {
       .toEqual([20, 30]);
     expect(tileShare(5, 0)).toBe(0);
 
-    // Cetak resi: 1 still printable, 3 cancelled since issuance.
-    const summary = { "LBL-ALL": 1, "LBL-CANCELLED": 3, "LBL-PRINTED": 0, "LBL-UNPRINTED": 1 };
+    // Cetak resi (T-270): 1 unprinted and 3 ready of every date, 3 cancelled in the period. The queue
+    // shares are of the queue base (4); Dibatalkan, on the period basis, shows no share at all.
+    const summary = { "LBL-ALL": 1, "LBL-CANCELLED": 3, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 3, "LBL-UNPRINTED": 1 };
     const base = labelTileShareBase(summary);
     expect(base).toBe(4);
-    const label = [tile("LBL-ALL", 1), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 0), tile("LBL-CANCELLED", 3)];
+    const label = [tile("LBL-ALL", 1), tile("LBL-UNPRINTED", 1), tile("LBL-PRINTED", 3), tile("LBL-HANDED-OVER", 0), { ...tile("LBL-CANCELLED", 3), share: false }];
     const rendered = shares(renderToStaticMarkup(createElement(StatusTiles, { label: "Cetak", tiles: label, total: base })));
-    expect(rendered).toEqual([25, 0, 75]);
+    expect(rendered).toEqual([25, 75, 0]);
     expect(Math.max(...rendered)).toBeLessThanOrEqual(100);
 
     // Each displayed share has its metric ID, and each page states its base.

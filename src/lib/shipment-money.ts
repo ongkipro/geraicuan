@@ -1,4 +1,5 @@
-import { codChargeBreakdown, mengantarCodFeeIdr, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import { codChargeBreakdown, codOngkirBreakEvenIdr, mengantarCodFeeIdr, type CodChargeBreakdown } from "@/lib/mengantar-cod-fee";
+import type { membershipRoles } from "@/lib/domain-enums";
 import type { PaymentMethod } from "@/lib/payment-method";
 
 /**
@@ -14,6 +15,8 @@ export const MONEY_METRIC_IDS = {
   codTotal: "COD-TOTAL",
   codOngkirCharge: "COD-ONGKIR-CHARGE-IDR",
   chargeBreakdown: "COD-CHARGE-BREAKDOWN",
+  codOngkirChargeBreakdown: "COD-ONGKIR-CHARGE-BREAKDOWN",
+  customerOngkir: "CUSTOMER-ONGKIR-IDR",
   shippingCost: "RPT-SHP-SHIPPING-COST-IDR",
   codFee: "RPT-SHP-COD-FEE-IDR",
   disbursementEstimate: "RPT-SHP-COD-DISBURSEMENT-EST-IDR",
@@ -22,19 +25,13 @@ export const MONEY_METRIC_IDS = {
   paymentMode: "RPT-SHP-PAYMENT-MODE",
 } as const;
 
-/** The one label per concept (spec 17 §T-261, spec 10 §4.15). */
-export const MONEY_LABELS = {
-  collect: "Ditagih ke penerima",
-  noCollect: "Tidak ada tagihan ke penerima",
-  goods: "Nilai barang",
-  // T-265 (critique P2): the buyer-paid and the Mengantar-paid shipping read as two different sums.
-  chargedShipping: "Ongkir ditagih ke penerima",
-  codFee: "Biaya COD (termasuk PPN)",
-  rounding: "Pembulatan",
-  shippingCost: "Ongkir dibayar ke Mengantar",
-  estimate: "Estimasi cair",
-  insurance: "Asuransi Mengantar",
-} as const;
+/**
+ * The one label per quantity (spec 17 §T-261, spec 10 §4.15, spec 19 §Rincian uang term table).
+ * T-269: the thermal sheet, the Buat kiriman rail, Cek resi and Laporan read these too.
+ */
+import { MONEY_LABELS } from "@/lib/money-labels";
+
+export { MONEY_LABELS };
 
 /**
  * The stored COD totals row (`shipment_cod_totals`) as a surface reads it; `null` when the
@@ -189,44 +186,118 @@ export function shipmentMoney(facts: ShipmentMoneyFacts): ShipmentMoney {
 
   const codAmount = facts.providerCodAmountIdr as number;
   const fee = mengantarCodFeeIdr(codAmount);
-  const charge = facts.codCharge;
-  const collectParts: MoneyLine[] = method === "COD" && charge
-    ? [
-        { amountIdr: charge.goodsValueIdr, key: "part-goods", label: MONEY_LABELS.goods, metricId: ids.chargeBreakdown },
-        { amountIdr: charge.shippingAmountIdr, key: "part-shipping", label: MONEY_LABELS.chargedShipping, metricId: ids.chargeBreakdown },
-        ...(charge.roundingIdr > 0
-          ? [{ amountIdr: charge.roundingIdr, key: "part-rounding", label: MONEY_LABELS.rounding, metricId: ids.chargeBreakdown }]
-          : []),
-      ]
-    : [];
+  const collectParts = chargeParts(method, codAmount, facts);
   return {
     collect,
     collectParts,
     deductions: [
-      { amountIdr: shippingCost, key: "shipping-cost", label: MONEY_LABELS.shippingCost, metricId: ids.shippingCost, sign: "minus" },
-      // T-265: the fee appears once. On COD it is also inside the charge above (COD-MENGANTAR-FEE equals
-      // RPT-SHP-COD-FEE-IDR by definition), so the charge's parts leave it out and this line says so.
+      // T-269: the fee is a part of the charge above and all of it goes to Mengantar, so it is
+      // listed here again as a deduction, named as the same line — the settlement section reads
+      // Ditagih ke penerima − these two = Estimasi cair.
       {
         amountIdr: fee,
         key: "cod-fee",
         label: MONEY_LABELS.codFee,
         metricId: ids.codFee,
-        note: collectParts.length > 0 ? "Juga termasuk dalam tagihan ke penerima" : undefined,
+        note: collectParts.length > 0 ? "Bagian tagihan di atas, seluruhnya untuk Mengantar" : undefined,
         sign: "minus",
       },
+      { amountIdr: shippingCost, key: "shipping-cost", label: MONEY_LABELS.shippingCost, metricId: ids.shippingCost, sign: "minus" },
     ],
     estimate: {
       amountIdr: codNetAmountIdr({ chargedShippingIdr: facts.chargedShippingIdr, paymentMethod: method, providerCodAmountIdr: codAmount }),
       key: "estimate",
       label: MONEY_LABELS.estimate,
       metricId: ids.disbursementEstimate,
-      note: "Perkiraan, bukan dana diterima",
+      note: "Ditagih ke penerima dikurangi potongan Mengantar. Perkiraan, bukan dana diterima",
     },
     // COD's goods are already a part of the charge above; COD Ongkir's were paid elsewhere.
     info: method === "COD_ONGKIR" ? [goods, ...insurance] : insurance,
     kind: "ready",
     method,
   };
+}
+
+/**
+ * T-269 (critique 2026-09-30 P1): what "Ditagih ke penerima" is made of, so its children add up to
+ * it on screen. Every part is an existing quantity; nothing here is a new formula.
+ *
+ * - COD: COD-CHARGE-BREAKDOWN — Nilai barang + Ongkir ditagih ke penerima + Biaya COD (termasuk
+ *   PPN) + Pembulatan (only when ≠ 0) = COD-TOTAL (`codChargeBreakdown`). Empty without a breakdown
+ *   (the inconsistent state never reaches here).
+ * - COD Ongkir: COD-ONGKIR-CHARGE-BREAKDOWN — Ongkir ditagih ke penerima + Biaya COD + Pembulatan =
+ *   COD-ONGKIR-CHARGE-IDR. At the D-28 computed charge the shipping is COD-ONGKIR-SHIPPING-DEDUCTED-IDR
+ *   (the order's `provider_charged_shipping_idr`) and the rounding is COD-ONGKIR-SELLER-DIFFERENCE-IDR
+ *   (0 or 1, as Buat kiriman showed it). A charge raised before D-28, or one whose basis is unknown,
+ *   has no rounding line: the shipping part is the charge less the fee.
+ */
+function chargeParts(method: PaymentMethod, codAmount: number, facts: ShipmentMoneyFacts): MoneyLine[] {
+  const ids = MONEY_METRIC_IDS;
+  const part = (key: string, label: string, amountIdr: number, metricId: string): MoneyLine => ({ amountIdr, key, label, metricId });
+  if (method === "COD") {
+    const charge = facts.codCharge;
+    if (!charge) return [];
+    return [
+      part("part-goods", MONEY_LABELS.goods, charge.goodsValueIdr, ids.chargeBreakdown),
+      part("part-shipping", MONEY_LABELS.chargedShipping, charge.shippingAmountIdr, ids.chargeBreakdown),
+      part("part-cod-fee", MONEY_LABELS.codFee, charge.codFeeIdr, ids.chargeBreakdown),
+      ...(charge.roundingIdr !== 0 ? [part("part-rounding", MONEY_LABELS.rounding, charge.roundingIdr, ids.chargeBreakdown)] : []),
+    ];
+  }
+  if (method !== "COD_ONGKIR") return [];
+  const fee = mengantarCodFeeIdr(codAmount);
+  const basis = facts.chargedShippingIdr;
+  const computed = basis !== null && codOngkirBreakEvenIdr(basis) === codAmount;
+  const shipping = computed ? basis : codAmount - fee;
+  const rounding = codAmount - shipping - fee;
+  return [
+    part("part-shipping", MONEY_LABELS.chargedShipping, shipping, ids.codOngkirChargeBreakdown),
+    part("part-cod-fee", MONEY_LABELS.codFee, fee, ids.codOngkirChargeBreakdown),
+    ...(rounding !== 0 ? [part("part-rounding", MONEY_LABELS.rounding, rounding, ids.codOngkirChargeBreakdown)] : []),
+  ];
+}
+
+/**
+ * T-270 (owner 2026-10-01): the customer-facing split of what is collected — Nilai barang + Ongkir,
+ * where Ongkir (CUSTOMER-ONGKIR-IDR) = the amount collected − Nilai barang in it. COD: COD-TOTAL −
+ * the breakdown's goods; COD Ongkir: the whole charge (the goods were paid elsewhere). Biaya COD and
+ * Pembulatan are inside Ongkir and never shown apart. A presentation of stored quantities only; null
+ * for Non-COD, before an order, and for a COD amount without its breakdown (nothing to split).
+ */
+export function customerCollectBreakdown(input: {
+  paymentMethod: PaymentMethod;
+  providerCodAmountIdr: number | null;
+  codCharge: Pick<CodChargeBreakdown, "goodsValueIdr"> | null;
+}): { goodsValueIdr: number | null; ongkirIdr: number } | null {
+  if (input.providerCodAmountIdr === null) return null;
+  if (input.paymentMethod === "COD_ONGKIR") return { goodsValueIdr: null, ongkirIdr: input.providerCodAmountIdr };
+  if (input.paymentMethod !== "COD" || !input.codCharge) return null;
+  return { goodsValueIdr: input.codCharge.goodsValueIdr, ongkirIdr: input.providerCodAmountIdr - input.codCharge.goodsValueIdr };
+}
+
+/**
+ * T-269 (owner decision 2026-09-30): role-based money visibility, decided on the server before
+ * anything renders, so an Operator's HTML and RSC payload never carry the withheld amounts.
+ *
+ * T-270 (owner 2026-10-01: "biaya potongan ini jangan dijadikan acuan ke customer, itu keuntungan
+ * pribadi kita atau admin gerai"): an Operator sees the customer-facing view — Ditagih ke penerima
+ * split into Nilai barang + Ongkir (`customerCollectBreakdown`), still summing to it — and never
+ * Biaya COD, Pembulatan, the settlement deductions or Estimasi cair. The Tenant Admin sees all.
+ */
+export function moneyForRole(money: ShipmentMoney, role: (typeof membershipRoles)[number]): ShipmentMoney {
+  if (role === "TENANT_ADMIN" || money.kind !== "ready") return money;
+  const goodsPart = money.collectParts.find((part) => part.key === "part-goods");
+  const split = customerCollectBreakdown({
+    codCharge: goodsPart?.amountIdr != null ? { goodsValueIdr: goodsPart.amountIdr } : null,
+    paymentMethod: money.method,
+    providerCodAmountIdr: money.method === "NON_COD" ? null : money.collect.amountIdr,
+  });
+  const collectParts: MoneyLine[] = split === null ? [] : [
+    ...(split.goodsValueIdr === null ? [] : [{ ...goodsPart!, amountIdr: split.goodsValueIdr }]),
+    { amountIdr: split.ongkirIdr, key: "part-customer-ongkir", label: MONEY_LABELS.customerOngkir, metricId: MONEY_METRIC_IDS.customerOngkir },
+  ];
+  const collect = money.method === "COD_ONGKIR" ? { ...money.collect, note: "Ongkir saja, barang sudah dibayar" } : money.collect;
+  return { ...money, collect, collectParts, deductions: [], estimate: null };
 }
 
 /**
@@ -266,7 +337,7 @@ export function reportRowMoneyLines(row: { codFeeIdr: number | null; shippingCos
   return [
     { amountIdr: row.shippingCostIdr, key: "shipping-cost", label: MONEY_LABELS.shippingCost, metricId: MONEY_METRIC_IDS.shippingCost },
     ...(row.codFeeIdr !== null
-      ? [{ amountIdr: row.codFeeIdr, key: "cod-fee", label: "Biaya COD", metricId: MONEY_METRIC_IDS.codFee }]
+      ? [{ amountIdr: row.codFeeIdr, key: "cod-fee", label: MONEY_LABELS.codFee, metricId: MONEY_METRIC_IDS.codFee }]
       : []),
   ];
 }

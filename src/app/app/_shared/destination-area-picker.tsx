@@ -358,7 +358,8 @@ export function DestinationAreaPicker({
   }
 
   return (
-    <Field data-invalid={Boolean(error)}>
+    // T-269: min-w-0 down to the trigger, whose text truncates, so no caller's column grows to the placeholder.
+    <Field className="min-w-0" data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={triggerId}>
         {label}
         {required ? <span className="-ml-1 text-destructive">*<span className="sr-only">wajib</span></span> : null}
@@ -404,7 +405,7 @@ export function DestinationAreaPicker({
                 aria-describedby={describedBy}
                 aria-expanded={open}
                 aria-invalid={Boolean(error)}
-                className="w-full justify-between px-3 font-normal"
+                className="w-full min-w-0 justify-between px-3 font-normal"
                 disabled={disabled || !activeOutletId}
                 id={triggerId}
                 role="combobox"

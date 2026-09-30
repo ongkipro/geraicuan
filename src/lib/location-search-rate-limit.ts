@@ -101,31 +101,31 @@ export async function withLocationSearchConcurrencyGuard<T>(
 
 // T-245: the local wilayah suggestion search costs one indexed read and no provider call, so it
 // spends no durable counter (a row write per keystroke would cost more than the search). This
-// in-memory window only stops a runaway client.
+// in-memory window only stops a runaway client. T-270: the handover scan uses the same window.
 // lazy: process-local — one Node process serves the CMS today; if replicas are added and abuse is
 // observed, move it to the durable `shipment_rate_limits` pattern above.
-const MAX_WILAYAH_SEARCHES_PER_WINDOW = 120;
-const WILAYAH_SEARCH_WINDOW_MS = 60 * 1000;
-const MAX_TRACKED_WILAYAH_SEARCHERS = 10_000;
-const wilayahSearchWindows = new Map<string, { count: number; start: number }>();
+const MAX_TRACKED_WINDOW_KEYS = 10_000;
 
-export function allowWilayahSearch(
-  context: Pick<TenantContext, "tenantId" | "userId">,
-  now = Date.now(),
-): boolean {
-  const key = `${context.tenantId}:${context.userId}`;
-  const current = wilayahSearchWindows.get(key);
-  if (!current || now - current.start >= WILAYAH_SEARCH_WINDOW_MS) {
-    if (wilayahSearchWindows.size >= MAX_TRACKED_WILAYAH_SEARCHERS) {
-      for (const [staleKey, window] of wilayahSearchWindows) {
-        if (now - window.start >= WILAYAH_SEARCH_WINDOW_MS) wilayahSearchWindows.delete(staleKey);
+/** A fixed per-(tenant, user) window of `max` calls per `windowMs`, kept in this process. */
+export function createProcessWindowLimiter(max: number, windowMs: number) {
+  const windows = new Map<string, { count: number; start: number }>();
+  return (context: Pick<TenantContext, "tenantId" | "userId">, now = Date.now()): boolean => {
+    const key = `${context.tenantId}:${context.userId}`;
+    const current = windows.get(key);
+    if (!current || now - current.start >= windowMs) {
+      if (windows.size >= MAX_TRACKED_WINDOW_KEYS) {
+        for (const [staleKey, window] of windows) {
+          if (now - window.start >= windowMs) windows.delete(staleKey);
+        }
+        if (windows.size >= MAX_TRACKED_WINDOW_KEYS) windows.clear();
       }
-      if (wilayahSearchWindows.size >= MAX_TRACKED_WILAYAH_SEARCHERS) wilayahSearchWindows.clear();
+      windows.set(key, { count: 1, start: now });
+      return true;
     }
-    wilayahSearchWindows.set(key, { count: 1, start: now });
+    if (current.count >= max) return false;
+    current.count += 1;
     return true;
-  }
-  if (current.count >= MAX_WILAYAH_SEARCHES_PER_WINDOW) return false;
-  current.count += 1;
-  return true;
+  };
 }
+
+export const allowWilayahSearch = createProcessWindowLimiter(120, 60 * 1000);

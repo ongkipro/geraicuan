@@ -6,17 +6,20 @@ import { requireTenantPrincipal } from "@/app/app/pengiriman/_list/tenant-page";
 import { db } from "@/db/client";
 import { loadLabelIndexPage } from "@/db/label-print-repository";
 import {
+  findHandoverScanTarget,
   HandoverInputError,
   type HandoverUndoOutcome,
   markShipmentsHandedOver,
   undoShipmentHandover,
 } from "@/db/shipment-handover-repository";
 import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
-import { parseAnalyticsRange } from "@/lib/analytics-range";
+import { createProcessWindowLimiter } from "@/lib/location-search-rate-limit";
 import {
   HANDOVER_REFUSAL_LABELS,
+  type HandoverScanResult,
   isHandoverMethod,
   normalizeHandoverNote,
+  normalizeHandoverScan,
 } from "@/lib/shipment-handover";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
 
@@ -100,6 +103,8 @@ export async function undoShipmentHandoverAction(shipmentId: unknown): Promise<H
 export type ReadySelection = {
   /** Shipment numbers, newest first, at most MAX_BATCH_SHIPMENTS. */
   numbers: number[];
+  /** T-270: the resi per returned number, for the dialog's list of chosen parcels. */
+  awbs: Record<number, string>;
   /** LBL-PRINTED for the same filter: every parcel ready for handover, not only the ones returned. */
   total: number;
   /** Planned handover type per returned number (the dialog's default method). */
@@ -108,28 +113,55 @@ export type ReadySelection = {
 
 /**
  * T-267 "Pilih semua siap diserahkan": T-266's pattern for the Siap diserahkan queue — the
- * session's tenant, the page's filter re-parsed here, the print state forced to "sudah", the same
- * loader as the list.
+ * session's tenant, the page's suffix filter re-parsed here, the print state forced to "sudah",
+ * the same loader as the list. T-270: the queue has no period, so none is read.
  */
 export async function selectReadyForHandover(params: Record<string, string>): Promise<ReadySelection> {
   const principal = await requireTenantPrincipal();
-  const search: Record<string, string> = {};
-  if (params && typeof params === "object") {
-    for (const key of ["q", "rentang", "khusus", "dari", "sampai", "tz"]) {
-      const value = (params as Record<string, unknown>)[key];
-      if (typeof value === "string") search[key] = value.slice(0, 64);
-    }
-  }
-  const query = parseLabelQuery(search);
-  if (query.awbSuffixError) return { numbers: [], total: 0, types: {} };
-  const range = parseAnalyticsRange(search, new Date());
+  const q = params && typeof params === "object" ? (params as Record<string, unknown>).q : undefined;
+  const query = parseLabelQuery(typeof q === "string" ? { q: q.slice(0, 64) } : {});
+  if (query.awbSuffixError) return { awbs: {}, numbers: [], total: 0, types: {} };
   const page = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-    loadLabelIndexPage(tx, context, { awbSuffix: query.awbSuffix || undefined, printState: "sudah", range, status: "issued" }));
+    loadLabelIndexPage(tx, context, { awbSuffix: query.awbSuffix || undefined, printState: "sudah", status: "issued" }));
   const rows = page.rows.slice(0, MAX_BATCH_SHIPMENTS);
   const numbers = rows.map((row) => Number(shipmentNumberFromReference(row.publicReference)));
   return {
+    awbs: Object.fromEntries(rows.flatMap((row, index) => (row.awb ? [[numbers[index], row.awb]] : []))),
     numbers,
     total: page.summary["LBL-PRINTED"],
     types: Object.fromEntries(rows.map((row, index) => [numbers[index], row.handoverType])),
   };
+}
+
+/**
+ * T-270: a keyboard-wedge scanner types about one code a second; 240 a minute per member leaves
+ * room for bursts and still stops a runaway client. Process-local, like the wilayah search.
+ */
+const allowHandoverScan = createProcessWindowLimiter(240, 60 * 1000);
+
+/**
+ * T-270 "Scan resi" on Siap diserahkan: finds the one shipment of the session's tenant a scanned
+ * resi or nomor kiriman names — anywhere in the queue, not only on the current page — and says
+ * whether it can join the handover selection. Read only: nothing is recorded until "Tandai". The
+ * scanned value is never logged, echoed in a URL or returned; the client keeps the selection
+ * (duplicates and the 50 cap are decided there, against what is already chosen).
+ */
+export async function scanForHandover(raw: unknown): Promise<HandoverScanResult> {
+  const principal = await requireTenantPrincipal();
+  const scan = normalizeHandoverScan(raw);
+  if (!scan) return { ok: false, publicReference: null, reason: "INVALID" };
+  if (!allowHandoverScan(principal)) return { ok: false, publicReference: null, reason: "RATE_LIMITED" };
+  try {
+    const target = await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
+      findHandoverScanTarget(tx, context, scan));
+    if (!target) return { ok: false, publicReference: null, reason: "NOT_FOUND" };
+    if (target.state !== "READY" || !target.awb) {
+      return { ok: false, publicReference: target.publicReference, reason: target.state === "READY" ? "NOT_ISSUED" : target.state };
+    }
+    return { awb: target.awb, handoverType: target.handoverType, number: target.number, ok: true, publicReference: target.publicReference };
+  } catch (error) {
+    if (error instanceof TenantContextDeniedError) throw error;
+    console.error("Handover scan could not be checked.", error instanceof Error ? error.name : "unknown");
+    return { ok: false, publicReference: null, reason: "LOOKUP_FAILED" };
+  }
 }

@@ -184,7 +184,7 @@ describe("selectUnprintedLabels (Pilih semua belum dicetak)", () => {
     expect(await selectUnprintedLabels({})).toEqual({ numbers: [foreign.number], total: 1 });
   });
 
-  it("applies the list's filter: resi suffix and issued period", async () => {
+  it("applies the list's resi suffix; T-270: Belum dicetak is a queue, so no period narrows it", async () => {
     const kept = await seedShipment("a");
     await seedShipment("a");
     await seedShipment("a", { resolvedAt: "2025-01-15T03:00:00Z" });
@@ -193,11 +193,11 @@ describe("selectUnprintedLabels (Pilih semua belum dicetak)", () => {
     expect(await selectUnprintedLabels({ q: kept.awb.slice(-6) })).toEqual({ numbers: [kept.number], total: 1 });
     // A resi suffix outside the list's pattern lists nothing, as on the page.
     expect(await selectUnprintedLabels({ q: "x" })).toEqual({ numbers: [], total: 0 });
-    // Default period (30 days) leaves last year's resi out; a custom range brings only it back.
-    expect((await selectUnprintedLabels({})).total).toBe(2);
+    // Last year's unprinted resi is still waiting: it is in the queue, whatever period is sent.
+    expect((await selectUnprintedLabels({})).total).toBe(3);
     const lastYear = await selectUnprintedLabels({ dari: "2025-01-01", khusus: "1", rentang: "kustom", sampai: "2025-01-31", tz: "Asia/Jakarta" });
-    expect(lastYear.total).toBe(1);
-    expect(lastYear.numbers).toHaveLength(1);
+    expect(lastYear.total).toBe(3);
+    expect(lastYear.numbers).toHaveLength(3);
   });
 
   it("refuses a session whose tenant is not the user's gerai (no cross-tenant read)", async () => {

@@ -484,7 +484,7 @@ describe("Cetak resi counts and lists (LBL-PRINTED, LBL-HANDED-OVER, LBL-HANDED-
     await adminPool.query("UPDATE shipments SET status = 'IN_TRANSIT' WHERE id = $1", [scanned.shipmentId]);
 
     const all = await read("a", (tx, context) => loadLabelIndexPage(tx, context, { printState: "semua", status: "issued" }));
-    expect(all.summary).toEqual({ "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 1, "LBL-PRINTED": 1, "LBL-UNPRINTED": 1 });
+    expect(all.summary).toEqual({ "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 1, "LBL-PRINTED": 1, "LBL-READY-PENDING": 0, "LBL-READY-TODAY": 1, "LBL-UNPRINTED": 1 });
     expect(all.summary["LBL-UNPRINTED"] + all.summary["LBL-PRINTED"] + all.summary["LBL-HANDED-OVER"]).toBe(all.summary["LBL-ALL"]);
     const sudah = await read("a", (tx, context) => loadLabelIndexPage(tx, context, { printState: "sudah", status: "issued" }));
     expect(sudah.rows.map((row) => [row.shipmentId, row.handoverType, row.handedOverAt])).toEqual([[ready.shipmentId, "PICKUP", null]]);
@@ -503,6 +503,7 @@ describe("Cetak resi counts and lists (LBL-PRINTED, LBL-HANDED-OVER, LBL-HANDED-
     await seedShipment("b", { printed: true });
     as("a");
     expect(await selectReadyForHandover({ cetak: "belum" })).toEqual({
+      awbs: { [drop.number]: drop.awb, [pickup.number]: pickup.awb },
       numbers: [drop.number, pickup.number],
       total: 2,
       types: { [drop.number]: "DROP_OFF", [pickup.number]: "PICKUP" },

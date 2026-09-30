@@ -14,6 +14,8 @@
  *
  * Plain module: the draft form renders these labels client-side.
  */
+import { MONEY_LABELS } from "./money-labels.ts";
+
 export const PAYMENT_METHODS = ["NON_COD", "COD", "COD_ONGKIR"] as const;
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -41,9 +43,11 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
  * never the goods, which were paid outside GeraiCUAN.
  */
 export const PAYMENT_AMOUNT_LABELS: Record<PaymentMethod, string> = {
-  COD: "Total COD",
-  COD_ONGKIR: "Ongkir ditagih",
-  NON_COD: "Nilai asuransi",
+  // T-269: the Rincian uang words — the collected amount is "Ditagih ke penerima" for both COD
+  // methods (the method label already says which), and the declared value is "Nilai barang".
+  COD: MONEY_LABELS.collect,
+  COD_ONGKIR: MONEY_LABELS.collect,
+  NON_COD: MONEY_LABELS.goods,
 };
 
 export type ShipmentPaymentFacts = {

@@ -41,6 +41,7 @@ export function sampleLabel(geraiName: string, geraiWhatsapp: string | null): Pr
   return {
     awb: "JX0012345678",
     codBreakdown: null,
+    collectBreakdown: null,
     courier: "JNE",
     destinationAreaLabel: "Dago, Coblong, Kota Bandung, Jawa Barat, 40135",
     insuranceAmountIdr: null,

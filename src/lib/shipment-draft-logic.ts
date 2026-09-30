@@ -7,6 +7,7 @@ import {
   mengantarCodFeeIdr,
   shippingMengantarDeductsIdr,
 } from "@/lib/mengantar-cod-fee";
+import { MONEY_LABELS } from "@/lib/shipment-money";
 
 /** "3,33%": Mengantar's COD fee rate, read from the one constant the fee helpers use. */
 export const MENGANTAR_COD_FEE_RATE_LABEL = `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(
@@ -471,12 +472,13 @@ export function issuanceCharges(input: {
     return {
       note: "Ditagih kurir ke penerima saat serah terima.",
       rows: [
-        { amountIdr: breakdown.goodsValueIdr, label: "Nilai barang" },
-        { amountIdr: breakdown.shippingAmountIdr, label: "Ongkir" },
-        { amountIdr: breakdown.codFeeIdr, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` },
-        ...(breakdown.roundingIdr > 0 ? [{ amountIdr: breakdown.roundingIdr, label: "Pembulatan" }] : []),
+        // T-269: the Rincian uang words for the same parts (one label per quantity).
+        { amountIdr: breakdown.goodsValueIdr, label: MONEY_LABELS.goods },
+        { amountIdr: breakdown.shippingAmountIdr, label: MONEY_LABELS.chargedShipping },
+        { amountIdr: breakdown.codFeeIdr, label: MONEY_LABELS.codFee },
+        ...(breakdown.roundingIdr > 0 ? [{ amountIdr: breakdown.roundingIdr, label: MONEY_LABELS.rounding }] : []),
       ],
-      total: { amountIdr: breakdown.providerCodAmountIdr, label: "Total tagihan COD" },
+      total: { amountIdr: breakdown.providerCodAmountIdr, label: MONEY_LABELS.collect },
     };
   }
   if (input.paymentMethod === "COD_ONGKIR") {
@@ -485,11 +487,11 @@ export function issuanceCharges(input: {
       note: "Barang sudah dibayar; kurir menagih ongkir + biaya COD (dihitung otomatis).",
       rows: [
         { amountIdr: input.declaredValueIdr, label: "Nilai barang (sudah dibayar)" },
-        { amountIdr: amount?.shippingIdr ?? null, label: "Ongkir dipotong Mengantar" },
-        { amountIdr: amount?.codFeeIdr ?? null, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` },
-        ...(amount && amount.roundingIdr > 0 ? [{ amountIdr: amount.roundingIdr, label: "Pembulatan" }] : []),
+        { amountIdr: amount?.shippingIdr ?? null, label: MONEY_LABELS.chargedShipping },
+        { amountIdr: amount?.codFeeIdr ?? null, label: MONEY_LABELS.codFee },
+        ...(amount && amount.roundingIdr > 0 ? [{ amountIdr: amount.roundingIdr, label: MONEY_LABELS.rounding }] : []),
       ],
-      total: { amountIdr: amount?.chargeIdr ?? null, label: "Nilai COD Ongkir" },
+      total: { amountIdr: amount?.chargeIdr ?? null, label: MONEY_LABELS.collect },
     };
   }
   return {

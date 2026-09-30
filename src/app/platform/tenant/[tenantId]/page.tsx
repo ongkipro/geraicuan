@@ -19,6 +19,7 @@ import { LEGACY_COD_FEE_VAT_LABEL } from "@/lib/mengantar-cod-fee";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 import { formatCount, formatShortId } from "@/lib/platform-monitoring-format";
+import { MONEY_LABELS } from "@/lib/shipment-money";
 
 import { formatWib } from "../../_components/platform-format";
 import {
@@ -58,9 +59,10 @@ const ENTRY_LABELS: Record<string, string> = {
   COD_REMITTANCE: "Remitansi COD",
   COD_SERVICE_FEE_VAT_PAYABLE: `${LEGACY_COD_FEE_VAT_LABEL} · entri lama`,
   GERAICUAN_COD_SERVICE_FEE_REVENUE: "Pendapatan jasa COD (entri lama)",
-  MENGANTAR_COD_FEE_COST: "Biaya COD Mengantar",
+  // T-269: the per-shipment words (MONEY_LABELS) for the same two quantities.
+  MENGANTAR_COD_FEE_COST: MONEY_LABELS.codFee,
   MENGANTAR_INSURANCE_COST: "Asuransi Mengantar",
-  MENGANTAR_SHIPPING_COST: "Ongkir Mengantar",
+  MENGANTAR_SHIPPING_COST: MONEY_LABELS.shippingCost,
   NON_COD_UPSTREAM_PAYMENT: "Pembayaran non-COD",
 };
 

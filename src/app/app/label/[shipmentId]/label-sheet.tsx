@@ -8,7 +8,7 @@ import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
 import { LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
-import { MONEY_LABELS, MONEY_METRIC_IDS, shippingCostIdr } from "@/lib/shipment-money";
+import { MONEY_LABELS } from "@/lib/shipment-money";
 import {
   DEFAULT_LABEL_FIELDS_BY_SIZE,
   formatCityProvince,
@@ -244,32 +244,23 @@ function LabelPackage({ label, logoSrc, note, shown }: {
               <span>COD — TAGIH KE PENERIMA</span>
               <b>{formatIdr(label.providerCodAmountIdr as number)}</b>
             </div>
-            {label.codBreakdown ? (
+            {/* T-270 (owner 2026-10-01): the customer's view only — Nilai barang + Ongkir (the amount
+                less Nilai barang), which add up to the amount above. Biaya COD and Pembulatan are the
+                gerai's business, inside Ongkir, never printed apart. */}
+            {label.collectBreakdown ? (
               <div className="label-money">
-                <div><span>Nilai barang</span><span>{formatIdr(label.codBreakdown.goodsValueIdr)}</span></div>
-                <div><span>Ongkir Mengantar</span><span>{formatIdr(label.codBreakdown.shippingAmountIdr)}</span></div>
-                {/* T-193: one Biaya COD — the fee Mengantar keeps, VAT inside it —
-                    and the round-up, so the lines add up to the amount above. */}
-                <div><span>Biaya COD (termasuk PPN)</span><span>{formatIdr(label.codBreakdown.codFeeIdr)}</span></div>
-                {label.codBreakdown.roundingIdr > 0 ? (
-                  <div><span>Pembulatan</span><span>{formatIdr(label.codBreakdown.roundingIdr)}</span></div>
-                ) : null}
+                <div><span>{MONEY_LABELS.goods}</span><span>{formatIdr(label.collectBreakdown.goodsValueIdr)}</span></div>
+                <div><span>{MONEY_LABELS.customerOngkir}</span><span>{formatIdr(label.collectBreakdown.ongkirIdr)}</span></div>
               </div>
             ) : null}
           </>
         ) : (
-          <>
-            {/* T-255: non-COD is plain bold text; only an amount to collect prints inverted. */}
-            <div className="label-payment">
-              <span>NON-COD — JANGAN TAGIH PENERIMA</span>
-            </div>
-            <div className="label-money">
-              {/* T-263: the same line and amount as the Rincian uang panel (RPT-SHP-SHIPPING-COST-IDR). */}
-              <div data-metric-id={MONEY_METRIC_IDS.shippingCost}>
-                <span>{MONEY_LABELS.shippingCost}</span><span>{formatIdr(shippingCostIdr(label))}</span>
-              </div>
-            </div>
-          </>
+          // T-255: non-COD is plain bold text; only an amount to collect prints inverted.
+          // T-270 (owner 2026-10-01): no seller-side amount (Ongkir dibayar ke Mengantar) for any
+          // role — the sheet is the courier's and recipient's document.
+          <div className="label-payment">
+            <span>NON-COD — JANGAN TAGIH PENERIMA</span>
+          </div>
         )}
       </div>
 

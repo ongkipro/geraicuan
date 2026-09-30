@@ -133,7 +133,7 @@ describe("Cek resi (T-242)", () => {
     const html = render(createElement(TrackingResultCard, { result }));
     const plain = text(html);
     expect(plain).toContain("Ekspedisi Lion Parcel");
-    expect(plain).toMatch(/Pembayaran COD Rp\s?119\.479 Total COD/);
+    expect(plain).toMatch(/Pembayaran COD Rp\s?119\.479 Ditagih ke penerima/);
     expect(plain).toContain("Tujuan Panakkukang, Makassar");
     expect(html).toContain('aria-label="Salin nomor resi"');
     expect(plain).toMatch(/Diperbarui \d{1,2} Sep 2026,? \d{2}[.:]\d{2} WIB/);
@@ -143,11 +143,11 @@ describe("Cek resi (T-242)", () => {
 
   it("names the COD Ongkir charge, never the goods; Non-COD without an order reads Belum ada layanan", () => {
     const codOngkir = text(render(createElement(TrackingResultCard, { result: { ...result, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: 20_000 } })));
-    expect(codOngkir).toMatch(/Pembayaran COD Ongkir Rp\s?20\.000 Ongkir ditagih/);
+    expect(codOngkir).toMatch(/Pembayaran COD Ongkir Rp\s?20\.000 Ditagih ke penerima/);
     expect(codOngkir).not.toMatch(/250\.000/);
     const nonCod = render(createElement(TrackingResultCard, { result: { ...result, awb: null, courier: null, paymentMethod: "NON_COD", providerService: null } }));
     expect(text(nonCod)).toContain("Belum ada layanan");
-    expect(text(nonCod)).toMatch(/Non-COD Rp\s?250\.000 Nilai asuransi/);
+    expect(text(nonCod)).toMatch(/Non-COD Rp\s?250\.000 Nilai barang/);
     expect(nonCod).not.toContain("Salin nomor resi");
   });
 

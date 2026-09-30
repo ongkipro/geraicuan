@@ -200,11 +200,12 @@ describe("T-186 COD Ongkir break-even (application)", () => {
       note: "Barang sudah dibayar; kurir menagih ongkir + biaya COD (dihitung otomatis).",
       rows: [
         { amountIdr: 250_000, label: "Nilai barang (sudah dibayar)" },
-        { amountIdr: 14_000, label: "Ongkir dipotong Mengantar" },
-        { amountIdr: 482, label: "Biaya COD 3,33%" },
+        // T-269: the Rincian uang words for the same parts.
+        { amountIdr: 14_000, label: "Ongkir ditagih ke penerima" },
+        { amountIdr: 482, label: "Biaya COD (termasuk PPN)" },
         { amountIdr: 1, label: "Pembulatan" },
       ],
-      total: { amountIdr: 14_483, label: "Nilai COD Ongkir" },
+      total: { amountIdr: 14_483, label: "Ditagih ke penerima" },
     });
   });
 
@@ -722,6 +723,7 @@ describe("T-186 the draft validation, the charge rule and the label keep each me
     const label: PrintableLabel = {
       awb: "JX1234567890",
       codBreakdown: { codFeeIdr: 666, codFeeVatIncludedIdr: 66, goodsValueIdr: 425_000, providerCodAmountIdr: 437_666, roundingIdr: 0, shippingAmountIdr: 12_000 },
+      collectBreakdown: { goodsValueIdr: 425_000, ongkirIdr: 12_666 },
       courier: "JNE",
       destinationAreaLabel: "Kebon Kacang, Tanah Abang, Jakarta Pusat",
       insuranceAmountIdr: null,

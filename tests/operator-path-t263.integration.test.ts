@@ -41,7 +41,7 @@ const flow = await import("@/app/app/pengiriman/baru/flow-parts");
 const { ShipmentCreateForm } = await import("@/app/app/pengiriman/baru/shipment-create-form");
 const { LabelPrintPanel } = await import("@/app/app/label/[shipmentId]/label-print-panel");
 const { LabelSheet } = await import("@/app/app/label/[shipmentId]/label-sheet");
-const { MONEY_LABELS } = await import("@/lib/shipment-money");
+const { MONEY_LABELS, shippingCostIdr } = await import("@/lib/shipment-money");
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
@@ -331,17 +331,20 @@ describe("thermal sheet Non-COD line", () => {
     shippingAmountIdr: 9_000, chargedShippingIdr: 6_300, ...overrides,
   }) as Parameters<typeof LabelSheet>[0]["label"];
 
-  it("prints Ongkir dibayar ke Mengantar at the charged amount, like the Rincian uang panel", () => {
+  it("T-270: prints no seller-side amount for any role — not even a Tenant Admin's label with the charged shipping", () => {
     const html = text(renderToStaticMarkup(createElement(LabelSheet, { label: label({}) })));
-    // T-265: renamed from "Biaya kirim Mengantar" so it never blurs with the buyer's ongkir.
-    expect(MONEY_LABELS.shippingCost).toBe("Ongkir dibayar ke Mengantar");
-    expect(html).toContain("Ongkir dibayar ke Mengantar Rp 6.300");
+    expect(html).toContain("NON-COD — JANGAN TAGIH PENERIMA");
+    expect(html).not.toContain(MONEY_LABELS.shippingCost);
+    expect(html).not.toContain("Rp 6.300");
     expect(html).not.toContain("Rp 9.000");
-    expect(html).not.toContain("Ongkir Mengantar");
+    expect(html).not.toContain("RPT-SHP-SHIPPING-COST-IDR");
+    // The sheet never reads the seller-side figure, so the Operator's label (none) prints the same.
+    expect(renderToStaticMarkup(createElement(LabelSheet, { label: label({ chargedShippingIdr: null }) })))
+      .toBe(renderToStaticMarkup(createElement(LabelSheet, { label: label({}) })));
   });
 
-  it("falls back to the order's price on a legacy snapshot without the charged amount", () => {
-    expect(text(renderToStaticMarkup(createElement(LabelSheet, { label: label({ chargedShippingIdr: null }) }))))
-      .toContain("Ongkir dibayar ke Mengantar Rp 9.000");
+  it("the legacy fallback stays in the shared money rule (Rincian uang, Laporan), not on the sheet", () => {
+    expect(MONEY_LABELS.shippingCost).toBe("Ongkir dibayar ke Mengantar");
+    expect(shippingCostIdr({ chargedShippingIdr: null, shippingAmountIdr: 9_000 })).toBe(9_000);
   });
 });

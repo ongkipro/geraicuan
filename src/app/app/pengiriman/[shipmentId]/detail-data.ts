@@ -10,7 +10,7 @@ import { listProviderHistoryEvents } from "@/db/provider-tracking-repository";
 import { loadShipmentHandover } from "@/db/shipment-handover-repository";
 import { loadShipmentDetail } from "@/db/shipment-queue-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
-import { storedCodCharge, type ShipmentMoneyFacts } from "@/lib/shipment-money";
+import { moneyForRole, shipmentMoney, storedCodCharge, type ShipmentMoneyFacts } from "@/lib/shipment-money";
 
 import type { AttentionEvidence, StatusObservation } from "./detail-model";
 
@@ -115,10 +115,12 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
     draft,
     handover,
     historyEvents,
-    moneyFacts,
+    // T-269: decided here, by role — an Operator's view never carries the seller-side lines.
+    money: moneyForRole(shipmentMoney(moneyFacts), context.role),
     observations,
     observationsVisible: context.role === "TENANT_ADMIN",
-    order: order ?? null,
+    // The charged shipping is read for "Rincian uang" only; it does not travel further.
+    order: order ? { estimateServiceId: order.estimateServiceId, returnCnoteNo: order.returnCnoteNo } : null,
     pickupPoint,
   };
 }

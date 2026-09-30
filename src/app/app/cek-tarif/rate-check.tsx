@@ -135,8 +135,10 @@ export function RateCheck({ canManageSettings, initialState = {}, outlets }: {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <Card className="px-6 max-md:px-4">
-        <form action={action} aria-busy={pending} className="grid gap-2" noValidate ref={formRef}>
-          <div className="grid gap-x-4 sm:grid-cols-2">
+        {/* T-269: tracks are minmax(0, 1fr), so a long placeholder in the destination combobox
+            cannot size the column past the card (it overflowed a 326px form by 17px at 390). */}
+        <form action={action} aria-busy={pending} className="grid grid-cols-[minmax(0,1fr)] gap-2" noValidate ref={formRef}>
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-x-4 sm:grid-cols-2">
             <Field className="gap-2" data-invalid={Boolean(errors.outletId)}>
               <FieldLabel htmlFor="rate-outlet">Outlet asal</FieldLabel>
               <Select

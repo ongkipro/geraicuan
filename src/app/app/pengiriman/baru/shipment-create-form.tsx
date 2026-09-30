@@ -37,6 +37,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
+import { MONEY_LABELS } from "@/lib/shipment-money";
 import {
   availablePickupSlots,
   composeProductRows,
@@ -274,8 +275,8 @@ export function ShipmentCreateForm({
     destination: destinationLabel,
     moneyRows: [
       { amountIdr: parseRupiahOrNull(declaredValue), label: cod ? "Nilai barang" : "Nilai barang (asuransi)" },
-      { amountIdr: null, label: "Ongkir" },
-      ...(cod ? [{ amountIdr: null, label: `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}` }] : []),
+      { amountIdr: null, label: cod ? MONEY_LABELS.chargedShipping : "Ongkir" },
+      ...(cod ? [{ amountIdr: null, label: MONEY_LABELS.codFee }] : []),
     ],
     origin: pickup?.originAreaLabel ?? null,
     rows: [
@@ -292,7 +293,7 @@ export function ShipmentCreateForm({
       { label: "Metode bayar", tone: "accent", value: PAYMENT_METHOD_LABELS[paymentMethod] },
     ],
     source: "Estimasi",
-    total: { amountIdr: null, label: cod ? "Total tagihan COD" : "Ongkir", note: "Tarif muncul setelah data disimpan" },
+    total: { amountIdr: null, label: cod ? MONEY_LABELS.collect : "Ongkir", note: "Tarif muncul setelah data disimpan" },
   };
   // T-263: on phones a section that is complete when the form opens (usually 1, pre-filled from
   // the outlet) folds to one line with "Ubah"; any complete section can be folded again with

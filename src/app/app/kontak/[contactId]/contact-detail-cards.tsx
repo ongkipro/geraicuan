@@ -186,7 +186,8 @@ function AddressForm({
   }, [onDone, router, state]);
   const prefix = address ? `edit-${address.id}` : "baru";
   return (
-    <form action={action} aria-busy={pending} className="grid gap-2" noValidate>
+    // T-269: a zero-minimum track, so the area combobox's placeholder cannot widen the form on phones.
+    <form action={action} aria-busy={pending} className="grid grid-cols-[minmax(0,1fr)] gap-2" noValidate>
       <input name="contactId" type="hidden" value={contactId} />
       {address ? <input name="addressId" type="hidden" value={address.id} /> : null}
       <ErrorSummary

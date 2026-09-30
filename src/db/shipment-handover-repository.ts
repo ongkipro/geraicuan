@@ -1,12 +1,13 @@
 import "server-only";
 
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import { TENANT_OPERATIONAL_TIMEZONE } from "@/db/shipment-event-predicates";
 import {
   auditEvents,
   printEvents,
   providerOrderSnapshots,
+  shipmentDrafts,
   shipmentHandoverEvents,
   shipments,
   users,
@@ -16,6 +17,7 @@ import {
   HANDOVER_ATTENTION_HOURS,
   type HandoverMethod,
   type HandoverRefusal,
+  type normalizeHandoverScan,
 } from "@/lib/shipment-handover";
 
 /**
@@ -282,6 +284,67 @@ export async function markShipmentsHandedOver(
     results.push({ number, outcome: "MARKED", publicReference: shipment.public_reference });
   }
   return results;
+}
+
+export type HandoverScanTarget = {
+  awb: string | null;
+  handoverType: HandoverMethod | null;
+  number: number;
+  publicReference: string;
+  /** READY = in Siap diserahkan (resi issued, printed, ISSUED, not handed over). */
+  state: "READY" | "HANDED_OVER" | HandoverRefusal;
+};
+
+/**
+ * T-270 "Scan resi": the one shipment of the context's tenant a scanned code names — its resi
+ * (exact, case-insensitive), its prefixed nomor kiriman, or its unprefixed number — and its
+ * handover state, with the same eligibility rules as `markShipmentsHandedOver`. A resi match wins
+ * over a number match (an all-digit resi can look like a nomor kiriman). null = nothing of this
+ * tenant's; another gerai's shipment is never read (tenant column here, RLS behind it). Read only.
+ */
+export async function findHandoverScanTarget(
+  tx: TenantTransaction,
+  context: TenantContext,
+  scan: NonNullable<ReturnType<typeof normalizeHandoverScan>>,
+): Promise<HandoverScanTarget | null> {
+  const awbMatch = sql`upper(btrim(${providerOrderSnapshots.cnoteNo})) = ${scan.code}`;
+  const [row] = await tx
+    .select({
+      shipmentId: shipments.id,
+      tenantNumber: shipments.tenantNumber,
+      publicReference: shipments.publicReference,
+      status: shipments.status,
+      handoverType: shipmentDrafts.handoverType,
+    })
+    .from(shipments)
+    .leftJoin(
+      providerOrderSnapshots,
+      and(eq(providerOrderSnapshots.shipmentId, shipments.id), eq(providerOrderSnapshots.tenantId, shipments.tenantId)),
+    )
+    .leftJoin(
+      shipmentDrafts,
+      and(eq(shipmentDrafts.shipmentId, shipments.id), eq(shipmentDrafts.tenantId, shipments.tenantId)),
+    )
+    .where(and(
+      eq(shipments.tenantId, context.tenantId),
+      or(
+        awbMatch,
+        scan.reference ? sql`upper(${shipments.publicReference}) = ${scan.reference}` : undefined,
+        scan.number !== null ? eq(shipments.tenantNumber, scan.number) : undefined,
+      ),
+    ))
+    .orderBy(sql`(${awbMatch}) IS TRUE DESC`, sql`${shipments.createdAt} DESC`)
+    .limit(1);
+  if (!row) return null;
+  const fact = (await loadHandoverFacts(tx, context, [row.shipmentId])).get(row.shipmentId);
+  const refusal = refusalFor(row.status, fact);
+  return {
+    awb: fact?.awb ?? null,
+    handoverType: row.handoverType === "PICKUP" || row.handoverType === "DROP_OFF" ? row.handoverType : null,
+    number: Number(row.tenantNumber),
+    publicReference: row.publicReference,
+    state: refusal ?? (fact!.latestKind === "HANDED_OVER" ? "HANDED_OVER" : "READY"),
+  };
 }
 
 export type HandoverUndoOutcome =

@@ -342,9 +342,29 @@ describe("Cek tarif", () => {
     expect(html).toContain('<input type="hidden" name="weightGrams" value="1000"/>');
     expect(html).toContain("Tarif belum tersedia");
   });
+
+  it("T-269: every form track is minmax(0, 1fr), so the combobox placeholder cannot widen the form past its card at 390", () => {
+    const html = render(createElement(RateCheck, { canManageSettings: false, outlets: [{ id: "o1", name: "Outlet Utama" }] }));
+    // The form and its outlet/kecamatan row: an auto track sized to the placeholder's min-content
+    // (342.8px in a 326px form) clipped all four controls; a zero-minimum track cannot.
+    const form = html.match(/<form[^>]*class="([^"]*)"/)![1]!.split(" ");
+    expect(form).toContain("grid-cols-[minmax(0,1fr)]");
+    const row = html.match(/<form[^>]*>\s*<div class="([^"]*)"/)![1]!.split(" ");
+    expect(row).toContain("grid-cols-[minmax(0,1fr)]");
+    expect(row).toContain("sm:grid-cols-2");
+  });
 });
 
 describe("DestinationAreaPicker", () => {
+  it("T-269: shrinks inside any caller — the field and trigger take min-width 0 and the trigger text truncates", () => {
+    const html = render(createElement(DestinationAreaPicker, { outlets: [{ id: "o1", name: "Outlet Utama" }] }));
+    const field = html.match(/<div[^>]*data-slot="field"[^>]*>/)![0];
+    expect(field.match(/class="([^"]*)"/)![1]!.split(" ")).toContain("min-w-0");
+    const trigger = html.match(/<button[^>]*role="combobox"[^>]*>([\s\S]*?)<\/button>/)!;
+    expect(trigger[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["w-full", "min-w-0"]));
+    expect(trigger[1]).toMatch(/<span class="[^"]*\bmin-w-0\b[^"]*\btruncate\b[^"]*">Cari kecamatan, kelurahan atau kode pos<\/span>/);
+  });
+
   it("posts the fields the destination actions validate, empty until an area is picked", () => {
     const html = render(createElement(DestinationAreaPicker, { outlets: [{ id: "o1", name: "Outlet Utama" }] }));
     for (const name of ["areaId", "areaLabel", "areaQuery", "areaOutletId"]) expect(html).toContain(`type="hidden" name="${name}" value=""`);

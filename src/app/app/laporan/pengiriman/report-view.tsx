@@ -26,7 +26,7 @@ import { serviceDisplayName } from "@/lib/labels/courier";
 import { areaDisplayCase, formatDistrictCity, formatWibDateTimeParts } from "@/lib/label-format";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
-import { reportRowMoneyLines } from "@/lib/shipment-money";
+import { MONEY_LABELS, reportRowMoneyLines } from "@/lib/shipment-money";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import { shipmentReportHref } from "@/lib/shipment-report";
 import { deliveredRate, formatRate, returnRate } from "@/lib/shipment-report-analytics";
@@ -178,7 +178,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
       action={(
         <SectionHelp label="Penjelasan total per kurir">
           <p>Ongkir dibayar ke Mengantar dan biaya COD adalah tagihan Mengantar per kiriman.</p>
-          <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dan biaya COD. Jumlah pasti mengikuti pencairan Mengantar.</p>
+          <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dibayar ke Mengantar dan biaya COD (termasuk PPN). Jumlah pasti mengikuti pencairan Mengantar.</p>
           <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman terkirim + retur.</p>
         </SectionHelp>
       )}
@@ -200,7 +200,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
             </p>
             <LowVolumeNote shipmentCount={total.shipmentCount} />
             <p className="text-xs text-muted-foreground">
-              Ongkir dibayar ke Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
+              {MONEY_LABELS.shippingCost} <Money amount={total.shippingCostIdr} /> · {MONEY_LABELS.codFee} <Money amount={total.codFeeIdr} />
             </p>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-muted-foreground">Estimasi cair</span>
@@ -217,8 +217,8 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
             <TableHead className="px-2 text-right">Kiriman</TableHead>
             <TableHead className="px-2 text-right">% terkirim</TableHead>
             <TableHead className="px-2 text-right">% retur</TableHead>
-            <TableHead className="px-2 text-right">Ongkir dibayar ke Mengantar</TableHead>
-            <TableHead className="px-2 text-right">Biaya COD</TableHead>
+            <TableHead className="px-2 text-right">{MONEY_LABELS.shippingCost}</TableHead>
+            <TableHead className="px-2 text-right">{MONEY_LABELS.codFee}</TableHead>
             <TableHead className="pr-0 pl-2 text-right">Estimasi cair</TableHead>
           </TableRow>
         </TableHeader>

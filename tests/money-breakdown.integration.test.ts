@@ -16,16 +16,19 @@ const { MoneyBreakdown, MoneyBreakdownCompact, MoneyInconsistentAlert } = await 
 const { loadShipmentDetailView } = await import("@/app/app/pengiriman/[shipmentId]/detail-data");
 const { calculateCodAmounts, calculateCodOngkirAmounts } = await import("@/db/cod-totals-repository");
 const { loadPrintableLabel } = await import("@/db/label-print-repository");
+const { LabelSheet } = await import("@/app/app/label/[shipmentId]/label-sheet");
 const { completeProviderOrder } = await import("@/db/order-batch-repository");
 const { loadShipmentReportPage } = await import("@/db/shipment-report-repository");
 const schema = await import("@/db/schema");
 const { withTenantContext } = await import("@/db/tenant-context");
 const { EMPTY_ANALYTICS_FILTERS } = await import("@/lib/analytics-filters");
 const { parseAnalyticsRange } = await import("@/lib/analytics-range");
-const { mengantarCodFeeIdr } = await import("@/lib/mengantar-cod-fee");
+const { codOngkirBreakEvenIdr, mengantarCodFeeIdr } = await import("@/lib/mengantar-cod-fee");
 const {
   labelMoneyFacts,
   MONEY_METRIC_IDS,
+  customerCollectBreakdown,
+  moneyForRole,
   reportRowMoneyLines,
   shipmentMoney,
   storedCodCharge,
@@ -43,6 +46,30 @@ function metricRows(html: string) {
 }
 const render = (facts: Facts, checkHref?: string) =>
   renderToStaticMarkup(createElement(MoneyBreakdown, { checkHref, money: shipmentMoney(facts) }));
+/** "Rp 1.234" / "−Rp 1.234" → a signed number. */
+const amountOf = (value: string) => (value.includes("−") ? -1 : 1) * Number(value.replace(/[^\d]/g, ""));
+/** Every <dd> amount inside the rendered <dl> whose opening tag matches `open`, in order. */
+function ddAmounts(html: string, open: RegExp) {
+  const block = html.match(new RegExp(`${open.source}[^>]*>([\\s\\S]*?)</dl>`));
+  return block ? [...block[1]!.matchAll(/<dd[^>]*>([\s\S]*?)<\/dd>/g)].map(([, dd]) => amountOf(text(dd!))) : [];
+}
+/**
+ * T-269: the page's arithmetic, read off the markup — the parent amount, its indented parts, the
+ * settlement lines and Estimasi cair — so the sums are asserted on what is rendered.
+ */
+function sections(html: string) {
+  const estimate = html.match(/data-metric-id="RPT-SHP-COD-DISBURSEMENT-EST-IDR"[\s\S]*?<dd[^>]*>([\s\S]*?)<\/dd>/);
+  return {
+    collect: ddAmounts(html, /<dl class=/)[0],
+    estimate: estimate ? amountOf(text(estimate[1]!)) : null,
+    parts: ddAmounts(html, /<dl aria-label="Rincian tagihan ke penerima"/),
+    settlement: [
+      ...ddAmounts(html, /<dl aria-label="Dipotong Mengantar saat pencairan"/),
+      // Non-COD's one settlement line has no caption (nothing is deducted from a collection).
+      ...(html.includes("Dipotong Mengantar") ? [] : ddAmounts(html.split('data-money-section="settlement"')[1] ?? "", /<dl/)),
+    ],
+  };
+}
 
 const COD_TOTAL = calculateCodAmounts(450_000, 16_000).providerCodAmountIdr; // 482 053
 const COD_FACTS: Facts = {
@@ -88,30 +115,108 @@ describe("Rincian uang render (T-261)", () => {
       ["COD-TOTAL", "Ditagih ke penerima Rp 482.053"],
       ["COD-CHARGE-BREAKDOWN", "Nilai barang Rp 450.000"],
       ["COD-CHARGE-BREAKDOWN", "Ongkir ditagih ke penerima Rp 16.000"],
+      // T-269: the fee is a child of the charge, so the children add up on screen.
+      ["COD-CHARGE-BREAKDOWN", "Biaya COD (termasuk PPN) Rp 16.052"],
       ["COD-CHARGE-BREAKDOWN", "Pembulatan Rp 1"],
+      ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) Bagian tagihan di atas, seluruhnya untuk Mengantar −Rp 16.052"],
       ["RPT-SHP-SHIPPING-COST-IDR", "Ongkir dibayar ke Mengantar −Rp 12.800"],
-      ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) Juga termasuk dalam tagihan ke penerima −Rp 16.052"],
-      ["RPT-SHP-COD-DISBURSEMENT-EST-IDR", "Estimasi cair Estimasi Perkiraan, bukan dana diterima Rp 453.201"],
+      ["RPT-SHP-COD-DISBURSEMENT-EST-IDR", "Estimasi cair Estimasi Ditagih ke penerima dikurangi potongan Mengantar. Perkiraan, bukan dana diterima Rp 453.201"],
     ]);
-    // The identity the page states: Ditagih − Biaya kirim − Biaya COD = Estimasi cair.
-    expect(482_053 - 12_800 - mengantarCodFeeIdr(482_053)).toBe(453_201);
-    // T-265: the parts plus the fee (shown once, below) make the charge; the fee is not repeated.
-    expect(450_000 + 16_000 + 1 + mengantarCodFeeIdr(482_053)).toBe(482_053);
-    expect(text(html).match(/Biaya COD/g)).toHaveLength(1);
-    expect(text(html)).not.toMatch(/Jumlah bersih|pendapatan/i);
+    expect(mengantarCodFeeIdr(482_053)).toBe(16_052);
+    expect(sections(html)).toEqual({ collect: 482_053, estimate: 453_201, parts: [450_000, 16_000, 16_052, 1], settlement: [-16_052, -12_800] });
+    expect(text(html)).toContain("Dipotong Mengantar saat pencairan");
+    expect(text(html)).not.toMatch(/Jumlah bersih|pendapatan|Juga termasuk/i);
   });
 
   it("COD Ongkir: only ongkir + biaya COD is collected, the goods are named as paid", () => {
+    // A charge raised above break-even before D-28: no rounding line, the shipping part is the rest.
     const html = render(ONGKIR_FACTS);
     expect(metricRows(html)).toEqual([
       ["COD-ONGKIR-CHARGE-IDR", "Ditagih ke penerima Ongkir + biaya COD saja Rp 7.000"],
+      ["COD-ONGKIR-CHARGE-BREAKDOWN", "Ongkir ditagih ke penerima Rp 6.767"],
+      ["COD-ONGKIR-CHARGE-BREAKDOWN", "Biaya COD (termasuk PPN) Rp 233"],
+      ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) Bagian tagihan di atas, seluruhnya untuk Mengantar −Rp 233"],
       ["RPT-SHP-SHIPPING-COST-IDR", "Ongkir dibayar ke Mengantar −Rp 6.300"],
-      ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) −Rp 233"],
-      ["RPT-SHP-COD-DISBURSEMENT-EST-IDR", "Estimasi cair Estimasi Perkiraan, bukan dana diterima Rp 467"],
+      ["RPT-SHP-COD-DISBURSEMENT-EST-IDR", "Estimasi cair Estimasi Ditagih ke penerima dikurangi potongan Mengantar. Perkiraan, bukan dana diterima Rp 467"],
       ["SHP-DECLARED-VALUE-IDR", "Nilai barang Sudah dibayar, tidak ditagih Rp 85.000"],
     ]);
+    expect(sections(html)).toEqual({ collect: 7_000, estimate: 467, parts: [6_767, 233], settlement: [-233, -6_300] });
     // The quote's list price is not a line: neither the buyer nor Mengantar pays it here.
     expect(rp(text(html))).not.toContain("Rp 9.000");
+  });
+
+  it("children sum to the parent and the settlement sums to Estimasi cair: COD, COD Ongkir at break-even, Non-COD, rounding 0 and 1", () => {
+    // GC-10177's shape: rounding 0, so no Pembulatan line.
+    const cod0 = calculateCodAmounts(325_000, 32_500).providerCodAmountIdr;
+    expect(cod0).toBe(369_815);
+    const codNoRounding = render({
+      ...COD_FACTS,
+      chargedShippingIdr: 24_375,
+      codCharge: storedCodCharge({ codTotals: { goodsValueIdr: 325_000, providerCodAmountIdr: cod0, shippingAmountIdr: 32_500 }, paymentMethod: "COD", providerCodAmountIdr: cod0 }).breakdown,
+      declaredValueIdr: 325_000,
+      providerCodAmountIdr: cod0,
+      shippingAmountIdr: 32_500,
+    });
+    expect(sections(codNoRounding)).toEqual({ collect: 369_815, estimate: 333_125, parts: [325_000, 32_500, 12_315], settlement: [-12_315, -24_375] });
+    expect(text(codNoRounding)).not.toContain("Pembulatan");
+    // COD Ongkir at the D-28 computed charge: ongkir (the deducted basis) + fee + Pembulatan 1.
+    const breakEven = codOngkirBreakEvenIdr(6_300)!;
+    expect(breakEven).toBe(6_518);
+    const ongkirComputed = render({ ...ONGKIR_FACTS, providerCodAmountIdr: breakEven });
+    expect(sections(ongkirComputed)).toEqual({ collect: 6_518, estimate: 1, parts: [6_300, 217, 1], settlement: [-217, -6_300] });
+    expect(metricRows(ongkirComputed)).toContainEqual(["COD-ONGKIR-CHARGE-BREAKDOWN", "Pembulatan Rp 1"]);
+    // Every rendered case: the parts add up to the parent; parent − settlement = Estimasi cair.
+    for (const html of [render(COD_FACTS), codNoRounding, render(ONGKIR_FACTS), ongkirComputed, render(NON_COD_FACTS)]) {
+      const { collect, estimate, parts, settlement } = sections(html);
+      expect(parts.reduce((sum, amount) => sum + amount, 0)).toBe(collect);
+      if (estimate !== null) expect(collect + settlement.reduce((sum, amount) => sum + amount, 0)).toBe(estimate);
+    }
+    expect(sections(render(NON_COD_FACTS))).toEqual({ collect: 0, estimate: null, parts: [], settlement: [11_900] });
+  });
+
+  it("Operator (T-269, T-270): the customer's view — Nilai barang + Ongkir, no fee, no rounding, no settlement, no Estimasi cair; Tenant Admin unchanged", () => {
+    for (const facts of [COD_FACTS, ONGKIR_FACTS, NON_COD_FACTS]) {
+      const full = shipmentMoney(facts);
+      expect(moneyForRole(full, "TENANT_ADMIN")).toBe(full);
+      const html = renderToStaticMarkup(createElement(MoneyBreakdown, { money: moneyForRole(full, "OPERATOR") }));
+      const ids = metricRows(html).map(([id]) => id);
+      expect(ids).not.toContain(MONEY_METRIC_IDS.shippingCost);
+      expect(ids).not.toContain(MONEY_METRIC_IDS.codFee);
+      expect(ids).not.toContain(MONEY_METRIC_IDS.disbursementEstimate);
+      expect(text(html)).not.toMatch(/Estimasi cair|Ongkir dibayar ke Mengantar|Dipotong Mengantar|Biaya COD|biaya COD|PPN|Pembulatan|Ongkir ditagih ke penerima/);
+      expect(html).not.toContain('data-money-section="settlement"');
+      // The recipient-side section still adds up.
+      const { collect, parts } = sections(html);
+      if (parts.length > 0) expect(parts.reduce((sum, amount) => sum + amount, 0)).toBe(collect);
+    }
+    // COD: Ongkir = 482 053 − 450 000 (the fee 16 052 and the rounding 1 are inside it).
+    const cod = renderToStaticMarkup(createElement(MoneyBreakdown, { money: moneyForRole(shipmentMoney(COD_FACTS), "OPERATOR") }));
+    expect(metricRows(cod)).toEqual([
+      ["COD-TOTAL", "Ditagih ke penerima Rp 482.053"],
+      ["COD-CHARGE-BREAKDOWN", "Nilai barang Rp 450.000"],
+      ["CUSTOMER-ONGKIR-IDR", "Ongkir Rp 32.053"],
+    ]);
+    expect(rp(text(cod))).not.toMatch(/Rp 16\.052|Rp 16\.000|Rp 12\.800|Rp 453\.201/);
+    // COD Ongkir: the whole charge is Ongkir; the goods stay the paid context line.
+    expect(metricRows(renderToStaticMarkup(createElement(MoneyBreakdown, { money: moneyForRole(shipmentMoney(ONGKIR_FACTS), "OPERATOR") })))).toEqual([
+      ["COD-ONGKIR-CHARGE-IDR", "Ditagih ke penerima Ongkir saja, barang sudah dibayar Rp 7.000"],
+      ["CUSTOMER-ONGKIR-IDR", "Ongkir Rp 7.000"],
+      ["SHP-DECLARED-VALUE-IDR", "Nilai barang Sudah dibayar, tidak ditagih Rp 85.000"],
+    ]);
+    // Non-COD: nothing collected, nothing paid to Mengantar shown.
+    expect(metricRows(renderToStaticMarkup(createElement(MoneyBreakdown, { money: moneyForRole(shipmentMoney(NON_COD_FACTS), "OPERATOR") })))).toEqual([
+      ["RPT-SHP-PAYMENT-MODE", "Ditagih ke penerima Tidak ada tagihan ke penerima Rp 0"],
+      ["SHP-DECLARED-VALUE-IDR", "Nilai barang Untuk asuransi, tidak ditagih Rp 150.000"],
+    ]);
+  });
+
+  it("customer Ongkir (CUSTOMER-ONGKIR-IDR) is the amount collected less Nilai barang, for COD; the whole charge for COD Ongkir", () => {
+    const breakdown = storedCodCharge({ codTotals: { goodsValueIdr: 450_000, providerCodAmountIdr: COD_TOTAL, shippingAmountIdr: 16_000 }, paymentMethod: "COD", providerCodAmountIdr: COD_TOTAL }).breakdown;
+    expect(customerCollectBreakdown({ codCharge: breakdown, paymentMethod: "COD", providerCodAmountIdr: COD_TOTAL })).toEqual({ goodsValueIdr: 450_000, ongkirIdr: 32_053 });
+    expect(breakdown!.shippingAmountIdr + breakdown!.codFeeIdr + breakdown!.roundingIdr).toBe(32_053);
+    expect(customerCollectBreakdown({ codCharge: null, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: 7_000 })).toEqual({ goodsValueIdr: null, ongkirIdr: 7_000 });
+    expect(customerCollectBreakdown({ codCharge: null, paymentMethod: "COD", providerCodAmountIdr: COD_TOTAL })).toBeNull();
+    expect(customerCollectBreakdown({ codCharge: null, paymentMethod: "NON_COD", providerCodAmountIdr: null })).toBeNull();
   });
 
   it("Non-COD: nothing collected, the shipping paid to Mengantar, no estimate", () => {
@@ -158,7 +263,7 @@ describe("Rincian uang render (T-261)", () => {
       MONEY_METRIC_IDS.shippingCost,
       MONEY_METRIC_IDS.codFee,
     ]);
-    expect(rp(text(html))).toBe("Ongkir dibayar ke Mengantar Rp 6.300 Biaya COD Rp 233");
+    expect(rp(text(html))).toBe("Ongkir dibayar ke Mengantar Rp 6.300 Biaya COD (termasuk PPN) Rp 233");
     expect(html).not.toMatch(/<(dl|div)/);
     // Under the "Biaya Mengantar" column the first label is for screen readers only.
     const inTable = renderToStaticMarkup(createElement(MoneyBreakdownCompact, { lines: reportRowMoneyLines({ codFeeIdr: 233, shippingCostIdr: 6_300 }), showFirstLabel: false }));
@@ -196,6 +301,7 @@ const appDb = drizzle({ client: appPool, schema });
 const tenantA = "00000000-0000-0261-0000-000000000001";
 const outletA = "00000000-0000-0261-0001-000000000001";
 const userA = "t261-admin-a";
+const userOp = "t269-operator-a";
 const GOODS = 250_000;
 const PRICE = 12_000;
 const BASIS = 9_800;
@@ -295,6 +401,8 @@ beforeAll(async () => {
   await adminPool.query("INSERT INTO users (id, name, email) VALUES ($1, 'T261 A', 't261-a@example.test')", [userA]);
   await adminPool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'T261 Tenant', 'ACTIVE')", [tenantA]);
   await adminPool.query("INSERT INTO memberships (tenant_id, user_id, role) VALUES ($1, $2, 'TENANT_ADMIN')", [tenantA, userA]);
+  await adminPool.query("INSERT INTO users (id, name, email) VALUES ($1, 'T269 Operator', 't269-op@example.test')", [userOp]);
+  await adminPool.query("INSERT INTO memberships (tenant_id, user_id, role) VALUES ($1, $2, 'OPERATOR')", [tenantA, userOp]);
   await adminPool.query(
     `INSERT INTO outlets (id, tenant_id, name, default_pickup_address_id, default_origin_area_id)
      VALUES ($1, $2, 'Outlet T261', 'pickup-261', 'origin-261')`,
@@ -318,14 +426,81 @@ describe("Rincian uang parity across surfaces (T-261)", () => {
     const shipmentId = seeded[key]!;
     const view = await asTenantA((tx, context) => loadShipmentDetailView(tx, context, shipmentId));
     const label = await asTenantA((tx, context) => loadPrintableLabel(tx, context, shipmentId));
-    const fromDetail = shipmentMoney(view!.moneyFacts);
-    const fromLabel = shipmentMoney(labelMoneyFacts(label));
+    const fromDetail = view!.money;
+    const fromLabel = label.money;
+    // The label's money is the one its own facts give (admin: nothing hidden).
+    expect(shipmentMoney(labelMoneyFacts(label))).toEqual(fromLabel);
     expect(fromLabel).toEqual(fromDetail);
     expect(renderToStaticMarkup(createElement(MoneyBreakdown, { money: fromLabel })))
       .toBe(renderToStaticMarkup(createElement(MoneyBreakdown, { money: fromDetail })));
     // The label page warns exactly when the sheet hides the COD lines — never for COD Ongkir.
     expect(fromLabel.kind === "inconsistent").toBe(label.paymentMethod === "COD" && label.codBreakdown === null);
     expect(fromLabel.kind).toBe(key === "COD_DRIFT" ? "inconsistent" : "ready");
+  });
+
+  it.each(["NON_COD", "COD", "COD_ONGKIR"])("%s as an Operator (T-269): the loaders drop every seller-side figure before render", async (key) => {
+    const shipmentId = seeded[key]!;
+    const asOperator = <T,>(read: Parameters<typeof withTenantContext<T>>[3]) => withTenantContext(appDb, userOp, tenantA, read);
+    const admin = await asTenantA((tx, context) => loadPrintableLabel(tx, context, shipmentId));
+    const label = await asOperator((tx, context) => loadPrintableLabel(tx, context, shipmentId));
+    const view = await asOperator((tx, context) => loadShipmentDetailView(tx, context, shipmentId));
+    // The Tenant Admin's label carries the charged shipping (the page's Rincian uang, not the sheet).
+    expect(admin.chargedShippingIdr).toBe(BASIS);
+    // The Operator's: no charged shipping, no settlement, no estimate. T-270: no label carries a
+    // sheet shipping cost any more, for either role.
+    expect(label.chargedShippingIdr).toBeNull();
+    expect(admin).not.toHaveProperty("shippingCostIdr");
+    expect(label).not.toHaveProperty("shippingCostIdr");
+    for (const money of [label.money, view!.money]) {
+      if (money.kind !== "ready") throw new Error(`${key} should be ready`);
+      expect(money.deductions).toEqual([]);
+      expect(money.estimate).toBeNull();
+      expect(money.collect.amountIdr).toBe((admin.money as typeof money).collect.amountIdr);
+      // T-270: the customer's split only, still adding up to what is collected.
+      expect(money.collectParts.map((part) => part.metricId)).toEqual(
+        key === "COD" ? ["COD-CHARGE-BREAKDOWN", "CUSTOMER-ONGKIR-IDR"] : key === "COD_ONGKIR" ? ["CUSTOMER-ONGKIR-IDR"] : [],
+      );
+      if (money.collectParts.length > 0) {
+        expect(money.collectParts.reduce((sum, part) => sum + (part.amountIdr ?? 0), 0)).toBe(money.collect.amountIdr);
+      }
+    }
+    // The Tenant Admin still gets the full split (fee, and rounding where there is one), adding up.
+    const adminMoney = admin.money;
+    if (adminMoney.kind !== "ready") throw new Error(`${key} should be ready`);
+    if (key !== "NON_COD") {
+      expect(adminMoney.collectParts.map((part) => part.label)).toContain("Biaya COD (termasuk PPN)");
+      expect(adminMoney.collectParts.reduce((sum, part) => sum + (part.amountIdr ?? 0), 0)).toBe(adminMoney.collect.amountIdr);
+      expect(adminMoney.deductions).toHaveLength(2);
+      expect(adminMoney.estimate).not.toBeNull();
+    }
+    // Neither the fee nor the rounding reaches an Operator's label (T-270).
+    expect(label.codBreakdown).toBeNull();
+    if (key === "COD") expect(admin.codBreakdown).not.toBeNull();
+    expect(view!.order).not.toHaveProperty("chargedShippingIdr");
+    // What would be serialized to the browser for the sheet: no seller-side amount or estimate.
+    const { money, ...sheet } = label;
+    const payload = JSON.stringify({ money, sheet });
+    expect(payload).not.toContain(`${BASIS}`);
+    if (admin.money.kind === "ready" && admin.money.estimate?.amountIdr) {
+      expect(payload).not.toContain(`"amountIdr":${admin.money.estimate.amountIdr}`);
+    }
+    expect(payload).not.toMatch(/RPT-SHP-SHIPPING-COST-IDR|RPT-SHP-COD-DISBURSEMENT-EST-IDR|RPT-SHP-COD-FEE-IDR|Estimasi cair|Ongkir dibayar ke Mengantar|Biaya COD|Pembulatan|codFeeIdr|roundingIdr/);
+    if (adminMoney.kind === "ready" && key !== "NON_COD") {
+      const fee = adminMoney.deductions.find((line) => line.metricId === "RPT-SHP-COD-FEE-IDR")!.amountIdr;
+      expect(payload).not.toContain(`"amountIdr":${fee},`);
+    }
+    const sheetHtml = renderToStaticMarkup(createElement(MoneyBreakdown, { money: label.money }));
+    expect(sheetHtml).not.toMatch(/Estimasi cair|Ongkir dibayar ke Mengantar/);
+  });
+
+  it.each(["NON_COD", "COD", "COD_ONGKIR"])("%s (T-270): the Tenant Admin and the Operator print the identical thermal sheet", async (key) => {
+    const shipmentId = seeded[key]!;
+    const admin = await asTenantA((tx, context) => loadPrintableLabel(tx, context, shipmentId));
+    const operator = await withTenantContext(appDb, userOp, tenantA, (tx, context) => loadPrintableLabel(tx, context, shipmentId));
+    const sheet = (label: typeof admin) => renderToStaticMarkup(createElement(LabelSheet, { label }));
+    expect(sheet(operator)).toBe(sheet(admin));
+    expect(sheet(admin)).not.toMatch(/Ongkir dibayar ke Mengantar|RPT-SHP-SHIPPING-COST-IDR|Estimasi cair|Biaya COD|PPN|Pembulatan|Ongkir ditagih ke penerima/);
+    expect(sheet(admin)).not.toContain(`Rp ${BASIS.toLocaleString("id-ID")}`);
   });
 
   it("the Laporan row quotes the detail's Ongkir dibayar ke Mengantar and Biaya COD", async () => {
@@ -335,7 +510,7 @@ describe("Rincian uang parity across surfaces (T-261)", () => {
     for (const key of ["NON_COD", "COD", "COD_ONGKIR"]) {
       const row = page.rows.find((candidate) => candidate.shipmentId === seeded[key]);
       const view = await asTenantA((tx, context) => loadShipmentDetailView(tx, context, seeded[key]!));
-      const money = shipmentMoney(view!.moneyFacts);
+      const money = view!.money;
       if (money.kind !== "ready") throw new Error(`${key} should be ready`);
       const byId = Object.fromEntries(money.deductions.map((line) => [line.metricId, line.amountIdr]));
       const report = Object.fromEntries(reportRowMoneyLines(row!).map((line) => [line.metricId, line.amountIdr]));

@@ -23,7 +23,6 @@ import { loadShipmentInvoice } from "@/db/shipment-invoice-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { loadPrintBrand, loadTenantLabelFields } from "@/db/tenant-settings-repository";
 import { formatWibDateTime, recipientDensity } from "@/lib/label-format";
-import { labelMoneyFacts, shipmentMoney } from "@/lib/shipment-money";
 
 export const metadata: Metadata = { title: "Label kiriman", robots: { index: false } };
 
@@ -115,15 +114,14 @@ export default async function LabelDetailPage({
     );
   }
 
-  const { brand, events, fields, invoice, label } = detail;
+  // T-269: `money` and the label's seller-side fields were decided by role in `loadPrintableLabel`.
+  const { brand, events, fields, invoice, label: { money, ...label } } = detail;
   const labelHref = `/app/label/${routeKey}`;
   const recipientLayout = recipientDensity({
     addressLength: label.recipient.address.length,
     areaLabelLength: label.destinationAreaLabel.length,
     nameLength: label.recipient.name.length,
   });
-  // T-261: the same "Rincian uang" the shipment detail shows, from the label's own facts.
-  const money = shipmentMoney(labelMoneyFacts(label));
 
   return (
     <>

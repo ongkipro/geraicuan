@@ -72,6 +72,7 @@ const AREA = "Dago, Coblong, Kota Bandung, Jawa Barat, 40135";
 const LABEL: PrintableLabel = {
   awb: "JX0012345678",
   codBreakdown: null,
+  collectBreakdown: null,
   courier: "JNE",
   destinationAreaLabel: AREA,
   insuranceAmountIdr: null,

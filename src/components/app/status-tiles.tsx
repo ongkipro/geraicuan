@@ -26,6 +26,11 @@ export type StatusTile = {
   key: string;
   label: string;
   selected: boolean;
+  /**
+   * T-270: false when the tile counts on another basis than `total` (Cetak resi's period-scoped
+   * Dibatalkan beside its period-free queues): no share, no composition segment. Default true.
+   */
+  share?: boolean;
   /** Icon and composition colour by meaning; defaults to the shipment status tone when `key` is a status, else neutral. */
   tone?: StatusTone;
 };
@@ -111,7 +116,7 @@ export function StatusTiles({ className, label, tiles, total }: { className?: st
                   <span className={cn("text-xl leading-none font-semibold tabular-nums", tile.selected ? "text-primary" : "text-foreground")}>
                     {number.format(tile.count)}
                   </span>
-                  {index > 0 ? <span className="text-xs tabular-nums text-muted-foreground">{tileShare(tile.count, total)}%</span> : null}
+                  {index > 0 && tile.share !== false ? <span className="text-xs tabular-nums text-muted-foreground">{tileShare(tile.count, total)}%</span> : null}
                 </span>
                 {tile.hint ? <span className="sr-only">, {tile.hint}</span> : null}
               </Link>
@@ -164,7 +169,7 @@ export function StatusTiles({ className, label, tiles, total }: { className?: st
  * overlapping caller would get no remainder rather than a negative one.
  */
 export function compositionSegments(tiles: StatusTile[], total: number) {
-  const parts = tiles.slice(1).filter((tile) => (tile.compositionCount ?? tile.count) > 0).map((tile) => ({
+  const parts = tiles.slice(1).filter((tile) => tile.share !== false && (tile.compositionCount ?? tile.count) > 0).map((tile) => ({
     bar: TONE[toneOf(tile)].bar,
     count: tile.compositionCount ?? tile.count,
     key: tile.key,

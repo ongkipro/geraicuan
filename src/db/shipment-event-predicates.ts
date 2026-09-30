@@ -7,7 +7,8 @@ import type { TenantContext } from "@/db/tenant-context";
 
 export const TENANT_OPERATIONAL_TIMEZONE = "Asia/Jakarta";
 
-const wibDayStart = sql`date_trunc(
+/** The start of today's WIB day, on the transaction's clock (`current_timestamp`). */
+export const wibDayStart = sql`date_trunc(
   'day',
   current_timestamp AT TIME ZONE ${TENANT_OPERATIONAL_TIMEZONE}
 ) AT TIME ZONE ${TENANT_OPERATIONAL_TIMEZONE}`;

@@ -28,7 +28,7 @@ vi.mock("@/db/tenant-settings-repository", () => ({ loadTenantBrand: async () =>
 
 const state = vi.hoisted(() => ({
   rows: [] as Record<string, unknown>[],
-  summary: { "LBL-ALL": 0, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0 },
+  summary: { "LBL-ALL": 0, "LBL-CANCELLED": 0, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 0, "LBL-UNPRINTED": 0 } as Record<string, number>,
   today: 0,
 }));
 vi.mock("@/db/label-print-repository", () => ({
@@ -47,12 +47,14 @@ function row(number: number, extra: Record<string, unknown> = {}) {
     awb: `AWB267${number}`,
     courier: "JNE",
     destinationAreaLabel: "Kebon Kacang, Tanah Abang, Kota Jakarta Pusat, DKI Jakarta, 10240",
+    firstPrintedAt: new Date(),
     handedOverAt: null,
     handoverType: "PICKUP",
     isCod: false,
     issuedAt,
     paymentMethod: "NON_COD",
     printCount: 1,
+    printedToday: true,
     providerCodAmountIdr: null,
     providerService: "JNE REG",
     publicReference: `GC-${number}`,
@@ -130,10 +132,14 @@ describe("Cetak resi: Siap diserahkan is the handover queue", () => {
     state.today = 4;
     const filtered = await render({ cetak: "sudah", q: "ABC123" });
     expect(filtered).not.toContain("Semua paket hari ini sudah diserahkan");
-    // A period that ends before today never says "hari ini", even with handovers today.
+    // T-270: the queue has no period, so an empty queue with handovers today is closed whatever
+    // period the URL carries — "hari ini" is then true — and never without one today.
     const past = await render({ cetak: "sudah", dari: "2026-09-01", rentang: "kustom", sampai: "2026-09-05" });
-    expect(past).not.toContain("Semua paket hari ini sudah diserahkan");
-    expect(past).toContain("Belum ada paket yang siap diserahkan.");
+    expect(past).toContain("Semua paket hari ini sudah diserahkan");
+    state.today = 0;
+    const pastNone = await render({ cetak: "sudah", dari: "2026-09-01", rentang: "kustom", sampai: "2026-09-05" });
+    expect(pastNone).not.toContain("Semua paket hari ini sudah diserahkan");
+    expect(pastNone).toContain("Belum ada paket yang siap diserahkan.");
   });
 
   it("lists Diserahkan rows with the sub-state and the recorded WIB time, linking to the detail", async () => {
@@ -148,11 +154,109 @@ describe("Cetak resi: Siap diserahkan is the handover queue", () => {
   });
 });
 
+describe("T-270: Siap diserahkan is a state queue, grouped, with scan to select", () => {
+  const summary = (extra: Record<string, number> = {}) => ({
+    "LBL-ALL": 3, "LBL-CANCELLED": 1, "LBL-HANDED-OVER": 0, "LBL-PRINTED": 3, "LBL-READY-PENDING": 1, "LBL-READY-TODAY": 2, "LBL-UNPRINTED": 0, ...extra,
+  });
+  const threeDaysAgo = () => new Date(Date.now() - 3 * 24 * 3_600_000);
+
+  it("groups the rows into Hari ini, then Tertunda (warn tone), each header with its LBL-READY-* count", async () => {
+    state.rows = [row(10701), row(10702), row(10703, { firstPrintedAt: threeDaysAgo(), printedToday: false })];
+    state.summary = summary();
+    const html = await render({ cetak: "sudah" });
+    const table = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    const order = [...table.matchAll(/(Hari ini|Tertunda)|pilih-tabel-(\d+)/g)].map((match) => match[1] ?? match[2]);
+    expect(order).toEqual(["Hari ini", "10701", "10702", "Tertunda", "10703"]);
+    expect(table).toMatch(/<th[^>]*colSpan="7"|<th[^>]*colspan="7"/);
+    expect(table).toMatch(/text-warn[^"]*"><svg[^>]*lucide-clock[\s\S]*?Tertunda<span[^>]*data-metric-id="LBL-READY-PENDING">\(1\)/);
+    expect(table).toMatch(/data-metric-id="LBL-READY-TODAY">\(2\)/);
+    // Phones: the same two groups, headed, in the same order.
+    const cards = html.slice(html.lastIndexOf('<div class="md:hidden">'));
+    expect([...cards.matchAll(/<section aria-label="(Hari ini|Tertunda)"/g)].map((match) => match[1])).toEqual(["Hari ini", "Tertunda"]);
+  });
+
+  it("shows each parcel's waiting age, in the warn tone once it was printed before today", async () => {
+    state.rows = [row(10711, { firstPrintedAt: new Date(Date.now() - 2 * 3_600_000) }), row(10712, { firstPrintedAt: threeDaysAgo(), printedToday: false })];
+    state.summary = summary({ "LBL-PRINTED": 2, "LBL-READY-PENDING": 1, "LBL-READY-TODAY": 1 });
+    const html = await render({ cetak: "sudah" });
+    expect(html).toMatch(/<span class="tabular-nums" data-slot="waiting-age">dicetak <time[^>]*>2 jam lalu<\/time>/);
+    expect(html).toMatch(/<span class="tabular-nums font-medium text-warn" data-slot="waiting-age">dicetak <time[^>]*>3 hari lalu<\/time>/);
+    // Other tabs keep the issue time, no waiting age.
+    state.rows = [row(10713, { printCount: 0 })];
+    expect(await render()).not.toContain('data-slot="waiting-age"');
+  });
+
+  it("demotes reprint on the handover queue to a quiet named icon action; other tabs keep the labelled button", async () => {
+    state.rows = [row(10721)];
+    state.summary = summary({ "LBL-PRINTED": 1, "LBL-READY-PENDING": 0, "LBL-READY-TODAY": 1 });
+    const queue = await render({ cetak: "sudah" });
+    expect(queue).toMatch(/<a[^>]*aria-label="Cetak ulang label AWB26710721"[^>]*>/);
+    expect(queue).toMatch(/data-variant="ghost" data-size="icon"[^>]*title="Cetak ulang label AWB26710721"|title="Cetak ulang label AWB26710721"/);
+    expect(queue).not.toMatch(/<\/svg>Cetak ulang</);
+    const semua = await render({ cetak: "semua" });
+    expect(semua).toMatch(/<\/svg>Cetak ulang</);
+  });
+
+  it("renders the Scan resi field (visible label, scanner-friendly input) on Siap diserahkan only", async () => {
+    state.rows = [row(10731)];
+    state.summary = summary({ "LBL-PRINTED": 1, "LBL-READY-PENDING": 0, "LBL-READY-TODAY": 1, "LBL-UNPRINTED": 1 });
+    const html = await render({ cetak: "sudah" });
+    expect(html.match(/id="scan-resi"/g)).toHaveLength(1);
+    expect(html).toMatch(/<label class="text-sm font-semibold" for="scan-resi">Scan resi<\/label>/);
+    const input = html.match(/<input[^>]*id="scan-resi"[^>]*>/)![0];
+    for (const attribute of ['autoComplete="off"', 'spellCheck="false"', 'maxLength="64"', 'enterKeyHint="done"', 'aria-describedby="scan-resi-bantuan scan-resi-hasil"']) {
+      expect(input.toLowerCase()).toContain(attribute.toLowerCase());
+    }
+    expect(input).not.toMatch(/autofocus/i);
+    expect(html).toMatch(/aria-live="polite"[^>]*id="scan-resi-hasil" role="status"/);
+    for (const cetak of ["semua", "belum", "diserahkan", "batal"]) {
+      expect(await render({ cetak }), cetak).not.toContain('id="scan-resi"');
+    }
+    // A suffix the list cannot search hides it with the list.
+    expect(await render({ cetak: "sudah", q: "!!" })).not.toContain('id="scan-resi"');
+  });
+
+  it("says the period governs only Semua resi and Dibatalkan; Dibatalkan shows no share of the queue base", async () => {
+    state.rows = [];
+    state.summary = summary({ "LBL-CANCELLED": 2, "LBL-PRINTED": 3, "LBL-UNPRINTED": 1 });
+    for (const cetak of ["belum", "sudah", "diserahkan"]) {
+      expect(await render({ cetak }), cetak).toContain("Periode hanya berlaku untuk Semua resi dan Dibatalkan.");
+    }
+    const semua = await render({ cetak: "semua" });
+    expect(semua).not.toContain('data-slot="queue-period-note"');
+    const strip = semua.slice(semua.indexOf('aria-label="Ringkasan status cetak resi"'), semua.indexOf("</nav>"));
+    // Base = 1 + 3 + 0 = 4: Belum 25 %, Siap 75 %, Diserahkan 0 %; Dibatalkan none.
+    expect([...strip.matchAll(/>(\d+)%</g)].map((match) => Number(match[1]))).toEqual([25, 75, 0]);
+    expect(strip).not.toContain('data-segment="LBL-CANCELLED"');
+    expect(strip).toContain(", Tidak dapat dicetak, terbit pada periode ini");
+  });
+
+  it("empty queues: Belum dicetak without a period sentence, Diserahkan with the Handshake icon", async () => {
+    state.rows = [];
+    state.summary = summary({ "LBL-PRINTED": 0, "LBL-READY-PENDING": 0, "LBL-READY-TODAY": 0 });
+    const belum = await render();
+    expect(belum).toContain("Semua resi sudah dicetak.");
+    expect(belum).not.toContain("pada periode ini sudah dicetak");
+    const diserahkan = await render({ cetak: "diserahkan" });
+    const empty = diserahkan.slice(diserahkan.indexOf("Tidak ada paket yang menunggu scan kurir.") - 1200, diserahkan.indexOf("Tidak ada paket yang menunggu scan kurir."));
+    expect(empty).toContain("lucide-handshake");
+    expect(empty).not.toContain("lucide-printer");
+  });
+
+  it("the handover dialog's list names every chosen parcel by resi", async () => {
+    const { ChosenResiList } = await import("@/app/app/label/handover-dialog");
+    const html = renderToStaticMarkup(createElement(ChosenResiList, { awbs: { 10801: "JNE801", 10802: "JNE802" }, numbers: [10802, 10801, 10803] }));
+    expect([...html.matchAll(/<li[^>]*>([^<]+)<\/li>/g)].map((match) => match[1])).toEqual(["JNE802", "JNE801", "Nomor kiriman 10803"]);
+    expect(html).toContain('aria-label="Resi terpilih"');
+  });
+});
+
 describe("proof stub: the Diserahkan row returns only with a recorded handover", () => {
   const label = {
     awb: "JX1234567890",
     chargedShippingIdr: null,
     codBreakdown: null,
+    collectBreakdown: null,
     courier: "JNE",
     destinationAreaLabel: "Kebon Kacang, Tanah Abang, Jakarta Pusat, DKI Jakarta, 10240",
     insuranceAmountIdr: null,

@@ -250,16 +250,11 @@ describe("tenant-scoped AWB labels", () => {
       shippingAmountIdr: 8000,
       insuranceAmountIdr: null,
       providerCodAmountIdr: 111721,
-      // T-193: one Biaya COD — Mengantar's fee round(111 721 × 333 / 10 000),
-      // VAT inside — and the round-up, adding up to the COD amount.
-      codBreakdown: {
-        goodsValueIdr: 100000,
-        shippingAmountIdr: 8000,
-        codFeeIdr: 3720,
-        codFeeVatIncludedIdr: 369,
-        roundingIdr: 1,
-        providerCodAmountIdr: 111721,
-      },
+      // T-270 (D-38): this reader is an Operator, so the seller-side breakdown (T-193: Mengantar's
+      // fee round(111 721 × 333 / 10 000) and the round-up) is withheld; the sheet's customer
+      // lines are Nilai barang + Ongkir = the COD amount.
+      codBreakdown: null,
+      collectBreakdown: { goodsValueIdr: 100000, ongkirIdr: 11721 },
       package: {
         content: "Produk sintetis untuk pengujian label",
         weightGrams: 2450,
@@ -284,9 +279,12 @@ describe("tenant-scoped AWB labels", () => {
       printCount: 0,
       lastPrintedAt: null,
     });
-    const breakdown = label.codBreakdown!;
-    expect(breakdown.goodsValueIdr + breakdown.shippingAmountIdr + breakdown.codFeeIdr + breakdown.roundingIdr)
-      .toBe(label.providerCodAmountIdr);
+    const collect = label.collectBreakdown!;
+    expect(collect.goodsValueIdr + collect.ongkirIdr).toBe(label.providerCodAmountIdr);
+    // The Operator's Rincian uang splits the same way (shipping 8 000 + fee 3 720 + rounding 1 inside Ongkir).
+    const money = label.money;
+    if (money.kind !== "ready") throw new Error("COD label money should be ready");
+    expect(money.collectParts.map((part) => part.amountIdr)).toEqual([100000, 11721]);
     // T-258: the draft's patokan is loaded for the package label, trimmed, in the tenant's scope.
     await adminPool.query("UPDATE shipment_drafts SET recipient_address_landmark = $1 WHERE shipment_id = $2", ["  Seberang masjid  ", fixture.shipmentId]);
     const withLandmark = await inTenantA((tx, context) => loadPrintableLabel(tx, context, fixture.shipmentId));

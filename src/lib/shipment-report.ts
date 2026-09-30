@@ -8,6 +8,7 @@
 // Type-only, so nothing from the repository's `server-only` module graph is
 // emitted into a bundle; `client-bundle-boundary` still holds.
 import type { ShipmentReportRow } from "@/db/shipment-report-repository";
+import { MONEY_LABELS } from "@/lib/shipment-money";
 
 export type ShipmentReportColumn = {
   /** Column header in the CSV file. */
@@ -29,8 +30,8 @@ export const SHIPMENT_REPORT_COLUMNS = [
   { csvHeader: "layanan", label: "Layanan", metricId: "RPT-SHP-SERVICE", value: (row) => row.providerService },
   { csvHeader: "lifecycle", label: "Status", metricId: "RPT-SHP-LIFECYCLE", value: (row) => row.status },
   { csvHeader: "pembayaran", label: "Pembayaran", metricId: "RPT-SHP-PAYMENT-MODE", value: (row) => row.paymentMethod },
-  { csvHeader: "biaya_kirim_mengantar_idr", label: "Biaya kirim Mengantar (IDR)", metricId: "RPT-SHP-SHIPPING-COST-IDR", value: (row) => row.shippingCostIdr },
-  { csvHeader: "biaya_cod_idr", label: "Biaya COD (IDR)", metricId: "RPT-SHP-COD-FEE-IDR", value: (row) => row.codFeeIdr },
+  { csvHeader: "biaya_kirim_mengantar_idr", label: `${MONEY_LABELS.shippingCost} (IDR)`, metricId: "RPT-SHP-SHIPPING-COST-IDR", value: (row) => row.shippingCostIdr },
+  { csvHeader: "biaya_cod_idr", label: `${MONEY_LABELS.codFee} (IDR)`, metricId: "RPT-SHP-COD-FEE-IDR", value: (row) => row.codFeeIdr },
   { csvHeader: "estimasi_dana_cair_mengantar_idr", label: "Estimasi dana dicairkan Mengantar (IDR)", metricId: "RPT-SHP-COD-DISBURSEMENT-EST-IDR", value: (row) => row.codDisbursementEstimateIdr },
   { csvHeader: "status_cetak", label: "Status cetak", metricId: "RPT-SHP-PRINT-STATE", value: (row) => row.printCount > 0 ? `SUDAH_DICETAK_${row.printCount}X` : "BELUM_DICETAK" },
 ] as const satisfies readonly ShipmentReportColumn[];

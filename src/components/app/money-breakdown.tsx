@@ -8,11 +8,17 @@ import { Button } from "@/components/ui/button";
 import type { MoneyLine, ShipmentMoney } from "@/lib/shipment-money";
 import { cn } from "@/lib/utils";
 
+const SETTLEMENT_CAPTION = "Dipotong Mengantar saat pencairan";
+
 /**
  * T-261 "Rincian uang" (spec 17 §T-261, spec 10 §4.15): the one per-shipment money
  * breakdown. Order is fixed — Ditagih ke penerima (and what it is made of), what Mengantar keeps,
  * Estimasi cair, then context lines outside the arithmetic. Every amount carries its spec 19
  * metric ID in `data-metric-id`. Presentational only: `shipmentMoney` decides the lines.
+ *
+ * T-269: every section adds up on screen — the indented parts sum to Ditagih ke penerima, and
+ * Ditagih ke penerima minus "Dipotong Mengantar saat pencairan" is Estimasi cair. An Operator's
+ * money arrives without the settlement section (`moneyForRole`), so none of it renders.
  */
 export function MoneyBreakdown({ checkHref, className, money }: {
   /** "Periksa kiriman" target for the inconsistent state; omitted on the shipment's own detail. */
@@ -44,7 +50,15 @@ export function MoneyBreakdown({ checkHref, className, money }: {
       {money.collectParts.length > 0 ? (
         <MoneyRows className="ml-1 border-l pl-3" label="Rincian tagihan ke penerima" lines={money.collectParts} tone="muted" />
       ) : null}
-      <MoneyRows className="border-t pt-3" lines={money.deductions} />
+      {money.deductions.length > 0 ? (
+        <div className="flex flex-col gap-2 border-t pt-3" data-money-section="settlement">
+          {/* Named once for sight (the caption) and once for the list (its aria-label). */}
+          {money.method === "NON_COD" ? null : (
+            <p aria-hidden="true" className="text-xs font-medium text-muted-foreground">{SETTLEMENT_CAPTION}</p>
+          )}
+          <MoneyRows label={money.method === "NON_COD" ? undefined : SETTLEMENT_CAPTION} lines={money.deductions} />
+        </div>
+      ) : null}
       {money.estimate ? (
         <dl className="border-t pt-3">
           <div className="flex items-start justify-between gap-4" data-metric-id={money.estimate.metricId}>

@@ -184,7 +184,7 @@ export function ReportKpiHelp() {
     <SectionHelp label="Cara membaca ringkasan laporan">
       <p>Status terkini kiriman yang dibuat pada periode ini, sama dengan Dasbor. Retur mencakup antre retur, retur dalam perjalanan dan retur diterima; persentasenya dihitung dari kiriman yang terkirim + retur (antre retur ikut dihitung karena hasilnya sudah pasti). Gagal mencakup kiriman gagal dan dibatalkan. Masih berjalan adalah sisanya: belum terkirim, retur atau gagal.</p>
       <p>Warna titik sama dengan kelompok di Distribusi status, yang menunjukkan pembagian total kiriman.</p>
-      <p>Nilai COD adalah jumlah yang ditagih kurir untuk kiriman COD yang resinya sudah terbit. Estimasi cair = nilai COD dikurangi ongkir dan biaya COD Mengantar.</p>
+      <p>Nilai COD adalah jumlah yang ditagih kurir untuk kiriman COD yang resinya sudah terbit. Estimasi cair = nilai COD dikurangi ongkir dibayar ke Mengantar dan biaya COD (termasuk PPN).</p>
     </SectionHelp>
   );
 }

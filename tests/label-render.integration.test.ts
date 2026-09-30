@@ -11,6 +11,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
   return {
     awb: "JNE-LABEL-000431",
     codBreakdown: null,
+    collectBreakdown: null,
     courier: "JNE",
     destinationAreaLabel: "Gambir, Jakarta Pusat",
     insuranceAmountIdr: null,

@@ -189,7 +189,8 @@ describe("rail charges", () => {
   it("adds COD lines up to the total the courier collects", () => {
     const charges = issuanceCharges({ declaredValueIdr: 170_000, option, paymentMethod: "COD" })!;
     expect(charges.rows.reduce((sum, row) => sum + (row.amountIdr ?? 0), 0)).toBe(charges.total.amountIdr);
-    expect(charges.total).toEqual({ amountIdr: 209_476, label: "Total tagihan COD" });
+    expect(charges.total).toEqual({ amountIdr: 209_476, label: "Ditagih ke penerima" });
+    expect(charges.rows.map((row) => row.label)).toEqual(["Nilai barang", "Ongkir ditagih ke penerima", "Biaya COD (termasuk PPN)"]);
   });
   it("shows the computed COD Ongkir amount (D-28) and the Non-COD ongkir as their totals", () => {
     expect(issuanceCharges({ declaredValueIdr: 170_000, option, paymentMethod: "COD_ONGKIR" })!.total.amountIdr).toBe(31_034);
