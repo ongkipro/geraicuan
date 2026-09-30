@@ -445,6 +445,8 @@ export type IssuanceChargeOption = {
   insuranceAmountIdr: number | null;
   shippingAmountIdr: number;
   shippingDeductedIdr?: number;
+  /** T-271: present (object or null) only in an Operator's COD / COD Ongkir view (`issuanceOptionsForRole`). */
+  customerCharge?: { collectIdr: number; goodsValueIdr: number | null; ongkirIdr: number } | null;
 };
 
 export type IssuanceCharges = {
@@ -466,6 +468,19 @@ export function issuanceCharges(input: {
 }): IssuanceCharges | null {
   const { option } = input;
   if (!option) return null;
+  // T-271 (D-37/D-38): an Operator's options carry only the customer split, never the fee parts.
+  if (option.customerCharge !== undefined && input.paymentMethod !== "NON_COD") {
+    const charge = option.customerCharge;
+    if (!charge) return null;
+    return {
+      note: input.paymentMethod === "COD" ? "Ditagih kurir ke penerima saat serah terima." : "Ongkir saja, barang sudah dibayar.",
+      rows: [
+        ...(charge.goodsValueIdr === null ? [] : [{ amountIdr: charge.goodsValueIdr, label: MONEY_LABELS.goods }]),
+        { amountIdr: charge.ongkirIdr, label: MONEY_LABELS.customerOngkir },
+      ],
+      total: { amountIdr: charge.collectIdr, label: MONEY_LABELS.collect },
+    };
+  }
   if (input.paymentMethod === "COD") {
     const breakdown = option.codBreakdown;
     if (!breakdown) return null;

@@ -70,6 +70,13 @@ export type IssueShipmentInvoiceResult =
 
 const MAX_INVOICE_ITEMS = 20;
 
+/**
+ * T-271 (D-40): the template every new invoice is issued with. Version 2 prints a COD nota's
+ * customer-facing split (Nilai barang + Ongkir = collected − Nilai barang), derived at render from
+ * the stored columns; an invoice issued earlier keeps its stored version 1 and renders unchanged.
+ */
+export const INVOICE_TEMPLATE_VERSION = 2;
+
 /** "JNE REG" under a "JNE" heading reads twice; the same rule as the label sheet. */
 export function courierServiceName(courier: string, service: string) {
   // "lion" → "Lion Parcel", "jne REG" → "JNE Reg"; a bare variant gets its courier's name.
@@ -285,7 +292,7 @@ export async function issueShipmentInvoice(
   await tx.execute(sql`
     INSERT INTO ${shipmentInvoices} (
       tenant_id, shipment_id, provider_order_snapshot_id, invoice_number,
-      issued_by_user_id, document, shipping_charge_idr, insurance_idr, total_idr,
+      issued_by_user_id, template_version, document, shipping_charge_idr, insurance_idr, total_idr,
       collection_mode, courier_collection_idr, declared_value_idr, logo_sha256
     )
     SELECT
@@ -294,6 +301,7 @@ export async function issueShipmentInvoice(
       pos.id,
       'INV-' || s.public_reference,
       ${context.userId},
+      ${INVOICE_TEMPLATE_VERSION}::smallint,
       jsonb_set(${JSON.stringify(document)}::jsonb, '{resi}', to_jsonb(btrim(pos.cnote_no))),
       -- COD Ongkir: the recipient pays the courier the charge the gerai set, which is
       -- the shipping the customer is charged; the list price would contradict it.

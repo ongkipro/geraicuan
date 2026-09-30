@@ -62,6 +62,7 @@ describe("no native select remains in src", () => {
 describe("Buat kiriman pickup schedule posts pickupDate and pickupSlot unchanged", () => {
   // 17.00 WIB: today's slots have passed, so tomorrow at 09.00 is the first choice (D-27).
   const html = renderToStaticMarkup(createElement(ShipmentCreateForm, {
+    sellerMoney: true,
     gerai: { name: "Gerai Uji", phone: "081234567890" },
     nowIso: "2026-09-26T10:00:00.000Z",
     outlets: [{

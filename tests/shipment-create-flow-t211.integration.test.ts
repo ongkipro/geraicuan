@@ -336,6 +336,7 @@ describe("T-249 section progress: states, sub-progress, rail checklist, bounded 
 
   it("renders the empty form: 1/4 in the top bar, rail checklist of five in-page links, guard naming the gaps", () => {
     const html = renderToStaticMarkup(createElement(ShipmentCreateForm, {
+      sellerMoney: true,
       gerai: { name: "Gerai Uji", phone: "081234567890" },
       nowIso: "2026-09-26T03:00:00.000Z",
       outlets: [{

@@ -27,6 +27,46 @@ export function invoiceCollectionLine(invoice: Pick<ShipmentInvoice, "collection
 }
 
 /**
+ * T-271 (owner 2026-10-01, D-40): the money lines of a template version 2 nota, derived only from
+ * the invoice's stored immutable columns. The customer must not be able to derive the gerai's
+ * Biaya COD + Pembulatan, so a COD nota prints the customer-facing split of what the courier
+ * collects — Nilai barang + Ongkir, where Ongkir = collected − Nilai barang (CUSTOMER-ONGKIR-IDR) —
+ * and never the quote's list price beside the collection. COD Ongkir: the whole charge is Ongkir.
+ * Non-COD: the version 1 lines. Insurance is not collected from a COD recipient, so a COD nota
+ * leaves it out. Null for Non-COD, which renders the version 1 lines.
+ */
+export function invoiceV2CodLines(
+  invoice: Pick<ShipmentInvoice, "collectionMode" | "courierCollectionIdr" | "declaredValueIdr">,
+): { goodsValueIdr: number | null; ongkirIdr: number | null; totalIdr: number } | null {
+  if (invoice.collectionMode === "NON_COD" || invoice.courierCollectionIdr === null) return null;
+  const collected = invoice.courierCollectionIdr;
+  if (invoice.collectionMode === "COD_SHIPPING_ONLY") return { goodsValueIdr: null, ongkirIdr: collected, totalIdr: collected };
+  // A collection below Nilai barang has no honest split (never expected: COD-TOTAL ≥ goods + ongkir).
+  return collected >= invoice.declaredValueIdr
+    ? { goodsValueIdr: invoice.declaredValueIdr, ongkirIdr: collected - invoice.declaredValueIdr, totalIdr: collected }
+    : { goodsValueIdr: null, ongkirIdr: null, totalIdr: collected };
+}
+
+function InvoiceMoneyV2Cod({ invoice, lines }: { invoice: ShipmentInvoice; lines: NonNullable<ReturnType<typeof invoiceV2CodLines>> }) {
+  const shippingOnly = invoice.collectionMode === "COD_SHIPPING_ONLY";
+  return (
+    <section className="invoice-block-money">
+      {lines.goodsValueIdr === null ? null : (
+        <p className="invoice-row"><span>Nilai barang</span><span>{formatIdr(lines.goodsValueIdr)}</span></p>
+      )}
+      {lines.ongkirIdr === null ? null : (
+        <p className="invoice-row"><span>Ongkir</span><span>{formatIdr(lines.ongkirIdr)}</span></p>
+      )}
+      <p className="invoice-row invoice-total">
+        <span>{shippingOnly ? "Total ongkir" : "Total"}</span><span>{formatIdr(lines.totalIdr)}</span>
+      </p>
+      <p className="invoice-note">Pembayaran: {invoiceCollectionLine(invoice)}</p>
+      {shippingOnly ? <p>Nilai barang (informasi): {formatIdr(invoice.declaredValueIdr)}</p> : null}
+    </section>
+  );
+}
+
+/**
  * The nota (PR-77, DATA-14): renders the stored `document` and money columns only, so a
  * reprint is the issued document unchanged. No paid/unpaid, payment method, QR, bank
  * or tax label (PR-78).
@@ -37,6 +77,8 @@ export function InvoiceSheet({ invoice, medium }: { invoice: ShipmentInvoice; me
   const hiddenItems = doc.items.length - items.length;
   // T-247 (L3): the logo version recorded at issuance, never the gerai's current logo.
   const logoSrc = geraiLogoVersionSrc(invoice.logoSha256);
+  // T-271: a reprint renders the template version stored at issuance; version 1 is unchanged.
+  const v2Lines = invoice.templateVersion >= 2 ? invoiceV2CodLines(invoice) : null;
 
   return (
     <article aria-label={`Invoice ${invoice.invoiceNumber}`} className="invoice-sheet" data-medium={medium}>
@@ -77,15 +119,17 @@ export function InvoiceSheet({ invoice, medium }: { invoice: ShipmentInvoice; me
         <p className="invoice-row"><span>Berat</span><span>{formatWeight(doc.weightGrams)}</span></p>
       </section>
 
-      <section className="invoice-block-money">
-        <p className="invoice-row"><span>Ongkir</span><span>{formatIdr(invoice.shippingChargeIdr)}</span></p>
-        {invoice.insuranceIdr > 0 ? (
-          <p className="invoice-row"><span>Asuransi</span><span>{formatIdr(invoice.insuranceIdr)}</span></p>
-        ) : null}
-        <p className="invoice-row invoice-total"><span>Total ongkir</span><span>{formatIdr(invoice.totalIdr)}</span></p>
-        <p className="invoice-note">Pembayaran: {invoiceCollectionLine(invoice)}</p>
-        <p>Nilai barang (informasi): {formatIdr(invoice.declaredValueIdr)}</p>
-      </section>
+      {v2Lines ? <InvoiceMoneyV2Cod invoice={invoice} lines={v2Lines} /> : (
+        <section className="invoice-block-money">
+          <p className="invoice-row"><span>Ongkir</span><span>{formatIdr(invoice.shippingChargeIdr)}</span></p>
+          {invoice.insuranceIdr > 0 ? (
+            <p className="invoice-row"><span>Asuransi</span><span>{formatIdr(invoice.insuranceIdr)}</span></p>
+          ) : null}
+          <p className="invoice-row invoice-total"><span>Total ongkir</span><span>{formatIdr(invoice.totalIdr)}</span></p>
+          <p className="invoice-note">Pembayaran: {invoiceCollectionLine(invoice)}</p>
+          <p>Nilai barang (informasi): {formatIdr(invoice.declaredValueIdr)}</p>
+        </section>
+      )}
 
       <section className="invoice-footer">
         <p>Nota ini bukan bukti pembayaran.</p>

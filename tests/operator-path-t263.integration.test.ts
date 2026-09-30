@@ -211,6 +211,7 @@ describe("Buat kiriman folds complete sections on phones", () => {
 
   it("opens the form with the pre-filled pickup section folded and the recipient section open", () => {
     const html = renderToStaticMarkup(createElement(ShipmentCreateForm, {
+      sellerMoney: true,
       gerai: { name: "Gerai Uji", phone: "081234567890" },
       nowIso: "2026-09-26T03:00:00.000Z",
       outlets: [{
@@ -233,6 +234,35 @@ describe("Buat kiriman folds complete sections on phones", () => {
     // T-249 states are unchanged by the fold.
     expect([...html.matchAll(/data-flow-section="[^"]+" data-state="(\w+)"/g)].map((match) => match[1]))
       .toEqual(["complete", "current", "pending", "pending", "locked"]);
+  });
+});
+
+describe("T-271: the Buat kiriman form shows the fee only to the Tenant Admin", () => {
+  const form = (sellerMoney: boolean) => text(renderToStaticMarkup(createElement(ShipmentCreateForm, {
+    sellerMoney,
+    gerai: { name: "Gerai Uji", phone: "081234567890" },
+    nowIso: "2026-09-26T03:00:00.000Z",
+    outlets: [{
+      id: "00000000-0000-4000-8000-000000000271",
+      name: "Outlet Uji",
+      pickupPoints: [{ isDefault: true, originAreaLabel: "Coblong, Kota Bandung", pickupAddressId: "P-1", pickupAddressLabel: "Gudang, Jl. Dago 1" }],
+    }],
+    steps: [
+      { detail: "a", label: "Isi data", state: "current" },
+      { detail: "b", label: "Cek tarif", state: "pending" },
+      { detail: "c", label: "Terbitkan resi", state: "pending" },
+    ],
+    submissionId: "00000000-0000-4000-8000-000000000272",
+  })));
+
+  it("Tenant Admin: the COD option names Biaya COD and its rate", () => {
+    expect(form(true)).toMatch(/Biaya COD 3,33%/);
+  });
+
+  it("Operator: no Biaya COD, rate or seller-side line anywhere on the form", () => {
+    const body = form(false);
+    expect(body).toContain("Kurir menagih penerima saat serah terima.");
+    expect(body).not.toMatch(/Biaya COD|biaya COD|3,33|PPN|Pembulatan|Ongkir ditagih ke penerima|dibayar ke Mengantar|Estimasi cair/);
   });
 });
 

@@ -164,10 +164,16 @@ export function ShipmentCreateForm({
   gerai,
   nowIso,
   outlets,
+  sellerMoney,
   steps,
   submissionId,
 }: {
   gerai: { name: string; phone: string | null };
+  /**
+   * T-271 (D-37/D-38): the Tenant Admin sees the fee parts (Biaya COD and its rate); an Operator
+   * sees what is collected as Nilai barang + Ongkir only. Decided by the page from the session role.
+   */
+  sellerMoney: boolean;
   /** The top-bar steps; step 1 gains the live "n/4 bagian lengkap" (T-249). */
   steps: FlowStep[];
   /** The server's clock, so the pickup dates and slots render the same on server and client. */
@@ -275,8 +281,8 @@ export function ShipmentCreateForm({
     destination: destinationLabel,
     moneyRows: [
       { amountIdr: parseRupiahOrNull(declaredValue), label: cod ? "Nilai barang" : "Nilai barang (asuransi)" },
-      { amountIdr: null, label: cod ? MONEY_LABELS.chargedShipping : "Ongkir" },
-      ...(cod ? [{ amountIdr: null, label: MONEY_LABELS.codFee }] : []),
+      { amountIdr: null, label: cod && sellerMoney ? MONEY_LABELS.chargedShipping : "Ongkir" },
+      ...(cod && sellerMoney ? [{ amountIdr: null, label: MONEY_LABELS.codFee }] : []),
     ],
     origin: pickup?.originAreaLabel ?? null,
     rows: [
@@ -780,7 +786,9 @@ export function ShipmentCreateForm({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <OptionCard
                   checked={cod}
-                  description={<span className="font-semibold">Biaya COD {MENGANTAR_COD_FEE_RATE_LABEL}</span>}
+                  description={sellerMoney
+                    ? <span className="font-semibold">Biaya COD {MENGANTAR_COD_FEE_RATE_LABEL}</span>
+                    : "Kurir menagih penerima saat serah terima."}
                   name="paymentChoice"
                   onSelect={() => setCod(true)}
                   value="COD"
@@ -810,7 +818,7 @@ export function ShipmentCreateForm({
                   <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sm border bg-card px-2 text-xs md:min-h-0 md:py-0.5">
                     <input checked={codOngkir} className="size-4 accent-primary" onChange={(event) => setCodOngkir(event.target.checked)} type="checkbox" />
                     <span className="font-semibold text-foreground">COD Ongkir</span>
-                    <span className="text-muted-foreground">(kurir menagih ongkir + biaya COD)</span>
+                    <span className="text-muted-foreground">{sellerMoney ? "(kurir menagih ongkir + biaya COD)" : "(kurir menagih ongkir saja)"}</span>
                   </label>
                 ) : null}
               </div>
@@ -832,7 +840,9 @@ export function ShipmentCreateForm({
               {cod ? (
                 <p className="flex items-center justify-between gap-3 text-xs">
                   <span className="text-muted-foreground">
-                    {codOngkir ? `Nilai COD = ongkir + biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}, dihitung otomatis` : `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL} dari total tagihan`}
+                    {sellerMoney
+                      ? codOngkir ? `Nilai COD = ongkir + biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL}, dihitung otomatis` : `Biaya COD ${MENGANTAR_COD_FEE_RATE_LABEL} dari total tagihan`
+                      : codOngkir ? "Nilai COD = ongkir, dihitung otomatis" : "Ditagih = nilai barang + ongkir"}
                   </span>
                   <span className="font-semibold text-muted-foreground">Setelah cek tarif</span>
                 </p>

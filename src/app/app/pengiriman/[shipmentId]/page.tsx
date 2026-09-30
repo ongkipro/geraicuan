@@ -32,7 +32,7 @@ import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-recon
 import { isSanctionedUnpaidRecoveryFixtureEnabled } from "@/lib/sanctioned-unpaid-recovery-fixture";
 import { gramsToKilogramLabel } from "@/lib/shipment-draft-logic";
 import { filterTenantCourierServices } from "@/lib/gerai-settings";
-import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
+import { buildShipmentEstimateOptions, issuanceOptionsForRole } from "@/lib/shipment-estimate-options";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 import { HANDOVER_ATTENTION_LABEL, handoverOverdue, handoverRecordText, handoverUndoAllowed } from "@/lib/shipment-handover";
@@ -264,12 +264,13 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
           codFormulaRetired={view.codFormulaRetired}
           declaredValueIdr={detail.package.declaredValueIdr}
           fixtureEnabled={isSanctionedOrderFixtureEnabled()}
-          options={buildShipmentEstimateOptions({
+          // T-271: an Operator's options carry the customer split only (D-37/D-38 tiers).
+          options={issuanceOptionsForRole(buildShipmentEstimateOptions({
             codFormulaRetired: view.codFormulaRetired,
             declaredValueIdr: detail.package.declaredValueIdr,
             paymentMethod: detail.paymentMethod,
             services: filterTenantCourierServices(detail.estimate.services, disabledCouriers),
-          })}
+          }), detail.paymentMethod, principal.role)}
           paymentMethod={detail.paymentMethod}
           shipmentId={detail.shipmentId}
           snapshotId={detail.estimate.snapshotId}

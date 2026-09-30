@@ -7,8 +7,14 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { InvoiceSheet } from "@/app/app/invoice/invoice-sheet";
+import { calculateCodAmounts } from "@/db/cod-totals-repository";
 import {
   courierServiceName,
+  INVOICE_TEMPLATE_VERSION,
   issueShipmentInvoice,
   loadShipmentInvoice,
 } from "@/db/shipment-invoice-repository";
@@ -80,12 +86,13 @@ async function seedShipment(input: {
   status?: "ISSUED" | "AWAITING_UPSTREAM_PAYMENT";
   cod?: "COD" | "COD_SHIPPING_ONLY";
   insuranceIdr?: number | null;
+  codAmountIdr?: number;
 }) {
   const tenantId = input.tenantId ?? tenantA;
   const outletId = input.outletId ?? outletA;
   const status = input.status ?? "ISSUED";
   const isCod = input.cod !== undefined;
-  const codAmount = input.cod === "COD" ? 111721 : input.cod === "COD_SHIPPING_ONLY" ? 8277 : null;
+  const codAmount = input.codAmountIdr ?? (input.cod === "COD" ? 111721 : input.cod === "COD_SHIPPING_ONLY" ? 8277 : null);
   const ids = fixtureIds(input.sequence);
   const awb = status === "ISSUED" ? `JNE-T221-${String(input.sequence).padStart(6, "0")}` : null;
 
@@ -264,7 +271,8 @@ describe("shipment invoice issuance", () => {
     expect(first.invoice).toMatchObject({
       invoiceNumber: `INV-${fixture.publicReference}`,
       issuedByUserId: operatorA,
-      templateVersion: 1,
+      // T-271: every new invoice is issued with template version 2.
+      templateVersion: 2,
       // The confirmed provider `price`, never the gerai's cost (7 000).
       shippingChargeIdr: 8000,
       insuranceIdr: 1500,
@@ -439,6 +447,64 @@ describe("shipment invoice issuance", () => {
     await expect(insert({ mode: "COD" })).rejects.toMatchObject({ constraint: "shipment_invoices_courier_collection_pair" });
     await expect(insert({ document: "[]" })).rejects.toMatchObject({ constraint: "shipment_invoices_document_object" });
     expect(await invoiceCount(fixture.shipmentId)).toBe(0);
+  });
+});
+
+describe("invoice template version 2 (T-271, D-40)", () => {
+  const nota = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/ /g, " ").replace(/\s+/g, " ");
+
+  it("issues version 2; a COD nota prints Nilai barang + Ongkir (collected − Nilai barang), never the quote", async () => {
+    const cod = calculateCodAmounts(150_000, 8_000);
+    const fixture = await seedShipment({ sequence: 30, cod: "COD", codAmountIdr: cod.providerCodAmountIdr, insuranceIdr: null });
+    const issued = await asUser(operatorA, tenantA, (tx, context) => issueShipmentInvoice(tx, context, fixture.shipmentId));
+    expect(INVOICE_TEMPLATE_VERSION).toBe(2);
+    expect(issued).toMatchObject({ ok: true, invoice: { templateVersion: 2, courierCollectionIdr: 163_443, declaredValueIdr: 150_000, shippingChargeIdr: 8000 } });
+    const { rows } = await adminPool.query<{ template_version: number }>(
+      "SELECT template_version FROM shipment_invoices WHERE shipment_id = $1", [fixture.shipmentId]);
+    expect(rows).toEqual([{ template_version: 2 }]);
+    if (!issued.ok) return;
+    const body = nota(renderToStaticMarkup(createElement(InvoiceSheet, { invoice: issued.invoice, medium: "80mm" })));
+    expect(body).toMatch(/Nilai barang Rp 150\.000 Ongkir Rp 13\.443 Total Rp 163\.443/);
+    expect(body).not.toMatch(/Rp 8\.000|Biaya COD|Pembulatan|PPN|Mengantar/);
+  });
+
+  it("leaves an invoice issued as version 1 as it was, and another tenant's issuance touches neither tenant's rows", async () => {
+    const old = await seedShipment({ sequence: 31, cod: "COD", insuranceIdr: null });
+    // An invoice issued before T-271: the row as 0055's default wrote it.
+    await adminPool.query(
+      `INSERT INTO shipment_invoices (
+        tenant_id, shipment_id, provider_order_snapshot_id, invoice_number, issued_by_user_id, document,
+        shipping_charge_idr, insurance_idr, total_idr, collection_mode, courier_collection_idr, declared_value_idr
+      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, 8000, 0, 8000, 'COD', 111721, 150000)`,
+      [tenantA, old.shipmentId, old.providerOrderSnapshotId, `INV-${old.publicReference}`, operatorA, JSON.stringify({
+        courierService: "JNE REG", deliveryEstimate: "1–2 hari", gerai: { address: "Jl. Kenanga 5", name: "Gerai Nota A", whatsapp: null },
+        items: [{ name: "Kain batik", quantity: 2 }], recipient: { city: "Menteng, Jakarta Pusat", name: "Penerima Sintetis" },
+        resi: old.awb, sender: { city: "Jl. Kenanga 5", name: "Gerai Sintetis", phone: "081211110000" }, weightGrams: 1250,
+      })],
+    );
+    const snapshot = async () => (await adminPool.query(
+      "SELECT to_jsonb(i) AS row FROM shipment_invoices i WHERE tenant_id = $1 ORDER BY invoice_number", [tenantA])).rows;
+    const before = await snapshot();
+    expect(before.map((entry) => entry.row.template_version)).toEqual([1]);
+
+    // A second (reprint) call returns the stored version 1 unchanged; a new shipment gets version 2.
+    const fresh = await seedShipment({ sequence: 32 });
+    const [reprint] = await asUser(adminA, tenantA, async (tx, context) => [
+      await issueShipmentInvoice(tx, context, old.shipmentId),
+      await issueShipmentInvoice(tx, context, fresh.shipmentId),
+    ] as const);
+    const other = await seedShipment({ sequence: 33, tenantId: tenantB, outletId: outletB });
+    const otherIssued = await asUser(userB, tenantB, (tx, context) => issueShipmentInvoice(tx, context, other.shipmentId));
+    expect(otherIssued).toMatchObject({ ok: true, invoice: { templateVersion: 2 } });
+
+    const after = await snapshot();
+    expect(after[0]).toEqual(before[0]);
+    expect(after.map((entry) => entry.row.template_version)).toEqual([1, 2]);
+    expect(reprint).toMatchObject({ ok: true, invoice: { templateVersion: 1 } });
+    if (!reprint.ok) return;
+    // Version 1 renders as it always did: the quote price as Ongkir, the collection apart.
+    const body = nota(renderToStaticMarkup(createElement(InvoiceSheet, { invoice: reprint.invoice, medium: "80mm" })));
+    expect(body).toMatch(/Ongkir Rp 8\.000 Total ongkir Rp 8\.000 Pembayaran: COD — ditagih kurir ke penerima: Rp 111\.721 Nilai barang \(informasi\): Rp 150\.000/);
   });
 });
 

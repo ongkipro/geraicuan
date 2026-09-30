@@ -25,7 +25,7 @@ import { paymentMethodOf } from "@/lib/payment-method";
 import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture";
 import { gramsToKilogramLabel } from "@/lib/shipment-draft-logic";
 import { filterTenantCourierServices } from "@/lib/gerai-settings";
-import { buildShipmentEstimateOptions } from "@/lib/shipment-estimate-options";
+import { buildShipmentEstimateOptions, issuanceOptionsForRole } from "@/lib/shipment-estimate-options";
 import { shipmentDetailHref, shipmentLabelHref } from "@/lib/shipment-number";
 
 import { EstimateLoader } from "./estimate-loader";
@@ -151,7 +151,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
       <>
         {header}
         {/* The form renders the stepper itself: step 1 carries its live "n/4 bagian lengkap" (T-249). */}
-        <ShipmentCreateForm gerai={data.gerai} nowIso={new Date().toISOString()} outlets={data.outlets} steps={steps("fill")} submissionId={randomUUID()} />
+        <ShipmentCreateForm gerai={data.gerai} nowIso={new Date().toISOString()} outlets={data.outlets} sellerMoney={principal.role === "TENANT_ADMIN"} steps={steps("fill")} submissionId={randomUUID()} />
       </>
     );
   }
@@ -233,12 +233,13 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
             codFormulaRetired: data.codFormulaRetired,
             declaredValueIdr: draft.declaredValueIdr,
             fixtureEnabled: isSanctionedOrderFixtureEnabled(),
-            options: buildShipmentEstimateOptions({
+            // T-271: an Operator's options carry the customer split only (D-37/D-38 tiers).
+            options: issuanceOptionsForRole(buildShipmentEstimateOptions({
               codFormulaRetired: data.codFormulaRetired,
               declaredValueIdr: draft.declaredValueIdr,
               paymentMethod,
               services: filterTenantCourierServices(data.snapshot.services, data.disabledCouriers),
-            }),
+            }), paymentMethod, principal.role),
             paymentMethod,
             shipmentId: draft.id,
             snapshotId: data.snapshot.snapshotId,

@@ -52,7 +52,12 @@ import { cn } from "@/lib/utils";
 type IssuanceContextValue = {
   charges: IssuanceCharges | null;
   codFormulaRetired: boolean;
+  /** Tenant Admin only: the COD Ongkir charge with its fee parts (D-28). */
   codOngkir: ReturnType<typeof codOngkirAmount>;
+  /** The COD Ongkir amount the courier collects, for either role. */
+  codOngkirChargeIdr: number | null;
+  /** T-271: the server sent the Operator's customer-facing options (no fee parts to show). */
+  customerView: boolean;
   confirmDisabled: boolean;
   consented: boolean;
   eligibleCount: number;
@@ -126,9 +131,15 @@ export function IssuanceProvider({
   // T-260 (owner 2026-09-28, "hold dulu"): a quotable service Mengantar cannot take an order for
   // (spx, paxel, SAPLite) is shown but not selectable; the server refuses it too.
   const eligibleCount = options.filter((option) => isOrderableOption(option) && (!isCod || option.codEligible)).length;
+  // T-271: `issuanceOptionsForRole` marks an Operator's options with `customerCharge` (object or
+  // null); they carry no fee parts, so the amount comes from the server as a whole.
+  const customerView = options.some((option) => option.customerCharge !== undefined);
   // D-28: ongkir + biaya COD, computed from the chosen service; the server records the same figure.
-  const codOngkir = paymentMethod === "COD_ONGKIR" ? codOngkirAmount(selected?.shippingDeductedIdr) : null;
-  const codOngkirBlocked = paymentMethod === "COD_ONGKIR" && selected !== null && codOngkir === null;
+  const codOngkir = paymentMethod === "COD_ONGKIR" && !customerView ? codOngkirAmount(selected?.shippingDeductedIdr) : null;
+  const codOngkirChargeIdr = paymentMethod !== "COD_ONGKIR"
+    ? null
+    : customerView ? selected?.customerCharge?.collectIdr ?? null : codOngkir?.chargeIdr ?? null;
+  const codOngkirBlocked = paymentMethod === "COD_ONGKIR" && selected !== null && codOngkirChargeIdr === null;
   const consented = selected !== null && consentFor === selectedId;
   const gate = issuanceGate({
     codFormulaRetired,
@@ -149,8 +160,10 @@ export function IssuanceProvider({
     charges,
     codFormulaRetired,
     codOngkir,
+    codOngkirChargeIdr,
     confirmDisabled: gate.confirmDisabled,
     consented,
+    customerView,
     eligibleCount,
     fixtureEnabled,
     formId,
@@ -346,22 +359,33 @@ export function IssuanceServiceChooser({ context }: {
   );
 }
 
-/** D-28: the COD Ongkir amount — ongkir + biaya COD, computed and read-only. */
+/**
+ * D-28: the COD Ongkir amount, computed and read-only. The Tenant Admin sees its parts (ongkir +
+ * biaya COD + pembulatan); an Operator (T-271) sees the amount only, as the customer's Ongkir.
+ */
 function CodOngkirAmountRow() {
-  const { codOngkir } = useIssuance();
+  const { codOngkir, codOngkirChargeIdr, customerView } = useIssuance();
   const id = useId();
-  if (codOngkir === null) {
-    return <p className="text-sm text-destructive" role="alert">Ongkir yang dipotong Mengantar untuk layanan ini tidak tersedia. Muat ulang tarif.</p>;
+  if (codOngkirChargeIdr === null) {
+    return (
+      <p className="text-sm text-destructive" role="alert">
+        {customerView ? "Nilai COD Ongkir layanan ini tidak tersedia." : "Ongkir yang dipotong Mengantar untuk layanan ini tidak tersedia."} Muat ulang tarif.
+      </p>
+    );
   }
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted p-4">
       <p className="text-sm font-medium" id={`${id}-label`}>Nilai COD Ongkir ditagih kurir ke penerima</p>
       <output aria-describedby={`${id}-hint`} aria-labelledby={`${id}-label`} className="text-base font-bold tabular-nums">
-        {formatIdr(codOngkir.chargeIdr)}
+        {formatIdr(codOngkirChargeIdr)}
       </output>
       <p className="text-xs text-muted-foreground" id={`${id}-hint`}>
-        Dihitung otomatis: ongkir ditagih ke penerima {formatIdr(codOngkir.shippingIdr)} + biaya COD {MENGANTAR_COD_FEE_RATE_LABEL} (termasuk PPN) {formatIdr(codOngkir.codFeeIdr)}
-        {codOngkir.roundingIdr > 0 ? ` + pembulatan ${formatIdr(codOngkir.roundingIdr)}` : ""}
+        {codOngkir ? (
+          <>
+            Dihitung otomatis: ongkir ditagih ke penerima {formatIdr(codOngkir.shippingIdr)} + biaya COD {MENGANTAR_COD_FEE_RATE_LABEL} (termasuk PPN) {formatIdr(codOngkir.codFeeIdr)}
+            {codOngkir.roundingIdr > 0 ? ` + pembulatan ${formatIdr(codOngkir.roundingIdr)}` : ""}
+          </>
+        ) : "Dihitung otomatis dari tarif layanan. Barang sudah dibayar; ini ongkir yang ditagih ke penerima."}
       </p>
     </div>
   );
