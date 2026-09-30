@@ -58,7 +58,7 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
   },
   ISSUED_TODAY: {
     guidance: "Resi diterbitkan pada hari operasional WIB saat ini.",
-    label: "Resi terbit hari ini",
+    label: "Resi diterbitkan hari ini",
     tone: "ok",
   },
   DRAFT: {
@@ -142,7 +142,7 @@ export const SHIPMENT_STATUS_OPTIONS: readonly {
   { label: "Perlu tindakan", value: "ACTION_REQUIRED" },
   { label: SHIPMENT_STATUS_PRESENTATION.NEEDS_ATTENTION.label, value: "NEEDS_ATTENTION" },
   { label: "Siap dilanjutkan", value: "READY_TO_PROGRESS" },
-  { label: "Resi terbit hari ini", value: "ISSUED_TODAY" },
+  { label: "Resi diterbitkan hari ini", value: "ISSUED_TODAY" },
   // Tenant Admin only: the page drops these for an operator (see STALE_SHIPMENT_FILTERS).
   { label: STALE_SHIPMENT_FILTERS.STALE_48H.label, value: "STALE_48H" },
   { label: STALE_SHIPMENT_FILTERS.STALE_4D.label, value: "STALE_4D" },

@@ -134,7 +134,7 @@ export function LabelPrintPanel({
       {/* T-243: a lone label preview stays beside the size cards while the history scrolls. */}
       <div className={cn("grid min-w-0 gap-6 print:static print:block lg:col-start-3 lg:row-start-1", !invoice && "lg:sticky lg:top-20")}>
         <div className="label-print-group grid min-w-0 gap-2 print:block">
-          <LabelPrintContext.Provider value={{ printedAt: state.printed?.printedAt ?? null, size }}>
+          <LabelPrintContext.Provider value={{ size }}>
             <LabelPreviewFrame
               label={`Pratinjau label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}
               size={size}

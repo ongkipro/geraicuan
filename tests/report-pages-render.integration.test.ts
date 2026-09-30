@@ -198,7 +198,7 @@ describe("Laporan pengiriman view", () => {
     expect(filledButtons(html)).toBe(0);
     expect(html).toContain('href="/app/laporan/pengiriman/export.csv?kurir=JNE&amp;rentang=30-hari&amp;tz=Asia%2FJakarta"');
     expect(tableHeaders(html, "Daftar kiriman")).toEqual(["Nomor", "Dibuat", "Penerima", "Kurir/Layanan", "Status", "Pembayaran", "Biaya Mengantar"]);
-    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Biaya kirim Mengantar", "Biaya COD", "Estimasi cair"]);
+    expect(tableHeaders(html, "Total per kurir")).toEqual(["Kurir", "Kiriman", "% terkirim", "% retur", "Ongkir dibayar ke Mengantar", "Biaya COD", "Estimasi cair"]);
     // JNE: 6 of 10 delivered; 2 of 8 finished returned. The logo alone names the courier.
     expect(html).toContain("60,0%");
     expect(html).toContain("25,0%");
@@ -220,7 +220,9 @@ describe("Laporan pengiriman view", () => {
     }
     // Terkirim 4 of 27; Retur 2 of 6 finished (4 + 2).
     expect(html).toContain("14,8% dari 27 kiriman");
-    expect(html).toContain("33,3% dari 6 selesai");
+    // T-265: the base is named ("terkirim + retur"), never the ambiguous "selesai".
+    expect(html).toContain("33,3% dari 6 terkirim + retur");
+    expect(html).not.toMatch(/dari \d+ selesai/);
     expect(html).toMatch(/Rp\s666\.480/);
     // T-251: two panels, no decorative icon chips; each figure is a <dd> after its <dt> label.
     const summary = html.slice(html.indexOf('aria-label="Ringkasan laporan"'), html.indexOf("Tren harian"));
@@ -269,9 +271,9 @@ describe("Laporan pengiriman view", () => {
       .toEqual([["DRAFT", "1", "2,2%"], ["ISSUED", "1", "2,2%"]]);
     // T-262: every percentage at the top of Laporan names its base inline — Retur's rate of the
     // finished shipments beside Distribusi's shares of all shipments read "31,0%" vs "14,0%" before.
-    const rates = [...(summary + distribution).replace(/<[^>]+>/g, "").matchAll(/(\d+(?:,\d)?%)(.{0,24})/g)];
+    const rates = [...(summary + distribution).replace(/<[^>]+>/g, "").matchAll(/(\d+(?:,\d)?%)(.{0,30})/g)];
     expect(rates.length).toBeGreaterThanOrEqual(4);
-    for (const [, rate, after] of rates) expect(`${rate}${after}`).toMatch(/^[\d,]+% dari \d+ (kiriman|selesai)/);
+    for (const [, rate, after] of rates) expect(`${rate}${after}`).toMatch(/^[\d,]+% dari \d+ (kiriman|terkirim \+ retur)/);
     expect(distribution).toContain("<details");
     // Wilayah: top 10 visible, the rest behind the disclosure, unknown named. T-254: the volume bar
     // sits in the table (no separate chart), and below md each wilayah is a record, not a squeezed table.

@@ -251,7 +251,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   Cara menghitung KPI
                   <ChevronDown aria-hidden="true" className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
                 </summary>
-                <p className="pt-2">Kiriman dibuat, COD dan non-COD dihitung saat kiriman dibuat (COD termasuk COD Ongkir); resi terbit dihitung saat Mengantar menerbitkan resi. Pembanding: {period.previousPeriodLabel}.</p>
+                <p className="pt-2">Kiriman dibuat, COD dan non-COD dihitung saat kiriman dibuat (COD termasuk COD Ongkir); resi diterbitkan dihitung saat Mengantar menerbitkan resi pada periode ini, bukan jumlah kiriman yang kini berstatus Resi terbit. Pembanding: {period.previousPeriodLabel}.</p>
               </details>
               <div className="flex flex-wrap items-center gap-x-4">
                 {isAdmin ? <Link className={arrowLink} href={`/app/laporan/pengiriman?${query.toString()}`}>Laporan pengiriman<ArrowRight aria-hidden="true" /></Link> : null}

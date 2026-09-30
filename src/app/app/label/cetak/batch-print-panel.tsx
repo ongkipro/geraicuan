@@ -36,7 +36,6 @@ export function BatchPrintPanel({
 }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BatchLabelPrintResult | null>(null);
-  const [recordedAt, setRecordedAt] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [nextAttempts, setNextAttempts] = useState(attempts);
   const [medium, setMedium] = useState<InvoiceMedium>(DEFAULT_INVOICE_MEDIUM);
@@ -51,7 +50,6 @@ export function BatchPrintPanel({
       try {
         const outcome = await recordBatchLabelPrints(nextAttempts);
         setResult(outcome);
-        setRecordedAt(new Date().toISOString());
         setNextAttempts(nextAttempts.map((entry) => ({ ...entry, attemptId: outcome.nextAttemptIds[entry.shipmentId] ?? entry.attemptId })));
         if (outcome.printed > 0) printGroup("label");
       } catch {
@@ -123,7 +121,7 @@ export function BatchPrintPanel({
       <div className="grid min-w-0 gap-6 print:block">
         {hasLabels ? (
           <div className="label-print-group grid min-w-0 gap-2 print:block">
-            <LabelPrintContext.Provider value={{ printedAt: recordedAt, size }}>
+            <LabelPrintContext.Provider value={{ size }}>
               <LabelPreviewFrame
                 className="print-sequence"
                 label={`Pratinjau ${attempts.length} label ${LABEL_SIZES[size].name}, sama dengan hasil cetak`}

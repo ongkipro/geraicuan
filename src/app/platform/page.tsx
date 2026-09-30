@@ -116,7 +116,7 @@ function Trend({ view }: { view: PlatformView }) {
     <PlatformCard
       action={(
         <SectionHelp label="Penjelasan tren kiriman">
-          <p>Kiriman dibuat dihitung menurut waktu kiriman dibuat; resi terbit menurut waktu Mengantar menerbitkan resi. Keduanya per hari (WIB), seluruh gerai.</p>
+          <p>Kiriman dibuat dihitung menurut waktu kiriman dibuat; resi diterbitkan menurut waktu Mengantar menerbitkan resi. Keduanya per hari (WIB), seluruh gerai.</p>
           <p>Angka di samping keterangan garis adalah total periode ini.</p>
         </SectionHelp>
       )}
@@ -126,7 +126,7 @@ function Trend({ view }: { view: PlatformView }) {
     >
       <dl aria-label="Total periode ini" className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
         <LegendTotal label="Kiriman dibuat" metric="PLT-TREND-TOTALS" swatch="h-0.5 bg-chart-1">{formatCount(totals.created)}</LegendTotal>
-        <LegendTotal label="Resi terbit" metric="PLT-TREND-TOTALS" swatch="border-t-2 border-dashed border-chart-2">{formatCount(totals.issued)}</LegendTotal>
+        <LegendTotal label="Resi diterbitkan" metric="PLT-TREND-TOTALS" swatch="border-t-2 border-dashed border-chart-2">{formatCount(totals.issued)}</LegendTotal>
       </dl>
       {totals.created || totals.issued ? (
         <>
@@ -137,9 +137,9 @@ function Trend({ view }: { view: PlatformView }) {
               <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
             </summary>
             <Table aria-label="Data tren kiriman" className="mt-2 text-xs [&_td:first-child]:pl-0 [&_td:last-child]:pr-0 [&_th:first-child]:pl-0 [&_th:last-child]:pr-0 [&_tr]:hover:bg-transparent">
-              <TableCaption className="sr-only">Kiriman dibuat dan resi terbit per hari, terbaru di atas.</TableCaption>
+              <TableCaption className="sr-only">Kiriman dibuat dan resi diterbitkan per hari, terbaru di atas.</TableCaption>
               <TableHeader>
-                <TableRow><TableHead>Tanggal (WIB)</TableHead><TableHead className="text-right">Kiriman dibuat</TableHead><TableHead className="text-right">Resi terbit</TableHead></TableRow>
+                <TableRow><TableHead>Tanggal (WIB)</TableHead><TableHead className="text-right">Kiriman dibuat</TableHead><TableHead className="text-right">Resi diterbitkan</TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 {[...view.trend].reverse().map((bucket) => (
@@ -203,9 +203,9 @@ function TopTenants({ view }: { view: PlatformView }) {
       {rows.length ? (
         <>
           <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
-            <TableCaption className="sr-only">Gerai dengan masalah pengajuan lebih dulu, lalu resi terbit terbanyak.</TableCaption>
+            <TableCaption className="sr-only">Gerai dengan masalah pengajuan lebih dulu, lalu resi diterbitkan terbanyak.</TableCaption>
             <TableHeader>
-              <TableRow><TableHead>Gerai</TableHead><TableHead>Status</TableHead><TableHead className="w-28 text-right">Kiriman</TableHead><TableHead className="w-28 text-right">Resi terbit</TableHead><TableHead>Aktivitas terakhir</TableHead></TableRow>
+              <TableRow><TableHead>Gerai</TableHead><TableHead>Status</TableHead><TableHead className="w-28 text-right">Kiriman</TableHead><TableHead className="w-32 text-right">Resi diterbitkan</TableHead><TableHead>Aktivitas terakhir</TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
@@ -231,7 +231,7 @@ function TopTenants({ view }: { view: PlatformView }) {
                   href={`/platform/tenant/${row.tenantId}`}
                   key={row.tenantId}
                   status={<TenantStatusBadge status={row.status} />}
-                  subtitle={`${formatCount(row.shipments)} kiriman · ${formatCount(row.issued)} resi terbit`}
+                  subtitle={`${formatCount(row.shipments)} kiriman · ${formatCount(row.issued)} resi diterbitkan`}
                   time={row.lastActivityAt ? formatWib(row.lastActivityAt) : "Belum ada aktivitas"}
                   title={row.name}
                 />

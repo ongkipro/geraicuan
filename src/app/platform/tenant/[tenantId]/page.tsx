@@ -245,7 +245,7 @@ function TenantStrip({ counts, finance }: { counts: NonNullable<PlatformView["co
   const { lifecycle, memberships, outlets } = counts;
   const items: StatItem[] = [
     { key: "shipments", label: "Kiriman dibuat", metric: "SHP-CREATED", value: formatCount(lifecycle.shipments) },
-    { key: "issued", label: "Resi terbit", metric: "SHP-ISSUED", value: formatCount(lifecycle.issued) },
+    { key: "issued", label: "Resi diterbitkan", metric: "SHP-ISSUED", value: formatCount(lifecycle.issued) },
     {
       badge: lifecycle.batchesFailed ? <StatusBadge label="Perlu dicek" tone="danger" /> : null,
       key: "failed",
@@ -330,7 +330,7 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg leading-snug font-bold" id="ringkasan-gerai">Ringkasan gerai</h2>
           <SectionHelp label="Cara membaca ringkasan gerai">
-            <p>Kiriman dibuat dan resi terbit mengikuti periode di atas, sama dengan Ringkasan platform. Pengajuan gagal dihitung dari semua pengajuan gerai ini ke Mengantar pada periode itu.</p>
+            <p>Kiriman dibuat dan resi diterbitkan mengikuti periode di atas, sama dengan Ringkasan platform. Pengajuan gagal dihitung dari semua pengajuan gerai ini ke Mengantar pada periode itu.</p>
             <p>Anggota aktif dan outlet lengkap adalah keadaan saat ini. Outlet lengkap berarti titik pickup dan area asal sudah terisi.</p>
             <p>Rekonsiliasi menunjukkan berapa hasil rekonsiliasi periode ini yang masih ada selisih.</p>
           </SectionHelp>

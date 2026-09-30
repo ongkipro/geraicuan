@@ -30,6 +30,7 @@ export function KpiCard({
   delta,
   icon: Icon,
   label,
+  metricId,
   note,
   value,
 }: {
@@ -37,13 +38,15 @@ export function KpiCard({
   delta?: KpiDelta;
   icon?: LucideIcon;
   label: string;
+  /** Spec 19 metric ID of the value (`data-metric-id`). */
+  metricId?: string;
   /** One 13px line under the value that says what it counts (a rate and its denominator). */
   note?: ReactNode;
   value: string | number;
 }) {
   const words = delta ? deltaWords(delta) : null;
   return (
-    <Card className="gap-3 [--card-spacing:--spacing(5)] max-md:[--card-spacing:--spacing(4)]">
+    <Card className="gap-3 [--card-spacing:--spacing(5)] max-md:[--card-spacing:--spacing(4)]" data-metric-id={metricId}>
       <div className="flex items-center justify-between gap-2 px-(--card-spacing)">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
         {Icon ? (

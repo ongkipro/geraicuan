@@ -50,7 +50,7 @@ import {
   type ContactRole,
 } from "@/lib/contact-role-filter";
 import { areaDisplayCase, formatDistrictCity, formatWibDateTime, formatWibDateTimeParts, parseAreaRegion } from "@/lib/label-format";
-import { presentShipmentPayment } from "@/lib/payment-method";
+import { PAYMENT_METHOD_LABELS, presentShipmentPayment } from "@/lib/payment-method";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import { cn } from "@/lib/utils";
 import { parseUiAuditScenarioForRoute, UI_AUDIT_HEADER } from "@/lib/ui-audit-scenario";
@@ -184,24 +184,41 @@ export async function ContactDetail({ params, role, searchParams }: ContactDetai
         <KpiCard
           icon={Package}
           label="Total kiriman"
+          metricId="CON-SHP-COUNT"
           note={summary.shipmentCount > 0 ? `${shareText(summary.deliveredCount, summary.shipmentCount)} terkirim (${count.format(summary.deliveredCount)})` : "Belum ada kiriman"}
           value={summary.shipmentCount}
         />
         <KpiCard
           icon={Banknote}
           label="Nilai COD"
-          note={`Dari ${count.format(summary.codOrderCount)} kiriman COD yang resinya terbit`}
+          metricId="CON-SHP-COD-VALUE-IDR"
+          // T-265: the total mixes a COD order's full charge with a COD Ongkir order's shipping-only
+          // charge, so the note names both parts (their sum is the value above).
+          note={summary.codOrderCount > 0 ? (
+            <>
+              <span className="block" data-metric-id="CON-SHP-COD-METHOD-IDR">
+                {PAYMENT_METHOD_LABELS.COD} {formatIdr(summary.codValueIdr - summary.codOngkirValueIdr)} dari {count.format(summary.codOrderCount - summary.codOngkirOrderCount)} kiriman
+              </span>
+              <span className="block" data-metric-id="CON-SHP-COD-ONGKIR-IDR">
+                {PAYMENT_METHOD_LABELS.COD_ONGKIR} {formatIdr(summary.codOngkirValueIdr)} dari {count.format(summary.codOngkirOrderCount)} kiriman
+              </span>
+              <span className="block">Hanya kiriman yang resinya terbit</span>
+            </>
+          ) : "Belum ada kiriman COD yang resinya terbit"}
           value={formatIdr(summary.codValueIdr)}
         />
         <KpiCard
           icon={Undo2}
           label="Tingkat retur"
-          note={settled > 0 ? `${count.format(summary.returnedCount)} retur dari ${count.format(settled)} kiriman selesai` : "Belum ada kiriman selesai"}
+          metricId="CON-SHP-RETURN-RATE"
+          // T-265: the base is named as Laporan names it; a queued return counts (spec 19).
+          note={settled > 0 ? `${count.format(summary.returnedCount)} retur dari ${count.format(settled)} kiriman terkirim + retur` : "Belum ada kiriman terkirim atau retur"}
           value={shareText(summary.returnedCount, settled) ?? "—"}
         />
         <KpiCard
           icon={CalendarDays}
           label="Kiriman 30 hari terakhir"
+          metricId="CON-SHP-LAST-30D"
           note="Dibuat dalam 30 hari terakhir"
           value={summary.last30DaysCount}
         />

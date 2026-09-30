@@ -98,7 +98,7 @@ const SENDER_PHONE = "0812-1111-0229";
 function render(size: LabelSize, fields?: LabelFieldsBySize, label: PrintableLabel = LABEL) {
   return renderToStaticMarkup(createElement(
     LabelPrintContext.Provider,
-    { value: { printedAt: null, size } },
+    { value: { size } },
     createElement(LabelSheet, { fields, label }),
   ));
 }

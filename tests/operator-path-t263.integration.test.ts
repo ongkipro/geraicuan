@@ -40,10 +40,8 @@ const { RecordItem } = await import("@/components/app/record-list");
 const flow = await import("@/app/app/pengiriman/baru/flow-parts");
 const { ShipmentCreateForm } = await import("@/app/app/pengiriman/baru/shipment-create-form");
 const { LabelPrintPanel } = await import("@/app/app/label/[shipmentId]/label-print-panel");
-const { HandoverTime, LabelPrintContext } = await import("@/app/app/label/[shipmentId]/label-print-context");
 const { LabelSheet } = await import("@/app/app/label/[shipmentId]/label-sheet");
 const { MONEY_LABELS } = await import("@/lib/shipment-money");
-const { formatWibDateTime } = await import("@/lib/label-format");
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
@@ -174,7 +172,7 @@ describe("record card as the tap target", () => {
   it("gives the Cetak resi selection a full-width 44px row", () => {
     const source = read("src/app/app/label/batch-selection.tsx");
     expect(source).toMatch(/visibleLabel \? "flex min-h-11 w-full items-center gap-3"/);
-    expect(source).toMatch(/<label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm" htmlFor=\{id\}>Pilih untuk cetak<\/label>/);
+    expect(source).toMatch(/<label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm" htmlFor=\{id\}>\s*Pilih untuk cetak<span className="sr-only"> resi \{awb\}<\/span>/);
   });
 });
 
@@ -309,17 +307,12 @@ describe("label page: preview first, one print button, handover time", () => {
     expect([...html.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].filter((match) => /cetak/i.test(text(match[1])))).toHaveLength(1);
   });
 
-  it("shows 'Saat label dicetak' until a print is recorded, then the recorded time", () => {
-    const at = (printedAt: string | null) => renderToStaticMarkup(createElement(
-      LabelPrintContext.Provider,
-      { value: { printedAt, size: "10x15" } },
-      createElement(HandoverTime),
-    ));
-    expect(at(null)).toBe("Saat label dicetak");
-    expect(at("2026-09-30T02:15:00.000Z")).toBe(formatWibDateTime("2026-09-30T02:15:00.000Z"));
-    // Opening the page must not stamp a time: no clock, no timer.
-    expect(read("src/app/app/label/[shipmentId]/label-print-context.tsx")).not.toMatch(/setInterval|new Date\(\)/);
+  it("puts no handover time on the stub: none is recorded (T-265 removed 'Diserahkan')", () => {
+    const sheet = read("src/app/app/label/[shipmentId]/label-sheet.tsx");
+    expect(sheet).not.toMatch(/<dt>Diserahkan|HandoverTime/);
+    expect(read("src/app/app/label/[shipmentId]/label-print-context.tsx")).not.toMatch(/printedAt|HandoverTime/);
   });
+
 });
 
 describe("thermal sheet Non-COD line", () => {
@@ -333,16 +326,17 @@ describe("thermal sheet Non-COD line", () => {
     shippingAmountIdr: 9_000, chargedShippingIdr: 6_300, ...overrides,
   }) as Parameters<typeof LabelSheet>[0]["label"];
 
-  it("prints Biaya kirim Mengantar at the charged amount, like the Rincian uang panel", () => {
+  it("prints Ongkir dibayar ke Mengantar at the charged amount, like the Rincian uang panel", () => {
     const html = text(renderToStaticMarkup(createElement(LabelSheet, { label: label({}) })));
-    expect(MONEY_LABELS.shippingCost).toBe("Biaya kirim Mengantar");
-    expect(html).toContain("Biaya kirim Mengantar Rp 6.300");
+    // T-265: renamed from "Biaya kirim Mengantar" so it never blurs with the buyer's ongkir.
+    expect(MONEY_LABELS.shippingCost).toBe("Ongkir dibayar ke Mengantar");
+    expect(html).toContain("Ongkir dibayar ke Mengantar Rp 6.300");
     expect(html).not.toContain("Rp 9.000");
     expect(html).not.toContain("Ongkir Mengantar");
   });
 
   it("falls back to the order's price on a legacy snapshot without the charged amount", () => {
     expect(text(renderToStaticMarkup(createElement(LabelSheet, { label: label({ chargedShippingIdr: null }) }))))
-      .toContain("Biaya kirim Mengantar Rp 9.000");
+      .toContain("Ongkir dibayar ke Mengantar Rp 9.000");
   });
 });

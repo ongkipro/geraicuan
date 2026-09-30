@@ -76,6 +76,10 @@ export type ContactShipmentSummary = {
   codOrderCount: number;
   /** CON-SHP-COD-VALUE-IDR: RPT-SHP-COD-VALUE-TOTAL's definition over this contact's shipments. */
   codValueIdr: number;
+  /** CON-SHP-COD-ONGKIR-COUNT: the COD Ongkir orders among `codOrderCount` (T-265). */
+  codOngkirOrderCount: number;
+  /** CON-SHP-COD-ONGKIR-IDR: their charge (ongkir + biaya COD); the rest of `codValueIdr` is COD (T-265). */
+  codOngkirValueIdr: number;
   deliveredCount: number;
   /** CON-SHP-LAST-30D: created in the 30 days before the read. */
   last30DaysCount: number;
@@ -93,6 +97,8 @@ export async function loadContactShipmentSummary(
     .select({
       codOrderCount: sql<number>`count(${shipmentCodTotals.shipmentId})::int`.mapWith(Number),
       codValueIdr: sql<number>`coalesce(sum(${shipmentCodTotals.providerCodAmountIdr}), 0)::bigint`.mapWith(Number),
+      codOngkirOrderCount: sql<number>`count(${shipmentCodTotals.shipmentId}) filter (where ${shipmentDrafts.codShippingOnly})::int`.mapWith(Number),
+      codOngkirValueIdr: sql<number>`coalesce(sum(${shipmentCodTotals.providerCodAmountIdr}) filter (where ${shipmentDrafts.codShippingOnly}), 0)::bigint`.mapWith(Number),
       deliveredCount,
       last30DaysCount: sql<number>`count(*) filter (where ${shipments.createdAt} >= statement_timestamp() - interval '30 days')::int`.mapWith(Number),
       returnedCount: sql<number>`count(*) filter (where ${inArray(shipments.status, [...RTS_STATUSES])})::int`.mapWith(Number),
@@ -101,6 +107,8 @@ export async function loadContactShipmentSummary(
     .from(contacts)
     .innerJoin(shipmentParties, attributedTo(input.role))
     .innerJoin(shipments, shipmentOfParty)
+    // T-265: the draft's method splits the COD total into COD and COD Ongkir.
+    .leftJoin(shipmentDrafts, and(eq(shipmentDrafts.shipmentId, shipments.id), eq(shipmentDrafts.tenantId, shipments.tenantId)))
     .leftJoin(
       providerOrderSnapshots,
       and(eq(providerOrderSnapshots.shipmentId, shipments.id), eq(providerOrderSnapshots.tenantId, shipments.tenantId)),
@@ -116,7 +124,7 @@ export async function loadContactShipmentSummary(
       ),
     )
     .where(and(eq(contacts.tenantId, context.tenantId), eq(contacts.id, input.contactId)));
-  return row ?? { codOrderCount: 0, codValueIdr: 0, deliveredCount: 0, last30DaysCount: 0, returnedCount: 0, shipmentCount: 0 };
+  return row ?? { codOngkirOrderCount: 0, codOngkirValueIdr: 0, codOrderCount: 0, codValueIdr: 0, deliveredCount: 0, last30DaysCount: 0, returnedCount: 0, shipmentCount: 0 };
 }
 
 export type ContactHistoryPayment = "all" | "cod" | "noncod";

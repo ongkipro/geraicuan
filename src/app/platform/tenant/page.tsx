@@ -155,7 +155,7 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                         </TableCell>
                         <TableCell><TenantStatusBadge status={row.status} /></TableCell>
                         <TableCell className="text-right tabular-nums">
-                          <StackCell primary={<span className="font-semibold">{formatCount(row.shipments)}</span>} secondary={`${formatCount(row.issued)} resi terbit`} />
+                          <StackCell primary={<span className="font-semibold">{formatCount(row.shipments)}</span>} secondary={`${formatCount(row.issued)} resi diterbitkan`} />
                         </TableCell>
                         <TableCell className="whitespace-normal">
                           <StackCell primary={`${formatCount(row.batches)} pengajuan`} secondary={issues ? <span className="font-medium text-danger">{issues}</span> : undefined} />
@@ -177,7 +177,7 @@ export default async function PlatformTenantsPage({ searchParams }: PageProps<"/
                       detail={submissionIssues(row) ? <p className="text-xs font-medium text-danger">{submissionIssues(row)}</p> : undefined}
                       meta={`Outlet lengkap ${row.outletConfigured}/${row.outletTotal} · ${formatCount(row.members)} anggota`}
                       status={<TenantStatusBadge status={row.status} />}
-                      subtitle={`${formatCount(row.shipments)} kiriman · ${formatCount(row.issued)} resi terbit`}
+                      subtitle={`${formatCount(row.shipments)} kiriman · ${formatCount(row.issued)} resi diterbitkan`}
                       time={row.lastActivityAt ? formatWib(row.lastActivityAt) : "Belum ada aktivitas"}
                       title={row.name}
                     />

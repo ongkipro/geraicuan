@@ -8,12 +8,12 @@ export type PlatformTrendPoint = { created: number; issued: number; label: strin
 
 const config = {
   created: { color: "var(--chart-1)", label: "Kiriman dibuat" },
-  issued: { color: "var(--chart-2)", label: "Resi terbit" },
+  issued: { color: "var(--chart-2)", label: "Resi diterbitkan" },
 } satisfies ChartConfig;
 
 /**
  * "Tren kiriman seluruh tenant" (reference `platform-ringkasan.html`): kiriman dibuat as the
- * filled series, resi terbit as a line; the legend sits in the card header.
+ * filled series, resi diterbitkan as a line; the legend sits in the card header.
  */
 export function PlatformTrendChart({ data }: { data: PlatformTrendPoint[] }) {
   return (

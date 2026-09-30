@@ -6,7 +6,7 @@ import { useGeraiBrand } from "@/app/app/brand/gerai-brand";
 import { courierPrintLogoSrc } from "@/lib/gerai-settings";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { LabelBarcode } from "@/app/app/label/[shipmentId]/label-barcode";
-import { HandoverTime, LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
+import { LabelPrintContext, LabelSheetFrame } from "@/app/app/label/[shipmentId]/label-print-context";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import { MONEY_LABELS, MONEY_METRIC_IDS, shippingCostIdr } from "@/lib/shipment-money";
 import {
@@ -304,6 +304,8 @@ function LabelPackage({ label, logoSrc, note, shown }: {
  * The stub leaves the building with the sender, so it carries what proves and traces
  * the handover and nothing that only the parcel needs: no recipient name, street
  * address, patokan (T-258) or phone, no sender contact, no package value and no COD breakdown.
+ * T-265 (owner 2026-09-30): no "Diserahkan" line — GeraiCUAN records no handover yet, so the
+ * stub claimed a time nobody confirmed. It returns with the handover feature.
  */
 function LabelSenderStub({ label }: { label: PrintableLabel }) {
   return (
@@ -329,7 +331,6 @@ function LabelSenderStub({ label }: { label: PrintableLabel }) {
       <dl className="label-stub-facts">
         <div><dt>No. kiriman</dt><dd>{label.publicReference}</dd></div>
         <div><dt>Tujuan</dt><dd>{formatDistrictCity(label.destinationAreaLabel)}</dd></div>
-        <div><dt>Diserahkan</dt><dd><HandoverTime /></dd></div>
       </dl>
     </section>
   );

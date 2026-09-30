@@ -128,7 +128,8 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
   const composition = reportOutcomeComposition(kpis);
   const caption: Record<string, string | undefined> = {
     delivered: `${share(kpis.deliveredCount, kpis.shipmentCount)} dari ${number.format(kpis.shipmentCount)} kiriman`,
-    returned: `${formatRate(returnRate(kpis))} dari ${number.format(finished)} selesai`,
+    // T-265: the base is named, not "selesai" — a queued return counts (spec 19 RPT-SHP-RETURN-RATE).
+    returned: `${formatRate(returnRate(kpis))} dari ${number.format(finished)} terkirim + retur`,
   };
   return (
     <section aria-label="Ringkasan laporan" className="@container/summary">
@@ -181,7 +182,7 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
 export function ReportKpiHelp() {
   return (
     <SectionHelp label="Cara membaca ringkasan laporan">
-      <p>Status terkini kiriman yang dibuat pada periode ini, sama dengan Dasbor. Retur mencakup antre retur, retur dalam perjalanan dan retur diterima; persentasenya dihitung dari kiriman yang selesai (terkirim + retur). Gagal mencakup kiriman gagal dan dibatalkan. Masih berjalan adalah sisanya: belum terkirim, retur atau gagal.</p>
+      <p>Status terkini kiriman yang dibuat pada periode ini, sama dengan Dasbor. Retur mencakup antre retur, retur dalam perjalanan dan retur diterima; persentasenya dihitung dari kiriman yang terkirim + retur (antre retur ikut dihitung karena hasilnya sudah pasti). Gagal mencakup kiriman gagal dan dibatalkan. Masih berjalan adalah sisanya: belum terkirim, retur atau gagal.</p>
       <p>Warna titik sama dengan kelompok di Distribusi status, yang menunjukkan pembagian total kiriman.</p>
       <p>Nilai COD adalah jumlah yang ditagih kurir untuk kiriman COD yang resinya sudah terbit. Estimasi cair = nilai COD dikurangi ongkir dan biaya COD Mengantar.</p>
     </SectionHelp>
@@ -301,7 +302,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
       action={(
         <SectionHelp label="Penjelasan distribusi status">
           <p>Status terkini kiriman pada periode ini, dikelompokkan seperti Ringkasan: Terkirim, Retur, Gagal dan Masih berjalan. Buka kelompok untuk melihat statusnya.</p>
-          <p>Persen dihitung dari semua kiriman pada periode ini, tidak seperti persen retur di Ringkasan yang dihitung dari kiriman selesai.</p>
+          <p>Persen dihitung dari semua kiriman pada periode ini, tidak seperti persen retur di Ringkasan yang dihitung dari kiriman terkirim + retur.</p>
         </SectionHelp>
       )}
       title="Distribusi status"
@@ -447,7 +448,7 @@ export function RegionCard({ regions }: { regions: ReportAnalyticsView["regions"
       action={(
         <SectionHelp label="Penjelasan wilayah tujuan">
           <p>Wilayah dibaca dari area penerima kiriman. Area yang tidak memuat kota dan provinsi masuk ke &quot;Wilayah tidak dikenal&quot;.</p>
-          <p>Panjang garis mengikuti jumlah kiriman. % retur = retur dibagi kiriman yang selesai (terkirim + retur) di wilayah itu.</p>
+          <p>Panjang garis mengikuti jumlah kiriman. % retur = retur dibagi kiriman terkirim + retur di wilayah itu.</p>
         </SectionHelp>
       )}
       title="Wilayah tujuan"
@@ -481,7 +482,7 @@ export function RoutesCard({ routes }: { routes: ReportAnalyticsView["routes"] }
       action={(
         <SectionHelp label="Penjelasan rute teratas">
           <p>Lima pasangan outlet → kota tujuan dengan kiriman terbanyak. Kiriman ke &quot;Wilayah tidak dikenal&quot; tidak dihitung, jadi jumlahnya tidak selalu sama dengan total.</p>
-          <p>% terkirim = terkirim dibagi kiriman rute itu. % retur = retur dibagi kiriman yang selesai (terkirim + retur).</p>
+          <p>% terkirim = terkirim dibagi kiriman rute itu. % retur = retur dibagi kiriman terkirim + retur.</p>
         </SectionHelp>
       )}
       title="Rute teratas"
@@ -498,7 +499,7 @@ export function RoutesCard({ routes }: { routes: ReportAnalyticsView["routes"] }
                   <span className="shrink-0 font-semibold tabular-nums">{number.format(route.shipmentCount)}</span>
                 </div>
                 <p className="text-xs tabular-nums text-muted-foreground">
-                  Terkirim {formatRate(deliveredRate(route))} · Retur {formatRate(returnRate(route))}
+                  % terkirim {formatRate(deliveredRate(route))} · % retur {formatRate(returnRate(route))}
                 </p>
                 <LowVolumeNote shipmentCount={route.shipmentCount} />
               </li>

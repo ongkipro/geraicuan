@@ -314,6 +314,8 @@ describe("shipment attribution (T-241, CON-SHP-*)", () => {
     const summary = await withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
       loadContactShipmentSummary(tx, context, { contactId: contactOne, role: "SENDER" }));
     expect(summary).toEqual({
+      codOngkirOrderCount: 0,
+      codOngkirValueIdr: 0,
       codOrderCount: 1,
       codValueIdr: 222_160,
       deliveredCount: 2,
@@ -321,6 +323,16 @@ describe("shipment attribution (T-241, CON-SHP-*)", () => {
       returnedCount: 1,
       shipmentCount: 4,
     });
+    // T-265: a COD Ongkir order's charge is split out of Nilai COD (CON-SHP-COD-ONGKIR-IDR), by
+    // the draft's method; the total and its count do not change.
+    await admin.query("UPDATE shipment_drafts SET cod_shipping_only = true WHERE shipment_id = $1", [shipmentId(1)]);
+    try {
+      const split = await withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
+        loadContactShipmentSummary(tx, context, { contactId: contactOne, role: "SENDER" }));
+      expect(split).toMatchObject({ codOngkirOrderCount: 1, codOngkirValueIdr: 222_160, codOrderCount: 1, codValueIdr: 222_160, shipmentCount: 4 });
+    } finally {
+      await admin.query("UPDATE shipment_drafts SET cod_shipping_only = false WHERE shipment_id = $1", [shipmentId(1)]);
+    }
     const rows = await withTenantContext(appDb, operatorA, tenantA, (tx, context) =>
       listContactDirectory(tx, context, { query: "", role: "sender", status: "active" }));
     expect(rows.find((row) => row.id === contactOne)).toMatchObject({ contactNumber: 1, deliveredCount: 2, shipmentCount: 4 });
@@ -352,6 +364,14 @@ describe("shipment attribution (T-241, CON-SHP-*)", () => {
     // Wilayah = city, province of the primary address (moved to Toko above).
     expect(html).toContain("Kota Jakarta Barat, DKI Jakarta");
     for (const label of ["Total kiriman", "Nilai COD", "Tingkat retur", "Kiriman 30 hari terakhir"]) expect(html).toContain(label);
+    // T-265: every KPI carries its spec 19 ID; Nilai COD names its COD and COD Ongkir parts, and the
+    // return rate names its base as Laporan does ("terkirim + retur", never "selesai").
+    expect([...html.matchAll(/data-metric-id="(CON-SHP-[A-Z0-9-]+)"/g)].map((match) => match[1]))
+      .toEqual(["CON-SHP-COUNT", "CON-SHP-COD-VALUE-IDR", "CON-SHP-COD-METHOD-IDR", "CON-SHP-COD-ONGKIR-IDR", "CON-SHP-RETURN-RATE", "CON-SHP-LAST-30D"]);
+    expect(html).toMatch(/COD Rp\s?222\.160 dari 1 kiriman/);
+    expect(html).toMatch(/COD Ongkir Rp\s?0 dari 0 kiriman/);
+    expect(html).toContain("1 retur dari 3 kiriman terkirim + retur");
+    expect(html).not.toContain("selesai");
     expect(html).toContain("50% terkirim");
     expect(html).toContain("33,3%");
     expect(html).toMatch(/Rp\s?222\.160/);

@@ -57,7 +57,7 @@ function printableLabel(overrides: Partial<PrintableLabel> = {}): PrintableLabel
 function render(label: PrintableLabel, context?: Partial<LabelPrintContextValue>, fields?: Parameters<typeof LabelSheet>[0]["fields"]) {
   const sheet = createElement(LabelSheet, { fields, label });
   const tree: ReactElement = context
-    ? createElement(LabelPrintContext.Provider, { value: { printedAt: null, size: DEFAULT_LABEL_SIZE, ...context } }, sheet)
+    ? createElement(LabelPrintContext.Provider, { value: { size: DEFAULT_LABEL_SIZE, ...context } }, sheet)
     : sheet;
   return renderToStaticMarkup(tree);
 }
@@ -154,8 +154,7 @@ describe("thermal sheet layouts", () => {
   });
 
   it("puts on the sender stub exactly what proves and traces the handover", () => {
-    const printedAt = "2026-09-17T07:05:00.000Z";
-    const stubHtml = stubOf(render(printableLabel(), { printedAt }));
+    const stubHtml = stubOf(render(printableLabel(), {}));
     const stub = text(stubHtml);
 
     expect(stub).toContain("GC-10024");
@@ -164,9 +163,8 @@ describe("thermal sheet layouts", () => {
     expect(stub).toMatch(/JNE\s+REG/);
     expect(stub).toContain("Tanah Abang, Jakarta Pusat");
     expect(stub).toContain("COD Rp 457.226");
-    // The recorded print request's time is the handover time, in WIB.
-    expect(stub).toContain(`Diserahkan ${formatWibDateTime(printedAt)}`);
-    expect(formatWibDateTime(printedAt)).toMatch(/14\.05 WIB$/);
+    // T-265: exactly two facts — the stub claims no handover time until a handover is recorded.
+    expect([...stubHtml.matchAll(/<dt>([^<]*)<\/dt>/g)].map((match) => match[1])).toEqual(["No. kiriman", "Tujuan"]);
     expect(stub).toContain("Outlet Tanah Abang");
   });
 
@@ -196,13 +194,12 @@ describe("thermal sheet layouts", () => {
     expect(stub).not.toContain("Rp");
   });
 
-  it("uses the current minute until a print is recorded, never an unrelated stored time", () => {
-    const stub = text(stubOf(render(printableLabel({ lastPrintedAt: new Date("2026-09-01T01:00:00.000Z") }))));
-
-    // Server render: the client clock has not run yet, so it says when the time is set.
-    expect(stub).toContain("Diserahkan Saat label dicetak");
-    expect(stub).not.toContain(formatWibDateTime(new Date("2026-09-01T01:00:00.000Z")));
-    expect(stub).not.toContain(formatWibDateTime(new Date("2026-09-14T08:24:00.000Z")));
+  it("never prints a handover time, recorded print or not (T-265)", () => {
+    for (const label of [printableLabel(), printableLabel({ lastPrintedAt: new Date("2026-09-01T01:00:00.000Z"), printCount: 2 })]) {
+      const stub = text(stubOf(render(label, {})));
+      expect(stub).not.toMatch(/Diserahkan|Saat label dicetak/);
+      expect(stub).not.toContain(formatWibDateTime(new Date("2026-09-01T01:00:00.000Z")));
+    }
   });
 });
 

@@ -42,9 +42,14 @@ export function BatchSelectionProvider({ children, numbers }: { children: ReactN
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
 }
 
+/**
+ * T-265 (critique 2026-09-29 #3, harden): the desktop table and the phone card both render this
+ * box for the same row, one of them hidden by CSS. Each layout gets its own id, so the card's
+ * <label for> never resolves to the hidden table copy, and each box is named after its resi.
+ */
 export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: string; number: number; visibleLabel?: boolean }) {
   const { selected, toggle } = useSelection();
-  const id = `pilih-${number}`;
+  const id = `pilih-${visibleLabel ? "kartu" : "tabel"}-${number}`;
   return (
     // T-263: on the phone card the whole row (≥ 44px, full width) toggles the selection.
     <span className={visibleLabel ? "flex min-h-11 w-full items-center gap-3" : "inline-flex min-h-11 items-center gap-3 md:min-h-6"}>
@@ -55,7 +60,11 @@ export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: 
         id={id}
         onCheckedChange={(checked) => toggle(number, checked === true)}
       />
-      {visibleLabel ? <label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm" htmlFor={id}>Pilih untuk cetak</label> : null}
+      {visibleLabel ? (
+        <label className="flex min-h-11 flex-1 cursor-pointer items-center text-sm" htmlFor={id}>
+          Pilih untuk cetak<span className="sr-only"> resi {awb}</span>
+        </label>
+      ) : null}
     </span>
   );
 }

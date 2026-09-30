@@ -87,15 +87,17 @@ describe("Rincian uang render (T-261)", () => {
     expect(metricRows(html)).toEqual([
       ["COD-TOTAL", "Ditagih ke penerima Rp 482.053"],
       ["COD-CHARGE-BREAKDOWN", "Nilai barang Rp 450.000"],
-      ["COD-CHARGE-BREAKDOWN", "Ongkir Mengantar Rp 16.000"],
-      ["COD-MENGANTAR-FEE", "Biaya COD (termasuk PPN) Rp 16.052"],
+      ["COD-CHARGE-BREAKDOWN", "Ongkir ditagih ke penerima Rp 16.000"],
       ["COD-CHARGE-BREAKDOWN", "Pembulatan Rp 1"],
-      ["RPT-SHP-SHIPPING-COST-IDR", "Biaya kirim Mengantar −Rp 12.800"],
-      ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) −Rp 16.052"],
+      ["RPT-SHP-SHIPPING-COST-IDR", "Ongkir dibayar ke Mengantar −Rp 12.800"],
+      ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) Juga termasuk dalam tagihan ke penerima −Rp 16.052"],
       ["RPT-SHP-COD-DISBURSEMENT-EST-IDR", "Estimasi cair Estimasi Perkiraan, bukan dana diterima Rp 453.201"],
     ]);
     // The identity the page states: Ditagih − Biaya kirim − Biaya COD = Estimasi cair.
     expect(482_053 - 12_800 - mengantarCodFeeIdr(482_053)).toBe(453_201);
+    // T-265: the parts plus the fee (shown once, below) make the charge; the fee is not repeated.
+    expect(450_000 + 16_000 + 1 + mengantarCodFeeIdr(482_053)).toBe(482_053);
+    expect(text(html).match(/Biaya COD/g)).toHaveLength(1);
     expect(text(html)).not.toMatch(/Jumlah bersih|pendapatan/i);
   });
 
@@ -103,7 +105,7 @@ describe("Rincian uang render (T-261)", () => {
     const html = render(ONGKIR_FACTS);
     expect(metricRows(html)).toEqual([
       ["COD-ONGKIR-CHARGE-IDR", "Ditagih ke penerima Ongkir + biaya COD saja Rp 7.000"],
-      ["RPT-SHP-SHIPPING-COST-IDR", "Biaya kirim Mengantar −Rp 6.300"],
+      ["RPT-SHP-SHIPPING-COST-IDR", "Ongkir dibayar ke Mengantar −Rp 6.300"],
       ["RPT-SHP-COD-FEE-IDR", "Biaya COD (termasuk PPN) −Rp 233"],
       ["RPT-SHP-COD-DISBURSEMENT-EST-IDR", "Estimasi cair Estimasi Perkiraan, bukan dana diterima Rp 467"],
       ["SHP-DECLARED-VALUE-IDR", "Nilai barang Sudah dibayar, tidak ditagih Rp 85.000"],
@@ -116,7 +118,7 @@ describe("Rincian uang render (T-261)", () => {
     const html = render(NON_COD_FACTS);
     expect(metricRows(html)).toEqual([
       ["RPT-SHP-PAYMENT-MODE", "Ditagih ke penerima Tidak ada tagihan ke penerima Rp 0"],
-      ["RPT-SHP-SHIPPING-COST-IDR", "Biaya kirim Mengantar Rp 11.900"],
+      ["RPT-SHP-SHIPPING-COST-IDR", "Ongkir dibayar ke Mengantar Rp 11.900"],
       ["SHP-DECLARED-VALUE-IDR", "Nilai barang Untuk asuransi, tidak ditagih Rp 150.000"],
     ]);
     expect(html).not.toContain("Estimasi cair");
@@ -150,17 +152,17 @@ describe("Rincian uang render (T-261)", () => {
     expect(html).not.toContain("Periksa kiriman");
   });
 
-  it("compact: the Laporan cell shows Biaya kirim and Biaya COD under their metric IDs, never a bare \"COD\"", () => {
+  it("compact: the Laporan cell shows Ongkir dibayar ke Mengantar and Biaya COD under their metric IDs, never a bare \"COD\"", () => {
     const html = renderToStaticMarkup(createElement(MoneyBreakdownCompact, { lines: reportRowMoneyLines({ codFeeIdr: 233, shippingCostIdr: 6_300 }) }));
     expect([...html.matchAll(/data-metric-id="([^"]+)"/g)].map(([, id]) => id)).toEqual([
       MONEY_METRIC_IDS.shippingCost,
       MONEY_METRIC_IDS.codFee,
     ]);
-    expect(rp(text(html))).toBe("Biaya kirim Rp 6.300 Biaya COD Rp 233");
+    expect(rp(text(html))).toBe("Ongkir dibayar ke Mengantar Rp 6.300 Biaya COD Rp 233");
     expect(html).not.toMatch(/<(dl|div)/);
     // Under the "Biaya Mengantar" column the first label is for screen readers only.
     const inTable = renderToStaticMarkup(createElement(MoneyBreakdownCompact, { lines: reportRowMoneyLines({ codFeeIdr: 233, shippingCostIdr: 6_300 }), showFirstLabel: false }));
-    expect(inTable).toMatch(/<span class="[^"]*sr-only[^"]*">Biaya kirim<\/span>/);
+    expect(inTable).toMatch(/<span class="[^"]*sr-only[^"]*">Ongkir dibayar ke Mengantar<\/span>/);
     expect(inTable).not.toMatch(/sr-only[^"]*">Biaya COD/);
     const noOrder = renderToStaticMarkup(createElement(MoneyBreakdownCompact, { lines: reportRowMoneyLines({ codFeeIdr: null, shippingCostIdr: null }) }));
     expect(text(noOrder)).toBe("—");
@@ -326,7 +328,7 @@ describe("Rincian uang parity across surfaces (T-261)", () => {
     expect(fromLabel.kind).toBe(key === "COD_DRIFT" ? "inconsistent" : "ready");
   });
 
-  it("the Laporan row quotes the detail's Biaya kirim Mengantar and Biaya COD", async () => {
+  it("the Laporan row quotes the detail's Ongkir dibayar ke Mengantar and Biaya COD", async () => {
     const range = parseAnalyticsRange({ rentang: "30-hari", tz: "Asia/Jakarta" }, new Date());
     const page = await asTenantA((tx, context) =>
       loadShipmentReportPage(tx, context, { filters: EMPTY_ANALYTICS_FILTERS, page: 1, pageSize: 50, range }));

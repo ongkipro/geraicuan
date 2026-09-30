@@ -14,7 +14,6 @@ export const MONEY_METRIC_IDS = {
   codTotal: "COD-TOTAL",
   codOngkirCharge: "COD-ONGKIR-CHARGE-IDR",
   chargeBreakdown: "COD-CHARGE-BREAKDOWN",
-  codFeeCharged: "COD-MENGANTAR-FEE",
   shippingCost: "RPT-SHP-SHIPPING-COST-IDR",
   codFee: "RPT-SHP-COD-FEE-IDR",
   disbursementEstimate: "RPT-SHP-COD-DISBURSEMENT-EST-IDR",
@@ -28,10 +27,11 @@ export const MONEY_LABELS = {
   collect: "Ditagih ke penerima",
   noCollect: "Tidak ada tagihan ke penerima",
   goods: "Nilai barang",
-  chargedShipping: "Ongkir Mengantar",
+  // T-265 (critique P2): the buyer-paid and the Mengantar-paid shipping read as two different sums.
+  chargedShipping: "Ongkir ditagih ke penerima",
   codFee: "Biaya COD (termasuk PPN)",
   rounding: "Pembulatan",
-  shippingCost: "Biaya kirim Mengantar",
+  shippingCost: "Ongkir dibayar ke Mengantar",
   estimate: "Estimasi cair",
   insurance: "Asuransi Mengantar",
 } as const;
@@ -141,7 +141,7 @@ export type ShipmentMoney =
     };
 
 /**
- * RPT-SHP-SHIPPING-COST-IDR, "Biaya kirim Mengantar": the shipping Mengantar deducts (charged),
+ * RPT-SHP-SHIPPING-COST-IDR, "Ongkir dibayar ke Mengantar" (T-265; was "Biaya kirim Mengantar"): the shipping Mengantar deducts (charged),
  * else the order's own price (legacy snapshots). The Rincian uang panel and the thermal sheet's
  * Non-COD line both read it here (T-263), so the sheet never prints the list price under it.
  */
@@ -194,7 +194,6 @@ export function shipmentMoney(facts: ShipmentMoneyFacts): ShipmentMoney {
     ? [
         { amountIdr: charge.goodsValueIdr, key: "part-goods", label: MONEY_LABELS.goods, metricId: ids.chargeBreakdown },
         { amountIdr: charge.shippingAmountIdr, key: "part-shipping", label: MONEY_LABELS.chargedShipping, metricId: ids.chargeBreakdown },
-        { amountIdr: charge.codFeeIdr, key: "part-fee", label: MONEY_LABELS.codFee, metricId: ids.codFeeCharged },
         ...(charge.roundingIdr > 0
           ? [{ amountIdr: charge.roundingIdr, key: "part-rounding", label: MONEY_LABELS.rounding, metricId: ids.chargeBreakdown }]
           : []),
@@ -205,7 +204,16 @@ export function shipmentMoney(facts: ShipmentMoneyFacts): ShipmentMoney {
     collectParts,
     deductions: [
       { amountIdr: shippingCost, key: "shipping-cost", label: MONEY_LABELS.shippingCost, metricId: ids.shippingCost, sign: "minus" },
-      { amountIdr: fee, key: "cod-fee", label: MONEY_LABELS.codFee, metricId: ids.codFee, sign: "minus" },
+      // T-265: the fee appears once. On COD it is also inside the charge above (COD-MENGANTAR-FEE equals
+      // RPT-SHP-COD-FEE-IDR by definition), so the charge's parts leave it out and this line says so.
+      {
+        amountIdr: fee,
+        key: "cod-fee",
+        label: MONEY_LABELS.codFee,
+        metricId: ids.codFee,
+        note: collectParts.length > 0 ? "Juga termasuk dalam tagihan ke penerima" : undefined,
+        sign: "minus",
+      },
     ],
     estimate: {
       amountIdr: codNetAmountIdr({ chargedShippingIdr: facts.chargedShippingIdr, paymentMethod: method, providerCodAmountIdr: codAmount }),
@@ -256,7 +264,7 @@ export function reportRowMoneyLines(row: { codFeeIdr: number | null; shippingCos
   // No provider order yet: no figure at all (the cell reads "—").
   if (row.shippingCostIdr === null) return [];
   return [
-    { amountIdr: row.shippingCostIdr, key: "shipping-cost", label: "Biaya kirim", metricId: MONEY_METRIC_IDS.shippingCost },
+    { amountIdr: row.shippingCostIdr, key: "shipping-cost", label: MONEY_LABELS.shippingCost, metricId: MONEY_METRIC_IDS.shippingCost },
     ...(row.codFeeIdr !== null
       ? [{ amountIdr: row.codFeeIdr, key: "cod-fee", label: "Biaya COD", metricId: MONEY_METRIC_IDS.codFee }]
       : []),

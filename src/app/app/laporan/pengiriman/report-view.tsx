@@ -177,9 +177,9 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
     <DataCard
       action={(
         <SectionHelp label="Penjelasan total per kurir">
-          <p>Biaya kirim dan biaya COD adalah tagihan Mengantar per kiriman.</p>
+          <p>Ongkir dibayar ke Mengantar dan biaya COD adalah tagihan Mengantar per kiriman.</p>
           <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dan biaya COD. Jumlah pasti mengikuti pencairan Mengantar.</p>
-          <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman yang selesai (terkirim + retur).</p>
+          <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman terkirim + retur.</p>
         </SectionHelp>
       )}
       title="Total per kurir"
@@ -196,11 +196,11 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
               <span className="shrink-0 tabular-nums">{number.format(total.shipmentCount)} kiriman</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Terkirim {formatRate(deliveredRate(total))} · Retur {formatRate(returnRate(total))}
+              % terkirim {formatRate(deliveredRate(total))} · % retur {formatRate(returnRate(total))}
             </p>
             <LowVolumeNote shipmentCount={total.shipmentCount} />
             <p className="text-xs text-muted-foreground">
-              Biaya kirim Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
+              Ongkir dibayar ke Mengantar <Money amount={total.shippingCostIdr} /> · Biaya COD <Money amount={total.codFeeIdr} />
             </p>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-muted-foreground">Estimasi cair</span>
@@ -217,7 +217,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
             <TableHead className="px-2 text-right">Kiriman</TableHead>
             <TableHead className="px-2 text-right">% terkirim</TableHead>
             <TableHead className="px-2 text-right">% retur</TableHead>
-            <TableHead className="px-2 text-right">Biaya kirim Mengantar</TableHead>
+            <TableHead className="px-2 text-right">Ongkir dibayar ke Mengantar</TableHead>
             <TableHead className="px-2 text-right">Biaya COD</TableHead>
             <TableHead className="pr-0 pl-2 text-right">Estimasi cair</TableHead>
           </TableRow>

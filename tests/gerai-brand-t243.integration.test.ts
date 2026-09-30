@@ -160,7 +160,7 @@ function renderLabel(size: LabelSize, brand: GeraiBrand, fields?: LabelFieldsByS
   return renderToStaticMarkup(createElement(
     GeraiBrandProvider,
     { value: brand },
-    createElement(LabelPrintContext.Provider, { value: { printedAt: null, size } }, createElement(LabelSheet, { fields, label })),
+    createElement(LabelPrintContext.Provider, { value: { size } }, createElement(LabelSheet, { fields, label })),
   ));
 }
 const packageSection = (html: string) => html.match(/<section aria-label="Label paket 10 × 10 cm"[^>]*>[\s\S]*?<\/section>/)?.[0] ?? "";

@@ -79,15 +79,16 @@ export function RegionError({ title }: { title: string }) {
 export function KpiRow({ comparison, summary }: { comparison: string; summary: TenantDashboardPeriodSummary }) {
   const { current, previous } = summary;
   const kpis = [
-    { current: current.createdCount, icon: Package, label: "Kiriman dibuat", previous: previous.createdCount },
-    { current: current.codCount, icon: Banknote, label: "Kiriman COD", previous: previous.codCount },
-    { current: current.nonCodCount, icon: Wallet, label: "Kiriman non-COD", previous: previous.nonCodCount },
-    { current: current.issuedCount, icon: ReceiptText, label: "Resi terbit", previous: previous.issuedCount },
+    { current: current.createdCount, icon: Package, label: "Kiriman dibuat", metricId: "SHP-CREATED", previous: previous.createdCount },
+    { current: current.codCount, icon: Banknote, label: "Kiriman COD", metricId: "SHP-COD", previous: previous.codCount },
+    { current: current.nonCodCount, icon: Wallet, label: "Kiriman non-COD", metricId: "SHP-NONCOD", previous: previous.nonCodCount },
+    // T-265: an event count ("diterbitkan" in the period), not the current "Resi terbit" status.
+    { current: current.issuedCount, icon: ReceiptText, label: "Resi diterbitkan", metricId: "SHP-ISSUED", previous: previous.issuedCount },
   ];
   return (
     <section aria-label="Ringkasan periode" className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
       {kpis.map((kpi) => (
-        <KpiCard comparison={comparison} delta={kpiDelta(kpi.current, kpi.previous)} icon={kpi.icon} key={kpi.label} label={kpi.label} value={kpi.current} />
+        <KpiCard comparison={comparison} delta={kpiDelta(kpi.current, kpi.previous)} icon={kpi.icon} key={kpi.label} label={kpi.label} metricId={kpi.metricId} value={kpi.current} />
       ))}
     </section>
   );

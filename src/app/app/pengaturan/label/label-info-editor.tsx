@@ -212,7 +212,7 @@ export function LabelInfoEditor({
 
           <div className="min-w-0 md:sticky md:top-20">
             <GeraiBrandProvider value={brand}>
-              <LabelPrintContext.Provider value={{ printedAt: null, size }}>
+              <LabelPrintContext.Provider value={{ size }}>
                 <LabelPreviewFrame
                   id="pratinjau-label"
                   label={`Pratinjau label ${LABEL_SIZES[size].name} dengan contoh data`}

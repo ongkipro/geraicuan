@@ -3,19 +3,13 @@
 import { Scissors } from "lucide-react";
 import { createContext, useContext, type ReactNode } from "react";
 
-import { formatWibDateTime } from "@/lib/label-format";
 import { DEFAULT_LABEL_SIZE, LABEL_SIZES, type LabelSize } from "@/lib/label-size";
 
 export type LabelPrintContextValue = {
   size: LabelSize;
-  /** The recorded print request's time; the stub's handover time once a print is recorded. */
-  printedAt: string | null;
 };
 
-export const LabelPrintContext = createContext<LabelPrintContextValue>({
-  printedAt: null,
-  size: DEFAULT_LABEL_SIZE,
-});
+export const LabelPrintContext = createContext<LabelPrintContextValue>({ size: DEFAULT_LABEL_SIZE });
 
 /**
  * The physical sheet. The package label always renders; the cut line and the sender
@@ -46,16 +40,4 @@ export function LabelSheetFrame({ children, stub }: { children: ReactNode; stub:
       ) : null}
     </article>
   );
-}
-
-/**
- * Handover time on the stub: the recorded print request's time once one exists in this view,
- * otherwise "Saat label dicetak". T-263 (critique 2026-09-29, Operator gerai): it used to show the
- * current WIB minute and re-tick every 15 s, so merely opening the page changed "Diserahkan".
- * `recordLabelPrint` records first and the print dialog opens after, so a printed sheet always
- * carries the recorded time.
- */
-export function HandoverTime() {
-  const { printedAt } = useContext(LabelPrintContext);
-  return <>{printedAt ? formatWibDateTime(printedAt) : "Saat label dicetak"}</>;
 }
