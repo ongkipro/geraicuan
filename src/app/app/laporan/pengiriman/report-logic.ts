@@ -1,4 +1,3 @@
-import type { CourierPerformancePoint } from "@/app/app/laporan/pengiriman/courier-performance-chart";
 import type { ReportTrendPoint } from "@/app/app/laporan/pengiriman/report-trend-chart";
 import type { ShipmentReportAnalytics, ShipmentReportKpis } from "@/db/shipment-report-repository";
 import type { TenantAnalyticsIssue } from "@/lib/analytics-filters";
@@ -11,8 +10,6 @@ export const REPORT_PATH = "/app/laporan/pengiriman";
 /** Rows per page on screen (the CSV always carries the whole filtered set). */
 export const REPORT_PAGE_SIZE = 20;
 export const REPORT_EXPORT_PATH = "/app/laporan/pengiriman/export.csv";
-
-const number = new Intl.NumberFormat("id-ID");
 
 export function reportIssueMessage(issue: TenantAnalyticsIssue) {
   switch (issue) {
@@ -54,23 +51,36 @@ export function activeFilterCount(input: {
     + Number(input.presetId !== "30-hari");
 }
 
+/** One courier of "Tingkat penerbitan resi per kurir" (spec 19 SHP-ISSUE-RATE). */
+export type CourierPerformancePoint = {
+  courier: string;
+  /** SHP-ISSUED: resi terbit. */
+  issuedCount: number;
+  /** Fewer answered submissions than `COURIER_LOW_VOLUME_THRESHOLD`. */
+  lowVolume: boolean;
+  /** SHP-ISSUE-RATE, 0–100, unrounded; shown with one decimal (spec 19 M-0). */
+  rate: number;
+  /** SHP-OUTCOMES: submissions Mengantar has answered — the rate's base. */
+  resolvedCount: number;
+};
+
 /**
- * Chart points in ranking order; a courier with no answered submission has no bar. The label
- * beside a bar always carries its denominator ("92% · 11/12"); low-volume couriers (fewer than
- * `COURIER_LOW_VOLUME_THRESHOLD` answers) rank last and are named once under the chart.
+ * T-273: the issuance rate per courier, highest first, in two groups — couriers with enough
+ * answers, then the low-volume ones (fewer than `COURIER_LOW_VOLUME_THRESHOLD`), each group sorted
+ * by rate on its own (`orderCouriersForRanking`), so a rate built on a handful of answers never
+ * ranks above a higher-volume courier and each group reads top-down. A courier with no answered
+ * submission has no rate and is left out.
  */
 export function courierPerformancePoints(rows: readonly CourierRateRow[]): CourierPerformancePoint[] {
   return orderCouriersForRanking(rows)
     .filter((row) => row.resolvedSubmissionCount > 0)
-    .map((row) => {
-      const rate = Math.round(courierIssueRate(row));
-      return {
-        courier: serviceDisplayName(row.courier),
-        label: `${number.format(rate)}% · ${number.format(row.issuedCount)}/${number.format(row.resolvedSubmissionCount)}`,
-        lowVolume: isLowVolumeCourier(row),
-        rate,
-      };
-    });
+    .map((row) => ({
+      courier: serviceDisplayName(row.courier),
+      issuedCount: row.issuedCount,
+      lowVolume: isLowVolumeCourier(row),
+      rate: courierIssueRate(row),
+      resolvedCount: row.resolvedSubmissionCount,
+    }));
 }
 
 export type ReportAnalyticsView = {

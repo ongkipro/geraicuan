@@ -7,6 +7,7 @@ import {
   issueShipmentInvoice as issueInvoice,
   type IssueShipmentInvoiceResult,
 } from "@/db/shipment-invoice-repository";
+import { dryRunShipmentInvoice } from "@/app/app/invoice/invoice-preview";
 import { resolveShipmentRouteKey } from "@/db/shipment-number-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
@@ -42,5 +43,20 @@ export async function issueShipmentInvoice(
     const resolved = await resolveShipmentRouteKey(tx, context, key);
     if (!resolved) return { ok: false, code: "NOT_FOUND" } as const;
     return issueInvoice(tx, context, resolved.shipmentId);
+  });
+}
+
+/** R6-X: the confirmation dialog's preview, by shipment number; same scope rules as issuance. */
+export async function previewShipmentInvoice(
+  shipmentNumber: string,
+): Promise<IssueShipmentInvoiceResult> {
+  const principal = await requireTenantPrincipal();
+  const key = typeof shipmentNumber === "string" ? parseShipmentRouteKey(shipmentNumber) : null;
+  if (!key) return { ok: false, code: "NOT_FOUND" };
+
+  return withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
+    const resolved = await resolveShipmentRouteKey(tx, context, key);
+    if (!resolved) return { ok: false, code: "NOT_FOUND" } as const;
+    return dryRunShipmentInvoice(tx, context, resolved.shipmentId);
   });
 }

@@ -79,7 +79,8 @@ export function tileShare(count: number, total: number) {
  * filter link: the §4.12 status icon (16px, tone ink) + label (13/500 muted, never truncated),
  * then the count (20/600) and its share of `total` in muted 13px. The first tile is the page's
  * "all" filter and carries no share. The hint is screen-reader text. One stacked composition
- * bar along the bottom edge shows the other tiles' shares of `total` (zero takes no width), with
+ * bar in its own row under the tiles (T-273: divider, inset, legend under it — never flush under a
+ * tile, where it read as that tile's underline) shows the other tiles' shares of `total` (zero takes no width), with
  * a screen-reader breakdown that also names the part of `total` no tile covers. Selected: 2px
  * primary bottom indicator, primary text, aria-current. T-247 (review L9): `total` is the page's
  * explicit base (spec 19 QUE-SHARE / RTS-SHARE / LBL-SHARE), never inferred from the largest count.
@@ -124,26 +125,30 @@ export function StatusTiles({ className, label, tiles, total }: { className?: st
           );
         })}
       </ul>
-      {/* The bar and its legend repeat the sentence below for sight; the active status stays full tone. */}
-      <div aria-hidden="true" data-slot="tile-composition">
-        <span className="flex h-2 items-end gap-0.5">
-          {segments.map((segment) => (
-            <span
-              className={cn(
-                "block h-1.5 transition-opacity",
-                segment.bar,
-                active && (segment.key === active ? "h-2" : "opacity-35"),
-              )}
-              data-active={segment.key === active ? "" : undefined}
-              data-count={segment.count}
-              data-segment={segment.key}
-              key={segment.key}
-              style={{ width: `${(segment.count / total) * 100}%` }}
-            />
-          ))}
-        </span>
-        {segments.length > 0 ? (
-          <span className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-xs text-muted-foreground @xl:px-4">
+      {/* T-273 (critique P2): the bar sat flush under the tiles, so a segment read as the tab
+          underline of whichever tile it happened to lie under. It is now its own row: a divider,
+          inset from the card edge by the same padding as the tiles, a rounded track with gaps
+          between segments, and the legend directly under it. The bar and its legend repeat the
+          sentence below for sight; the active status stays full tone. */}
+      {segments.length > 0 ? (
+        <div aria-hidden="true" className="grid gap-2 border-t px-3 pt-2.5 pb-2 @xl:px-4" data-slot="tile-composition">
+          <span className="flex h-2 items-center gap-0.5 overflow-hidden rounded-full" data-slot="tile-composition-bar">
+            {segments.map((segment) => (
+              <span
+                className={cn(
+                  "block h-1.5 rounded-full transition-opacity",
+                  segment.bar,
+                  active && (segment.key === active ? "h-2" : "opacity-35"),
+                )}
+                data-active={segment.key === active ? "" : undefined}
+                data-count={segment.count}
+                data-segment={segment.key}
+                key={segment.key}
+                style={{ width: `${(segment.count / total) * 100}%` }}
+              />
+            ))}
+          </span>
+          <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             {segments.map((segment) => (
               <span className={cn("flex items-center gap-1.5", segment.key === active && "font-medium text-foreground")} key={segment.key}>
                 <span className={cn("size-2 shrink-0 rounded-full", segment.bar, active && segment.key !== active && "opacity-35")} />
@@ -151,8 +156,8 @@ export function StatusTiles({ className, label, tiles, total }: { className?: st
               </span>
             ))}
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {breakdown.length > 0 ? (
         <p className="sr-only">
           Komposisi dari {number.format(total)}: {breakdown.join(", ")}.

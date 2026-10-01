@@ -8,11 +8,11 @@ import {
   reportExportHref,
   reportAnalyticsView,
   reportIssueMessage,
+  type CourierPerformancePoint,
   type ReportAnalyticsView,
 } from "@/app/app/laporan/pengiriman/report-logic";
 import { ShipmentReportView } from "@/app/app/laporan/pengiriman/report-view";
 import { requireReportAdmin } from "@/app/app/laporan/_components/report-access";
-import type { CourierPerformancePoint } from "@/app/app/laporan/pengiriman/courier-performance-chart";
 import { loadAnalyticsFilterOptions, loadCourierPerformance } from "@/db/analytics-repository";
 import { db } from "@/db/client";
 import { shipmentStatuses } from "@/db/schema";
@@ -55,7 +55,7 @@ export default async function ShipmentReportPage({
     : await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
       loadShipmentReportPage(tx, context, { filters, page, pageSize: REPORT_PAGE_SIZE, range }));
 
-  // Its own transaction, so a failed read degrades only the "Performa kurir" card.
+  // Its own transaction, so a failed read degrades only the "Tingkat penerbitan resi per kurir" card.
   let performance: CourierPerformancePoint[] | null = [];
   if (!parsed.filterRejected && data.totals.shipmentCount > 0) {
     try {

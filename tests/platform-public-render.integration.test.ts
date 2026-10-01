@@ -19,6 +19,9 @@ vi.mock("@/app/atur-ulang-password/actions", () => ({ resetPassword: vi.fn() }))
 vi.mock("@/app/platform/tenant/actions", () => ({ submitPlatformTenantLifecycle: vi.fn() }));
 vi.mock("@/app/platform/tenant/shipment-prefix-actions", () => ({ unlockShipmentPrefix: vi.fn() }));
 vi.mock("@/app/platform/pendaftaran/actions", () => ({ reviewRegistration: vi.fn() }));
+// T-273: the audit page renders from a fixed view; no database, no monitoring-access write.
+const auditView = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/app/platform/_components/platform-view", () => ({ loadPlatformView: async () => auditView.current }));
 
 const { demoPassword, resolveLoginNotice } = await import("@/app/login/_components/login-notices");
 const { AuthShell } = await import("@/app/login/_components/auth-shell");
@@ -297,6 +300,52 @@ describe("T-257 platform alignment", () => {
     expect(text).toContain("22.48 WIB| · 12 menit lalu");
     expect(html).toMatch(/datetime="2026-09-26T15:48:00.000Z"/i);
     expect(render(createElement(TimeCell, { instant: new Date("2026-09-26T15:48:00Z") }))).not.toContain("lalu");
+  });
+
+  // T-273 (critique P2 "roles not names, no object, view events flood"): the actor by name with
+  // the role, what changed, and page views behind a URL toggle that is off by default.
+  it("reads an audit row as named actor, gerai and object, with the page-view toggle in the filter form (T-273)", async () => {
+    const { parseAnalyticsRange } = await import("@/lib/analytics-range");
+    const { default: PlatformAuditPage } = await import("@/app/platform/audit/page");
+    const at = new Date("2026-09-26T15:48:00Z");
+    const base = { createdAt: at, fromStatus: null, outcome: "SUCCESS" as const, tenantId: "t-1", tenantName: "Sekar Batik", toStatus: null };
+    const view = (showMonitoringViews: boolean) => ({
+      audit: {
+        rows: [
+          { ...base, action: "OUTLET_SETTINGS_CHANGED", actorName: "Rina Wulandari", actorRole: "TENANT_MEMBER", id: "1", outletName: "Gudang Utama", targetType: "OUTLET" },
+          { ...base, action: "SHIPMENT_HANDOVER_RECORDED", actorName: "Budi", actorRole: "TENANT_MEMBER", id: "2", targetType: "SHIPMENT" },
+          { ...base, action: "TENANT_SUSPENDED", actorName: null, actorRole: "SUPER_ADMIN", id: "3", targetType: "TENANT" },
+        ],
+        total: 3,
+      },
+      filters: { action: null, courier: null, outcome: null, outletId: null, page: 1, query: null, range: parseAnalyticsRange({ rentang: "30-hari", tz: "Asia/Jakarta" }, now), scope: { kind: "global" }, showMonitoringViews, status: null },
+      now,
+      tenants: [{ id: "t-1", name: "Sekar Batik" }],
+    });
+    auditView.current = view(false);
+    const html = render(await PlatformAuditPage({ searchParams: Promise.resolve({}) } as never));
+    const table = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    expect([...table.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map(([, body]) => body.replace(/<[^>]+>/g, ""))).toEqual(["Waktu (WIB)", "Aksi", "Pelaku", "Gerai", "Objek", "Hasil"]);
+    const rows = [...table.matchAll(/<tr[^>]*data-slot="table-row"[^>]*>([\s\S]*?)<\/tr>/g)].slice(1).map(([, row]) =>
+      [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(([, cell]) => cell.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()));
+    expect(rows.map((cells) => cells.slice(2, 5))).toEqual([
+      ["Rina Wulandari Anggota gerai", "Sekar Batik", "Outlet Gudang Utama"],
+      ["Budi Anggota gerai", "Sekar Batik", "Kiriman"],
+      ["Admin platform", "Sekar Batik", "—"],
+    ]);
+    // Phone rows: "Name (role) · gerai", the object in the meta line.
+    expect(html).toContain("Rina Wulandari (Anggota gerai) · Sekar Batik");
+    // The toggle: a native checkbox in the GET form, off by default, on from the URL; on counts as a changed filter.
+    const toggle = (markup: string) => markup.match(/<input[^>]*name="kunjungan"[^>]*>/)?.[0] ?? "";
+    expect(toggle(html)).toMatch(/type="checkbox"/);
+    expect(toggle(html)).toMatch(/value="tampil"/);
+    expect(toggle(html)).not.toMatch(/checked/);
+    expect(html).toContain("Tampilkan kunjungan pemantauan");
+    expect(html).not.toContain("Hapus filter");
+    auditView.current = view(true);
+    const shown = render(await PlatformAuditPage({ searchParams: Promise.resolve({ kunjungan: "tampil" }) } as never));
+    expect(toggle(shown)).toMatch(/checked/);
+    expect(shown).toContain("Hapus filter");
   });
 
   it("T-259: a gerai row stored without its gerai reads \"Gerai tidak tercatat\"; a platform-wide row keeps \"Platform\"", () => {

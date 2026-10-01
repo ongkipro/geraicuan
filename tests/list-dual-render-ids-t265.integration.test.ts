@@ -60,6 +60,8 @@ const rows = [10178, 10177, 10175].map((number, index) => ({
   updatedAt: issuedAt,
 }));
 
+// T-274: the day line reads its own counts.
+vi.mock("@/app/app/label/label-day-summary", () => ({ loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": 0, "LBL-PRINTED-TODAY": 0, "LBL-READY-PENDING": 0 }) }));
 vi.mock("@/db/label-print-repository", () => ({
   loadLabelIndexPage: async () => ({ rows, summary: { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 } }),
 }));
@@ -127,8 +129,8 @@ describe("dual-rendered lists (table + phone cards) carry unique ids", () => {
     expect(names).toHaveLength(2 + rows.length * 2);
     expect(names.filter((name) => name === "")).toEqual([]);
     for (const row of rows) {
-      expect(names).toContain(`Pilih resi ${row.awb}`);
-      expect(names).toContain(`Pilih untuk cetak resi ${row.awb}`);
+      // R6-X: both layouts name the box after what it does (was "Pilih resi …" on the table).
+      expect(names.filter((name) => name === `Pilih untuk cetak resi ${row.awb}`)).toHaveLength(2);
     }
     // The phone label points at the phone checkbox, never at the hidden table copy.
     expect(html).toContain('for="pilih-kartu-10178"');

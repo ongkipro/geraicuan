@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 import { LabelPrintContext } from "@/app/app/label/[shipmentId]/label-print-context";
 import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
-import { sampleLabel } from "@/app/app/pengaturan/label/label-info-editor";
+import { LabelInfoEditor, sampleLabel } from "@/app/app/pengaturan/label/label-info-editor";
 import type { PrintableLabel } from "@/db/label-print-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -180,8 +180,6 @@ describe("label sheet with the Informasi label choice", () => {
     const cases = [
       ["senderAddress", LABEL.sender.address],
       ["senderPhone", SENDER_PHONE],
-      ["recipientName", LABEL.recipient.name],
-      ["recipientPhone", RECIPIENT_PHONE],
       ["recipientAddressDetail", LABEL.recipient.address],
     ] as const;
     for (const [key, value] of cases) {
@@ -192,6 +190,34 @@ describe("label sheet with the Informasi label choice", () => {
     // The sender's origin line goes with the address, and the phone's separator with the phone.
     expect(render("10x10", withOff("10x10", "senderAddress"))).not.toContain("label-sender-origin");
     expect(packageOf(render("10x10", withOff("10x10", "senderPhone")))).toContain(`Pengirim ${LABEL.sender.name} ${LABEL.sender.address}`);
+  });
+
+  // R6-X (critique 2026-09-30T19-21-59Z #7): the courier cannot deliver without them.
+  it("always prints the recipient's name and phone, even when a stored choice switched them off", () => {
+    const off: LabelFieldsBySize = {
+      "10x10": { ...DEFAULT_LABEL_FIELDS, recipientName: false, recipientPhone: false },
+      "10x15": { ...DEFAULT_LABEL_FIELDS, recipientName: false, recipientPhone: false },
+    };
+    for (const size of ["10x15", "10x10"] as const) {
+      expect(render(size, off), size).toBe(render(size));
+      const pkg = packageOf(render(size, off));
+      expect(pkg).toContain(LABEL.recipient.name);
+      expect(pkg).toContain(RECIPIENT_PHONE);
+    }
+    // The editor shows both switches on and locked with the reason, and saves them on.
+    const html = renderToStaticMarkup(createElement(LabelInfoEditor, {
+      brand: { defaultLabelSize: "10x15", logoSrc: null, note: null } as Parameters<typeof LabelInfoEditor>[0]["brand"],
+      geraiName: "Gerai Label A",
+      geraiWhatsapp: null,
+      initial: off,
+    }));
+    for (const key of ["recipientName", "recipientPhone"] as const) {
+      expect(html).toMatch(new RegExp(`<button(?=[^>]*role="switch")(?=[^>]*aria-checked="true")(?=[^>]*disabled="")(?=[^>]*id="label-field-${key}")`));
+      for (const size of ["10x15", "10x10"]) expect(html).toContain(`name="${size}.${key}" value="1"`);
+    }
+    expect(html).toContain("Selalu tercetak: kurir butuh nama penerima untuk mengantar.");
+    // Every other switch stays the gerai's choice.
+    expect(html).toMatch(/<button(?=[^>]*role="switch")(?=[^>]*id="label-field-senderPhone")(?![^>]*disabled="")/);
   });
 
   it("prints only the city and province when the address detail is off", () => {

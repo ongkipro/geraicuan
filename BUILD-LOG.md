@@ -5422,3 +5422,86 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
   - A version 2 invoice was shown by render tests and the iso-DB issuance test, not in the browser (no invoice issued on the dev DB).
   - The service list's Asuransi column still shows the insurance quote to an Operator (a customer-facing context line under D-37).
   - Version 1 COD invoices already handed out remain derivable; by decision they are not re-rendered.
+
+## 2026-10-01 — T-272 Round 6-X: harden + adapt (critique 2026-09-30T19-21-59Z)
+
+- **Changes.** #1 `loadPrintableLabel` returns `shippingAmountIdr: null` for an Operator (label page and `/app/label/cetak` batch view; `insuranceAmountIdr` kept — printed on the sheet for every role). #2 `DialogContent`/`AlertDialogContent` max-h `100dvh − 2rem` + scroll, sticky opaque footer (`-bottom-*` = `-mb-*`). #3 `SelectionBar` portals the pinned bar after the list; `scroll-padding-bottom: calc(7rem + safe area)` while it is open below 1024px; the count live region is `aria-live="off"` for a scan. #7 "Terbitkan invoice?" confirmation previewing the nota through `previewShipmentInvoice` (issuance statement in an always-rolled-back savepoint); recipient name/phone locked on (`LOCKED_LABEL_FIELDS`, ignored-if-off in `LabelSheet`, saved on by the editor); no Hapus on the main pickup point. #8 always-mounted handover `role="status"`; checkbox names per tab; "Pilih cara paket diserahkan."; card ring `ring-2 ring-ring`. #12 popover "Pilih periode"; header search without `aria-label`; home link `min-h-11 md:min-h-10`; courier logo `width`/`height`; reduced-motion rule for spin/pulse/dialog/sheet.
+- **Checks run.**
+  - Iso DB under `flock` (test-iso.env, 3110 auth origin): r6x-harden-render, label-info-settings, shipment-invoice, settings-screens-t217, money-breakdown, date-range-presets-t240, app-foundation-render, handover-scan-t270, label-batch-print, label-thermal, label-render, design-token-contrast: 12 files / 209 passed; operator-path-t263 passed except its label-page source test, which fails on another agent's in-progress `src/app/app/label/page.tsx`. handover-render-t267, label-selection-bar-t266 and list-dual-render-ids-t265 (page renders) fail before reaching this change: `page.tsx` now calls the new `label-day-summary.ts`, which those tests' mocks do not provide (another agent's work); the same assertions pass at component level in r6x-harden-render.
+  - Mutations, each restored from a byte copy: Operator branch without `shippingAmountIdr: null` (3 failed); invoice preview without the savepoint rollback (1 failed); `LabelSheet` without the name/phone lock (1 failed); main pickup point showing Hapus (1 failed).
+  - `tsc --noEmit`: 0 in this change's files (others: `tests/report-pages-render`, `tests/operator-mobile-t274`, `src/app/app/laporan/pengiriman/page.tsx` — other agents). `npx eslint .` 0. `impeccable detect --json` over the 14 changed UI files: `[]`. system-map-inventory: action counts pass (63); its loading count fails on another agent's new `src/app/app/info/loading.tsx`.
+- **Browser.** Snap Chromium 153 headless (CDP 9680), dev app 3127, operator@ and tenant@ (every path asserted not /login; no handover, invoice, setting or deletion submitted; the invoice preview's insert was rolled back and the page still read "Invoice belum diterbitkan" afterwards).
+  - Operator payload (HTML + RSC stream) for 4 labels and their batch view: every `shippingAmountIdr`, `chargedShippingIdr` and `codBreakdown` is `null`, no seller words; the Tenant Admin's same labels carry 9000 / 32500.
+  - Handover dialog at 640×360, 390×844, 1440×900: Batal and "Tandai 1 paket" fully in view and hit-testable (footer flush with the bottom at 640×360 after scrolling the body). Other dialogs opened and closed at 640×360 and 390×844: batch print, pickup notes, pickup Hapus (secondary), invite member, member access — footer actions in view (member access: its role/deactivate actions sit in the scrollable body at 640×360).
+  - Focus above the bar: with one row chosen, Tab through the list at 390×844 (Semua resi, Siap diserahkan) and 640×360: 26/26/23 list stops, 0 fully or partly under the bar, the bar reached after the list; `scroll-padding-bottom` 112px.
+  - Scan: after a scan the count region is `aria-live="off"` and the scan line reads "GC-… ditambahkan · 1 dipilih"; a click then sets it back to polite.
+  - Invoice confirm (COD, 640×360 / 390×844 / 1440×900): the nota renders Nilai barang + Ongkir = Total (v2), actions in view, Batal closes. Informasi label: name/phone switches checked + disabled with the reason; sender phone still toggleable. Titik pickup: main point without Hapus, reason shown; secondary points keep Hapus. Header search AX name "Cari halaman… ⌘K"; home link 139×40 (1440) / 124×44 (390); period popover role dialog named "Pilih periode"; courier logos width/height 29×24 / 80×24; card ring `rgb(46,71,186) 0 0 0 2px inset`; reduced motion: dialog/overlay/spin/pulse `animation-name: none` (spin otherwise).
+  - Screenshots and `report-*.json` in the session scratchpad `r6x/`.
+- **Open.**
+  - The issued invoice page (`InvoicePrintPanel`) and the preview still send the full invoice object to an Operator, including `shippingChargeIdr` (for COD the quote price), so the same derivation as #1 remains possible from the invoice payload (the printed v2 nota does not show it).
+  - The batch view's "Terbitkan N invoice" still issues without a preview (`src/app/app/label/cetak`, outside this round's files).
+  - `handover-undo.tsx` (pengiriman detail) uses `p-6` with `-mb-6` but not `-bottom-6`: if it ever scrolls, 8px of body shows under its sticky footer.
+  - The 80 mm nota inside the confirmation scrolls sideways a little at 390 wide (the sheet keeps its print width).
+  - Page-level render tests for the selection names/status region wait on the `label-day-summary` mocks (see Checks).
+
+## 2026-10-01 — T-274 Round 6-Z: operator mobile path + Buat kiriman short viewports (critique 2026-09-30T19-21-59Z)
+
+- **Changes.** Cetak resi: phone queue switch (`QueueSwitch`, links with `aria-current`, counts, period/suffix kept); the T-270 paragraph → one muted period note beside the period control and in the Filter sheet (`ListFilterSheet periodNote`); day line "Hari ini: n dicetak · n diserahkan · n tertunda" (`loadLabelDaySummary`: new LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY, LBL-READY-PENDING in one statement, read in the list's transaction; the closing state reuses its handover count). Buat kiriman: phone sender fold ("Pengirim di label" + Ubah/Selesai), folded sections without the "Lengkap" badge, status on the title row, phone example hint instead of the placeholder, stepper numbers only below 360px, "Data pelanggan" header wraps, one-row bottom bar at ≤ 500px tall. Render tests t265/t266/t267 mock the new loader; t263's filter-row regex and t267's tile-strip slice follow the new markup.
+- **Checks run.**
+  - Iso DB under `flock` (test-iso.env, 3110 auth origin): new `tests/label-day-summary-t274` (2) and `tests/operator-mobile-t274` (11), with operator-path-t263, label-selection-bar-t266, handover-render-t267, handover-scan-t270, shipment-create-flow-t211, native-select-replacement-t234, list-dual-render-ids-t265, system-map-inventory: 10 files, 111 passed, 1 failed — system-map-inventory "every layout, loading, error and not-found boundary" (31 stated vs 32: `src/app/app/info/loading.tsx`, another agent's uncommitted file, not this change).
+  - Mutations, each restored from a byte copy (`cmp` confirmed): day-summary lower bound `>=` → `>` (fixed-clock test failed); queue switch links without the carried period/suffix (URL-state test failed); folded sender block not hidden on phones (fold test failed).
+  - `tsc --noEmit`: 0 in this change's files (remaining: `tests/r6x-harden-render`, another agent). `npx eslint` over the changed files: 0. `impeccable detect --json` over the 5 changed UI files: `[]`.
+  - Full suite not run (parallel agents on the tree).
+- **Browser.** Snap Chromium 153 headless (CDP 9682), dev app 3127, operator@ then tenant@ (paths asserted not /login; nothing saved or submitted). Measured y (px, document) before → after, operator; tenant identical after:
+
+  | Viewport | Cetak resi queue control | first row | Buat kiriman recipient name | bottom bar | overflow |
+  |---|---|---|---|---|---|
+  | 390×844 | Filter button 192 (3 taps) → switch 192 (1 tap) | 441 → 477 | 919 → 668 | 105 → 105 | 0 → 0 |
+  | 360×640 | 192 → 192 | 483 → 477 | 1009 → 713 | 124 → 124 | 0 → 0 |
+  | 320×360 | 192 → 192 | 483 → 496 | 1009 → 713 | 124 → 65 | 3 → 0 (stepper overlap 6 → 0) |
+  | 640×360 | 170 → 170 | 396 → 454 | 684 → 553 | 105 → 65 | 0 → 0 |
+  | 1440×900 | tiles 317 → 350 (day line 187) | 573 → 618 | 1208 → 1208 | — | 0 → 0 |
+
+  - Keyboard (390×844): Tab reaches "Belum dicetak 10" (focus ring, `aria-current="page"`), next "Siap diserahkan 18", Enter → `?…&cetak=sudah` with that segment current.
+  - Sender fold (390×844): block hidden, Ubah `aria-expanded=false` → click → block shown, "Selesai", focus on `#sender-masking`. Phone field: placeholder empty, hint "Contoh: 0812-3456-7890" in `aria-describedby`.
+  - 640×360: icon-only Rincian 48×48 named "Rincian", opens the summary sheet.
+  - Day line on dev: "Hari ini: 0 dicetak · 0 diserahkan · 18 tertunda", equal to the Siap diserahkan tile (18, all printed before today).
+  - Screenshots and `before-*/after-*.json` in the session scratchpad `r6z/`.
+- **Open.**
+  - Cetak resi's first row moved down on some widths (390: +36px; 640×360: +58px; 1440: +45px) — the switch and day line take the place the paragraph freed plus a line; the queue itself is now one tap.
+  - At 360×640 the recipient name field is still below the first screen (713 > 640); only 390×844 was the target.
+  - The Operator Dasbor day line was not done (`src/app/app/page.tsx` shared with another agent's chart work).
+  - Non-zero "n dicetak" / "n diserahkan" were shown by render and DB tests only (no print or handover recorded on dev); the "18 tertunda" link was rendered in the browser.
+
+## 2026-10-01 — T-273 Round 6-Y: clarify + dataviz + optimize (critique 2026-09-30T19-21-59Z)
+
+- **Changes.** Laporan: `CourierIssueRateCard` (analytics-sections) replaces the Recharts "Performa kurir" chart (file removed): SHP-ISSUE-RATE with one decimal, SHP-ISSUED / SHP-OUTCOMES per row and in total, enough-volume group then "Volume rendah (kurang dari 10 jawaban)", each highest first. Distribusi status shows counts only, so Ringkasan's RPT-SHP-RETURN-RATE is the page's one Retur percentage. `data-metric-id` on every Laporan figure (289 attributes on dev). `KpiCard` deltas toned via `KPI_BETTER_WHEN`/`deltaTone` (+ sr "membaik/memburuk"). `StatusTiles` bar in its own inset row with legend. Audit: `listAuditEvents` joins `users.name` and the row's own outlet name, `hideMonitoringViews`; parser `kunjungan=tampil`; page Pelaku name+role, Objek column, checkbox. `LazyReportTrendChart` / `LazyTrendChart` (`next/dynamic`, `ssr:false`, h-56 / h-48 skeletons). Seed announcement (D-40), contact messages, label facts line, Cek tarif `rateView` order, Operator line removed, `/app/info/loading.tsx`.
+- **Checks run.**
+  - Iso DB under `flock` (test-iso.env, 3110 auth origin): report-pages-render, shipment-report, metric-scope-parity, app-foundation-render, platform-public-render, platform-monitoring, audit-labels, label-thermal, lookup-screens-t242, shipment-status-copy, contact-actions — 11 files, 166 tests passed.
+  - Mutations, each restored from a byte copy (`cmp` confirmed): courier points unsorted (2 report tests failed); composition row classes removed (tile test failed); `hideMonitoringViews` SQL clause dropped (platform-monitoring T-273 failed); `deltaTone` by sign (KPI tone test failed).
+  - `tsc --noEmit`: 0 in this change's files (remaining: `tests/r6x-harden-render`, another agent). `npx eslint` over the changed files: 0. `impeccable detect --json` over 11 changed UI files: `[]`.
+  - Full suite not run (parallel agents on the tree).
+- **Browser.** Snap Chromium 153 headless (CDP 9681), dev app 3127, tenant@ and super@ (cookies from curl sign-in; nothing saved). 1440 and 390: Laporan (Ringkasan, Distribusi, issue-rate card), Dasbor KPI tones + chart, Histori strip (1440; hidden below md), /platform/audit (25 entries, no page views by default; toggle at 390); 0 console errors, 0 overflow, 0 duplicate ids. Non-COD label GC-10167 printToPDF: 1 page, facts "… · Nilai barang Rp 285.000", no insurance line. /app/info client navigation shows "Memuat info terbaru" skeleton (1440).
+- **Perf (dev server, `next dev`; production numbers need `next build`).** Laporan HTML 896 593 → 998 447 B, DOM 2 910 → 3 099 elements, CLS 0.0012 → 0.0012, SSR Recharts markup 32 → 0 `recharts-` classes (chart skeleton instead). The HTML grew from the server-rendered issue-rate table + phone list (10 couriers, both layouts) and the metric-ID attributes. Dasbor HTML 238 710 → 255 801 B, DOM 722 → 726, `recharts-` 16 → 0; the other deltas on /app and /app/info include other agents' concurrent shell changes and are not attributed to T-273. Decoded JS after 3.5 s on Laporan 9.43 → 9.24 MB (dev, unminified; Recharts still loads, after the page).
+- **Open.**
+  - Shipment number in the audit Objek column needs a `public_reference` column on `platform_monitoring_shipment` (migration; not done). Membership rows cannot name the member (no membership id in the platform read model).
+  - The date-range picker calendar is still eager (its internals are another agent's); the pengiriman list skeleton (`_list/list-states.tsx`) still draws a 6 px bar, ~40 px shorter than the new composition row.
+  - Buat kiriman still labels the field "Nilai barang untuk asuransi (Rp)" (pengiriman/baru is another agent's).
+  - The /app/info loading skeleton was captured at 1440 only; the 390 run (sidebar collapsed, full navigation) caught "Memuat dasbor" instead, so 390 is unproven.
+
+## 2026-10-01 — Round 6 integration (T-272, T-273, T-274), coordinator checks
+
+- **Integration fixes.**
+  - `tests/r6x-harden-render`: the provider's children now go as arguments, with a cast for the props type (tsc 2352, `react/no-children-prop`).
+  - COD Ongkir label: the facts line is back to "Nilai (lunas)". T-273's "Nilai barang (lunas)" broke T-186: a COD Ongkir label never reads "Nilai barang …" as an amount to collect. The T-273 thermal assertion now follows.
+  - `tests/label-print`: the Operator label's `shippingAmountIdr` is now `null`, matching T-272.
+  - New `src/app/app/info/error.tsx`: T-273 added `info/loading.tsx`, and every tenant loading boundary outside the settings sub-pages has a sibling error boundary. Spec 18 now counts 23 error boundaries, 22 of them tenant.
+- **Checks run.**
+  - `npx tsc --noEmit`: 0 errors.
+  - `npx eslint .`: 0 problems.
+  - `git diff --check`: clean.
+  - Full integration suite on the iso DB (`flock`, test-iso.env, auth origin 3110, `drizzle-kit migrate` first): 140 files, 1763 tests passed.
+- **Browser.** Snap Chromium headless, CDP 9690, dev app 3127.
+  - Tenant: `/app`, `/app/label`, `/app/laporan/pengiriman`, `/app/pengiriman/baru`, `/app/info`, `/app/pengaturan/pickup`, `/app/pengaturan/label`.
+  - Operator: `/app/label`, `/app/label?cetak=sudah`, `/app/pengiriman/baru`, `/app/info`.
+  - Each page at 390 and 1440 wide: the path was not /login, overflow was 0, no duplicate ids, no console errors or exceptions. Nothing was saved.

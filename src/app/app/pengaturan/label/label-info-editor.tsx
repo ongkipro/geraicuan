@@ -6,7 +6,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { GeraiBrandProvider, type GeraiBrand } from "@/app/app/brand/gerai-brand";
 import { LabelPreviewFrame } from "@/app/app/label/[shipmentId]/label-preview-frame";
 import { LabelPrintContext } from "@/app/app/label/[shipmentId]/label-print-context";
-import { LabelSheet } from "@/app/app/label/[shipmentId]/label-sheet";
+import { LabelSheet, LOCKED_LABEL_FIELDS } from "@/app/app/label/[shipmentId]/label-sheet";
 import { saveLabelSettings, type LabelSettingsActionState } from "@/app/app/pengaturan/actions";
 import { DataCard } from "@/components/app/data-card";
 import { OptionCard } from "@/components/app/option-card";
@@ -120,7 +120,7 @@ export function LabelInfoEditor({
       <form action={formAction} className="hidden" id={FORM_ID}>
         {(Object.keys(LABEL_SIZES) as LabelSize[]).flatMap((each) =>
           LABEL_FIELD_KEYS.map((key) => (
-            <input key={`${each}-${key}`} name={labelFieldInputName(each, key)} type="hidden" value={fields[each][key] ? "1" : "0"} />
+            <input key={`${each}-${key}`} name={labelFieldInputName(each, key)} type="hidden" value={fields[each][key] || key in LOCKED_LABEL_FIELDS ? "1" : "0"} />
           )))}
         <input name="defaultSize" type="hidden" value={defaultSize} />
       </form>
@@ -166,23 +166,25 @@ export function LabelInfoEditor({
               {LABEL_FIELD_KEYS.map((key) => {
                 const id = `label-field-${key}`;
                 const unavailable = missing[key];
+                // R6-X: name and phone of the recipient are locked on, with the reason in place of the description.
+                const locked = key in LOCKED_LABEL_FIELDS ? LOCKED_LABEL_FIELDS[key as keyof typeof LOCKED_LABEL_FIELDS] : null;
                 return (
                   // The switch's ::after covers the whole row (relative li, static switch), so the
                   // label and description toggle it too: a ≥ 44px target on touch, one tab stop.
                   <li className="relative py-3 first:pt-0 last:pb-0" data-row-target="" key={key}>
-                    <Field data-disabled={unavailable ? true : undefined} orientation="horizontal">
+                    <Field data-disabled={unavailable ? true : undefined} data-locked={locked ? true : undefined} orientation="horizontal">
                       <FieldContent>
                         <FieldLabel htmlFor={id}>{LABEL_FIELD_COPY[key].label}</FieldLabel>
                         <FieldDescription>
                           {unavailable ? (
                             <>{unavailable} <Link className="relative z-10 font-medium text-primary underline-offset-4 hover:underline" href="/app/pengaturan">{key === "geraiLogo" ? "Unggah di Profil gerai" : "Isi di Profil gerai"}</Link></>
-                          ) : LABEL_FIELD_COPY[key].description}
+                          ) : locked ?? LABEL_FIELD_COPY[key].description}
                         </FieldDescription>
                       </FieldContent>
                       <Switch
-                        checked={unavailable ? false : fields[size][key]}
+                        checked={unavailable ? false : locked ? true : fields[size][key]}
                         className="static cursor-pointer after:inset-0 after:content-['']"
-                        disabled={Boolean(unavailable)}
+                        disabled={Boolean(unavailable || locked)}
                         id={id}
                         onCheckedChange={(on) => toggle(key, on)}
                       />

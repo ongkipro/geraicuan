@@ -236,7 +236,7 @@ export async function saveContact(
   }
   const requestedRole = formData.get("peran");
   return {
-    message: "Kontak tersimpan dan siap dipakai pada draf baru.",
+    message: "Kontak tersimpan dan siap dipakai saat membuat kiriman.",
     successId: created.id,
     successNumber: created.contactNumber,
     successRole: contactRoleFor(validation.input, parseContactRole(typeof requestedRole === "string" ? requestedRole : null)),

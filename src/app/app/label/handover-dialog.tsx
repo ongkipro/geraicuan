@@ -4,7 +4,7 @@ import { ChevronDown, CircleAlert, CircleCheck, Handshake, Info, ListChecks, Sca
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type KeyboardEvent } from "react";
 
-import { SelectionNote, selectionBarClassName, useBatchSelection } from "@/app/app/label/batch-selection";
+import { SelectionBar, SelectionNote, useBatchSelection } from "@/app/app/label/batch-selection";
 import { MAX_BATCH_SHIPMENTS } from "@/app/app/label/cetak/batch-query";
 import { markShipmentsHandedOverAction, scanForHandover, selectReadyForHandover } from "@/app/app/label/handover-actions";
 import { OptionCard } from "@/components/app/option-card";
@@ -117,13 +117,7 @@ export function HandoverDialog() {
   });
 
   return (
-    <div
-      aria-label={count > 0 ? "Paket terpilih" : undefined}
-      className={selectionBarClassName(count)}
-      data-slot="selection-bar"
-      data-state={count > 0 ? "open" : "closed"}
-      role={count > 0 ? "region" : undefined}
-    >
+    <SelectionBar count={count} label="Paket terpilih">
       <SelectionNote className="max-lg:order-first max-lg:basis-full lg:hidden" />
       {count > 0 ? <span className="flex-1 text-sm font-semibold whitespace-nowrap tabular-nums lg:hidden">{count} dipilih</span> : null}
       {count > 0 ? (
@@ -184,8 +178,8 @@ export function HandoverDialog() {
             {planned === null ? (
               <p className="text-xs text-muted-foreground">
                 {new Set(chosen.map((number) => types[number] ?? null)).size > 1
-                  ? "Rencana penyerahan paket terpilih berbeda. Pilih yang terjadi sekarang."
-                  : "Rencana penyerahan tidak tercatat. Pilih yang terjadi sekarang."}
+                  ? "Paket terpilih punya rencana penyerahan berbeda. Pilih cara paket diserahkan sekarang."
+                  : "Pilih cara paket diserahkan."}
               </p>
             ) : null}
           </fieldset>
@@ -205,7 +199,7 @@ export function HandoverDialog() {
             </p>
           </div>
           {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
-          <DialogFooter className="-mx-6 -mb-6 px-6">
+          <DialogFooter className="-mx-6 -mb-6 -bottom-6 px-6">
             <Button onClick={() => setOpen(false)} type="button" variant="outline">Batal</Button>
             <Button disabled={!method || pending || overCap} onClick={submit} type="button">
               {pending ? "Mencatat…" : `Tandai ${count} paket`}
@@ -214,17 +208,18 @@ export function HandoverDialog() {
         </DialogContent>
       </Dialog>
       {count === 0 ? <span className="text-xs text-muted-foreground">Pilih paket yang sudah diterima kurir</span> : null}
-    </div>
+    </SelectionBar>
   );
 }
 
 /** The last handover outcome, above the list, until dismissed. Announced politely. */
 export function HandoverNotice() {
   const { notice, setNotice } = useBatchSelection();
-  if (!notice) return null;
+  // R6-X (critique #8): the status container is always mounted and empty until an outcome, so the
+  // injected text is announced (a live region mounted together with its text often is not).
   return (
-    <div className="border-b p-4" role="status">
-      <Alert className={cn(
+    <div className={notice ? "border-b p-4" : undefined} data-slot="handover-notice" role="status">
+      {notice ? <Alert className={cn(
         "relative pr-12",
         notice.tone === "success" && "border-ok/40 bg-ok-surface text-ok",
         notice.tone === "warning" && "border-warn/40 bg-warn-surface text-warn",
@@ -239,7 +234,7 @@ export function HandoverNotice() {
         <Button aria-label="Tutup pesan" className="absolute top-2 right-2 size-9" onClick={() => setNotice(null)} size="icon" type="button" variant="ghost">
           <X aria-hidden="true" />
         </Button>
-      </Alert>
+      </Alert> : null}
     </div>
   );
 }

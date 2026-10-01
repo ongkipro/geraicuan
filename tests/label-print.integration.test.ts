@@ -247,7 +247,8 @@ describe("tenant-scoped AWB labels", () => {
       courier: "JNE",
       providerService: "REG",
       isCod: true,
-      shippingAmountIdr: 8000,
+      // T-272: nor the quote price an Operator could derive the fee from.
+      shippingAmountIdr: null,
       insuranceAmountIdr: null,
       providerCodAmountIdr: 111721,
       // T-270 (D-38): this reader is an Operator, so the seller-side breakdown (T-193: Mengantar's

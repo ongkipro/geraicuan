@@ -45,7 +45,12 @@ export type PrintableLabel = {
    * collects and never a goods breakdown.
    */
   paymentMethod: PaymentMethod;
-  shippingAmountIdr: number;
+  /**
+   * The order's quote price (`provider_order_snapshots.shipping_amount_idr`), seller-side: the
+   * sheet never prints it. R6-X (critique 2026-09-30T19-21-59Z #1): null for an Operator, whose
+   * RSC payload would otherwise carry it (on COD it makes the fee derivable).
+   */
+  shippingAmountIdr: number | null;
   /**
    * T-261: `provider_order_snapshots.provider_charged_shipping_idr`, the shipping Mengantar
    * deducts — read for the page's "Rincian uang" panel only, never printed on the sheet.
@@ -456,7 +461,9 @@ export async function loadPrintableLabel(
   // seller-side amount for any role, so the label itself carries none.
   if (context.role === "TENANT_ADMIN") return { ...label, money };
   // T-270: an Operator's label carries neither the fee nor the rounding (inside `codBreakdown`).
-  return { ...label, chargedShippingIdr: null, codBreakdown: null, money };
+  // R6-X: nor the quote price. `insuranceAmountIdr` stays: the sheet prints "Asuransi Mengantar"
+  // for every role (D-37 context line), so withholding it would change the Operator's document.
+  return { ...label, chargedShippingIdr: null, codBreakdown: null, money, shippingAmountIdr: null };
 }
 
 /** T-270: the COD sheet's customer-facing lines; null without a breakdown to split. */

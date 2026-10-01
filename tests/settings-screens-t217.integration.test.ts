@@ -349,12 +349,23 @@ describe("Titik pickup", () => {
     { isDefault: false, notes: NO_NOTES, originAreaLabel: "Sukajadi, Kota Bandung", pickupAddressId: "p-2", pickupAddressLabel: "Gudang Dua" },
   ];
 
-  it("offers Jadikan utama only on the non-default point and Hapus on every point", () => {
+  it("offers Jadikan utama and Hapus only on the non-default point; the main point says why it stays (R6-X)", () => {
     const html = renderToStaticMarkup(createElement(PickupPoints, {
       connectionSource: "platform_default", outletId: outlet.id, outletName: outlet.name, points,
     }));
     expect(html.match(/Jadikan utama/g)).toHaveLength(1);
-    expect(html.match(/>Hapus</g)).toHaveLength(2);
+    expect(html.match(/>Hapus</g)).toHaveLength(1);
+    const rows = html.split("<li").slice(1);
+    const main = rows.find((row) => row.includes("Gudang Utama"))!;
+    expect(main).not.toContain(">Hapus<");
+    expect(main).toContain("Titik utama tidak dapat dihapus. Jadikan titik lain utama dulu.");
+    expect(rows.find((row) => row.includes("Gudang Dua"))).toContain(">Hapus<");
+    // The only point is the main point too: no Hapus, and the way out.
+    const only = renderToStaticMarkup(createElement(PickupPoints, {
+      connectionSource: "platform_default", outletId: outlet.id, outletName: outlet.name, points: [points[0]!],
+    }));
+    expect(only).not.toContain(">Hapus<");
+    expect(only).toContain("Tambahkan titik lain dan jadikan utama dulu.");
     expect(html).toContain("Utama");
     // No filled primary: adding a pickup point is an outline action (reference).
     expect(filledButtons(html)).toBe(0);

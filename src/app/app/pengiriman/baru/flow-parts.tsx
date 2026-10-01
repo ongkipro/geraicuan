@@ -50,7 +50,8 @@ export function FlowStepper({ steps }: { steps: FlowStep[] }) {
                 {step.state === "done" ? <Check aria-hidden="true" className="size-4" /> : index + 1}
                 <span className="sr-only">{step.state === "done" ? " (selesai)" : ""}</span>
               </span>
-              <span className={cn("flex min-w-0 flex-col", step.state !== "current" && "max-md:sr-only")}>
+              {/* T-274: below 360px even the current step's label is only spoken; the numbers stay. */}
+              <span className={cn("flex min-w-0 flex-col", step.state === "current" ? "max-[360px]:sr-only" : "max-md:sr-only")}>
                 <span
                   className={cn(
                     "text-sm leading-tight",
@@ -150,7 +151,7 @@ export function SectionStatus({ missing, state }: { missing: number; state: Sect
   }
   if (missing === 0) {
     return (
-      <span className="flex items-center gap-1.5 self-start rounded-sm border border-ok bg-ok-surface px-2.5 py-0.5 text-xs font-semibold text-ok sm:self-auto">
+      <span className="flex items-center gap-1.5 rounded-sm border border-ok bg-ok-surface px-2.5 py-0.5 text-xs font-semibold text-ok">
         <Check aria-hidden="true" className="size-3.5" />Lengkap
       </span>
     );
@@ -215,7 +216,8 @@ export function SectionCard({
           emphasis && "ring-2 ring-primary/40",
         )}
       >
-        <header className="flex flex-col justify-between gap-2 border-b pb-3 sm:flex-row sm:items-center">
+        {/* T-274: the status sits beside the title while both fit (it wraps under it on the narrowest phones). */}
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b pb-3">
           <div className="flex items-center gap-2">
             <SectionMarker className="size-7 lg:hidden" number={number} state={state} />
             <h2 className="text-lg font-bold" id={id} tabIndex={-1}>
@@ -224,7 +226,8 @@ export function SectionCard({
               <span className="sr-only">{` (${STATE_WORDS[state]})`}</span>
             </h2>
           </div>
-          {aside}
+          {/* T-274: a folded section's "Lengkap" repeats its check marker (and the heading's spoken state); phones drop it. */}
+          {aside ? <div className={cn("flex", collapse?.collapsed && "max-md:hidden")}>{aside}</div> : null}
         </header>
         {collapse ? (
           <div className="flex items-center justify-between gap-3 md:hidden" data-slot="section-fold">
@@ -319,8 +322,8 @@ export function SubBlockTitle({ children, id }: { children: ReactNode; id?: stri
 }
 
 /** A tinted inner block (pickup address, sender on label, COD value box, product row). */
-export function InsetBlock({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex flex-col gap-3 rounded-lg border bg-muted/60 p-4", className)}>{children}</div>;
+export function InsetBlock({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
+  return <div className={cn("flex flex-col gap-3 rounded-lg border bg-muted/60 p-4", className)} id={id}>{children}</div>;
 }
 
 export function DetailRows({ rows }: { rows: [string, ReactNode][] }) {

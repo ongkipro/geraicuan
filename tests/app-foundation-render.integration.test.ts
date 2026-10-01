@@ -271,6 +271,62 @@ describe("Mengantar look (v3.2)", () => {
     expect(empty).not.toContain("Komposisi");
   });
 
+  // T-273 (critique P2): the bar sat flush under the tile row, so a segment lying under a tile read
+  // as that tile's selected underline. It is its own row now: a divider, inset by the tiles'
+  // padding, a rounded track, and the legend in the same row directly under it; counts unchanged.
+  it("draws the composition bar in its own inset row with its legend, apart from the tile row (T-273)", async () => {
+    const { StatusTiles } = await import("@/components/app/status-tiles");
+    const tile = (key: string, count: number, label = key) => ({ count, href: `/${key}`, key, label, selected: false });
+    const html = renderToStaticMarkup(createElement(StatusTiles, {
+      label: "Histori",
+      total: 134,
+      tiles: [tile("QUE-ALL", 134, "Semua kiriman"), tile("ISSUED", 28, "Resi terbit"), tile("DELIVERED", 45, "Terkirim")],
+    }));
+    const tilesEnd = html.indexOf("</ul>");
+    const row = html.match(/<div aria-hidden="true" class="([^"]*)" data-slot="tile-composition">([\s\S]*?)<\/div>/)!;
+    // After the tile list, never inside it or flush against the card edge.
+    expect(html.indexOf('data-slot="tile-composition"')).toBeGreaterThan(tilesEnd);
+    expect(html.slice(0, tilesEnd)).not.toContain("data-segment");
+    expect(row[1].split(" ")).toEqual(expect.arrayContaining(["border-t", "px-3", "@xl:px-4", "pt-2.5"]));
+    // The track is rounded and inset; the legend follows it inside the same row.
+    expect(row[2]).toMatch(/^<span class="[^"]*\brounded-full\b[^"]*" data-slot="tile-composition-bar">/);
+    expect(row[2].indexOf("Resi terbit (28)")).toBeGreaterThan(row[2].lastIndexOf("data-segment"));
+    // PR-52 counts: the same segments, widths and remainder as before.
+    expect([...row[2].matchAll(/data-count="(\d+)" data-segment="([^"]+)"/g)].map((match) => [match[2], Number(match[1])]))
+      .toEqual([["ISSUED", 28], ["DELIVERED", 45], ["OTHER", 61]]);
+  });
+
+  // T-273 (critique: "uncoloured deltas"): a KPI change is toned by the metric's desired direction
+  // (spec 19 M-0), never its sign; the arrow and words carry the direction without colour.
+  it("tones a KPI delta by the metric's desired direction, with arrow and words (T-273)", async () => {
+    const { KpiCard, deltaTone } = await import("@/components/app/kpi-card");
+    const pill = (metricId: string | undefined, change: number) => {
+      const html = renderToStaticMarkup(createElement(KpiCard, { delta: { change, percent: 10 }, label: "L", metricId, value: 1 }));
+      const match = html.match(/<span class="([^"]*)" data-delta-tone="(\w+)">([\s\S]*?)<\/span><span class="text-xs/)!;
+      return { className: match[1], text: match[3].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), tone: match[2], arrow: /lucide-arrow-(up|down)-right|lucide-arrow-right/.exec(match[3])?.[0] };
+    };
+    const created = pill("SHP-CREATED", 5);
+    expect(created).toMatchObject({ arrow: "lucide-arrow-up-right", tone: "ok" });
+    expect(created.className).toContain("bg-ok-surface text-ok");
+    expect(created.text).toBe("Naik 5 (10%) (membaik)");
+    const returned = pill("SHP-OUTCOME-RETURNED", 3);
+    expect(returned).toMatchObject({ arrow: "lucide-arrow-up-right", tone: "danger" });
+    expect(returned.className).toContain("bg-danger-surface text-danger");
+    expect(returned.text).toBe("Naik 3 (10%) (memburuk)");
+    expect(pill("SHP-OUTCOME-RETURNED", -3)).toMatchObject({ arrow: "lucide-arrow-down-right", tone: "ok" });
+    expect(pill("SHP-ISSUED", -2)).toMatchObject({ arrow: "lucide-arrow-down-right", tone: "danger" });
+    // Unchanged, or a metric without a declared direction: the neutral pill, no judgement text.
+    expect(pill("SHP-CREATED", 0)).toMatchObject({ arrow: "lucide-arrow-right", text: "Tetap", tone: "neutral" });
+    expect(pill("UNKNOWN-METRIC", 4)).toMatchObject({ text: "Naik 4 (10%)", tone: "neutral" });
+    expect(pill("UNKNOWN-METRIC", 4).className).toContain("bg-muted");
+    // Every Dasbor KPI declares its direction, so none renders uncoloured.
+    const { readFileSync } = await import("node:fs");
+    const row = readFileSync("src/app/app/_dashboard/sections.tsx", "utf8");
+    const ids = [...row.slice(row.indexOf("export function KpiRow")).slice(0, 1200).matchAll(/metricId: "([A-Z-]+)"/g)].map((match) => match[1]);
+    expect(ids.length).toBe(4);
+    for (const id of ids) expect(deltaTone(id, 1), id).not.toBe("neutral");
+  });
+
   // T-248 (owner: "bar bawahnya active juga kamu bedakan"): the active status stays full tone.
   it("dims every other bar segment while a status is the active filter and says which one", async () => {
     const { StatusTiles } = await import("@/components/app/status-tiles");

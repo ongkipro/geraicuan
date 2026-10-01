@@ -61,7 +61,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -95,6 +95,12 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * R6-X (critique 2026-09-30T19-21-59Z #2, WCAG 1.4.10): the content never outgrows the viewport
+ * (max-h 100dvh − 2rem, scrolls), and the footer sticks to its bottom edge so the actions stay
+ * reachable at 640 × 360 / 200% zoom. Sticky offsets stop at the content's padding, so `-bottom-*`
+ * mirrors `-mb-*`: a caller with `p-6` passes `-mb-6 -bottom-6`. Opaque, so nothing shows through.
+ */
 function DialogFooter({
   className,
   showCloseButton = false,
@@ -107,7 +113,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        "sticky -bottom-4 z-10 -mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-[color-mix(in_oklab,var(--muted)_50%,var(--popover))] p-4 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

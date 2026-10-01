@@ -1,18 +1,20 @@
-import { Calculator, ChevronDown } from "lucide-react";
+import { Calculator, ChevronDown, CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { reportTrendTotals, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
-import { ReportTrendChart } from "@/app/app/laporan/pengiriman/report-trend-chart";
+import { reportTrendTotals, type CourierPerformancePoint, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
+import { LazyReportTrendChart as ReportTrendChart } from "@/app/app/laporan/pengiriman/report-trend-chart-lazy";
 import { DataCard } from "@/components/app/data-card";
 import { SectionHelp } from "@/components/app/help-hint";
 import { formatIdr } from "@/components/app/money";
 import { STAT_CELL, STAT_LABEL, STAT_NOTE, STAT_VALUE } from "@/components/app/stat-strip";
 import { ShipmentStatusBadge, StatusBadge } from "@/components/app/status-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ShipmentReportLifecycleTotal } from "@/db/shipment-report-repository";
 import { shipmentStatuses } from "@/lib/domain-enums";
 import { SHIPMENT_STATUS_PRESENTATION, type ShipmentStatus } from "@/lib/shipment-queue";
+import { COURIER_LOW_VOLUME_THRESHOLD } from "@/lib/courier-volume";
 import { deliveredRate, formatRate, lowVolumeNote, returnRate, type RegionTotal, type RouteTotal, UNKNOWN_REGION_KEY } from "@/lib/shipment-report-analytics";
 import { cn } from "@/lib/utils";
 
@@ -56,11 +58,12 @@ export function reportOutcomeComposition(kpis: ReportAnalyticsView["kpis"]) {
 }
 
 type OutcomeKey = "delivered" | "returned" | "failed" | "in-progress";
-const OUTCOMES: readonly { bar: string; key: OutcomeKey; label: string }[] = [
-  { bar: "bg-ok", key: "delivered", label: "Terkirim" },
-  { bar: "bg-warn", key: "returned", label: "Retur" },
-  { bar: "bg-danger", key: "failed", label: "Gagal" },
-  { bar: "bg-primary", key: "in-progress", label: "Masih berjalan" },
+/** Each bucket with its spec 19 metric ID (T-273: every figure on the page carries one). */
+const OUTCOMES: readonly { bar: string; key: OutcomeKey; label: string; metric: string }[] = [
+  { bar: "bg-ok", key: "delivered", label: "Terkirim", metric: "RPT-SHP-DELIVERED" },
+  { bar: "bg-warn", key: "returned", label: "Retur", metric: "RPT-SHP-RETURNED" },
+  { bar: "bg-danger", key: "failed", label: "Gagal", metric: "RPT-SHP-FAILED" },
+  { bar: "bg-primary", key: "in-progress", label: "Masih berjalan", metric: "RPT-SHP-IN-PROGRESS" },
 ];
 
 /**
@@ -126,10 +129,11 @@ const moneyCell = "flex min-w-0 flex-wrap items-center justify-between gap-x-3 g
 export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) {
   const finished = kpis.deliveredCount + kpis.returnedCount;
   const composition = reportOutcomeComposition(kpis);
-  const caption: Record<string, string | undefined> = {
-    delivered: `${share(kpis.deliveredCount, kpis.shipmentCount)} dari ${number.format(kpis.shipmentCount)} kiriman`,
+  const caption: Record<string, { metric: string; text: string } | undefined> = {
+    delivered: { metric: "RPT-SHP-DELIVERED-SHARE", text: `${share(kpis.deliveredCount, kpis.shipmentCount)} dari ${number.format(kpis.shipmentCount)} kiriman` },
     // T-265: the base is named, not "selesai" — a queued return counts (spec 19 RPT-SHP-RETURN-RATE).
-    returned: `${formatRate(returnRate(kpis))} dari ${number.format(finished)} terkirim + retur`,
+    // T-273: the page's one Retur percentage; every % retur below uses this base.
+    returned: { metric: "RPT-SHP-RETURN-RATE", text: `${formatRate(returnRate(kpis))} dari ${number.format(finished)} terkirim + retur` },
   };
   return (
     <section aria-label="Ringkasan laporan" className="@container/summary">
@@ -139,7 +143,7 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
           <dl className="grid flex-1 grid-cols-3 gap-px bg-border @xl:flex">
             <div className={cn(statCell, "@xl:flex-auto")} data-kpi="total">
               <dt className={statLabel}>Total kiriman</dt>
-              <dd className={statValue}>{number.format(kpis.shipmentCount)}</dd>
+              <dd className={statValue} data-metric-id="RPT-SHP-KPI-TOTAL">{number.format(kpis.shipmentCount)}</dd>
             </div>
             {composition.map((part, index) => (
               <div className={cn(statCell, "@xl:flex-auto", index === composition.length - 1 && "col-span-2")} data-kpi={part.key} key={part.key}>
@@ -147,8 +151,8 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
                   <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", part.bar)} />
                   {part.label}
                 </dt>
-                <dd className={statValue}>{number.format(part.count)}</dd>
-                {caption[part.key] ? <dd className={statNote}>{caption[part.key]}</dd> : null}
+                <dd className={statValue} data-metric-id={part.metric}>{number.format(part.count)}</dd>
+                {caption[part.key] ? <dd className={statNote} data-metric-id={caption[part.key]!.metric}>{caption[part.key]!.text}</dd> : null}
               </div>
             ))}
           </dl>
@@ -158,12 +162,12 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
           <dl className="grid h-full gap-px bg-border @md:grid-cols-2">
             <div className={moneyCell} data-kpi="cod-value">
               <dt className={statLabel}>Nilai COD</dt>
-              <dd className={cn(statValue, "whitespace-nowrap")}>{formatIdr(kpis.codValueIdr)}</dd>
+              <dd className={cn(statValue, "whitespace-nowrap")} data-metric-id="RPT-SHP-COD-VALUE-TOTAL">{formatIdr(kpis.codValueIdr)}</dd>
               <dd className={cn(statNote, "basis-full")}>Ditagih kurir dari {number.format(kpis.codOrderCount)} kiriman COD</dd>
             </div>
             <div className={moneyCell} data-kpi="cod-disbursement-estimate">
               <dt className={statLabel}>Estimasi cair</dt>
-              <dd className={cn(statValue, "whitespace-nowrap")}>{formatIdr(kpis.codDisbursementEstimateIdr)}</dd>
+              <dd className={cn(statValue, "whitespace-nowrap")} data-metric-id="RPT-SHP-COD-DISBURSEMENT-EST-TOTAL">{formatIdr(kpis.codDisbursementEstimateIdr)}</dd>
               {/* Spec 10 §4.15: the same "Estimasi" info badge as every Rincian uang. It sits on the
                   note line so the label and amount share one line like Nilai COD's. */}
               <dd className={cn(statNote, "flex basis-full flex-wrap items-center gap-x-1.5 gap-y-1")}>
@@ -182,7 +186,7 @@ export function ReportKpiStrip({ kpis }: { kpis: ReportAnalyticsView["kpis"] }) 
 export function ReportKpiHelp() {
   return (
     <SectionHelp label="Cara membaca ringkasan laporan">
-      <p>Status terkini kiriman yang dibuat pada periode ini, sama dengan Dasbor. Retur mencakup antre retur, retur dalam perjalanan dan retur diterima; persentasenya dihitung dari kiriman yang terkirim + retur (antre retur ikut dihitung karena hasilnya sudah pasti). Gagal mencakup kiriman gagal dan dibatalkan. Masih berjalan adalah sisanya: belum terkirim, retur atau gagal.</p>
+      <p>Status terkini kiriman yang dibuat pada periode ini, sama dengan Dasbor. Retur mencakup antre retur, retur dalam perjalanan dan retur diterima. Semua persen retur di halaman ini dihitung dari kiriman yang terkirim + retur (antre retur ikut dihitung karena hasilnya sudah pasti). Gagal mencakup kiriman gagal dan dibatalkan. Masih berjalan adalah sisanya: belum terkirim, retur atau gagal.</p>
       <p>Warna titik sama dengan kelompok di Distribusi status, yang menunjukkan pembagian total kiriman.</p>
       <p>Nilai COD adalah jumlah yang ditagih kurir untuk kiriman COD yang resinya sudah terbit. Estimasi cair = nilai COD dikurangi ongkir dibayar ke Mengantar dan biaya COD (termasuk PPN).</p>
     </SectionHelp>
@@ -223,14 +227,14 @@ export function ReportTrendCard({ granularity, trend }: Pick<ReportAnalyticsView
           <TabsTrigger value="nilai">Nilai COD per {unit}</TabsTrigger>
         </TabsList>
         <TabsContent className="grid gap-3" value="kiriman">
-          <dl aria-label="Total periode ini" className={legend}>
+          <dl aria-label="Total periode ini" className={legend} data-metric-id="RPT-SHP-TREND-TOTALS">
             <LegendTotal label="COD" swatch="h-0.5 bg-chart-1">{number.format(totals.cod)} kiriman</LegendTotal>
             <LegendTotal label="Non-COD" swatch="border-t-2 border-dashed border-chart-2">{number.format(totals.nonCod)} kiriman</LegendTotal>
           </dl>
           <ReportTrendChart data={trend} mode="count" />
         </TabsContent>
         <TabsContent className="grid gap-3" value="nilai">
-          <dl aria-label="Total periode ini" className={legend}>
+          <dl aria-label="Total periode ini" className={legend} data-metric-id="RPT-SHP-TREND-TOTALS">
             <LegendTotal label="Nilai COD" swatch="h-0.5 bg-chart-1">{formatIdr(totals.codValue)}</LegendTotal>
           </dl>
           <ReportTrendChart data={trend} mode="value" />
@@ -246,9 +250,9 @@ export function ReportTrendCard({ granularity, trend }: Pick<ReportAnalyticsView
           <TableHeader>
             <TableRow>
               <TableHead>{granularity === "harian" ? "Tanggal" : "Bulan"} (WIB)</TableHead>
-              <TableHead className={numeric}>COD</TableHead>
-              <TableHead className={numeric}>Non-COD</TableHead>
-              <TableHead className={numeric}>Nilai COD</TableHead>
+              <TableHead className={numeric} data-metric-id="RPT-SHP-TREND-COD">COD</TableHead>
+              <TableHead className={numeric} data-metric-id="RPT-SHP-TREND-NONCOD">Non-COD</TableHead>
+              <TableHead className={numeric} data-metric-id="RPT-SHP-TREND-COD-VALUE">Nilai COD</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -277,14 +281,15 @@ function ShareBar({ className, value }: { className: string; value: number }) {
 }
 
 /**
- * A count and its share, the share naming its base inline (T-262): "63 · 47,0% dari 134 kiriman".
- * One unbroken block; in a row too narrow for the label beside it, it wraps whole to the right.
+ * A bucket's or status's count (T-273). No percentage: the share bar shows the part of the whole,
+ * and a written "x% dari N kiriman" beside Ringkasan's Retur "x% dari N terkirim + retur" gave the
+ * page two Retur percentages on two bases. The page's one Retur percentage is RPT-SHP-RETURN-RATE.
  */
-function CountShare({ count, total }: { count: number; total: number }) {
+function Count({ count, metric }: { count: number; metric: string }) {
   return (
-    <span className="ml-auto text-right text-sm whitespace-nowrap tabular-nums">
+    <span className="ml-auto text-right text-sm whitespace-nowrap tabular-nums" data-metric-id={metric}>
       <span className="font-semibold">{number.format(count)}</span>{" "}
-      <span className="text-xs text-muted-foreground">· {share(count, total)} dari {number.format(total)} kiriman</span>
+      <span className="text-xs text-muted-foreground">kiriman</span>
     </span>
   );
 }
@@ -302,7 +307,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
       action={(
         <SectionHelp label="Penjelasan distribusi status">
           <p>Status terkini kiriman pada periode ini, dikelompokkan seperti Ringkasan: Terkirim, Retur, Gagal dan Masih berjalan. Buka kelompok untuk melihat statusnya.</p>
-          <p>Persen dihitung dari semua kiriman pada periode ini, tidak seperti persen retur di Ringkasan yang dihitung dari kiriman terkirim + retur.</p>
+          <p>Panjang garis menunjukkan bagian dari {number.format(total)} kiriman pada periode ini. Persen retur ada di Ringkasan.</p>
         </SectionHelp>
       )}
       title="Distribusi status"
@@ -317,7 +322,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
                   {group.label}
                   {group.statuses.length > 1 ? <ChevronDown aria-hidden="true" className={cn(chevron, "text-muted-foreground")} /> : null}
                 </span>
-                <CountShare count={group.count} total={total} />
+                <Count count={group.count} metric="RPT-SHP-LIFECYCLE-GROUP" />
               </span>
               <ShareBar className={group.bar} value={group.count / Math.max(1, total)} />
             </span>
@@ -334,7 +339,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
                     {group.statuses.map((row) => (
                       <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1" data-status={row.status} key={row.status}>
                         <ShipmentStatusBadge status={row.status} />
-                        <CountShare count={row.count} total={total} />
+                        <Count count={row.count} metric="RPT-SHP-LIFECYCLE-COUNT" />
                       </li>
                     ))}
                   </ul>
@@ -347,7 +352,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
         })}
       </ul>
       <p className="sr-only">
-        {groups.flatMap((group) => group.statuses).map((row) => `${SHIPMENT_STATUS_PRESENTATION[row.status].label} ${number.format(row.count)}`).join("; ")}.
+        Dari {number.format(total)} kiriman: {groups.flatMap((group) => group.statuses).map((row) => `${SHIPMENT_STATUS_PRESENTATION[row.status].label} ${number.format(row.count)}`).join("; ")}.
       </p>
     </DataCard>
   );
@@ -357,7 +362,7 @@ export function StatusDistribution({ total, totals }: { total: number; totals: S
  * Wilayah and route rows (T-254): a table from `md` (numeric columns one shared width, the volume
  * bar under the name instead of a separate chart), a record list below it. `max` scales the bars.
  */
-function RegionRows({ label, max, rows }: { label: string; max: number; rows: RegionTotal[] }) {
+function RegionRows({ label, max, metric, rows }: { label: string; max: number; metric: string; rows: RegionTotal[] }) {
   return (
     <>
       <ul aria-label={label} className="divide-y md:hidden">
@@ -365,11 +370,11 @@ function RegionRows({ label, max, rows }: { label: string; max: number; rows: Re
           <li className="grid gap-1.5 py-3 first:pt-0 last:pb-0" key={row.key}>
             <div className="flex items-baseline justify-between gap-3">
               <RegionName row={row} />
-              <span className="shrink-0 font-semibold tabular-nums">{number.format(row.shipmentCount)}</span>
+              <span className="shrink-0 font-semibold tabular-nums" data-metric-id={metric}>{number.format(row.shipmentCount)}</span>
             </div>
             {row.key === UNKNOWN_REGION_KEY ? null : <ShareBar className="bg-chart-1" value={row.shipmentCount / max} />}
             <p className="text-xs tabular-nums text-muted-foreground">
-              Terkirim {number.format(row.deliveredCount)} · Retur {number.format(row.returnedCount)} · % retur {formatRate(returnRate(row))}
+              <span data-metric-id="RPT-SHP-DELIVERED">Terkirim {number.format(row.deliveredCount)}</span> · <span data-metric-id="RPT-SHP-RETURNED">Retur {number.format(row.returnedCount)}</span> · <span data-metric-id="RPT-SHP-RETURN-RATE">% retur {formatRate(returnRate(row))}</span>
             </p>
             <LowVolumeNote shipmentCount={row.shipmentCount} />
           </li>
@@ -380,10 +385,10 @@ function RegionRows({ label, max, rows }: { label: string; max: number; rows: Re
           <TableHeader>
             <TableRow>
               <TableHead>Wilayah</TableHead>
-              <TableHead className={numericColumn}>Kiriman</TableHead>
-              <TableHead className={numericColumn}>Terkirim</TableHead>
-              <TableHead className={numericColumn}>Retur</TableHead>
-              <TableHead className={numericColumn}>% retur</TableHead>
+              <TableHead className={numericColumn} data-metric-id={metric}>Kiriman</TableHead>
+              <TableHead className={numericColumn} data-metric-id="RPT-SHP-DELIVERED">Terkirim</TableHead>
+              <TableHead className={numericColumn} data-metric-id="RPT-SHP-RETURNED">Retur</TableHead>
+              <TableHead className={numericColumn} data-metric-id="RPT-SHP-RETURN-RATE">% retur</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -418,13 +423,13 @@ function RegionName({ row }: { row: RegionTotal }) {
   );
 }
 
-function RegionPanel({ noun, rows }: { noun: string; rows: RegionTotal[] }) {
+function RegionPanel({ metric, noun, rows }: { metric: string; noun: string; rows: RegionTotal[] }) {
   const top = rows.slice(0, REGION_TOP);
   const rest = rows.slice(REGION_TOP);
   const max = Math.max(1, ...rows.filter((row) => row.key !== UNKNOWN_REGION_KEY).map((row) => row.shipmentCount));
   return (
     <div className="grid gap-3">
-      <RegionRows label={`Kiriman per ${noun}`} max={max} rows={top} />
+      <RegionRows label={`Kiriman per ${noun}`} max={max} metric={metric} rows={top} />
       {rest.length > 0 ? (
         <details className="group">
           <summary className={disclosureSummary}>
@@ -433,7 +438,7 @@ function RegionPanel({ noun, rows }: { noun: string; rows: RegionTotal[] }) {
           </summary>
           {/* A long remainder scrolls inside its own box with the header pinned (from md). */}
           <div className="mt-2 md:[&_[data-slot=table-container]]:max-h-96 md:[&_thead_th]:sticky md:[&_thead_th]:top-0 md:[&_thead_th]:z-10 md:[&_thead_th]:bg-card">
-            <RegionRows label={`Kiriman per ${noun}, lainnya`} max={max} rows={rest} />
+            <RegionRows label={`Kiriman per ${noun}, lainnya`} max={max} metric={metric} rows={rest} />
           </div>
         </details>
       ) : null}
@@ -458,8 +463,8 @@ export function RegionCard({ regions }: { regions: ReportAnalyticsView["regions"
           <TabsTrigger value="provinsi">Per provinsi</TabsTrigger>
           <TabsTrigger value="kota">Per kota</TabsTrigger>
         </TabsList>
-        <TabsContent value="provinsi"><RegionPanel noun="provinsi" rows={regions.provinces} /></TabsContent>
-        <TabsContent value="kota"><RegionPanel noun="kota" rows={regions.cities} /></TabsContent>
+        <TabsContent value="provinsi"><RegionPanel metric="RPT-SHP-REGION-PROVINCE" noun="provinsi" rows={regions.provinces} /></TabsContent>
+        <TabsContent value="kota"><RegionPanel metric="RPT-SHP-REGION-CITY" noun="kota" rows={regions.cities} /></TabsContent>
       </Tabs>
     </DataCard>
   );
@@ -496,10 +501,10 @@ export function RoutesCard({ routes }: { routes: ReportAnalyticsView["routes"] }
               <li className="grid gap-1 py-3 first:pt-0 last:pb-0" key={route.key}>
                 <div className="flex items-baseline justify-between gap-3">
                   <RouteName route={route} />
-                  <span className="shrink-0 font-semibold tabular-nums">{number.format(route.shipmentCount)}</span>
+                  <span className="shrink-0 font-semibold tabular-nums" data-metric-id="RPT-SHP-ROUTE-COUNT">{number.format(route.shipmentCount)}</span>
                 </div>
                 <p className="text-xs tabular-nums text-muted-foreground">
-                  % terkirim {formatRate(deliveredRate(route))} · % retur {formatRate(returnRate(route))}
+                  <span data-metric-id="RPT-SHP-DELIVERED-SHARE">% terkirim {formatRate(deliveredRate(route))}</span> · <span data-metric-id="RPT-SHP-RETURN-RATE">% retur {formatRate(returnRate(route))}</span>
                 </p>
                 <LowVolumeNote shipmentCount={route.shipmentCount} />
               </li>
@@ -510,9 +515,9 @@ export function RoutesCard({ routes }: { routes: ReportAnalyticsView["routes"] }
               <TableHeader>
                 <TableRow>
                   <TableHead>Rute</TableHead>
-                  <TableHead className={numericColumn}>Kiriman</TableHead>
-                  <TableHead className={numericColumn}>% terkirim</TableHead>
-                  <TableHead className={numericColumn}>% retur</TableHead>
+                  <TableHead className={numericColumn} data-metric-id="RPT-SHP-ROUTE-COUNT">Kiriman</TableHead>
+                  <TableHead className={numericColumn} data-metric-id="RPT-SHP-DELIVERED-SHARE">% terkirim</TableHead>
+                  <TableHead className={numericColumn} data-metric-id="RPT-SHP-RETURN-RATE">% retur</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -528,6 +533,114 @@ export function RoutesCard({ routes }: { routes: ReportAnalyticsView["routes"] }
                   </TableRow>
                 ))}
               </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
+    </DataCard>
+  );
+}
+
+function IssueRateRows({ points }: { points: CourierPerformancePoint[] }) {
+  return points.map((point) => (
+    <TableRow data-low-volume-courier={point.lowVolume ? "" : undefined} key={point.courier}>
+      <TableCell className="font-medium whitespace-normal">{point.courier}</TableCell>
+      <TableCell className="whitespace-normal">
+        <span className="grid gap-1.5">
+          <span className="text-right font-semibold tabular-nums" data-metric-id="SHP-ISSUE-RATE">{formatRate(point.rate)}</span>
+          <ShareBar className="bg-chart-1" value={point.rate / 100} />
+        </span>
+      </TableCell>
+      <TableCell className={numeric} data-metric-id="SHP-ISSUED">{number.format(point.issuedCount)}</TableCell>
+      <TableCell className={numeric} data-metric-id="SHP-OUTCOMES">{number.format(point.resolvedCount)}</TableCell>
+    </TableRow>
+  ));
+}
+
+function IssueRateList({ label, points }: { label: string; points: CourierPerformancePoint[] }) {
+  return (
+    <ul aria-label={label} className="divide-y">
+      {points.map((point) => (
+        <li className="grid gap-1.5 py-3 first:pt-0 last:pb-0" key={point.courier}>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-medium">{point.courier}</span>
+            <span className="shrink-0 font-semibold tabular-nums" data-metric-id="SHP-ISSUE-RATE">{formatRate(point.rate)}</span>
+          </div>
+          <ShareBar className="bg-chart-1" value={point.rate / 100} />
+          <p className="text-xs tabular-nums text-muted-foreground">
+            <span data-metric-id="SHP-ISSUED">{number.format(point.issuedCount)} resi diterbitkan</span> dari <span data-metric-id="SHP-OUTCOMES">{number.format(point.resolvedCount)} pengajuan dijawab</span>
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * T-273 (critique P1, was "Performa kurir"): spec 19 SHP-ISSUE-RATE per courier, named for what it
+ * measures. Highest first; couriers with fewer than 10 answers follow under their own heading,
+ * each group sorted on its own (`courierPerformancePoints`), so the order reads top-down. The base
+ * is written above the rows and on each row (resi terbit / pengajuan dijawab). HTML bars from
+ * zero, like the wilayah table (T-254): the table is the chart, rendered on the server.
+ */
+export function CourierIssueRateCard({ points }: { points: CourierPerformancePoint[] | null }) {
+  const ranked = points?.filter((point) => !point.lowVolume) ?? [];
+  const low = points?.filter((point) => point.lowVolume) ?? [];
+  const answered = (points ?? []).reduce((sum, point) => sum + point.resolvedCount, 0);
+  const issued = (points ?? []).reduce((sum, point) => sum + point.issuedCount, 0);
+  const lowHeading = `Volume rendah (kurang dari ${COURIER_LOW_VOLUME_THRESHOLD} jawaban)`;
+  return (
+    <DataCard
+      action={(
+        <SectionHelp label="Penjelasan tingkat penerbitan resi">
+          <p>Tingkat penerbitan resi = resi diterbitkan dibagi pengajuan yang sudah dijawab Mengantar, termasuk yang ditolak atau belum pasti.</p>
+          <p>Dihitung menurut waktu jawaban Mengantar, jadi bisa berbeda dari jumlah kiriman yang dibuat. Kurir dengan kurang dari {COURIER_LOW_VOLUME_THRESHOLD} jawaban dikelompokkan terakhir.</p>
+        </SectionHelp>
+      )}
+      title="Tingkat penerbitan resi per kurir"
+    >
+      {points === null ? (
+        <Alert role="alert" variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>Tingkat penerbitan resi tidak dapat dimuat</AlertTitle>
+          <AlertDescription>Muat ulang halaman untuk mencoba lagi.</AlertDescription>
+        </Alert>
+      ) : points.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Belum ada pengajuan yang dijawab Mengantar pada periode ini.</p>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground" data-slot="metric-base">
+            <span data-metric-id="SHP-ISSUED">{number.format(issued)} resi diterbitkan</span> dari{" "}
+            <span data-metric-id="SHP-OUTCOMES">{number.format(answered)} pengajuan yang sudah dijawab Mengantar</span>. Tertinggi di atas.
+          </p>
+          <div className="grid gap-4 md:hidden">
+            {ranked.length ? <IssueRateList label="Tingkat penerbitan resi per kurir" points={ranked} /> : null}
+            {low.length ? (
+              <div className="grid gap-2 border-t pt-3">
+                <p className="text-xs font-medium text-muted-foreground">{lowHeading}</p>
+                <IssueRateList label={lowHeading} points={low} />
+              </div>
+            ) : null}
+          </div>
+          <div className="max-md:hidden">
+            <Table aria-label="Tingkat penerbitan resi per kurir" className={cn(inCardTable, "table-fixed")}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Kurir</TableHead>
+                  <TableHead className="w-1/2 text-right" data-metric-id="SHP-ISSUE-RATE">Tingkat penerbitan</TableHead>
+                  <TableHead className={numericColumn} data-metric-id="SHP-ISSUED">Resi diterbitkan</TableHead>
+                  <TableHead className={numericColumn} data-metric-id="SHP-OUTCOMES">Dijawab</TableHead>
+                </TableRow>
+              </TableHeader>
+              {ranked.length ? <TableBody><IssueRateRows points={ranked} /></TableBody> : null}
+              {low.length ? (
+                <TableBody>
+                  <TableRow>
+                    <TableHead className="h-9 pt-3 text-xs" colSpan={4} scope="colgroup">{lowHeading}</TableHead>
+                  </TableRow>
+                  <IssueRateRows points={low} />
+                </TableBody>
+              ) : null}
             </Table>
           </div>
         </>

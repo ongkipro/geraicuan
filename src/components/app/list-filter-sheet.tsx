@@ -43,6 +43,7 @@ export function ListFilterSheet({
   hidden,
   moreOptions,
   options,
+  periodNote,
   range,
   search,
   statusLegend,
@@ -62,6 +63,8 @@ export function ListFilterSheet({
   /** Further statuses behind "Status lainnya" (same radio group). */
   moreOptions?: readonly FilterSheetOption[];
   options: readonly FilterSheetOption[];
+  /** T-274: one quiet line under "Periode" when the selected status ignores it (Cetak resi's queues). */
+  periodNote?: string;
   range: { endDate: string; presetId: AnalyticsPresetId; startDate: string };
   /** The list's search form, first on the screen. */
   search?: ReactNode;
@@ -110,6 +113,7 @@ export function ListFilterSheet({
               <div className="flex min-h-0 flex-col gap-5 overflow-y-auto px-4 py-4">
                 <fieldset className="flex flex-col gap-2">
                   <legend className="mb-2 text-sm font-semibold">Periode</legend>
+                  {periodNote ? <p className="-mt-1 text-xs text-muted-foreground" data-slot="queue-period-note">{periodNote}</p> : null}
                   <DateRangePicker endDate={range.endDate} presetId={range.presetId} startDate={range.startDate} />
                 </fieldset>
                 <fieldset className="flex flex-col gap-1">

@@ -190,3 +190,25 @@ describe("shipment lifecycle presentation copy", () => {
     }
   });
 });
+
+// T-273 (critique): staff copy that told an Operator something is hidden from them, and contact
+// messages that said "draf" where the operator is simply making a shipment.
+describe("T-273 plain operator copy", () => {
+  const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? files(path) : /\.tsx?$/.test(name) ? [path] : [];
+  });
+  const literals = (path: string) => [...readFileSync(path, "utf8").matchAll(/"([^"\n]*)"|`([^`]*)`|>([^<>{}\n]+)</g)].map((match) => match[1] ?? match[2] ?? match[3]);
+
+  it("never tells an Operator that Mengantar status is only for the owner", () => {
+    for (const path of files("src/app/app/pengiriman/[shipmentId]")) {
+      for (const text of literals(path)) expect(text, path).not.toMatch(/terlihat oleh pemilik gerai/i);
+    }
+  });
+
+  it("says \"kiriman\", not \"draf\", in the contact pages' copy", () => {
+    for (const path of files("src/app/app/kontak")) {
+      for (const text of literals(path)) expect(text, path).not.toMatch(/\bdraf\b/i);
+    }
+  });
+});

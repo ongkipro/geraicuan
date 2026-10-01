@@ -140,7 +140,7 @@ describe("mobile Filter sheet", () => {
     for (const path of ["src/app/app/label/page.tsx", "src/app/app/pengiriman/page.tsx", "src/app/app/pengiriman/rts/page.tsx"]) {
       const page = read(path);
       expect(page, path).toContain("<ListFilterSheet");
-      expect(page, path).toMatch(/<div className="max-md:hidden">\s*<PeriodFilter/);
+      expect(page, path).toMatch(/<div className="(?:[^"]* )?max-md:hidden">\s*<PeriodFilter/);
       expect(page, path).toMatch(/<StatusTiles\s+className="max-md:hidden"/);
     }
     expect(read("src/app/app/pengiriman/page.tsx")).toMatch(/<div className="max-md:hidden">\s*<StatusSelect/);
@@ -174,7 +174,7 @@ describe("record card as the tap target", () => {
   it("gives the Cetak resi selection a 44px, full-height tap target", () => {
     const source = read("src/app/app/label/batch-selection.tsx");
     expect(source).toMatch(/<span className="relative flex w-11 flex-1 justify-center pt-3">/);
-    expect(source).toMatch(/<label className="absolute inset-0 cursor-pointer" htmlFor=\{id\}>\s*<span className="sr-only">Pilih untuk cetak resi \{awb\}<\/span>/);
+    expect(source).toMatch(/<label className="absolute inset-0 cursor-pointer" htmlFor=\{id\}>\s*<span className="sr-only">\{name\}<\/span>/);
     expect(read("src/components/app/record-list.tsx")).toContain('<div className="relative z-10 flex w-11 shrink-0 self-stretch" data-slot="record-leading">');
   });
 });

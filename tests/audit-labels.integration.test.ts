@@ -4,6 +4,7 @@ import { auditEventActions, auditEventTargetTypes, tenantStatuses } from "@/db/s
 import {
   auditActionSentence,
   auditActorLabel,
+  auditObjectLabel,
   auditOutcomeLabel,
   auditTenantFallbackLabel,
   tenantStatusLabel,
@@ -56,5 +57,15 @@ describe("T-202 audit and tenant-status labels (spec 10 §8, spec 18 /platform/a
     expect(tenantStatusLabel(null)).toBe("—");
     expect(auditOutcomeLabel("SUCCESS")).toEqual({ label: "Berhasil", tone: "ok" });
     expect(auditOutcomeLabel("DENIED")).toEqual({ label: "Ditolak", tone: "danger" });
+  });
+
+  // T-273: the Objek column — what a row changed when it is not the gerai itself. Every stored
+  // target type is placed; a shipment reads "Kiriman" (no number: not in the platform read model).
+  it("names the object of each target type, and nothing for a gerai row", () => {
+    const labels = auditEventTargetTypes.map((targetType) => [targetType, auditObjectLabel({ action: "X", targetType })]);
+    expect(labels).toEqual([["TENANT", null], ["PLATFORM", null], ["MEMBERSHIP", "Anggota gerai"], ["OUTLET", "Outlet"], ["SHIPMENT", "Kiriman"]]);
+    expect(auditObjectLabel({ action: "OUTLET_SETTINGS_CHANGED", outletName: "Gudang Utama", targetType: "OUTLET" })).toBe("Outlet Gudang Utama");
+    expect(auditObjectLabel({ action: "ANNOUNCEMENT_PUBLISHED", targetType: "PLATFORM" })).toBe("Info terbaru");
+    expect(auditObjectLabel({ action: "PLATFORM_MONITORING_VIEWED", targetType: "PLATFORM" })).toBe("Pemantauan platform");
   });
 });

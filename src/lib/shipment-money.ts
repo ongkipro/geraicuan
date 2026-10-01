@@ -313,7 +313,7 @@ export function labelMoneyFacts(label: {
   package: { declaredValueIdr: number };
   paymentMethod: PaymentMethod;
   providerCodAmountIdr: number | null;
-  shippingAmountIdr: number;
+  shippingAmountIdr: number | null;
 }): ShipmentMoneyFacts {
   return {
     chargedShippingIdr: label.chargedShippingIdr,

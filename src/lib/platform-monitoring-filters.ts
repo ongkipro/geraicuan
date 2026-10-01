@@ -46,6 +46,8 @@ export type PlatformFilters = {
   action?: AuditAction | null;
   /** `status-gerai` on /platform/tenant (T-257): one tenant status. */
   tenantStatus?: TenantStatus | null;
+  /** `kunjungan=tampil` on /platform/audit (T-273): list monitoring page views, hidden by default. */
+  showMonitoringViews?: boolean;
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -80,6 +82,7 @@ const PLATFORM_KEYS: Record<string, true> = {
   halaman: true,
   aksi: true,
   "status-gerai": true,
+  kunjungan: true,
 };
 const issueMessages: Record<Exclude<PlatformIssue, AnalyticsIssue>, string> = {
   tenant_tidak_dikenal: "Gerai tidak dikenal, lingkup dikembalikan ke global.",
@@ -117,6 +120,7 @@ function canonicalParams(filters: PlatformFilters, forcedTenant: boolean) {
   if (filters.query) params.set("q", filters.query);
   if (filters.action) params.set("aksi", filters.action);
   if (filters.tenantStatus) params.set("status-gerai", filters.tenantStatus);
+  if (filters.showMonitoringViews) params.set("kunjungan", "tampil");
   if (filters.page !== 1) params.set("halaman", String(filters.page));
   return params;
 }
@@ -212,6 +216,14 @@ export function parsePlatformFilters(
     }
   }
 
+  // T-273: any value other than "tampil" is the default (hidden), so it is dropped silently.
+  let showMonitoringViews = false;
+  const requestedViews = first(params.kunjungan)?.trim().toLowerCase();
+  if (requestedViews) {
+    if (options.route !== "/platform/audit") issues.push("parameter_tidak_berlaku");
+    else showMonitoringViews = requestedViews === "tampil";
+  }
+
   const parsedPage = parsePageNumber(params.halaman);
   issues.push(...parsedPage.issues);
   for (const key of Object.keys(params)) {
@@ -231,6 +243,7 @@ export function parsePlatformFilters(
     page: parsedPage.page,
     action,
     tenantStatus,
+    showMonitoringViews,
   };
   return {
     filters,

@@ -84,8 +84,6 @@ function PickupRow({ busy, outletId, point, onlyPoint, defaultAction, removeActi
 }) {
   const [confirming, setConfirming] = useState(false);
   const [seenToken, setSeenToken] = useState(removeToken);
-  // The server refuses removing the main point while others remain; say so instead of offering it.
-  const blocked = point.isDefault && !onlyPoint;
   // The confirmation stays open (showing progress) until the server answers, then closes.
   if (removeToken !== seenToken) {
     setSeenToken(removeToken);
@@ -113,26 +111,26 @@ function PickupRow({ busy, outletId, point, onlyPoint, defaultAction, removeActi
             <Button className="px-0" disabled={busy} type="submit" variant="link">Jadikan utama</Button>
           </form>
         )}
+        {/* R6-X (critique 2026-09-30T19-21-59Z #7): no Hapus beside the main point — every new
+            kiriman starts from it — only why, and what to do first. The server rule is unchanged. */}
+        {point.isDefault ? (
+          <p className="py-2 text-xs text-muted-foreground" data-slot="pickup-primary-guard">
+            {onlyPoint
+              ? "Titik utama tidak dapat dihapus. Tambahkan titik lain dan jadikan utama dulu."
+              : "Titik utama tidak dapat dihapus. Jadikan titik lain utama dulu."}
+          </p>
+        ) : (
         <AlertDialog onOpenChange={setConfirming} open={confirming}>
           <AlertDialogTrigger asChild>
             <Button className="px-0 text-destructive" disabled={busy} variant="link">Hapus</Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{blocked ? `Titik utama ${point.pickupAddressLabel} belum dapat dihapus` : `Hapus titik pickup ${point.pickupAddressLabel}?`}</AlertDialogTitle>
+              <AlertDialogTitle>{`Hapus titik pickup ${point.pickupAddressLabel}?`}</AlertDialogTitle>
               <AlertDialogDescription>
-                {onlyPoint
-                  ? "Ini titik pickup terakhir. Outlet ini tidak dapat membuat kiriman sampai titik baru ditambahkan."
-                  : blocked
-                    ? "Ini titik utama. Jadikan titik lain sebagai utama dulu, lalu hapus titik ini."
-                    : "Titik ini tidak dapat dipilih lagi saat membuat kiriman. Alamatnya tetap ada di akun Mengantar dan dapat ditambahkan lagi."}
+                Titik ini tidak dapat dipilih lagi saat membuat kiriman. Alamatnya tetap ada di akun Mengantar dan dapat ditambahkan lagi.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            {blocked ? (
-              <AlertDialogFooter>
-                <AlertDialogCancel>Tutup</AlertDialogCancel>
-              </AlertDialogFooter>
-            ) : (
               <form action={removeAction}>
                 <input name="outletId" type="hidden" value={outletId} />
                 <input name="pickupAddressId" type="hidden" value={point.pickupAddressId} />
@@ -144,9 +142,9 @@ function PickupRow({ busy, outletId, point, onlyPoint, defaultAction, removeActi
                   </Button>
                 </AlertDialogFooter>
               </form>
-            )}
           </AlertDialogContent>
         </AlertDialog>
+        )}
       </div>
     </li>
   );

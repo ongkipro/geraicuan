@@ -19,6 +19,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 const clockFormat = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",
@@ -47,8 +48,10 @@ function useWibStamp() {
 
 /** The owner's GeraiCUAN logo, all-white on the primary bar (its blue half would be 1.82:1 on #2E47BA). */
 function Brand({ compact = false, home }: { compact?: boolean; home: string }) {
+  // R6-X (critique #12): a 44px (phone) / 40px (desktop) target around the unchanged logo; the
+  // 32px G mark gets its width back from a negative margin, so nothing moves.
   return (
-    <Link aria-label="GeraiCUAN, ke beranda" className="flex shrink-0 items-center rounded-lg outline-offset-2 focus-visible:outline-primary-foreground" href={home}>
+    <Link aria-label="GeraiCUAN, ke beranda" className={cn("flex min-h-11 shrink-0 items-center rounded-lg outline-offset-2 focus-visible:outline-primary-foreground md:min-h-10", compact && "max-md:-mx-1.5 max-md:min-w-11 max-md:justify-center")} href={home}>
       {/* Static brand SVGs: next/image adds nothing for a vector. The focused bar on a phone keeps
           only the G mark so the stepper has room. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -145,7 +148,6 @@ export function SiteHeader({
       </div>
       <Button
         aria-keyshortcuts="Meta+K Control+K"
-        aria-label="Cari halaman"
         className="w-64 justify-start border-transparent bg-card px-3 font-normal text-muted-foreground hover:bg-accent hover:text-foreground max-sm:hidden"
         onClick={() => setSearchOpen(true)}
         type="button"
@@ -153,6 +155,7 @@ export function SiteHeader({
       >
         <Search aria-hidden="true" />
         <span className="text-xs">Cari halaman…</span>
+        {/* R6-X (critique #12, WCAG 2.5.3): no aria-label, so the name is the visible text and shortcut. */}
         <kbd className="ml-auto rounded border border-border px-1.5 font-mono text-xs text-muted-foreground">⌘K</kbd>
       </Button>
       <Button aria-label="Cari halaman" className={`sm:hidden ${onPrimary}`} onClick={() => setSearchOpen(true)} size="icon" type="button" variant="ghost">

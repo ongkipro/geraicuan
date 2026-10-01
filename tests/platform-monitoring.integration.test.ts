@@ -115,6 +115,37 @@ describe("platform monitoring trust boundary",()=>{
     expect(r.tenantCounts.memberships).toMatchObject({active:1,tenantAdmins:1,operators:0});
     expect(r.tenantCounts.outlets).toMatchObject({total:1,configured:1});
   });
+  it("T-273: names the actor and the outlet on audit rows, and hides page views only when asked",async()=>{
+    await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,created_at) VALUES ('monitor-member','TENANT_MEMBER',$1,'OUTLET_SETTINGS_CHANGED','OUTLET',$2,'SUCCESS','2026-08-29T04:00:00Z'),('monitor-member','TENANT_MEMBER',$1,'OUTLET_SETTINGS_CHANGED','OUTLET',$3,'SUCCESS','2026-08-29T05:00:00Z'),('monitor-super','SUPER_ADMIN',NULL,'PLATFORM_MONITORING_VIEWED','PLATFORM','GLOBAL','SUCCESS','2026-08-29T06:00:00Z')",[tenantA,outletA,outletB]);
+    const range=parseAnalyticsRange({rentang:"30-hari",tz:"Asia/Jakarta"},now);
+    const filters={range,scope:{kind:"global"} as const,outletId:null,courier:null,status:null,outcome:null,query:null,page:1};
+    const r=await withPlatformContext(appDb,"monitor-super",async tx=>({
+      all:await listAuditEvents(tx,filters,100),
+      hidden:await listAuditEvents(tx,filters,100,{hideMonitoringViews:true}),
+      viewsOnly:await listAuditEvents(tx,{...filters,action:"PLATFORM_MONITORING_VIEWED"},100),
+    }));
+    const outletRows=r.all.rows.filter(row=>row.action==="OUTLET_SETTINGS_CHANGED");
+    // The actor's account name, never the e-mail; the outlet by name only inside the row's own gerai
+    // (outletB belongs to Beta, so a row of Alpha naming it resolves to no outlet).
+    expect(outletRows.map(row=>[row.actorName,row.outletName])).toEqual([["Member",null],["Member","Alpha Utama"]]);
+    expect(r.all.rows.find(row=>row.action==="PLATFORM_MONITORING_VIEWED")?.actorName).toBe("Super");
+    expect(JSON.stringify(r.all.rows)).not.toContain("@example.test");
+    // Hidden: every page view gone from rows and total, nothing else; handovers stay in the trail.
+    const views=r.all.rows.filter(row=>row.action==="PLATFORM_MONITORING_VIEWED").length;
+    expect(views).toBeGreaterThan(0);
+    expect(r.hidden.rows.some(row=>row.action==="PLATFORM_MONITORING_VIEWED")).toBe(false);
+    expect(r.hidden.total).toBe(r.all.total-views);
+    expect(r.hidden.rows.some(row=>row.action==="SHIPMENT_HANDOVER_RECORDED")).toBe(true);
+    expect(r.viewsOnly.total).toBe(views);
+    // The URL toggle: only "tampil" on /platform/audit turns it on, and it survives canonicalisation.
+    const options={route:"/platform/audit" as const,now,knownTenantIds:[tenantA,tenantB],knownOutletIds:[],knownCouriers:[]};
+    const on=parsePlatformFilters({kunjungan:"tampil"},options);
+    expect(on.filters.showMonitoringViews).toBe(true);expect(on.canonicalQuery.get("kunjungan")).toBe("tampil");expect(on.issues).toEqual([]);
+    expect(parsePlatformFilters({},options).filters.showMonitoringViews).toBe(false);
+    expect(parsePlatformFilters({kunjungan:"ya"},options).filters.showMonitoringViews).toBe(false);
+    expect(parsePlatformFilters({kunjungan:"tampil"},{...options,route:"/platform/tenant"}).issues).toEqual(["parameter_tidak_berlaku"]);
+    await admin.query("DELETE FROM audit_events WHERE action='OUTLET_SETTINGS_CHANGED' OR (action='PLATFORM_MONITORING_VIEWED' AND target_id='GLOBAL' AND created_at='2026-08-29T06:00:00Z')");
+  });
   it("T-268 (M1): Riwayat keputusan keeps a decision behind more than 500 later handover audit rows",async()=>{
     await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,created_at) VALUES ('monitor-super','SUPER_ADMIN',$1,'TENANT_REGISTRATION_APPROVED','TENANT',$2,'SUCCESS',now()-interval '2 days'),('monitor-super','SUPER_ADMIN',$1,'TENANT_REGISTRATION_REJECTED','TENANT',$2,'DENIED',now()-interval '1 day')",[tenantA,tenantA]);
     await admin.query(`INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,metadata,created_at)

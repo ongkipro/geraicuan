@@ -34,11 +34,17 @@ export function courierOf(providerService: string) {
   return mengantarCourierOfService(providerService) ?? providerService;
 }
 
-/** Couriers in first-quoted order, and the services left after the chip filter; cheapest first. */
+/**
+ * Couriers in first-quoted order, and the services left after the chip filter: orderable services
+ * cheapest first, then the quote-only ones (spx, paxel, SAPLite; T-237) cheapest first. T-273: a
+ * cheaper quote-only service listed first sat above the row the "Termurah" highlight names (T-260
+ * recommends only what can be booked), so the list now opens with that row.
+ */
 export function rateView(services: RateService[], courier: string | null) {
   const couriers = [...new Set(services.map((service) => courierOf(service.providerService)))];
+  const quoteOnly = (service: RateService) => Number(mengantarOrderableService(service.providerService) === null);
   const shown = (courier ? services.filter((service) => courierOf(service.providerService) === courier) : services)
-    .slice().sort((a, b) => a.shippingAmountIdr - b.shippingAmountIdr);
+    .slice().sort((a, b) => quoteOnly(a) - quoteOnly(b) || a.shippingAmountIdr - b.shippingAmountIdr);
   return { couriers, shown };
 }
 

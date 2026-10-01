@@ -19,7 +19,7 @@ vi.mock("@/app/app/cek-resi/actions", () => ({ lookupShipmentTracking: vi.fn() }
 vi.mock("@/app/app/cek-tarif/actions", () => ({ checkShippingRates: vi.fn() }));
 vi.mock("@/app/app/location-actions", () => ({ searchMengantarDestinationAreas: vi.fn() }));
 
-const { RateCheck, RateResults, estimateDays, rateHighlights } = await import("@/app/app/cek-tarif/rate-check");
+const { RateCheck, RateResults, estimateDays, rateHighlights, rateView } = await import("@/app/app/cek-tarif/rate-check");
 const { TrackingLookup, TrackingResultCard } = await import("@/app/app/cek-resi/tracking-lookup");
 const { mengantarOrderableService } = await import("@/lib/mengantar-couriers");
 
@@ -57,6 +57,17 @@ describe("Cek tarif (T-242)", () => {
     expect(rateHighlights([]).cheapest).toBeNull();
     // With nothing orderable the highlight still names the cheapest quote.
     expect(rateHighlights(services.slice(2)).cheapest?.providerService).toBe("SAPLite");
+  });
+
+  // T-273 (critique): SAPLite (17 500, quote-only) was listed first while the Termurah tile named
+  // JNE (22 000); the list now opens with the Termurah row, quote-only services after, each part
+  // cheapest first.
+  it("lists orderable services first, so the first row is the Termurah highlight (T-273)", () => {
+    const shown = rateView(services, null).shown.map((service) => service.providerService);
+    expect(shown).toEqual(["JNE", "JT", "SAPLite", "spx"]);
+    expect(shown[0]).toBe(rateHighlights(services).cheapest?.providerService);
+    // Nothing orderable: plain cheapest first, as before.
+    expect(rateView(services.slice(2), null).shown.map((service) => service.providerService)).toEqual(["SAPLite", "spx"]);
   });
 
   it("marks exactly the services the order builder refuses (spx, paxel, SAPLite) as not orderable", () => {

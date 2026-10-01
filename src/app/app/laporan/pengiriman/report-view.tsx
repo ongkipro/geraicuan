@@ -2,9 +2,8 @@ import { CircleAlert, Download, FileSpreadsheet, SearchX } from "lucide-react";
 import Link from "next/link";
 
 import { AdvancedFilters } from "@/app/app/laporan/pengiriman/advanced-filters";
-import { LowVolumeNote, RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, SectionHelp, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
-import { CourierPerformanceChart, type CourierPerformancePoint } from "@/app/app/laporan/pengiriman/courier-performance-chart";
-import { REPORT_PATH, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
+import { CourierIssueRateCard, LowVolumeNote, RegionCard, ReportKpiHelp, ReportKpiStrip, ReportTrendCard, RoutesCard, SectionHelp, StatusDistribution } from "@/app/app/laporan/pengiriman/analytics-sections";
+import { REPORT_PATH, type CourierPerformancePoint, type ReportAnalyticsView } from "@/app/app/laporan/pengiriman/report-logic";
 import { FilterSelect } from "@/app/app/laporan/_components/filter-select";
 import { ReportPagination } from "@/app/app/laporan/_components/report-pagination";
 import { CourierLogo } from "@/components/app/courier-logo";
@@ -157,7 +156,7 @@ export function ShipmentReportView({
             </>
           )}
           <CourierTotals totals={data.totals.byCourier} />
-          <CourierPerformance points={performance} />
+          <CourierIssueRateCard points={performance} />
           {/* T-254: full width — the wilayah table (10 rows) beside a five-route table left a 500 px hole. */}
           {analytics === null ? null : (
             <>
@@ -165,7 +164,8 @@ export function ShipmentReportView({
               <RoutesCard routes={analytics.routes} />
             </>
           )}
-          <ShipmentRows carry={carry} count={count} data={data} />
+          {/* RPT-SHP-ROWS: the count badge and "Menampilkan … dari N" (T-273 metric ID); `contents` keeps the grid. */}
+          <div className="contents" data-metric-id="RPT-SHP-ROWS"><ShipmentRows carry={carry} count={count} data={data} /></div>
         </>
       )}
     </>
@@ -179,7 +179,7 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
         <SectionHelp label="Penjelasan total per kurir">
           <p>Ongkir dibayar ke Mengantar dan biaya COD adalah tagihan Mengantar per kiriman.</p>
           <p>Estimasi cair adalah perkiraan dana COD yang dicairkan Mengantar: nilai COD dikurangi ongkir dibayar ke Mengantar dan biaya COD (termasuk PPN). Jumlah pasti mengikuti pencairan Mengantar.</p>
-          <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman terkirim + retur.</p>
+          <p>% terkirim = terkirim dibagi kiriman kurir itu. % retur = retur dibagi kiriman terkirim + retur, sama seperti di Ringkasan.</p>
         </SectionHelp>
       )}
       title="Total per kurir"
@@ -193,16 +193,16 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
               <span className="flex min-w-0 items-center font-medium">
                 {total.courier ? <CourierLogo className={logoBox} courier={total.courier} /> : carrierName(total.courier)}
               </span>
-              <span className="shrink-0 tabular-nums">{number.format(total.shipmentCount)} kiriman</span>
+              <span className="shrink-0 tabular-nums" data-metric-id="RPT-SHP-COURIER-COUNT">{number.format(total.shipmentCount)} kiriman</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              % terkirim {formatRate(deliveredRate(total))} · % retur {formatRate(returnRate(total))}
+              <span data-metric-id="RPT-SHP-COURIER-DELIVERED-RATE">% terkirim {formatRate(deliveredRate(total))}</span> · <span data-metric-id="RPT-SHP-COURIER-RETURN-RATE">% retur {formatRate(returnRate(total))}</span>
             </p>
             <LowVolumeNote shipmentCount={total.shipmentCount} />
             <p className="text-xs text-muted-foreground">
-              {MONEY_LABELS.shippingCost} <Money amount={total.shippingCostIdr} /> · {MONEY_LABELS.codFee} <Money amount={total.codFeeIdr} />
+              <span data-metric-id="RPT-SHP-COURIER-SHIPPING-COST-IDR">{MONEY_LABELS.shippingCost} <Money amount={total.shippingCostIdr} /></span> · <span data-metric-id="RPT-SHP-COURIER-COD-FEE-IDR">{MONEY_LABELS.codFee} <Money amount={total.codFeeIdr} /></span>
             </p>
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex items-baseline justify-between gap-3" data-metric-id="RPT-SHP-COURIER-COD-DISBURSEMENT-EST-IDR">
               <span className="text-xs text-muted-foreground">Estimasi cair</span>
               <Money amount={total.codDisbursementEstimateIdr} className="font-semibold" />
             </div>
@@ -214,12 +214,12 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="pr-2 pl-0">Kurir</TableHead>
-            <TableHead className="px-2 text-right">Kiriman</TableHead>
-            <TableHead className="px-2 text-right">% terkirim</TableHead>
-            <TableHead className="px-2 text-right">% retur</TableHead>
-            <TableHead className="px-2 text-right">{MONEY_LABELS.shippingCost}</TableHead>
-            <TableHead className="px-2 text-right">{MONEY_LABELS.codFee}</TableHead>
-            <TableHead className="pr-0 pl-2 text-right">Estimasi cair</TableHead>
+            <TableHead className="px-2 text-right" data-metric-id="RPT-SHP-COURIER-COUNT">Kiriman</TableHead>
+            <TableHead className="px-2 text-right" data-metric-id="RPT-SHP-COURIER-DELIVERED-RATE">% terkirim</TableHead>
+            <TableHead className="px-2 text-right" data-metric-id="RPT-SHP-COURIER-RETURN-RATE">% retur</TableHead>
+            <TableHead className="px-2 text-right" data-metric-id="RPT-SHP-COURIER-SHIPPING-COST-IDR">{MONEY_LABELS.shippingCost}</TableHead>
+            <TableHead className="px-2 text-right" data-metric-id="RPT-SHP-COURIER-COD-FEE-IDR">{MONEY_LABELS.codFee}</TableHead>
+            <TableHead className="pr-0 pl-2 text-right" data-metric-id="RPT-SHP-COURIER-COD-DISBURSEMENT-EST-IDR">Estimasi cair</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -242,42 +242,6 @@ function CourierTotals({ totals }: { totals: ShipmentReportPage["totals"]["byCou
         </TableBody>
       </Table>
       </div>
-    </DataCard>
-  );
-}
-
-function CourierPerformance({ points }: { points: CourierPerformancePoint[] | null }) {
-  return (
-    <DataCard
-      action={(
-        <SectionHelp label="Penjelasan performa kurir">
-          <p>Tingkat penerbitan = resi terbit dibagi pengajuan yang sudah dijawab Mengantar.</p>
-          <p>Dihitung pada waktu jawaban Mengantar. Kurir dengan kurang dari 10 jawaban diurutkan terakhir.</p>
-        </SectionHelp>
-      )}
-      title="Performa kurir"
-    >
-      {points === null ? (
-        <Alert role="alert" variant="destructive">
-          <CircleAlert aria-hidden="true" />
-          <AlertTitle>Performa kurir tidak dapat dimuat</AlertTitle>
-          <AlertDescription>Muat ulang halaman untuk mencoba lagi.</AlertDescription>
-        </Alert>
-      ) : points.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Belum ada pengajuan yang dijawab Mengantar pada periode ini.</p>
-      ) : (
-        <figure className="grid gap-3">
-          <CourierPerformanceChart data={points} />
-          <figcaption className="text-xs text-muted-foreground">
-            <span className="sr-only">
-              Tingkat penerbitan resi per kurir: {points.map((point) => `${point.courier} ${point.label}`).join("; ")}.{" "}
-            </span>
-            {points.some((point) => point.lowVolume)
-              ? `Volume rendah (kurang dari 10 jawaban): ${points.filter((point) => point.lowVolume).map((point) => point.courier).join(", ")}.`
-              : null}
-          </figcaption>
-        </figure>
-      )}
     </DataCard>
   );
 }

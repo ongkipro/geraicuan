@@ -192,6 +192,22 @@ describe("thermal sheet layouts", () => {
     expect(stub).not.toMatch(/Nilai barang|Biaya layanan|PPN|Asuransi|Rp 425\.000|Rp 13\.260/);
   });
 
+  // T-273 (critique): a Non-COD label printed the value beside "Asuransi Mengantar Tidak ada",
+  // while Buat kiriman asks for that value "untuk asuransi". One wording, and the insurance only
+  // when the parcel is insured.
+  it("prints \"Nilai barang\" and the insurance only when insured (T-273)", () => {
+    const facts = (overrides: Partial<PrintableLabel>) => {
+      const html = packageOf(render(printableLabel(overrides)));
+      return text(html.slice(html.indexOf('class="label-facts"'), html.indexOf('class="label-footer"')));
+    };
+    const nonCod = { codBreakdown: null, collectBreakdown: null, isCod: false, paymentMethod: "NON_COD" as const, providerCodAmountIdr: null };
+    const uninsured = facts({ ...nonCod, insuranceAmountIdr: null });
+    expect(uninsured).toContain("Nilai barang Rp 425.000");
+    expect(uninsured).not.toMatch(/Asuransi|Tidak ada/);
+    expect(facts({ ...nonCod, insuranceAmountIdr: 2_000 })).toContain("Nilai barang Rp 425.000 · Asuransi Mengantar Rp 2.000");
+    expect(facts({ codBreakdown: null, collectBreakdown: null, insuranceAmountIdr: null, paymentMethod: "COD_ONGKIR" })).toContain("Nilai (lunas) Rp 425.000") // T-186: never "Nilai barang …" on COD Ongkir;
+  });
+
   it("shows no money on a non-COD stub", () => {
     const stub = text(stubOf(render(printableLabel({ codBreakdown: null, collectBreakdown: null, insuranceAmountIdr: null, isCod: false, paymentMethod: "NON_COD", providerCodAmountIdr: null }))));
 

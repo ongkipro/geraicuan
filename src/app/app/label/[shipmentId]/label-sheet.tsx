@@ -95,9 +95,19 @@ const NOTE_STYLE: CSSProperties = {
  * applies that size's choice. Without it the sheet prints the defaults, which are the
  * label as it was before T-229. Geometry is unchanged: hidden text leaves its row.
  */
+/**
+ * R6-X (critique 2026-09-30T19-21-59Z #7, error prevention): the courier cannot deliver without the
+ * recipient's name and phone, so they always print. A stored "off" (saved before this rule) is kept
+ * as stored but ignored here, the one place every sheet — page, batch, settings preview — is drawn.
+ */
+export const LOCKED_LABEL_FIELDS = {
+  recipientName: "Selalu tercetak: kurir butuh nama penerima untuk mengantar.",
+  recipientPhone: "Selalu tercetak: kurir menghubungi nomor ini saat mengantar.",
+} as const satisfies Partial<Record<keyof LabelFields, string>>;
+
 export function LabelSheet({ fields, label }: { fields?: LabelFieldsBySize; label: PrintableLabel }) {
   const { size } = useContext(LabelPrintContext);
-  const shown = (fields ?? DEFAULT_LABEL_FIELDS_BY_SIZE)[size];
+  const shown: LabelFields = { ...(fields ?? DEFAULT_LABEL_FIELDS_BY_SIZE)[size], recipientName: true, recipientPhone: true };
   const brand = useGeraiBrand();
   return (
     <LabelSheetFrame stub={<LabelSenderStub label={label} />}>
@@ -149,7 +159,6 @@ function LabelPackage({ label, logoSrc, note, shown }: {
   const areaLines = recipientLayout.omitAreaLine ? [area.lines.join(", ")] : area.lines;
   const courierLogoSrc = shown.courierLogo ? courierPrintLogoSrc(label.courier) : null;
   const dimensions = formatDimensions(label.package.lengthCm, label.package.widthCm, label.package.heightCm);
-  const insurance = label.insuranceAmountIdr === null ? "Tidak ada" : formatIdr(label.insuranceAmountIdr);
 
   return (
     <section aria-label="Label paket 10 × 10 cm" className="label-package">
@@ -264,7 +273,9 @@ function LabelPackage({ label, logoSrc, note, shown }: {
         )}
       </div>
 
-      {/* T-255: two plain lines — what is inside and its weight, then size, value and insurance. */}
+      {/* T-255: two plain lines — what is inside and its weight, then size, value and insurance.
+          T-273: "Nilai barang", the form's word (COD Ongkir keeps "Nilai (lunas)" so it never reads as a sum to collect, T-186); the insurance only when the parcel is insured, so a
+          Non-COD label never reads a value "untuk asuransi" beside "Asuransi Mengantar Tidak ada". */}
       <div className="label-facts">
         <p className="label-facts-line">
           <b>Isi</b>{" "}<span className="label-facts-content">{label.package.content}</span>
@@ -272,8 +283,8 @@ function LabelPackage({ label, logoSrc, note, shown }: {
         </p>
         <p className="label-facts-line">
           {dimensions ?? "Dimensi tidak dicatat"}
-          {" · "}<b>{label.paymentMethod === "COD_ONGKIR" ? "Nilai (lunas)" : "Nilai"}</b> {formatIdr(label.package.declaredValueIdr)}
-          {" · "}<b>Asuransi Mengantar</b> {insurance}
+          {" · "}<b>{label.paymentMethod === "COD_ONGKIR" ? "Nilai (lunas)" : "Nilai barang"}</b> {formatIdr(label.package.declaredValueIdr)}
+          {label.insuranceAmountIdr === null ? null : <>{" · "}<b>Asuransi Mengantar</b> {formatIdr(label.insuranceAmountIdr)}</>}
         </p>
       </div>
 

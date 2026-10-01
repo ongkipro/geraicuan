@@ -101,7 +101,7 @@ export function RecordItem({
     <li
       className={cn(
         leading ? "flex pr-4" : cn("grid px-4", dense ? "gap-0.5 py-2" : "gap-1 py-3"),
-        href && "relative transition-colors active:bg-accent has-[a[data-slot=record-link]:focus-visible]:ring-3 has-[a[data-slot=record-link]:focus-visible]:ring-ring/50 has-[a[data-slot=record-link]:focus-visible]:ring-inset",
+        href && "relative transition-colors active:bg-accent has-[a[data-slot=record-link]:focus-visible]:ring-2 has-[a[data-slot=record-link]:focus-visible]:ring-ring has-[a[data-slot=record-link]:focus-visible]:ring-inset",
       )}
       data-slot="record-item"
     >

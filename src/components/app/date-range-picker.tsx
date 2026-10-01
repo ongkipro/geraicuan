@@ -91,7 +91,7 @@ export function DateRangePicker({
           <ChevronDown aria-hidden="true" className="ml-auto text-muted-foreground" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="flex w-auto max-w-[calc(100vw-2rem)] flex-col gap-3 p-3 md:flex-row">
+      <PopoverContent align="start" aria-label="Pilih periode" className="flex w-auto max-w-[calc(100vw-2rem)] flex-col gap-3 p-3 md:flex-row">
         <ul aria-label="Pilihan periode" className="flex flex-wrap gap-2 md:w-40 md:flex-col md:flex-nowrap">
           {PICKER_PRESETS.map((preset) => (
             <li key={preset.id}>

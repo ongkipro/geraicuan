@@ -1,8 +1,9 @@
 "use client";
 
 import { ArrowLeft, ListChecks, Printer } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { createContext, useContext, useState, useTransition, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createContext, useContext, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { selectUnprintedLabels } from "@/app/app/label/cetak/actions";
 import { BATCH_CONTENT_LABELS, batchPrintHref, MAX_BATCH_SHIPMENTS, type BatchPrintContent } from "@/app/app/label/cetak/batch-query";
@@ -37,6 +38,8 @@ type Selection = {
   /** T-270: one scanned parcel joins the selection (from any page), with its resi and planned handover. */
   add: (number: number, awb: string, type: "PICKUP" | "DROP_OFF" | null) => void;
   clear: () => void;
+  /** R6-X: where the phone/tablet bar is placed, after the list in DOM and tab order. */
+  barSlot: HTMLElement | null;
 };
 
 const SelectionContext = createContext<Selection | null>(null);
@@ -58,19 +61,27 @@ export function BatchSelectionProvider({ awbs = {}, children, numbers, types = {
   const [notice, setNotice] = useState<SelectionNotice | null>(null);
   const [extraTypes, setExtraTypes] = useState<PlannedHandoverTypes>({});
   const [extraAwbs, setExtraAwbs] = useState<Readonly<Record<number, string>>>({});
+  const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
+  // R6-X (critique 2026-09-30T19-21-59Z #3): a scan already announces its outcome under the scan
+  // field ("… dipilih"), so the count below stays silent for it instead of speaking twice.
+  const [lastChange, setLastChange] = useState<"scan" | "user">("user");
+  const user = () => setLastChange("user");
   const value: Selection = {
     add: (number, awb, type) => {
+      setLastChange("scan");
       setNote(null);
       setExtraTypes((current) => ({ ...current, [number]: type }));
       setExtraAwbs((current) => ({ ...current, [number]: awb }));
       setSelected((current) => new Set(current).add(number));
     },
     awbs: { ...extraAwbs, ...awbs },
-    clear: () => { setSelected(new Set()); setNote(null); },
+    barSlot,
+    clear: () => { user(); setSelected(new Set()); setNote(null); },
     note,
     notice,
     numbers,
     replace: (next, nextNote, nextTypes, nextAwbs) => {
+      user();
       setSelected(new Set(next));
       setNote(nextNote);
       if (nextTypes) setExtraTypes(nextTypes);
@@ -80,7 +91,7 @@ export function BatchSelectionProvider({ awbs = {}, children, numbers, types = {
     setNotice,
     types: { ...extraTypes, ...types },
     // The page box adds or removes this page's rows; picks from other pages stay.
-    setAll: (on) => { setNote(null); setSelected((current) => {
+    setAll: (on) => { user(); setNote(null); setSelected((current) => {
       const next = new Set(current);
       for (const number of numbers) {
         if (on) next.add(number);
@@ -88,7 +99,7 @@ export function BatchSelectionProvider({ awbs = {}, children, numbers, types = {
       }
       return next;
     }); },
-    toggle: (number, on) => { setNote(null); setSelected((current) => {
+    toggle: (number, on) => { user(); setNote(null); setSelected((current) => {
       const next = new Set(current);
       if (on) next.add(number);
       else next.delete(number);
@@ -98,7 +109,9 @@ export function BatchSelectionProvider({ awbs = {}, children, numbers, types = {
   return (
     <SelectionContext.Provider value={value}>
       {children}
-      <p aria-live="polite" className="sr-only">{selected.size > 0 ? `${selected.size} resi dipilih` : ""}</p>
+      {/* R6-X: the phone/tablet selection bar lands here, after the list (SelectionBar). */}
+      <div className="contents" data-slot="selection-bar-slot" ref={setBarSlot} />
+      <p aria-live={lastChange === "scan" ? "off" : "polite"} className="sr-only">{selected.size > 0 ? `${selected.size} resi dipilih` : ""}</p>
       {/* T-266: room below the last row for the phone/tablet selection bar. */}
       {selected.size > 0 ? <div aria-hidden="true" className="h-28 lg:hidden print:hidden" data-slot="selection-bar-spacer" /> : null}
     </SelectionContext.Provider>
@@ -117,10 +130,12 @@ export function BatchSelectionProvider({ awbs = {}, children, numbers, types = {
 export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: string; number: number; visibleLabel?: boolean }) {
   const { selected, toggle } = useSelection();
   const id = `pilih-${visibleLabel ? "kartu" : "tabel"}-${number}`;
+  // R6-X (critique #8): on Siap diserahkan (`cetak=sudah`) choosing a parcel records its handover.
+  const name = useSearchParams().get("cetak") === "sudah" ? `Pilih paket ${awb} untuk diserahkan` : `Pilih untuk cetak resi ${awb}`;
   const box = (
     <Checkbox
       className={visibleLabel ? undefined : "relative after:absolute after:-inset-3.5 after:content-['']"}
-      aria-label={visibleLabel ? undefined : `Pilih resi ${awb}`}
+      aria-label={visibleLabel ? undefined : name}
       checked={selected.has(number)}
       id={id}
       onCheckedChange={(checked) => toggle(number, checked === true)}
@@ -131,7 +146,7 @@ export function SelectRowCheckbox({ awb, number, visibleLabel = false }: { awb: 
     <span className="relative flex w-11 flex-1 justify-center pt-3">
       {box}
       <label className="absolute inset-0 cursor-pointer" htmlFor={id}>
-        <span className="sr-only">Pilih untuk cetak resi {awb}</span>
+        <span className="sr-only">{name}</span>
       </label>
     </span>
   );
@@ -243,6 +258,38 @@ export function selectionBarClassName(count: number) {
   return cn("flex items-center gap-3 print:hidden", count > 0 ? SELECTION_BAR : "max-lg:hidden");
 }
 
+/** Tailwind's `max-lg`, where the open bar is pinned to the bottom. */
+const PINNED_BAR_QUERY = "(width < 64rem)";
+
+function subscribePinned(onChange: () => void) {
+  const query = window.matchMedia(PINNED_BAR_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/**
+ * R6-X (critique 2026-09-30T19-21-59Z #3, WCAG 2.4.11): the toolbar element, or — while it is
+ * pinned below 1024px — the same element moved after the list, so Tab reaches the chosen rows
+ * before the bar. `data-state="open"` gives the page `scroll-padding-bottom` (globals.css), so a
+ * focused row scrolls above the bar instead of under it.
+ */
+export function SelectionBar({ children, count, label }: { children: ReactNode; count: number; label: string }) {
+  const { barSlot } = useSelection();
+  const pinned = useSyncExternalStore(subscribePinned, () => window.matchMedia(PINNED_BAR_QUERY).matches, () => false);
+  const bar = (
+    <div
+      aria-label={count > 0 ? label : undefined}
+      className={selectionBarClassName(count)}
+      data-slot="selection-bar"
+      data-state={count > 0 ? "open" : "closed"}
+      role={count > 0 ? "region" : undefined}
+    >
+      {children}
+    </div>
+  );
+  return count > 0 && pinned && barSlot ? createPortal(bar, barSlot) : bar;
+}
+
 export function BatchPrintDialog({ defaultSize = DEFAULT_LABEL_SIZE }: { defaultSize?: LabelSize }) {
   const router = useRouter();
   const { clear, selected } = useSelection();
@@ -262,13 +309,7 @@ export function BatchPrintDialog({ defaultSize = DEFAULT_LABEL_SIZE }: { default
   };
 
   return (
-    <div
-      aria-label={count > 0 ? "Resi terpilih" : undefined}
-      className={selectionBarClassName(count)}
-      data-slot="selection-bar"
-      data-state={count > 0 ? "open" : "closed"}
-      role={count > 0 ? "region" : undefined}
-    >
+    <SelectionBar count={count} label="Resi terpilih">
       <SelectionNote className="max-lg:order-first max-lg:basis-full lg:hidden" />
       {count > 0 ? <span className="flex-1 text-sm font-semibold whitespace-nowrap tabular-nums lg:hidden">{count} dipilih</span> : null}
       {count > 0 ? (
@@ -312,7 +353,7 @@ export function BatchPrintDialog({ defaultSize = DEFAULT_LABEL_SIZE }: { default
               ))}
             </fieldset>
           )}
-          <DialogFooter className="-mx-6 -mb-6 px-6 sm:justify-between">
+          <DialogFooter className="-mx-6 -mb-6 -bottom-6 px-6 sm:justify-between">
             {step === 1 ? (
               <>
                 <span className="hidden sm:block" />
@@ -333,6 +374,6 @@ export function BatchPrintDialog({ defaultSize = DEFAULT_LABEL_SIZE }: { default
         </DialogContent>
       </Dialog>
       {count === 0 ? <span className="text-xs text-muted-foreground">Pilih resi untuk cetak massal</span> : null}
-    </div>
+    </SelectionBar>
   );
 }

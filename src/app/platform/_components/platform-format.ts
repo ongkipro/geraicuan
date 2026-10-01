@@ -53,6 +53,14 @@ export function auditActor(row: { action: string; actorRole: string | null }): s
   return row.action === "TENANT_SELF_REGISTERED" ? "Pemilik gerai" : auditActorLabel(row.actorRole);
 }
 
+/**
+ * T-273: the actor by name with the role after it — "Rina (Anggota gerai)" — or the role alone
+ * for a row without a named account (a system row).
+ */
+export function auditActorWithName(row: { action: string; actorName?: string | null; actorRole: string | null }): string {
+  return row.actorName ? `${row.actorName} (${auditActor(row)})` : auditActor(row);
+}
+
 /** "Aktif → Ditangguhkan", or "Menjadi Disiapkan" for a tenant's first status. */
 export function tenantStatusChange(row: { fromStatus: string | null; toStatus: string | null }): string | undefined {
   if (!row.fromStatus && !row.toStatus) return undefined;

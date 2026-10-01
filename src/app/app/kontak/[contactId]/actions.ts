@@ -361,7 +361,7 @@ export async function addContactAddressAction(
     throw error;
   }
   revalidateContactPages();
-  return { message: "Alamat tersimpan dan siap dipakai pada draf berikutnya.", success: true };
+  return { message: "Alamat tersimpan dan siap dipakai saat membuat kiriman berikutnya.", success: true };
 }
 
 export async function updateContactAddressAction(

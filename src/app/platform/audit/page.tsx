@@ -10,11 +10,11 @@ import { RecordItem, RecordList } from "@/components/app/record-list";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRangeLabel } from "@/lib/analytics-range";
-import { auditActionLabel, auditActionOptions, auditTenantFallbackLabel } from "@/lib/labels/audit";
+import { auditActionLabel, auditActionOptions, auditObjectLabel, auditTenantFallbackLabel } from "@/lib/labels/audit";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 
 import { FilterSelect } from "../_components/filter-select";
-import { PLATFORM_PAGE_SIZE, auditActor, formatAgo, formatWib, tenantStatusChange } from "../_components/platform-format";
+import { PLATFORM_PAGE_SIZE, auditActor, auditActorWithName, formatAgo, formatWib, tenantStatusChange } from "../_components/platform-format";
 import { filtersChanged } from "../_components/platform-logic";
 import {
   AuditOutcomeBadge,
@@ -65,6 +65,12 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
           options={[{ label: "Berhasil", value: "SUCCESS" }, { label: "Ditolak", value: "DENIED" }]}
           value={filters.outcome}
         />
+        {/* T-273: page views flooded the trail; hidden unless asked for. A native checkbox in the GET
+            form, so it works before hydration and the URL (`kunjungan=tampil`) carries it. */}
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm md:min-h-10">
+          <input className="size-4 accent-primary" defaultChecked={Boolean(filters.showMonitoringViews)} name="kunjungan" type="checkbox" value="tampil" />
+          Tampilkan kunjungan pemantauan
+        </label>
       </FilterBar>
       {!view.audit ? (
         <RegionError title="Jejak audit" />
@@ -91,14 +97,16 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
               <Table className={`${FLUSH_TABLE} ${DESKTOP_ONLY}`}>
                 <TableCaption className="sr-only">Jejak audit · {range.periodLabel} · {range.timezoneLabel}</TableCaption>
                 <TableHeader>
-                  <TableRow><TableHead>Waktu (WIB)</TableHead><TableHead>Aksi</TableHead><TableHead>Pelaku</TableHead><TableHead>Gerai</TableHead><TableHead>Hasil</TableHead></TableRow>
+                  <TableRow><TableHead>Waktu (WIB)</TableHead><TableHead>Aksi</TableHead><TableHead>Pelaku</TableHead><TableHead>Gerai</TableHead><TableHead>Objek</TableHead><TableHead>Hasil</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell><TimeCell instant={row.createdAt} now={view.now} /></TableCell>
                       <TableCell className="whitespace-normal"><StackCell primary={<span className="font-medium">{auditActionLabel(row.action)}</span>} secondary={tenantStatusChange(row)} /></TableCell>
-                      <TableCell>{auditActor(row)}</TableCell>
+                      <TableCell className="whitespace-normal">
+                        {row.actorName ? <StackCell primary={<span className="font-medium">{row.actorName}</span>} secondary={auditActor(row)} /> : auditActor(row)}
+                      </TableCell>
                       <TableCell className="whitespace-normal">
                         {row.tenantId && row.tenantName ? (
                           <Link className="text-primary hover:underline" href={`/platform/tenant/${row.tenantId}`} prefetch={false}>{row.tenantName}</Link>
@@ -106,6 +114,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
                           <span className="text-muted-foreground">{auditTenantFallbackLabel(row.targetType)}</span>
                         )}
                       </TableCell>
+                      <TableCell className="whitespace-normal">{auditObjectLabel(row) ?? <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell><AuditOutcomeBadge outcome={row.outcome} /></TableCell>
                     </TableRow>
                   ))}
@@ -116,9 +125,9 @@ export default async function PlatformAuditPage({ searchParams }: PageProps<"/pl
                   {rows.map((row) => (
                     <RecordItem
                       key={row.id}
-                      meta={tenantStatusChange(row)}
+                      meta={[auditObjectLabel(row), tenantStatusChange(row)].filter(Boolean).join(" · ") || undefined}
                       status={<AuditOutcomeBadge outcome={row.outcome} />}
-                      subtitle={`${auditActor(row)} · ${row.tenantName ?? auditTenantFallbackLabel(row.targetType)}`}
+                      subtitle={`${auditActorWithName(row)} · ${row.tenantName ?? auditTenantFallbackLabel(row.targetType)}`}
                       time={[formatWib(row.createdAt), formatAgo(row.createdAt, view.now)].filter(Boolean).join(" · ")}
                       title={<span className="whitespace-normal">{auditActionLabel(row.action)}</span>}
                     />

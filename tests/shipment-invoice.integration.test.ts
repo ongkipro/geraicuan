@@ -533,6 +533,48 @@ describe("issueShipmentInvoice action", () => {
   });
 });
 
+describe("invoice preview before issuance (R6-X)", () => {
+  const nota = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\u00a0/g, " ").replace(/\s+/g, " ");
+  it("shows the version 2 nota the issuance would write, and writes nothing", async () => {
+    const { previewShipmentInvoice } = await import("@/app/app/invoice/actions");
+    const cod = calculateCodAmounts(150_000, 8_000);
+    const fixture = await seedShipment({ sequence: 40, cod: "COD", codAmountIdr: cod.providerCodAmountIdr, insuranceIdr: null });
+    const audits = async () => (await adminPool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM audit_events WHERE tenant_id = $1", [tenantA])).rows[0].n;
+    const auditsBefore = await audits();
+
+    principal.current = { scope: "tenant", userId: operatorA, tenantId: tenantA, role: "OPERATOR", tenantStatus: "ACTIVE" };
+    const preview = await previewShipmentInvoice(String(fixture.tenantNumber));
+    const again = await previewShipmentInvoice(fixture.publicReference);
+    expect(preview).toMatchObject({ ok: true, invoice: { templateVersion: 2, invoiceNumber: `INV-${fixture.publicReference}`, courierCollectionIdr: 163_443 } });
+    // A preview is a dry run: no invoice row and no audit event survive, however often it is opened.
+    expect(await invoiceCount(fixture.shipmentId)).toBe(0);
+    expect(await audits()).toBe(auditsBefore);
+    expect(again.ok && preview.ok && again.invoice.document).toEqual(preview.ok && preview.invoice.document);
+    if (!preview.ok) return;
+    const previewNota = nota(renderToStaticMarkup(createElement(InvoiceSheet, { invoice: preview.invoice, medium: "80mm" })));
+    expect(previewNota).toMatch(/Nilai barang Rp 150\.000 Ongkir Rp 13\.443 Total Rp 163\.443/);
+
+    // "Terbitkan invoice" then issues exactly what was previewed.
+    const issued = await asUser(operatorA, tenantA, (tx, context) => issueShipmentInvoice(tx, context, fixture.shipmentId));
+    expect(await invoiceCount(fixture.shipmentId)).toBe(1);
+    if (!issued.ok) throw new Error("issuance refused");
+    const unsaved = { id: null, issuedAt: null };
+    expect({ ...issued.invoice, ...unsaved }).toEqual({ ...preview.invoice, ...unsaved });
+  });
+
+  it("previews the same refusal as issuance and no other tenant's shipment", async () => {
+    const { previewShipmentInvoice } = await import("@/app/app/invoice/actions");
+    const unpaid = await seedShipment({ sequence: 41, status: "AWAITING_UPSTREAM_PAYMENT" });
+    const foreign = await seedShipment({ sequence: 42, tenantId: tenantB, outletId: outletB });
+    principal.current = { scope: "tenant", userId: adminA, tenantId: tenantA, role: "TENANT_ADMIN", tenantStatus: "ACTIVE" };
+    expect(await previewShipmentInvoice(String(unpaid.tenantNumber))).toEqual({ ok: false, code: "NOT_ISSUED" });
+    expect(await previewShipmentInvoice(foreign.shipmentId)).toEqual({ ok: false, code: "NOT_FOUND" });
+    expect(await invoiceCount(unpaid.shipmentId)).toBe(0);
+    expect(await invoiceCount(foreign.shipmentId)).toBe(0);
+  });
+});
+
 describe("invoice courier/service line", () => {
   it("prints the courier's display name once", () => {
     expect(courierServiceName("lion", "lion")).toBe("Lion Parcel");

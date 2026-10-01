@@ -505,7 +505,7 @@ describe("contact Server Actions", () => {
     const { addContactAddressAction, updateContactAction } = await import("@/app/app/kontak/[contactId]/actions");
 
     await expect(saveContact({}, validCreateForm())).resolves.toEqual({
-      message: "Kontak tersimpan dan siap dipakai pada draf baru.",
+      message: "Kontak tersimpan dan siap dipakai saat membuat kiriman.",
       successId: CONTACT_ID,
       successNumber: 7,
       successRole: "pengirim",

@@ -49,10 +49,11 @@ export function attentionItems(health: PlatformHealth | null, tenants: readonly 
   return items.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "kritis" ? -1 : 1));
 }
 
-/** Filters differ from the default window (30 hari, no tenant/outcome/query/aksi/status gerai) → "Hapus filter". */
+/** Filters differ from the default window (30 hari, no tenant/outcome/query/aksi/status gerai, page views hidden) → "Hapus filter". */
 export function filtersChanged(filters: PlatformFilters, { ignoreTenant = false } = {}): boolean {
   return (
     filters.range.presetId !== "30-hari" ||
+    Boolean(filters.showMonitoringViews) ||
     Boolean(filters.outcome) ||
     Boolean(filters.query) ||
     Boolean(filters.action) ||

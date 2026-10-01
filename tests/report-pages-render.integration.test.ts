@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -116,15 +118,15 @@ describe("Laporan pengiriman logic", () => {
     expect(activeFilterCount({ courier: "JNE", lifecycleStatus: "ISSUED", outletId: "o", presetId: "7-hari" })).toBe(4);
   });
 
-  it("ranks low-volume couriers last and always shows the denominator", () => {
+  it("ranks low-volume couriers last and keeps each rate's base (SHP-ISSUED / SHP-OUTCOMES)", () => {
     const points = courierPerformancePoints([
       { courier: "SAP", issuedCount: 5, resolvedSubmissionCount: 5 },
       { courier: "JNE", issuedCount: 8, resolvedSubmissionCount: 10 },
       { courier: "JT", issuedCount: 0, resolvedSubmissionCount: 0 },
     ]);
-    expect(points.map((point) => [point.courier, point.label, point.lowVolume])).toEqual([
-      ["JNE", "80% · 8/10", false],
-      ["SAP", "100% · 5/5", true],
+    expect(points.map((point) => [point.courier, point.rate, point.issuedCount, point.resolvedCount, point.lowVolume])).toEqual([
+      ["JNE", 80, 8, 10, false],
+      ["SAP", 100, 5, 5, true],
     ]);
   });
 });
@@ -261,19 +263,22 @@ describe("Laporan pengiriman view", () => {
     // Only the active tab renders on the server; the Nilai COD legend (Rp 666.480) mounts on its tab.
     expect(legends).toEqual([[["COD", "3 kiriman"], ["Non-COD", "1 kiriman"]]]);
     // Status distribution (T-254): the lifecycle counts grouped into the Ringkasan buckets. The
-    // fixture's ISSUED and DRAFT are both "Masih berjalan"; each status keeps its badge, count and
-    // share of the 45-shipment cohort (1 / 45 = 2,2%), in lifecycle order inside the group.
+    // fixture's ISSUED and DRAFT are both "Masih berjalan"; each status keeps its badge and count,
+    // in lifecycle order inside the group; the share bar shows the part of the 45-shipment cohort.
     expect(html).not.toContain("Total per status");
     const distribution = html.slice(html.indexOf('<ul aria-label="Distribusi status"'), html.indexOf('<p class="sr-only">', html.indexOf('<ul aria-label="Distribusi status"')));
     expect([...distribution.matchAll(/data-outcome="([a-z-]+)"/g)].map((match) => match[1])).toEqual(["in-progress"]);
-    expect(distribution).toMatch(/Masih berjalan[\s\S]*?<span class="font-semibold">2<\/span> <span[^>]*>· 4,4% dari 45 kiriman<\/span>/);
-    expect([...distribution.matchAll(/data-status="([A-Z_]+)"[\s\S]*?data-slot="badge"[\s\S]*?<span class="font-semibold">(\d+)<\/span> <span[^>]*>· ([\d,]+%) dari 45 kiriman/g)].map((match) => match.slice(1)))
-      .toEqual([["DRAFT", "1", "2,2%"], ["ISSUED", "1", "2,2%"]]);
-    // T-262: every percentage at the top of Laporan names its base inline — Retur's rate of the
-    // finished shipments beside Distribusi's shares of all shipments read "31,0%" vs "14,0%" before.
-    const rates = [...(summary + distribution).replace(/<[^>]+>/g, "").matchAll(/(\d+(?:,\d)?%)(.{0,30})/g)];
-    expect(rates.length).toBeGreaterThanOrEqual(4);
-    for (const [, rate, after] of rates) expect(`${rate}${after}`).toMatch(/^[\d,]+% dari \d+ (kiriman|terkirim \+ retur)/);
+    expect(distribution).toMatch(/Masih berjalan[\s\S]*?data-metric-id="RPT-SHP-LIFECYCLE-GROUP"><span class="font-semibold">2<\/span> <span[^>]*>kiriman<\/span>/);
+    expect([...distribution.matchAll(/data-status="([A-Z_]+)"[\s\S]*?data-slot="badge"[\s\S]*?data-metric-id="RPT-SHP-LIFECYCLE-COUNT"><span class="font-semibold">(\d+)<\/span>/g)].map((match) => match.slice(1)))
+      .toEqual([["DRAFT", "1"], ["ISSUED", "1"]]);
+    // T-273 (critique P1): one Retur percentage per page. Ringkasan's 33,3% of 6 terkirim + retur
+    // sat above Distribusi's Retur share of all shipments (30,8% vs 13,0% on the dev tenant). The
+    // distribution now writes no percentage at all, and every "% retur" on the page uses the
+    // Ringkasan base (RPT-SHP-RETURN-RATE: retur ÷ terkirim + retur).
+    expect(distribution.replace(/<[^>]+>/g, "")).not.toMatch(/%/);
+    const rates = [...summary.replace(/<[^>]+>/g, "").matchAll(/(\d+(?:,\d)?%)(?=(.{0,30}))/g)];
+    expect(rates.map(([, rate, after]) => `${rate}${after}`.match(/^[\d,]+% dari \d+ (kiriman|terkirim \+ retur)/)?.[1])).toEqual(["kiriman", "terkirim + retur"]);
+
     expect(distribution).toContain("<details");
     // Wilayah: top 10 visible, the rest behind the disclosure, unknown named. T-254: the volume bar
     // sits in the table (no separate chart), and below md each wilayah is a record, not a squeezed table.
@@ -335,10 +340,76 @@ describe("Laporan pengiriman view", () => {
     expect(html).not.toContain("Wilayah tujuan");
   });
 
-  it("degrades only the performance card when its read failed", () => {
+  it("degrades only the issuance-rate card when its read failed", () => {
     const html = render(createElement(ShipmentReportView, reportProps({ performance: null })));
-    expect(html).toContain("Performa kurir tidak dapat dimuat");
+    expect(html).toContain("Tingkat penerbitan resi tidak dapat dimuat");
     expect(html).toContain("Daftar kiriman");
+  });
+
+  // T-273 (critique P1): "Performa kurir" was the issuance rate under another name, its order
+  // unreadable (a 100% low-volume courier drawn under an 80% one) and its base only in sr text.
+  it("names the courier card for SHP-ISSUE-RATE, sorts it highest first per group and writes its base", () => {
+    const points = courierPerformancePoints([
+      { courier: "SAP", issuedCount: 5, resolvedSubmissionCount: 5 },
+      { courier: "JNE", issuedCount: 8, resolvedSubmissionCount: 10 },
+      { courier: "LION", issuedCount: 19, resolvedSubmissionCount: 20 },
+      { courier: "POS", issuedCount: 1, resolvedSubmissionCount: 4 },
+    ]);
+    const html = render(createElement(ShipmentReportView, reportProps({ performance: points })));
+    expect(html).not.toContain("Performa kurir");
+    expect(html).toContain(">Tingkat penerbitan resi per kurir<");
+    const start = html.search(/<table data-slot="table" class="[^"]*" aria-label="Tingkat penerbitan resi per kurir"/);
+    const table = html.slice(start, html.indexOf("</table>", start));
+    expect(tableHeaders(html, "Tingkat penerbitan resi per kurir")).toEqual(["Kurir", "Tingkat penerbitan", "Resi diterbitkan", "Dijawab", "Volume rendah (kurang dari 10 jawaban)"]);
+    // Rows in order with their rate (one decimal, spec 19 M-0) and base: enough volume first,
+    // highest first; then the low-volume heading and its own rows, highest first.
+    const rows = [...table.matchAll(/<tr[^>]*data-slot="table-row"[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) => row.replace(/<[^>]+>/g, "|").split("|").filter(Boolean).join(" "));
+    expect(rows.slice(1)).toEqual([
+      "Lion Parcel 95,0% 19 20",
+      "JNE 80,0% 8 10",
+      "Volume rendah (kurang dari 10 jawaban)",
+      "SAP 100,0% 5 5",
+      "POS Indonesia 25,0% 1 4",
+    ]);
+    const rates = [...table.matchAll(/data-metric-id="SHP-ISSUE-RATE">([\d,]+)%/g)].map((match) => Number(match[1].replace(",", ".")));
+    expect(rates.slice(0, 2)).toEqual([...rates.slice(0, 2)].sort((a, b) => b - a));
+    expect(rates.slice(2)).toEqual([...rates.slice(2)].sort((a, b) => b - a));
+    // The base, in words, above the rows: 33 of 39 answered submissions.
+    expect(html).toMatch(/data-slot="metric-base"><span data-metric-id="SHP-ISSUED">33 resi diterbitkan<\/span> dari <span data-metric-id="SHP-OUTCOMES">39 pengajuan yang sudah dijawab Mengantar<\/span>/);
+    // Rendered on the server as the table: no Recharts in this card.
+    expect(table).not.toMatch(/recharts|data-slot="chart"/);
+    // The phone list keeps the same order and the same groups.
+    expect([...html.matchAll(/<ul aria-label="(Tingkat penerbitan resi per kurir|Volume rendah \(kurang dari 10 jawaban\))"[\s\S]*?<\/ul>/g)]
+      .map(([list]) => [...list.matchAll(/<span class="font-medium">([^<]+)<\/span>/g)].map((match) => match[1])))
+      .toEqual([["Lion Parcel", "JNE"], ["SAP", "POS Indonesia"]]);
+  });
+
+  // T-273: every figure carries its spec 19 metric ID, and every ID it carries is defined there.
+  it("tags every Laporan figure with a spec 19 metric ID that the contract defines", () => {
+    const html = render(createElement(ShipmentReportView, reportProps({
+      performance: courierPerformancePoints([{ courier: "JNE", issuedCount: 8, resolvedSubmissionCount: 10 }]),
+    })));
+    const spec = readFileSync("docs/spec/19-METRICS-ANALYTICS-CONTRACT.md", "utf8");
+    const defined = new Set([...spec.matchAll(/^\| ([A-Z][A-Z0-9-]+(?: \/ [A-Z][A-Z0-9-]+)*) \|/gm)].flatMap((match) => match[1].split(" / ")));
+    const used = new Set([...html.matchAll(/data-metric-id="([^"]+)"/g)].flatMap((match) => match[1].split(" ")));
+    for (const id of used) expect(defined, id).toContain(id);
+    for (const id of [
+      "RPT-SHP-KPI-TOTAL", "RPT-SHP-DELIVERED", "RPT-SHP-DELIVERED-SHARE", "RPT-SHP-RETURNED", "RPT-SHP-RETURN-RATE", "RPT-SHP-FAILED",
+      "RPT-SHP-IN-PROGRESS", "RPT-SHP-COD-VALUE-TOTAL", "RPT-SHP-COD-DISBURSEMENT-EST-TOTAL", "RPT-SHP-TREND-TOTALS", "RPT-SHP-TREND-COD",
+      "RPT-SHP-TREND-NONCOD", "RPT-SHP-TREND-COD-VALUE", "RPT-SHP-LIFECYCLE-GROUP", "RPT-SHP-COURIER-COUNT", "RPT-SHP-COURIER-DELIVERED-RATE",
+      "RPT-SHP-COURIER-RETURN-RATE", "RPT-SHP-COURIER-SHIPPING-COST-IDR", "RPT-SHP-COURIER-COD-FEE-IDR", "RPT-SHP-COURIER-COD-DISBURSEMENT-EST-IDR",
+      "SHP-ISSUE-RATE", "SHP-ISSUED", "SHP-OUTCOMES", "RPT-SHP-REGION-PROVINCE", "RPT-SHP-ROUTE-COUNT", "RPT-SHP-ROWS",
+    ]) expect(used, id).toContain(id);
+  });
+
+  // T-273 (optimize): Recharts is not in the server HTML; a skeleton of the chart's own box is,
+  // and the trend's numbers (legend totals, data table) stay server-rendered.
+  it("renders a same-size skeleton in place of the trend chart, with the trend numbers still in the HTML", () => {
+    const html = render(createElement(ShipmentReportView, reportProps()));
+    expect(html).not.toMatch(/recharts-/);
+    expect(html).toMatch(/class="[^"]*\bh-56 w-full\b[^"]*"[^>]*data-slot="chart-skeleton"|data-slot="chart-skeleton"[^>]*class="[^"]*\bh-56 w-full\b/);
+    expect(tableHeaders(html, "Data tren")).toEqual(["Tanggal (WIB)", "COD", "Non-COD", "Nilai COD"]);
+    expect(readFileSync("src/app/app/laporan/pengiriman/analytics-sections.tsx", "utf8")).not.toMatch(/from "@\/app\/app\/laporan\/pengiriman\/report-trend-chart"/);
   });
 
   it("shows the system-empty state with one primary and hides the export", () => {

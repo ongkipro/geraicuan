@@ -16,6 +16,7 @@ const { MoneyBreakdown, MoneyBreakdownCompact, MoneyInconsistentAlert } = await 
 const { loadShipmentDetailView } = await import("@/app/app/pengiriman/[shipmentId]/detail-data");
 const { calculateCodAmounts, calculateCodOngkirAmounts } = await import("@/db/cod-totals-repository");
 const { loadPrintableLabel } = await import("@/db/label-print-repository");
+const { loadBatchPrint } = await import("@/app/app/label/cetak/batch-data");
 const { LabelSheet } = await import("@/app/app/label/[shipmentId]/label-sheet");
 const { completeProviderOrder } = await import("@/db/order-batch-repository");
 const { loadShipmentReportPage } = await import("@/db/shipment-report-repository");
@@ -491,6 +492,34 @@ describe("Rincian uang parity across surfaces (T-261)", () => {
     }
     const sheetHtml = renderToStaticMarkup(createElement(MoneyBreakdown, { money: label.money }));
     expect(sheetHtml).not.toMatch(/Estimasi cair|Ongkir dibayar ke Mengantar/);
+  });
+
+  // R6-X (critique 2026-09-30T19-21-59Z #1): the quote price (`shippingAmountIdr`) reached the
+  // Operator's label page and batch print payload — on COD, collected − goods − price is the fee.
+  it.each(["NON_COD", "COD", "COD_ONGKIR"])("%s (R6-X): no quote price, charged shipping or fee in the Operator's label or batch print payload; the Tenant Admin keeps them", async (key) => {
+    const shipmentId = seeded[key]!;
+    const { rows: [{ tenant_number: tenantNumber }] } = await adminPool.query<{ tenant_number: number }>(
+      "SELECT tenant_number FROM shipments WHERE id = $1", [shipmentId]);
+    const asOperator = <T,>(read: Parameters<typeof withTenantContext<T>>[3]) => withTenantContext(appDb, userOp, tenantA, read);
+    const query = { content: "label" as const, numbers: [tenantNumber!] };
+    const admin = await asTenantA((tx, context) => loadPrintableLabel(tx, context, shipmentId));
+    const adminBatch = await asTenantA((tx, context) => loadBatchPrint(tx, context, query));
+    const operator = await asOperator((tx, context) => loadPrintableLabel(tx, context, shipmentId));
+    const operatorBatch = await asOperator((tx, context) => loadBatchPrint(tx, context, query));
+    expect(admin.shippingAmountIdr).toBe(PRICE);
+    expect(JSON.stringify(adminBatch)).toContain(`"shippingAmountIdr":${PRICE}`);
+    // Both surfaces serialize the label (minus `money` on the page) to the browser.
+    const pageProps = { ...operator, money: undefined };
+    for (const payload of [JSON.stringify(pageProps), JSON.stringify(operator), JSON.stringify(operatorBatch)]) {
+      expect(payload).toContain('"shippingAmountIdr":null');
+      expect(payload).toContain('"chargedShippingIdr":null');
+      expect(payload).toContain('"codBreakdown":null');
+      expect(payload).not.toContain(`${PRICE}`);
+      expect(payload).not.toContain(`${BASIS}`);
+      expect(payload).not.toMatch(/codFeeIdr|serviceFeeIdr|vatAmountIdr|roundingIdr|Estimasi cair/);
+    }
+    // The customer-facing sheet data is still there: what is collected and the declared value.
+    expect(operatorBatch[0]).toMatchObject({ kind: "ready", label: { package: { declaredValueIdr: GOODS }, providerCodAmountIdr: admin.providerCodAmountIdr } });
   });
 
   it.each(["NON_COD", "COD", "COD_ONGKIR"])("%s (T-270): the Tenant Admin and the Operator print the identical thermal sheet", async (key) => {

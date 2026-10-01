@@ -10,7 +10,7 @@ import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader,
 import { auditActionLabel, auditOutcomeLabel, auditTenantFallbackLabel, tenantStatusLabel, tenantStatusTone } from "@/lib/labels/audit";
 import { cn } from "@/lib/utils";
 
-import { auditActor, badgeTone, formatAgo, tenantStatusChange, wibParts } from "./platform-format";
+import { auditActorWithName, badgeTone, formatAgo, tenantStatusChange, wibParts } from "./platform-format";
 import { RetryButton } from "./retry-button";
 
 const number = new Intl.NumberFormat("id-ID");
@@ -117,7 +117,7 @@ export function TimeCell({ instant, now }: { instant: Date; now?: Date }) {
   );
 }
 
-type FeedRow = { action: string; actorRole: string | null; createdAt: Date; fromStatus: string | null; id: string; outcome: string; targetType: string; tenantName: string | null; toStatus: string | null };
+type FeedRow = { action: string; actorName?: string | null; actorRole: string | null; createdAt: Date; fromStatus: string | null; id: string; outcome: string; targetType: string; tenantName: string | null; toStatus: string | null };
 
 /**
  * T-257: a short audit list (Ringkasan, tenant detail). The action in words is the title, the
@@ -133,7 +133,7 @@ export function AuditFeed({ label, now, rows, showTenant = true }: { label: stri
           <li className="flex flex-col gap-2 px-6 py-3 max-md:px-4 sm:flex-row sm:items-center sm:justify-between" key={row.id}>
             <StackCell
               primary={<span className="font-medium">{auditActionLabel(row.action)}</span>}
-              secondary={[auditActor(row), showTenant ? (row.tenantName ?? auditTenantFallbackLabel(row.targetType)) : null, change].filter(Boolean).join(" · ")}
+              secondary={[auditActorWithName(row), showTenant ? (row.tenantName ?? auditTenantFallbackLabel(row.targetType)) : null, change].filter(Boolean).join(" · ")}
             />
             <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-row-reverse sm:justify-start">
               <AuditOutcomeBadge outcome={row.outcome} />

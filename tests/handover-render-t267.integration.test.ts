@@ -8,12 +8,13 @@ import { describe, expect, it, vi } from "vitest";
  * words the detail and the attention rule use. Canned repository rows; no database, no Mengantar.
  */
 
+const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
   notFound: () => { throw new Error("NOT_FOUND"); },
   redirect: (href: string) => { throw new Error(`REDIRECT:${href}`); },
   usePathname: () => "/app/label",
   useRouter: () => ({ push: () => undefined, refresh: () => undefined, replace: () => undefined }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => nav.params,
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/db/client", () => ({ db: {} }));
@@ -34,7 +35,10 @@ const state = vi.hoisted(() => ({
 vi.mock("@/db/label-print-repository", () => ({
   loadLabelIndexPage: async () => ({ rows: state.rows, summary: state.summary }),
 }));
-vi.mock("@/db/shipment-handover-repository", () => ({ countHandedOverToday: async () => state.today }));
+// T-274: LBL-HANDED-OVER-TODAY now comes with the day line (one statement, the list's transaction).
+vi.mock("@/app/app/label/label-day-summary", () => ({
+  loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": state.today, "LBL-PRINTED-TODAY": 0, "LBL-READY-PENDING": 0 }),
+}));
 
 const { default: LabelIndexPage } = await import("@/app/app/label/page");
 const { LabelPrintContext } = await import("@/app/app/label/[shipmentId]/label-print-context");
@@ -66,6 +70,7 @@ function row(number: number, extra: Record<string, unknown> = {}) {
 }
 
 async function render(searchParams: Record<string, string> = {}) {
+  nav.params = new URLSearchParams(searchParams);
   return renderToStaticMarkup(await (LabelIndexPage as (props: { searchParams: Promise<Record<string, string>> }) => Promise<ReactElement>)({ searchParams: Promise.resolve(searchParams) }));
 }
 
@@ -74,7 +79,7 @@ describe("Cetak resi: Siap diserahkan is the handover queue", () => {
     state.rows = [];
     state.summary = { "LBL-ALL": 6, "LBL-CANCELLED": 1, "LBL-HANDED-OVER": 2, "LBL-PRINTED": 3, "LBL-UNPRINTED": 1 };
     const html = await render({ cetak: "semua" });
-    const strip = html.slice(html.indexOf('aria-label="Ringkasan status cetak resi"'), html.indexOf("</nav>"));
+    const strip = html.slice(html.indexOf('aria-label="Ringkasan status cetak resi"'), html.indexOf("</nav>", html.indexOf('aria-label="Ringkasan status cetak resi"')));
     const tiles = [...strip.matchAll(/<\/svg>([^<]+)<\/span><span class="flex items-baseline[^"]*"><span[^>]*>(\d+)</g)].map(([, label, count]) => `${label} ${count}`);
     expect(tiles).toEqual(["Semua resi 6", "Belum dicetak 1", "Siap diserahkan 3", "Diserahkan 2", "Dibatalkan 1"]);
     expect(strip).toContain(", Sudah dicetak, belum diserahkan");
@@ -95,6 +100,12 @@ describe("Cetak resi: Siap diserahkan is the handover queue", () => {
     expect(html).not.toContain("Pilih semua siap diserahkan");
     expect(html).toContain("Cetak ulang label AWB26710301");
     expect(html).toContain('id="pilih-kartu-10301"');
+    // R6-X (critique 2026-09-30T19-21-59Z #8): here a checkbox chooses a parcel to hand over, in both layouts.
+    expect(html).toContain('aria-label="Pilih paket AWB26710301 untuk diserahkan"');
+    expect(html).toMatch(/for="pilih-kartu-10301"><span class="sr-only">Pilih paket AWB26710301 untuk diserahkan<\/span>/);
+    expect(html).not.toContain("Pilih untuk cetak resi");
+    // R6-X: the handover result's status container is mounted, empty, before any result.
+    expect(html).toContain('<div data-slot="handover-notice" role="status"></div>');
   });
 
   it("offers 'Pilih semua siap diserahkan (N)' once the queue is longer than the page", async () => {
@@ -110,6 +121,8 @@ describe("Cetak resi: Siap diserahkan is the handover queue", () => {
     const html = await render();
     expect(html.match(/Cetak terpilih/g)).toHaveLength(1);
     expect(html).not.toContain("Tandai");
+    expect(html).toContain('aria-label="Pilih untuk cetak resi AWB26710501"');
+    expect(html).not.toContain("untuk diserahkan");
   });
 
   it("closes the day when Siap diserahkan is empty and parcels were handed over today", async () => {
@@ -224,7 +237,7 @@ describe("T-270: Siap diserahkan is a state queue, grouped, with scan to select"
     }
     const semua = await render({ cetak: "semua" });
     expect(semua).not.toContain('data-slot="queue-period-note"');
-    const strip = semua.slice(semua.indexOf('aria-label="Ringkasan status cetak resi"'), semua.indexOf("</nav>"));
+    const strip = semua.slice(semua.indexOf('aria-label="Ringkasan status cetak resi"'), semua.indexOf("</nav>", semua.indexOf('aria-label="Ringkasan status cetak resi"')));
     // Base = 1 + 3 + 0 = 4: Belum 25 %, Siap 75 %, Diserahkan 0 %; Dibatalkan none.
     expect([...strip.matchAll(/>(\d+)%</g)].map((match) => Number(match[1]))).toEqual([25, 75, 0]);
     expect(strip).not.toContain('data-segment="LBL-CANCELLED"');

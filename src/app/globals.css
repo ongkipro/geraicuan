@@ -189,6 +189,22 @@
   }
 }
 
+/* R6-X (critique 2026-09-30T19-21-59Z #12): no spinning, pulsing, zooming or sliding for people who
+   asked for less motion. Spinners are `animate-spin` across many screens, so the rule lives here; the
+   dialog, alert dialog and sheet then open and close at once (Radix waits for no animation). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin, .animate-pulse,
+  [data-slot="dialog-overlay"], [data-slot="dialog-content"],
+  [data-slot="alert-dialog-overlay"], [data-slot="alert-dialog-content"],
+  [data-slot="sheet-overlay"], [data-slot="sheet-content"] { animation:none !important; transition:none !important; }
+}
+
+/* R6-X (critique #3, WCAG 2.4.11): while the Cetak resi selection bar is pinned to the bottom (below
+   1024px), keyboard focus and scan reveals stop above it (bar ≤ 7rem, the spacer's height). */
+@media (width < 64rem) {
+  :root:has([data-slot="selection-bar"][data-state="open"]) { scroll-padding-bottom:calc(7rem + env(safe-area-inset-bottom)); }
+}
+
 /* The CMS ground behind the white cards (§2.1 `--background` #F2F4F8). */
 [data-slot="sidebar-inset"] { background:var(--background); }
 

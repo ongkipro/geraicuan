@@ -120,3 +120,21 @@ export function auditOutcomeLabel(outcome: string | null | undefined): { label: 
   if (outcome === "DENIED") return { label: "Ditolak", tone: "danger" };
   return { label: "Tidak diketahui", tone: "neutral" };
 }
+
+/**
+ * T-273: what a row changed, when it is not the gerai itself (the Gerai column names that). No
+ * payload is stored in the platform read model, so the object is its kind plus, for an outlet,
+ * the outlet's name. A shipment's number is not in the platform read model and a Super Admin
+ * cannot open a gerai's shipment, so it reads "Kiriman" without a number or link.
+ */
+export function auditObjectLabel(row: { action: string; outletName?: string | null; targetType: string }): string | null {
+  switch (row.targetType) {
+    case "OUTLET": return row.outletName ? `Outlet ${row.outletName}` : "Outlet";
+    case "MEMBERSHIP": return "Anggota gerai";
+    case "SHIPMENT": return "Kiriman";
+    case "PLATFORM":
+      if (row.action.startsWith("ANNOUNCEMENT_")) return "Info terbaru";
+      return row.action === "PLATFORM_MONITORING_VIEWED" ? "Pemantauan platform" : null;
+    default: return null;
+  }
+}

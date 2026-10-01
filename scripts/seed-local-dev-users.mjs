@@ -1142,7 +1142,8 @@ try {
     [2, "JADWAL", false, at(3, 10), "Jadwal pickup mengikuti Mengantar: 09.00–18.00 WIB",
       "Pilihan jam pickup kini mengikuti jadwal Mengantar, pukul 09.00–18.00 WIB dalam slot satu jam.\nUntuk pickup hari ini, slot paling cepat 90 menit dari sekarang.\nDraf lama yang masih memakai jam 08.00 tetap tersimpan; pilih ulang jam pickup saat kiriman dikirim."],
     [3, "FITUR_BARU", false, at(1, 8), "Invoice dan cetak resi massal kini tersedia",
-      "Setiap kiriman yang resinya sudah terbit kini punya invoice (nota) berisi ongkir dan asuransi dari Mengantar.\nDi menu Cetak resi, pilih beberapa kiriman sekaligus lalu cetak semua resinya dalam satu kali cetak."],
+      // T-273: D-40 — a new COD invoice shows Nilai barang + Ongkir = Total, never a fee line.
+      "Setiap kiriman yang resinya sudah terbit kini punya invoice (nota) untuk penerima. Invoice kiriman COD berisi Nilai barang dan Ongkir beserta totalnya, tanpa rincian biaya Mengantar.\nDi menu Cetak resi, pilih beberapa kiriman sekaligus lalu cetak semua resinya dalam satu kali cetak."],
   ];
   for (const [index, category, pinned, publishedAt, title, body] of announcements) {
     await query(

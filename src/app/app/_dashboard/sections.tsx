@@ -25,7 +25,8 @@ import { cn } from "@/lib/utils";
 
 import { courierTotals, kpiDelta, recentNextStep } from "./dashboard-logic";
 import { RetryButton } from "./retry-button";
-import { TrendChart, type TrendPoint } from "./trend-chart";
+import type { TrendPoint } from "./trend-chart";
+import { LazyTrendChart as TrendChart } from "./trend-chart-lazy";
 
 const count = new Intl.NumberFormat("id-ID");
 

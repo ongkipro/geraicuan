@@ -212,6 +212,17 @@ export function ShipmentCreateForm({
   const [masked, setMasked] = useState({ address: "", name: "", phone: "" });
   const geraiSender = geraiSenderIdentity(gerai, pickup);
   const sender = masking ? masked : geraiSender;
+  // T-274: on phones the (usually pre-filled) gerai sender folds to one line with "Ubah", so the
+  // recipient fields are in the first screen. Not with masking on, a gap in the gerai identity,
+  // or a server error — then the block shows as before.
+  const [senderOpen, setSenderOpen] = useState(false);
+  const senderFoldable = !masking && Boolean(geraiSender.name && geraiSender.phone && geraiSender.address);
+  const senderOpenedByUser = useRef(false);
+  useEffect(() => {
+    if (!senderOpen || !senderOpenedByUser.current) return;
+    senderOpenedByUser.current = false;
+    document.getElementById("sender-masking")?.focus();
+  }, [senderOpen]);
   const [recipient, setRecipient] = useState({ address: "", name: "", phone: "" });
   const [recipientContact, setRecipientContact] = useState<ShipmentContactSelection | null>(null);
   const [destination, setDestination] = useState<Destination>({ mode: "empty" });
@@ -614,7 +625,30 @@ export function ShipmentCreateForm({
 
           {/* 2 — Pengirim (masking) & penerima */}
           <SectionCard {...section(1)}>
-            <InsetBlock className="gap-3.5">
+            {senderFoldable && errorEntries.length === 0 ? (
+              <div className="flex items-center justify-between gap-3 border-b pb-2 md:hidden" data-slot="sender-fold">
+                <p className="min-w-0 flex-1 text-sm wrap-anywhere">
+                  <span className="block text-xs text-muted-foreground">Pengirim di label</span>
+                  <span className="font-semibold">{geraiSender.name}</span>
+                  <span className="text-muted-foreground tabular-nums"> · {geraiSender.phone}</span>
+                </p>
+                <Button
+                  aria-controls="sender-block-body"
+                  aria-expanded={senderOpen}
+                  className="h-11 shrink-0 px-0 font-semibold"
+                  onClick={() => {
+                    senderOpenedByUser.current = !senderOpen;
+                    setSenderOpen((open) => !open);
+                  }}
+                  type="button"
+                  variant="link"
+                >
+                  {senderOpen ? "Selesai" : "Ubah"}
+                  <span className="sr-only"> data pengirim</span>
+                </Button>
+              </div>
+            ) : null}
+            <InsetBlock className={cn("gap-3.5", senderFoldable && errorEntries.length === 0 && !senderOpen && "max-md:hidden")} id="sender-block-body">
               <div className="flex flex-col justify-between gap-2 border-b pb-2.5 sm:flex-row sm:items-center" id="sender-block" tabIndex={-1}>
                 <div className="flex flex-wrap items-center gap-2">
                   <SubBlockTitle>Data pengirim (cetak di label)</SubBlockTitle>
@@ -624,6 +658,7 @@ export function ShipmentCreateForm({
                   <input
                     checked={masking}
                     className="size-4 accent-primary"
+                    id="sender-masking"
                     onChange={(event) => {
                       setMasking(event.target.checked);
                       if (event.target.checked && !masked.name && !masked.phone && !masked.address) {
@@ -709,7 +744,7 @@ export function ShipmentCreateForm({
             </InsetBlock>
 
             <div className="flex flex-col gap-4 pt-1">
-              <div className="flex items-center justify-between gap-2 border-b pb-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 border-b pb-1">
                 <SubBlockTitle>Data pelanggan (penerima)</SubBlockTitle>
                 <ContactSearch onSelected={applyRecipientContact} role="RECIPIENT" />
               </div>
@@ -734,7 +769,7 @@ export function ShipmentCreateForm({
                 </FormField>
                 <FormField error={errors.recipientPhone} htmlFor="recipientPhone" label="Nomor telepon" required>
                   <CharacterClassInput
-                    aria-describedby={errors.recipientPhone ? "recipientPhone-error" : undefined}
+                    aria-describedby={errors.recipientPhone ? "recipientPhone-hint recipientPhone-error" : "recipientPhone-hint"}
                     aria-invalid={Boolean(errors.recipientPhone)}
                     autoComplete="off"
                     characterClass="PHONE"
@@ -742,10 +777,11 @@ export function ShipmentCreateForm({
                     id="recipientPhone"
                     name="recipientPhone"
                     onChange={(event) => setRecipient((current) => ({ ...current, phone: event.target.value }))}
-                    placeholder="08123456789"
                     type="tel"
                     value={recipient.phone}
                   />
+                  {/* T-274: an example in muted text, not a placeholder that reads as a filled value. */}
+                  <p className="text-xs text-muted-foreground" id="recipientPhone-hint">Contoh: 0812-3456-7890</p>
                 </FormField>
               </div>
               <FormField error={errors.recipientAddress} htmlFor="recipientAddress" label="Alamat lengkap penerima" required>

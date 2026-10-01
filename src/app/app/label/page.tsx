@@ -1,9 +1,10 @@
-import { Clock, Handshake, Printer, Search } from "lucide-react";
+import { CalendarOff, Clock, Handshake, Printer, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BatchPrintDialog, BatchSelectionProvider, SelectionNote, SelectPageCheckbox, SelectRowCheckbox, SelectUnprintedButton } from "@/app/app/label/batch-selection";
 import { HandoverDialog, HandoverNotice, HandoverScanField, SelectReadyButton } from "@/app/app/label/handover-dialog";
+import { type LabelDaySummary, loadLabelDaySummary } from "@/app/app/label/label-day-summary";
 import { AWB_SUFFIX_ERROR, DEFAULT_PRINT_STATE, LABEL_PAGE_SIZE, labelIndexHref, labelTileShareBase, parseLabelQuery } from "@/app/app/label/label-query";
 import { ListPagination } from "@/app/app/pengiriman/_list/list-pagination";
 import { AdjustedFilterAlert, PeriodFilter, rangeIssueMessages } from "@/app/app/pengiriman/_list/period-filter";
@@ -23,7 +24,6 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db/client";
 import { loadLabelIndexPage, type LabelIndexPage, type LabelPrintStateFilter, type PrintableShipmentRow } from "@/db/label-print-repository";
-import { countHandedOverToday } from "@/db/shipment-handover-repository";
 import { withTenantContext } from "@/db/tenant-context";
 import { loadTenantBrand } from "@/db/tenant-settings-repository";
 import { formatRangeLabel, parseAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
@@ -49,6 +49,9 @@ const PRINT_STATE_TILES = [
   // T-238 (owner): resi Mengantar cancelled after issuance; listed, never printable.
   { hint: "Tidak dapat dicetak, terbit pada periode ini", label: "Dibatalkan", metricId: "LBL-CANCELLED", value: "batal" },
 ] as const satisfies readonly { hint: string; label: string; metricId: keyof LabelIndexPage["summary"]; value: LabelPrintStateFilter }[];
+
+/** T-270: the queues ignore the period; said once, quietly, next to the period control. */
+const PERIOD_NOTE = "Periode hanya berlaku untuk Semua resi dan Dibatalkan.";
 
 const EMPTY_PAGE: LabelIndexPage = {
   rows: [],
@@ -87,6 +90,66 @@ function ReadyGroupHeading({ count, group }: { count: number; group: (typeof REA
   );
 }
 
+const numberFormat = new Intl.NumberFormat("id-ID");
+
+/**
+ * T-274 (critique 2026-09-30T19-21-59Z P2 #6): below 768px the three queues are one tap apart —
+ * a segmented row of links (URL state, `aria-current`), 44px, with each queue's count. The
+ * Filter sheet keeps the period and the history tabs (Semua resi, Dibatalkan).
+ */
+function QueueSwitch({ current, hrefFor, summary }: {
+  current: LabelPrintStateFilter;
+  hrefFor: (value: LabelPrintStateFilter) => string;
+  summary: LabelIndexPage["summary"];
+}) {
+  const queues = PRINT_STATE_TILES.filter((tile) => printStateIgnoresPeriod(tile.value));
+  return (
+    <nav aria-label="Antrean cetak resi" className="md:hidden" data-slot="queue-switch">
+      <ul className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+        {queues.map((tile) => {
+          const selected = tile.value === current;
+          return (
+            <li className="flex" key={tile.value}>
+              <Link
+                aria-current={selected ? "page" : undefined}
+                className={cn(
+                  "flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg px-1.5 py-1 text-xs leading-tight font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  selected && "bg-card font-semibold text-foreground shadow-sm",
+                )}
+                href={hrefFor(tile.value)}
+              >
+                <span className="min-w-0 text-center">{tile.label}</span>
+                <span className="text-sm font-semibold tabular-nums" data-metric-id={tile.metricId}>{numberFormat.format(summary[tile.metricId])}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/** T-274: the operator's day has an end — "Hari ini: n dicetak · n diserahkan · n tertunda". */
+function DaySummaryLine({ day, pendingHref }: { day: LabelDaySummary; pendingHref: string }) {
+  const pending = day["LBL-READY-PENDING"];
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 text-[0.8125rem] text-muted-foreground md:text-sm" data-slot="day-summary">
+      <span className="font-semibold text-foreground">Hari ini:</span>
+      <span><b className="font-semibold text-foreground tabular-nums" data-metric-id="LBL-PRINTED-TODAY">{numberFormat.format(day["LBL-PRINTED-TODAY"])}</b> dicetak</span>
+      <span aria-hidden="true">·</span>
+      <span><b className="font-semibold text-foreground tabular-nums" data-metric-id="LBL-HANDED-OVER-TODAY">{numberFormat.format(day["LBL-HANDED-OVER-TODAY"])}</b> diserahkan</span>
+      <span aria-hidden="true">·</span>
+      {pending > 0 ? (
+        <Link className="font-medium text-warn underline-offset-4 hover:underline" href={pendingHref}>
+          <b className="font-semibold tabular-nums" data-metric-id="LBL-READY-PENDING">{numberFormat.format(pending)}</b>&nbsp;tertunda
+        </Link>
+      ) : (
+        <span><b className="font-semibold text-foreground tabular-nums" data-metric-id="LBL-READY-PENDING">0</b> tertunda</span>
+      )}
+    </p>
+  );
+}
+
 function PrintCountBadge({ cancelled, count, handedOverAt }: { cancelled?: boolean; count: number; handedOverAt?: Date | null }) {
   if (cancelled) return <ShipmentStatusBadge status="CANCELLED" />;
   // T-267: the sub-state "Diserahkan · menunggu scan kurir" until Mengantar reports the pickup.
@@ -103,15 +166,18 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
   const range = parseAnalyticsRange(params, new Date());
   const carry = Object.fromEntries(serializeAnalyticsRange(range));
 
-  const data = query.awbSuffixError
-    ? EMPTY_PAGE
-    : await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      loadLabelIndexPage(tx, context, {
+  // T-274: the day line is read in the list's transaction, so its Tertunda equals the tiles' clock.
+  const [data, day] = await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => [
+    query.awbSuffixError
+      ? EMPTY_PAGE
+      : await loadLabelIndexPage(tx, context, {
         awbSuffix: query.awbSuffix || undefined,
         printState: query.printState,
         range,
         status: "issued",
-      }));
+      }),
+    await loadLabelDaySummary(tx, context),
+  ] as const);
 
   // T-267: the closing moment. "Siap diserahkan" emptied (no suffix filter) → count the parcels
   // handed over today (LBL-HANDED-OVER-TODAY); an empty day is never celebrated. T-270: the queue has
@@ -121,9 +187,7 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
   const queueTab = printStateIgnoresPeriod(query.printState);
   const now = new Date();
   const readyQueueEmpty = handoverQueue && !query.awbSuffix && !query.awbSuffixError && data.summary["LBL-PRINTED"] === 0;
-  const handedOverToday = readyQueueEmpty
-    ? await withTenantContext(db, principal.userId, principal.tenantId, countHandedOverToday)
-    : 0;
+  const handedOverToday = day["LBL-HANDED-OVER-TODAY"];
 
   // T-243: the batch dialog preselects the gerai's default label size (Informasi label).
   const { defaultLabelSize } = await withTenantContext(db, principal.userId, principal.tenantId, loadTenantBrand);
@@ -196,6 +260,10 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
 
       <AdjustedFilterAlert issues={rangeIssueMessages(range)} />
 
+      {/* T-274: phones switch queues here, one tap; the tiles are the switch from 768px. */}
+      <QueueSwitch current={query.printState} hrefFor={(printState) => labelIndexHref({ awbSuffix: query.awbSuffix, printState }, carry)} summary={data.summary} />
+      <DaySummaryLine day={day} pendingHref={labelIndexHref({ printState: "sudah" }, carry)} />
+
       {/* T-263: phones get search + one Filter sheet; the filter row and tiles are from 768px. */}
       <ListFilterSheet
         action="/app/label"
@@ -205,28 +273,30 @@ export default async function LabelIndexPage({ searchParams }: { searchParams: P
         count={activeFilterCount({ defaultStatus: DEFAULT_PRINT_STATE, presetId: range.presetId, status: query.printState })}
         hidden={{ q: query.awbSuffix || undefined }}
         options={PRINT_STATE_TILES.map((tile) => ({ count: data.summary[tile.metricId], label: tile.label, value: tile.value }))}
+        periodNote={queueTab ? PERIOD_NOTE : undefined}
         range={{ endDate: range.lastIncludedDate, presetId: range.presetId, startDate: range.startDate }}
         search={searchForm("q-resi-ponsel", "Akhiran resi")}
         statusLegend="Status cetak"
         statusName="cetak"
-        summary={`${selectedTile.label} · ${queueTab ? "semua tanggal" : range.presetId === "kustom" ? periodLabel : presetLabel}`}
+        // T-274: on a queue the switch above names it; the line says only that no period applies.
+        summary={queueTab ? "Semua tanggal" : `${selectedTile.label} · ${range.presetId === "kustom" ? periodLabel : presetLabel}`}
         value={query.printState}
       />
 
-      <div className="max-md:hidden">
+      <div className="flex flex-col gap-1.5 max-md:hidden">
         <PeriodFilter
           clearHref={labelIndexHref({ awbSuffix: query.awbSuffix, printState: query.printState })}
           hidden={{ cetak: cetakParam, q: query.awbSuffix || undefined }}
           range={range}
         />
+        {/* T-270/T-274: which tabs the period governs — one quiet line beside the period, not a paragraph. */}
+        {queueTab ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-slot="queue-period-note">
+            <CalendarOff aria-hidden="true" className="size-3.5 shrink-0" />{PERIOD_NOTE}
+          </p>
+        ) : null}
       </div>
 
-      {/* T-270: say which tabs the period governs, where the queue ignores it. */}
-      {queueTab ? (
-        <p className="-mt-2 text-sm text-muted-foreground" data-slot="queue-period-note">
-          <b className="font-semibold text-foreground">{selectedTile.label}</b> memuat semua paket yang masih menunggu, berapa pun tanggalnya. Periode hanya berlaku untuk Semua resi dan Dibatalkan.
-        </p>
-      ) : null}
 
       <StatusTiles
         className="max-md:hidden"

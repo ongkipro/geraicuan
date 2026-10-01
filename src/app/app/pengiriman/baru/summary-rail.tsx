@@ -217,7 +217,8 @@ export function SummaryRail({
 /**
  * Below 1024px the rail is hidden; this bar carries the progress, the total and the one primary
  * (spec 10 §4.8). "Rincian" opens the whole summary in a bottom Sheet; closing it returns focus
- * to the button.
+ * to the button. T-274: on a short viewport (landscape phone, ≤ 500px tall) it is one row —
+ * progress + total, an icon-only "Rincian", the primary — 60px instead of ~110px.
  */
 export function MobileActionBar({
   actions,
@@ -236,23 +237,22 @@ export function MobileActionBar({
 }) {
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 flex flex-col gap-2 border-t bg-card px-4 pt-3 pb-[max(--spacing(3),env(safe-area-inset-bottom))] shadow-lg lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex flex-col gap-2 border-t bg-card px-4 pt-3 pb-[max(--spacing(3),env(safe-area-inset-bottom))] shadow-lg lg:hidden [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:items-center [@media(max-height:500px)]:pt-2 [@media(max-height:500px)]:pb-[max(--spacing(2),env(safe-area-inset-bottom))]"
       data-slot="mobile-action-bar"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 text-xs text-muted-foreground">
+      <div className="flex items-baseline justify-between gap-3 [@media(max-height:500px)]:min-w-0 [@media(max-height:500px)]:flex-1 [@media(max-height:500px)]:flex-col [@media(max-height:500px)]:items-stretch [@media(max-height:500px)]:gap-0">
+        <span className="min-w-0 text-xs text-muted-foreground [@media(max-height:500px)]:truncate">
           {progress ? <span aria-live="polite" className="font-semibold text-foreground tabular-nums" data-slot="mobile-progress">{progress}</span> : null}
-          {progress ? " · " : null}
-          {caption}
+          <span className="[@media(max-height:500px)]:hidden">{progress ? " · " : null}{caption}</span>
         </span>
         <span className="shrink-0 text-base font-bold text-primary tabular-nums">{total === null ? "—" : formatIdr(total)}</span>
       </div>
-      <div className="flex gap-2 *:flex-none [&>*:last-child]:flex-1">
+      <div className="flex gap-2 *:flex-none [&>*:last-child]:flex-1 [@media(max-height:500px)]:flex-none">
         {summary ? (
           <Sheet>
             <SheetTrigger asChild>
-              <Button size="lg" type="button" variant="outline">
-                <ChevronUp aria-hidden="true" />Rincian
+              <Button className="[@media(max-height:500px)]:w-12 [@media(max-height:500px)]:px-0" size="lg" type="button" variant="outline">
+                <ChevronUp aria-hidden="true" /><span className="[@media(max-height:500px)]:sr-only">Rincian</span>
               </Button>
             </SheetTrigger>
             <SheetContent className="max-h-[85svh] gap-0" showCloseButton={false} side="bottom">

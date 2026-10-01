@@ -174,9 +174,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
             observations: view.observations,
           })}
         />
-        {!view.observationsVisible && awb ? (
-          <p className="text-xs text-muted-foreground">Status dari Mengantar terlihat oleh pemilik gerai.</p>
-        ) : null}
+        {/* T-273: no "visible to the owner" line for an Operator — it told staff something was hidden. */}
       </DetailCard>
 
       <DetailCard id="detail-paket" title="Detail paket">
