@@ -123,6 +123,14 @@ const navigationGroups: readonly {
         roles: ["TENANT_ADMIN"],
         shortLabel: "LP",
       },
+      // T-275 (D-41): the owner's COD payouts and ongkir margin.
+      {
+        href: "/app/laporan/pencairan",
+        key: "payout-report",
+        label: "Pencairan COD",
+        roles: ["TENANT_ADMIN"],
+        shortLabel: "PC",
+      },
       {
         href: "/app/laporan/cetak-resi",
         key: "print-history-report",

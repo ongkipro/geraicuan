@@ -128,12 +128,14 @@ export async function pullMengantarStatus(
         snapshot,
       });
     });
-    // Both pages that host this action show the pull's basis line, so they are
-    // refreshed every time; a delivery transition also changes the dashboard.
+    // The pages that host this action show the pull's basis line, so they are refreshed
+    // every time; a delivery transition also changes the shipment detail.
     revalidatePath("/app/pengiriman");
     revalidatePath("/app/pengiriman/rts");
+    // T-275: the payouts it recorded move Pencairan COD and the Dasbor's Uang gerai.
+    revalidatePath("/app/laporan/pencairan");
+    revalidatePath("/app");
     if (result.appliedTransitionCount > 0) {
-      revalidatePath("/app");
       revalidatePath("/app/pengiriman/[shipmentId]", "page");
     }
     const found = `${result.matchedStatusCount} status cocok dengan kiriman GeraiCUAN`;

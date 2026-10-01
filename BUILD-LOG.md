@@ -5505,3 +5505,33 @@ Documentation only (PR-58, PR-63, D-2, D-7, D-9, D-10, D-11). No DNS change, dep
   - Tenant: `/app`, `/app/label`, `/app/laporan/pengiriman`, `/app/pengiriman/baru`, `/app/info`, `/app/pengaturan/pickup`, `/app/pengaturan/label`.
   - Operator: `/app/label`, `/app/label?cetak=sudah`, `/app/pengiriman/baru`, `/app/info`.
   - Each page at 390 and 1440 wide: the path was not /login, overflow was 0, no duplicate ids, no console errors or exceptions. Nothing was saved.
+
+## 2026-10-01 — T-275 Uang gerai + Pencairan COD (D-41, PR-93)
+
+- **Changes.**
+  - New `src/db/owner-money-repository.ts` (Tenant Admin only):
+    - The cohort is resi issued in the period, excluding cancelled ones.
+    - Mengantar's latest cleared invoice lines are summed in exact ten-thousandths.
+    - The margin is proven from a cleared payout or return charge where one exists, and estimated otherwise. Non-COD margin is always an estimate. Refunds are never margin.
+  - Dasbor "Uang gerai" strip for the owner only.
+  - New `/app/laporan/pencairan` page with its own loading and error boundaries, plus a sidebar item.
+  - `pullMengantarStatus` now also revalidates `/app/laporan/pencairan` and `/app`.
+  - Docs: specs 02 (PR-93), 17, 18 and 19 (§OWN-*); DECISIONS D-41; TASKS T-275.
+- **Checks run.**
+  - `npx tsc --noEmit`: 0 errors. `npx eslint .`: 0 problems. `git diff --check`: clean.
+  - Full integration suite on the iso DB (`flock`, test-iso.env, auth origin 3110, `drizzle-kit migrate` first): 141 files, 1770 tests passed.
+  - New tests:
+    - The T-275 block in `tests/provider-settlement-repository.integration.test.ts` uses the sanitized live Mengantar invoices. It checks: proven −121.9779 on a payout of 99 878.0221 against Nilai barang 100 000; a return charge of −9 000; the estimate −122; summary totals; that an Operator is refused; tenant isolation; and each payment method's own rule.
+    - `tests/owner-money-render-t275.integration.test.ts` covers the strip's metric IDs, the estimate badge, the half-sen variance and the URL state.
+  - Mutations, each restored from a byte copy (`cmp` confirmed). The first run of M1 (cleared charges dropped from the proven margin) survived; I added a "paid out, then billed" case, after which it failed. Also failed: M2 (a returned resi uses the estimate despite a cleared charge), M3 (Perlu dicek counted as Belum cair) and M4 (Non-COD margin set to zero).
+  - Independent check on the dev DB, a raw SQL query that does not use the repository, over the 30-day cohort: Sudah cair 4 366 362.3350 from 23 resi, margin 214 829.3350, proven −38 187.6650. These match the page (Rp 4.366.362 · 23; Rp 214.829; −Rp 38.188). The negative proven figure comes from cleared return charges (for example GC-10073, −7 200). COD Ongkir GC-10086's payout of 608.60 is its whole margin.
+  - `impeccable detect --json` on the changed UI files: `[]`.
+- **Browser.** Snap Chromium headless, CDP 9690, dev app 3127.
+  - Tenant: `/app` and `/app/laporan/pencairan` with each tab, at 390 and 1440 wide: not /login, overflow 0, no duplicate ids, no console errors.
+  - The Margin per kurir table first scrolled sideways on phones (457 px in 358). Fixed: the proven figure moves under the margin below `sm`. Now 288/288 at 320, 328/328 at 360 and 358/358 at 390.
+  - Operator: `/app` shows no Uang gerai, and `/app/laporan/pencairan` redirects to `/app`. Nothing was saved and no Mengantar call was made.
+  - Screenshots are in the session scratchpad `t275/`.
+- **Open.**
+  - Non-COD margin cannot be proven per resi, because Mengantar bills Non-COD per batch.
+  - The estimated cost of a not-yet-billed return rests on one captured return line.
+  - Above 5 000 resi in one period, the totals cover only the newest, and the page says so.

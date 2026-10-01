@@ -13,6 +13,14 @@ import {
   ProviderSettlementThrottledError,
   recordProviderSettlementPull,
 } from "@/db/provider-settlement-repository";
+import {
+  loadOwnerMoney,
+  OwnerMoneyDeniedError,
+  ownerMarginUnits,
+  ownerPayoutState,
+  summarizeOwnerMoney,
+  type OwnerMoneyRow,
+} from "@/db/owner-money-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import {
@@ -352,5 +360,96 @@ describe("provider settlement reconciliation", () => {
     expect(classifyProviderSettlement({ ...base, latestProviderStatus: "UNDELIVERED" })).toBe("IN_PROGRESS");
     expect(classifyProviderSettlement({ ...base, latestProviderStatus: "DELIVERED" })).toBe("DELIVERED_UNPAID");
     expect(classifyProviderSettlement({ ...base, isCod: false, latestProviderStatus: "DELIVERED" })).toBe("IN_PROGRESS");
+  });
+});
+
+describe("T-275 owner money from Mengantar's own invoices (D-41)", () => {
+  const wide = { startInclusive: new Date("2020-01-01T00:00:00Z"), endExclusive: new Date("2100-01-01T00:00:00Z") };
+
+  it("proves the margin from the sanitized live invoices and estimates the rest", async () => {
+    const ids = {
+      matched: await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0001"),
+      mismatch: await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0002"),
+      returned: await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0003"),
+      refunded: await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0004"),
+      deliveredUnpaid: await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0005"),
+      undelivered: await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0006"),
+    };
+    await record();
+    const money = await asAdminA((tx, context) => loadOwnerMoney(tx, context, wide));
+    const row = (id: string) => money.rows.find((candidate) => candidate.shipmentId === id)!;
+    const margin = (id: string) => ownerMarginUnits(row(id));
+
+    // Paid out: Mengantar's subItem 99 878.0221 (COD 113 663 − estimatedSpecialPrice 13 784.9779)
+    // less Nilai barang 100 000. The fixture's COD is a formula-version-1 amount, which left the
+    // seller short — the margin shows it, to the ten-thousandth.
+    expect(margin(ids.matched)).toEqual({ basis: "PROVEN", units: BigInt(-1_219_779) });
+    expect(ownerPayoutState(row(ids.matched))).toBe("SUDAH_CAIR");
+    expect(margin(ids.mismatch)).toEqual({ basis: "PROVEN", units: BigInt(-21_219_779) });
+    expect(ownerPayoutState(row(ids.mismatch))).toBe("PERLU_DICEK");
+    // "Payment for returned order": the cleared −9 000 is the whole margin; the goods came back.
+    expect(margin(ids.returned)).toEqual({ basis: "PROVEN", units: BigInt(-90_000_000) });
+    expect(ownerPayoutState(row(ids.returned))).toBe("RETUR");
+    // A claim refund is never margin; the resi is flagged and its margin stays the estimate.
+    expect(ownerPayoutState(row(ids.refunded))).toBe("PERLU_DICEK");
+    // Estimate: 113 663 − 10 000 − round(113 663 × 0.0333) 3 785 − 100 000 = −122.
+    for (const id of [ids.refunded, ids.deliveredUnpaid, ids.undelivered]) {
+      expect(margin(id)).toEqual({ basis: "ESTIMATE", units: BigInt(-1_220_000) });
+    }
+    expect(ownerPayoutState(row(ids.deliveredUnpaid))).toBe("BELUM_CAIR");
+    expect(ownerPayoutState(row(ids.undelivered))).toBe("BELUM_CAIR");
+
+    expect(summarizeOwnerMoney(money.rows)).toEqual({
+      byCourier: [{ count: 6, courier: "JNE", marginIdr: -11_610, provenIdr: -11_244 }],
+      margin: { estimateCount: 3, idr: -11_610, provenCount: 3, provenIdr: -11_244, unknownCount: 0 },
+      needsReviewCount: 2,
+      returned: { count: 1 },
+      // Mengantar's invoice total 197 756.0442, rounded once.
+      settled: { count: 2, payoutIdr: 197_756 },
+      unsettled: { codIdr: 227_326, count: 2, estimatedPayoutIdr: 199_756 },
+    });
+    expect(money.lastPullAt).toBeInstanceOf(Date);
+    expect(money.truncated).toBe(false);
+  });
+
+  it("is the Tenant Admin's own: an Operator is refused and another tenant sees nothing", async () => {
+    await seedIssuedCodOrder(tenantA, outletA, "SANITIZED-CNOTE-0001");
+    await record();
+    await expect(withTenantContext(appDb, operatorA, tenantA, (tx, context) => loadOwnerMoney(tx, context, wide)))
+      .rejects.toThrow(OwnerMoneyDeniedError);
+    const other = await withTenantContext(appDb, adminB, tenantB, (tx, context) => loadOwnerMoney(tx, context, wide));
+    expect(other).toMatchObject({ lastPullAt: null, rows: [] });
+    const outside = await asAdminA((tx, context) => loadOwnerMoney(tx, context, {
+      startInclusive: new Date("2020-01-01T00:00:00Z"), endExclusive: new Date("2020-01-02T00:00:00Z"),
+    }));
+    expect(outside.rows).toEqual([]);
+  });
+
+  it("keeps each payment method's own margin rule", () => {
+    const base: OwnerMoneyRow = {
+      chargeUnits: BigInt(0), chargedShippingIdr: 24_375, cnoteNo: "X", collectIdr: 369_815, courier: "JNE",
+      estimatedPayoutIdr: 333_125, expectedUnits: null, goodsValueIdr: 325_000, issuedAt: new Date(), latestProviderStatus: null,
+      outletName: "O", paymentMethod: "COD", publicReference: "GC-10177", refundUnits: BigInt(0), settledUnits: null,
+      shipmentId: "s", shippingAmountIdr: 32_500, status: "ISSUED",
+    };
+    // GC-10177 (dev): Ongkir ditagih 32 500 against 24 375 deducted — the courier discount is the margin.
+    expect(ownerMarginUnits(base)).toEqual({ basis: "ESTIMATE", units: BigInt(81_250_000) });
+    // COD Ongkir GC-10178: the whole Estimasi cair is margin (no goods in the charge).
+    expect(ownerMarginUnits({ ...base, collectIdr: 7_000, estimatedPayoutIdr: 467, goodsValueIdr: 0, paymentMethod: "COD_ONGKIR" }))
+      .toEqual({ basis: "ESTIMATE", units: BigInt(4_670_000) });
+    // Non-COD: the quote price on the invoice minus the shipping Mengantar deducts; never "proven".
+    const nonCod = { ...base, collectIdr: null, estimatedPayoutIdr: null, goodsValueIdr: null, paymentMethod: "NON_COD" as const, shippingAmountIdr: 10_000, chargedShippingIdr: 7_500 };
+    expect(ownerMarginUnits(nonCod)).toEqual({ basis: "ESTIMATE", units: BigInt(25_000_000) });
+    expect(ownerPayoutState(nonCod)).toBeNull();
+    // A returned COD before Mengantar bills it: minus the shipping it deducts.
+    expect(ownerMarginUnits({ ...base, status: "RTS_QUEUED" })).toEqual({ basis: "ESTIMATE", units: BigInt(-243_750_000) });
+    expect(ownerPayoutState({ ...base, status: "RTS_QUEUED" })).toBe("RETUR");
+    // A legacy COD row without a stored goods value cannot be split: unknown, not zero.
+    expect(ownerMarginUnits({ ...base, goodsValueIdr: null })).toBeNull();
+    // Paid out, then billed again: still needs a look.
+    const billedAfter = { ...base, chargeUnits: BigInt(-90_000_000), expectedUnits: BigInt(3_331_250_000), settledUnits: BigInt(3_331_250_000) };
+    expect(ownerPayoutState(billedAfter)).toBe("PERLU_DICEK");
+    // …and the later charge comes off the proven margin: 333 125 − 9 000 − 325 000.
+    expect(ownerMarginUnits(billedAfter)).toEqual({ basis: "PROVEN", units: BigInt(-8_750_000) });
   });
 });

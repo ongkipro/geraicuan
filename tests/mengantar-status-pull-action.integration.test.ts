@@ -176,11 +176,12 @@ describe("Perbarui status dari Mengantar (T-204)", () => {
     expect(mocks.revalidated).not.toContain("/app/keuangan");
   });
 
-  it("refreshes only the hosting pages when nothing moved", async () => {
+  it("refreshes the hosting pages and Uang gerai, not the detail, when nothing moved", async () => {
     const { pullMengantarStatus } = await import("@/app/app/pengiriman/status-sync-actions");
     mocks.transitions = 0;
     await pullMengantarStatus({}, form());
-    expect(mocks.revalidated).toEqual(["/app/pengiriman", "/app/pengiriman/rts"]);
+    // T-275: the recorded payouts also move Pencairan COD and the Dasbor's Uang gerai.
+    expect(mocks.revalidated).toEqual(["/app/pengiriman", "/app/pengiriman/rts", "/app/laporan/pencairan", "/app"]);
   });
 
   it("keeps the one-minute throttle and refuses a changed account authority without writing", async () => {

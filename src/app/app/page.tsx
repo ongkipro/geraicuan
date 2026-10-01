@@ -8,12 +8,14 @@ import { DataCard } from "@/components/app/data-card";
 import { DateRangePicker } from "@/components/app/date-range-picker";
 import { EmptyState } from "@/components/app/empty-state";
 import { FilterBar } from "@/components/app/filter-bar";
+import { OwnerMoneyStrip } from "@/components/app/owner-money-strip";
 import { PageHeader } from "@/components/app/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { countUnreadAnnouncements } from "@/db/announcement-repository";
 import { db } from "@/db/client";
 import { listOutletReadiness, listOutletReadinessSummary, OutletSettingsDeniedError } from "@/db/outlet-readiness-repository";
+import { loadOwnerMoney, summarizeOwnerMoney } from "@/db/owner-money-repository";
 import {
   loadTenantDashboardCourierRecap,
   loadTenantDashboardMetrics,
@@ -136,7 +138,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const showTrend = range.spanDays > 1;
   const trend = (trendRange: typeof range) => read((tx, context) => loadTenantDashboardPeriodTrend(tx, context, trendRange, filters));
 
-  const [metrics, summary, outcome, recap, currentTrend, previousTrend, actionable, recent] = await Promise.all([
+  const [metrics, summary, outcome, recap, currentTrend, previousTrend, actionable, recent, ownerMoney] = await Promise.all([
     settle(read(loadTenantDashboardMetrics)),
     invalidOutlet ? null : settle(read((tx, context) => loadTenantDashboardPeriodSummary(tx, context, period.currentRange, period.previousRange, filters)).then((value) => {
       if (audit === "dashboard-period-error") throw new Error("Intentional development-only dashboard period failure.");
@@ -151,6 +153,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       return rows;
     })),
     settle(read((tx, context) => loadTenantDashboardShipments(tx, context, { limit: RECENT_ROWS, mode: "recent" }))),
+    // T-275 (D-41): the owner's money; never loaded for an Operator.
+    isAdmin && !invalidOutlet ? settle(read((tx, context) => loadOwnerMoney(tx, context, period.currentRange, filters))) : null,
   ]);
 
   const header = (
@@ -260,6 +264,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
           </div>
         ) : <RegionError title="Ringkasan periode tidak dapat dimuat" />
+      ) : null}
+
+      {ownerMoney ? (
+        <section aria-labelledby="uang-gerai" className="grid gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+            <h2 className="text-base font-semibold" id="uang-gerai">Uang gerai</h2>
+            <Link className={arrowLink} href={`/app/laporan/pencairan?${query.toString()}`}>Pencairan COD<ArrowRight aria-hidden="true" /></Link>
+          </div>
+          {ownerMoney.ok ? (
+            <>
+              <OwnerMoneyStrip summary={summarizeOwnerMoney(ownerMoney.value.rows)} />
+              <p className="text-xs text-muted-foreground">
+                Resi terbit pada periode ini.{" "}
+                {ownerMoney.value.lastPullAt
+                  ? `Data pencairan terakhir ditarik dari Mengantar ${formatWibDateTime(ownerMoney.value.lastPullAt)}.`
+                  : "Data pencairan belum pernah ditarik dari Mengantar."}
+              </p>
+            </>
+          ) : <RegionError title="Uang gerai tidak dapat dimuat" />}
+        </section>
       ) : null}
 
       {outcome ? (

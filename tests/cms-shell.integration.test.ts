@@ -99,6 +99,7 @@ describe("tenant CMS shell contract", () => {
     // group at all; T-204 removed Analitik (its courier view moves into the report).
     expect(groups.find(({ label }) => label === "Laporan")?.items.map((item) => [item.key, item.label, item.href])).toEqual([
       ["shipment-report", "Laporan pengiriman", "/app/laporan/pengiriman"],
+      ["payout-report", "Pencairan COD", "/app/laporan/pencairan"],
       ["print-history-report", "Riwayat cetak resi", "/app/laporan/cetak-resi"],
     ]);
     expect(

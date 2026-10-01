@@ -3612,3 +3612,9 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
   - [x] "resi" instead of "AWB" in user-facing copy (Cek resi's "(AWB)" alias kept); Cek tarif weight in kg like Buat kiriman ("Setara n gram"), action still receives grams.
   - [x] Specs 02 (PR-88 wording), 10 (§4.15, §5), 17 (contracts + §T-261), 19 (§Rincian uang, SHP-DECLARED-VALUE-IDR, SHP-INSURANCE-IDR).
   - Evidence: BUILD-LOG 2026-09-30 T-261; screenshots in the session scratchpad `fix1-money/`.
+- [x] **T-275 — Uang gerai + Pencairan COD for the owner (D-41, PR-93; owner 2026-10-01: Dasbor money row, read-only Pencairan, margin on Dasbor + Laporan, option (a) settlement-based, "pastikan presisi dengan sistem mengantar").** Done 2026-10-01.
+  - [x] `src/db/owner-money-repository.ts`: `loadOwnerMoney` (Tenant Admin only; resi issued in the period, cancelled excluded, ≤ 5 000; Mengantar's latest cleared invoice lines in exact ten-thousandths), `ownerMarginUnits` (proven from cleared payouts/return charges, else estimated; Non-COD always estimated; refunds never margin), `ownerPayoutState`, `summarizeOwnerMoney`.
+  - [x] Dasbor "Uang gerai" strip (owner only; COD belum cair + estimasi cair, Sudah cair + perlu dicek, Margin ongkir + terbukti) with the last-pull line and a link to Pencairan COD.
+  - [x] `/app/laporan/pencairan` (sidebar Laporan → Pencairan COD): Ringkasan, Margin per kurir, Resi COD by Belum cair / Perlu dicek / Sudah cair / Retur with expected vs paid, Selisih, margin basis; reuses the read-only "Perbarui status dari Mengantar" pull, which now also revalidates this page and Dasbor.
+  - [x] Specs 02 (PR-93), 17 (§T-275), 18 (route, URL state `status`, inventory), 19 (§OWN-*); DECISIONS D-41.
+  - Evidence: BUILD-LOG 2026-10-01 T-275; screenshots in the session scratchpad `t275/`.

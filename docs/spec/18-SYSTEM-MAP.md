@@ -37,14 +37,14 @@ Every change touching routes, handlers, actions, data models, or navigation must
 
 ### Current Repository Inventory (2026-09-26)
 
-- **41 `page.tsx` files**:
+- **42 `page.tsx` files**:
   - 8 Public & Authentication pages (`/`, `/login/tenant`, `/login/super-admin`, `/daftar`, `/verifikasi-email`, `/verifikasi-email/konfirmasi`, `/lupa-password`, `/atur-ulang-password`).
-  - 27 Authenticated Tenant CMS pages reached from 13 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
+  - 28 Authenticated Tenant CMS pages reached from 14 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
   - 6 Authenticated Platform CMS pages (Ringkasan, Tenant, Detail tenant, Pendaftaran, Audit, Info terbaru).
 - **4 `route.ts` Route Handlers**: Better Auth (`/api/auth/[...all]`), the report CSV export (`/app/laporan/pengiriman/export.csv`), the gerai logo (`/app/brand/logo`, T-243), and the provider webhook (`/api/webhooks/mengantar`, 404 unless `MENGANTAR_WEBHOOK_ENABLED=1` and a secret are set — T-238, D-30).
 - **28 files declaring Server Actions** (`"use server"`), exporting 63 Server Actions (`export async function`; T-270 added `scanForHandover`, T-272 `previewShipmentInvoice`).
-- **6 `layout.tsx` files**, **32 `loading.tsx`** (27 tenant, 5 platform), **23 `error.tsx`** (22 tenant, 1 platform), **7 `not-found.tsx`** (Section 10).
-- **42 repository and data-layer modules** in `src/db/` (T-238 added `mengantar-webhook-repository.ts` and `provider-tracking-repository.ts`; T-241 added `contact-shipment-repository.ts`; T-244 added `announcement-repository.ts`; T-245 added `wilayah-repository.ts`; T-267 added `shipment-handover-repository.ts`).
+- **6 `layout.tsx` files**, **33 `loading.tsx`** (28 tenant, 5 platform), **24 `error.tsx`** (23 tenant, 1 platform), **7 `not-found.tsx`** (Section 10).
+- **43 repository and data-layer modules** in `src/db/` (T-275 added `owner-money-repository.ts`; T-238 added `mengantar-webhook-repository.ts` and `provider-tracking-repository.ts`; T-241 added `contact-shipment-repository.ts`; T-244 added `announcement-repository.ts`; T-245 added `wilayah-repository.ts`; T-267 added `shipment-handover-repository.ts`).
 - These counts are checked against the filesystem by `tests/system-map-inventory.integration.test.ts` (T-199, re-enabled by T-224); a drifted number fails the suite.
 - **Apex landing site**: standalone Astro static site in `apps/landing` for `https://geraicuan.com` (not part of the Next.js route tree).
 
@@ -171,7 +171,7 @@ The account menu in the sidebar footer (`AppSidebar`) holds "Anggota & akses" (T
 
 ### Tenant Navigation Registry (`src/lib/cms-shell-navigation.ts`)
 
-The Tenant CMS sidebar lists **13 navigation items** in 6 groups, in the order of `navigationGroups` (`tenantCmsNavigation`), rendered by `src/components/app/app-sidebar.tsx`. Every item has its own icon (`NAV_ICONS` in `src/components/app/nav-icons.ts`, keyed by the item `key`) in a 40×40 box; Info terbaru and Dasbor sit at the top without their "Utama" label (T-244: Info terbaru above Dasbor, with an unread-count `SidebarMenuBadge` from the tenant layout and a dot on the icon rail; the owner's login still lands on `/app`); the other groups show an uppercase label. Items with `roles` are hidden from an Operator (the page guards refuse them too). T-263 (owner 2026-09-29): a tenant sign-in lands by role (`tenantLandingPath`, via `tenantLandingAction`) — Operator of an active gerai → `/app/label` (Cetak resi, opening on Belum dicetak), Tenant Admin and any pending gerai → `/app` (Dasbor). `/app` itself, the home link and the menu are unchanged, so Dasbor stays one item away for the Operator.
+The Tenant CMS sidebar lists **14 navigation items** in 6 groups, in the order of `navigationGroups` (`tenantCmsNavigation`), rendered by `src/components/app/app-sidebar.tsx`. Every item has its own icon (`NAV_ICONS` in `src/components/app/nav-icons.ts`, keyed by the item `key`) in a 40×40 box; Info terbaru and Dasbor sit at the top without their "Utama" label (T-244: Info terbaru above Dasbor, with an unread-count `SidebarMenuBadge` from the tenant layout and a dot on the icon rail; the owner's login still lands on `/app`); the other groups show an uppercase label. Items with `roles` are hidden from an Operator (the page guards refuse them too). T-263 (owner 2026-09-29): a tenant sign-in lands by role (`tenantLandingPath`, via `tenantLandingAction`) — Operator of an active gerai → `/app/label` (Cetak resi, opening on Belum dicetak), Tenant Admin and any pending gerai → `/app` (Dasbor). `/app` itself, the home link and the menu are unchanged, so Dasbor stays one item away for the Operator.
 
 **Active match rule.** The current item is the one whose `href` is the longest match of the path: `/app` matches only exactly, every other `href` matches itself or any sub-path (`routeMatches`). Before matching, `/app/anggota` resolves as `/app/pengaturan`, and a contact page outside the role lists resolves as `/app/kontak/<role>`: `/app/kontak/baru` takes the role from `peran`, `/app/kontak/[contactId]` from `dari`, each defaulting to `pengirim` (`contactNavigationPath`). A path matching no item marks nothing current (today: `/app/invoice/[shipmentNumber]`).
 
@@ -188,6 +188,7 @@ The Tenant CMS sidebar lists **13 navigation items** in 6 groups, in the order o
 | **Cek** | `Search` | Cek resi | `/app/cek-resi` | Admin, Operator | — |
 | | `Calculator` | Cek tarif | `/app/cek-tarif` | Admin, Operator | — |
 | **Laporan** | `FileChartColumn` | Laporan pengiriman | `/app/laporan/pengiriman` | **Admin only** | — |
+| | `HandCoins` | Pencairan COD | `/app/laporan/pencairan` | **Admin only** | — |
 | | `History` | Riwayat cetak resi | `/app/laporan/cetak-resi` | **Admin only** | — |
 | **Pengelolaan** | `Settings` | Pengaturan | `/app/pengaturan` | **Admin only** | `/app/pengaturan/*`, `/app/anggota` |
 
@@ -222,7 +223,7 @@ All render `AuthShell` (spec 17 UX-v3.10; polish is T-225). No route-level `load
 
 ---
 
-## 5. Tenant CMS Pages (27 Routes)
+## 5. Tenant CMS Pages (28 Routes)
 
 Guards (verified in code):
 
@@ -238,7 +239,7 @@ Guards (verified in code):
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
 | `/app/info` | `src/app/app/info/page.tsx` | T+P (Admin, Operator) | Info terbaru (T-244, PR-91, D-31; T-256): read the Admin platform's published announcements, pinned first then newest; category filter with counts (`?kategori=`), category chip, relative age with the WIB date in `title`, plain-text body with "Baca selengkapnya". Viewing marks the shown rows read for this member only; "Baru" = unread when the page loaded. | `listTenantAnnouncements` (`announcement-repository.ts`); layout badge `countUnreadAnnouncements` | `markAnnouncementsReadAction` (once per shown list, idempotent) | Boundaries `info/loading` (T-273: its own header, chips and cards), `info/error` (keeps the shell while the list fails); empty ("Belum ada info"); filtered-empty ("Belum ada info <kategori>" + "Lihat semua info"); unread cards "Baru" + dot + bold title; pinned "Disematkan" + primary edge; long body collapsed | — | WORKTREE |
-| `/app` | `src/app/app/page.tsx` | T+P (Admin, Operator) | See today's situation and what needs action: KPI cards, Hasil pengiriman, Grafik kiriman, Kiriman terbaru, Rekap per kurir. | `listOutletReadinessSummary`, `loadTenantDashboardMetrics`, `loadTenantDashboardPeriodSummary`, `loadTenantDashboardOutcomeSummary`, `loadTenantDashboardCourierRecap`, `loadTenantDashboardPeriodTrend`, `loadTenantDashboardShipments` (`tenant-dashboard-repository.ts`); `countUnreadAnnouncements` (T-244 "N info baru" line, shown only when unread > 0); pending gerai: `listOutletReadiness` | None (links: Buat kiriman, Siapkan outlet, Laporan pengiriman, Info terbaru) | Boundaries `app/loading`, `app/error`; pending gerai → setup steps (+ refused banner on `persetujuan=diperlukan`); no outlet ready alert; no shipments; filtered-empty; invalid outlet; per-region error (`settle`) | `dasbor.html` | WORKTREE |
+| `/app` | `src/app/app/page.tsx` | T+P (Admin, Operator) | See today's situation and what needs action: KPI cards, Uang gerai (Tenant Admin only, T-275: COD belum cair, Sudah cair, Margin ongkir), Hasil pengiriman, Grafik kiriman, Kiriman terbaru, Rekap per kurir. | `loadOwnerMoney` + `summarizeOwnerMoney` (`owner-money-repository.ts`, Tenant Admin only, never called for an Operator), `listOutletReadinessSummary`, `loadTenantDashboardMetrics`, `loadTenantDashboardPeriodSummary`, `loadTenantDashboardOutcomeSummary`, `loadTenantDashboardCourierRecap`, `loadTenantDashboardPeriodTrend`, `loadTenantDashboardShipments` (`tenant-dashboard-repository.ts`); `countUnreadAnnouncements` (T-244 "N info baru" line, shown only when unread > 0); pending gerai: `listOutletReadiness` | None (links: Buat kiriman, Siapkan outlet, Laporan pengiriman, Pencairan COD, Info terbaru) | Boundaries `app/loading`, `app/error`; pending gerai → setup steps (+ refused banner on `persetujuan=diperlukan`); no outlet ready alert; no shipments; filtered-empty; invalid outlet; per-region error (`settle`) | `dasbor.html` | WORKTREE |
 
 ### 5.2 Pengiriman (7 Routes)
 
@@ -282,6 +283,7 @@ Guards (verified in code):
 | Route | Source File | Roles | Job | Reads | Actions | States | Ref | Maturity |
 |---|---|---|---|---|---|---|---|---|
 | `/app/laporan/pengiriman` | `src/app/app/laporan/pengiriman/page.tsx` | A | Period report: Ringkasan panels (T-251), Tren harian beside Distribusi status grouped by outcome (T-254), totals per courier (with % terkirim / % retur), Tingkat penerbitan resi per kurir (T-273, was Performa kurir; HTML bars), Wilayah tujuan, Rute teratas, paginated list, CSV export (T-235). | `loadAnalyticsFilterOptions`, `loadShipmentReportPage`, `loadShipmentReportAnalytics` (own transaction) (`shipment-report-repository.ts`), `loadCourierPerformance` (own transaction) | None (link to `export.csv` carrying the filters) | Boundaries own `loading`/`error`; rejected filter reads nothing; empty; filtered-empty; chart card error only; analytics error alert only | `laporan-pengiriman.html` | WORKTREE |
+| `/app/laporan/pencairan` | `src/app/app/laporan/pencairan/page.tsx` | A | Pencairan COD (T-275, D-41, PR-93): what COD is still outside, what Mengantar paid out per its cleared invoices, and the ongkir margin the gerai keeps, proven or estimated; margin per kurir; COD resi by Belum cair / Perlu dicek / Sudah cair / Retur with expected vs paid and the variance. | `listTenantOutlets`, `loadOwnerMoney` (`owner-money-repository.ts`, ≤ 5000 resi per period, Tenant Admin only), `summarizeOwnerMoney`, `ownerPayoutState`, `ownerMarginUnits` | `pullMengantarStatus` (the existing read-only Mengantar pull; now also revalidates this page and `/app`) | Layout guard `requireReportAdmin` (Operator → `/app`); own `loading`/`error`; never pulled; empty tab; filtered-empty; truncated period; unknown outlet ignored | — | WORKTREE |
 | `/app/laporan/cetak-resi` | `src/app/app/laporan/cetak-resi/page.tsx` | A | Who printed what: print events with role, result, order, reprint. | `loadAnalyticsFilterOptions`, `loadPrintHistoryPage` (`label-print-repository.ts`, ≤ 200 rows) | None | Boundaries own `loading`/`error`; empty; filtered-empty | `riwayat-cetak-resi.html` | WORKTREE |
 
 ### 5.7 Pengelolaan (Tenant Admin Only — 6 Routes)
@@ -319,18 +321,19 @@ All query parameters are validated by route-specific parsers that reject or cano
 
 | Parameter | Accepted Values and Validating Owner | Target Routes | Behavior on Invalid or Absent Input |
 |---|---|---|---|
-| `rentang` | `hari-ini`, `kemarin`, `minggu-ini`, `bulan-ini`, `bulan-lalu`, `7-hari`, `30-hari`, `kustom` (`parseAnalyticsRange`, `src/lib/analytics-range.ts`) | Dasbor, Histori, Retur, Cetak resi, both Laporan, all platform pages; detail back link keeps it (`queueBackHref`) | Default `7-hari` on Dasbor (`DASHBOARD_DEFAULT_PRESET`), `30-hari` elsewhere; unknown → default + adjusted-filter notice |
+| `rentang` | `hari-ini`, `kemarin`, `minggu-ini`, `bulan-ini`, `bulan-lalu`, `7-hari`, `30-hari`, `kustom` (`parseAnalyticsRange`, `src/lib/analytics-range.ts`) | Dasbor, Histori, Retur, Cetak resi, every Laporan page (incl. Pencairan COD), all platform pages; detail back link keeps it (`queueBackHref`) | Default `7-hari` on Dasbor (`DASHBOARD_DEFAULT_PRESET`), `30-hari` elsewhere; unknown → default + adjusted-filter notice |
 | `dari`, `sampai` | `YYYY-MM-DD`, only with `rentang=kustom`; span ≤ 366 days | Range-aware routes | Malformed or illogical → default period with notice |
 | `tz` | `Asia/Jakarta` (default), `Asia/Makassar`, `Asia/Jayapura`, `UTC` | Range-aware routes | Unknown → `Asia/Jakarta` |
 | `khusus` | Accepted range key on platform routes (`platform-monitoring-filters.ts` `ANALYTICS_KEYS`) | Platform pages | Parsed with the range |
-| `outlet` | Tenant-owned outlet UUID | Dasbor, both Laporan, Pengaturan pickup/outlet/koneksi; `/app/pengaturan?outlet=` redirects to Outlet; platform (with `tenant`) | Foreign/unknown: Dasbor shows invalid-outlet state; Laporan rejects the filter and reads nothing; settings fall back to the first outlet |
+| `outlet` | Tenant-owned outlet UUID | Dasbor, Laporan pengiriman, Riwayat cetak resi, Pencairan COD, Pengaturan pickup/outlet/koneksi; `/app/pengaturan?outlet=` redirects to Outlet; platform (with `tenant`) | Foreign/unknown: Dasbor shows invalid-outlet state; Laporan rejects the filter and reads nothing; settings fall back to the first outlet |
 | `cari` | Shipment number or resi fragment `^[A-Za-z0-9-]{3,40}$`, upper-cased (`parseShipmentQueueQuery`) | Histori kiriman | Invalid → dropped with notice; never a name or phone |
 | `status` (Histori) | `ALL`, `ACTION_REQUIRED`, `NEEDS_ATTENTION`, `READY_TO_PROGRESS`, `ISSUED_TODAY`, `STALE_48H`, `STALE_4D` (Tenant Admin only, T-231), every `shipmentStatuses` value | `/app/pengiriman` | Unknown → `ALL` + notice; stale filter for an Operator → `ALL` + notice |
 | `status` (Retur) | `ALL`, `RTS_QUEUED`, `RTS_IN_TRANSIT`, `RTS_RECEIVED`, `PROBLEM` (`parseRtsQuery`) | `/app/pengiriman/rts` | Unknown → `ALL` + notice |
+| `status` (Pencairan COD) | `belum` (default, left out of the URL), `dicek`, `cair`, `retur` (`parsePayoutTab`, T-275) | `/app/laporan/pencairan` | Absent/unknown → Belum cair |
 | `status` (Kontak) | `active` (default, kept out of the URL), `archived`, `all` (`parseContactStatusFilter`) | Pengirim, Penerima | Unknown → Aktif |
 | `status` (Laporan, platform) | Lifecycle status (`parseTenantAnalyticsQuery`, `parsePlatformFilters`) | Laporan pengiriman, platform pages | Unknown → dropped with notice |
 | `page` | Positive integer | Histori, Retur, Cetak resi | Invalid → 1 + notice; past the end → last page |
-| `halaman` | Positive integer | Pengirim, Penerima, both Laporan, platform pages | Invalid → 1 |
+| `halaman` | Positive integer | Pengirim, Penerima, Laporan pengiriman, Riwayat cetak resi, Pencairan COD, platform pages | Invalid → 1 |
 | `kurir` | Courier code the tenant has used (`loadAnalyticsFilterOptions`) | Laporan pengiriman, platform | Unknown → filter rejected (Laporan) / dropped (platform) |
 | `basis` | Parsed by `parseTenantAnalyticsQuery` but never set by the v3 report; the export link deletes it (`report-logic.ts`) | Laporan pengiriman | Unknown → notice |
 | `q` | AWB suffix `^[a-z0-9]{3,24}$`i (`parseLabelQuery`); tenant search 2–80 chars (platform) | `/app/label`, `/platform/tenant` | Label: invalid → error text and an empty list, never a guess |
@@ -455,8 +458,8 @@ Every mutation follows: `Authenticate -> Derive Scope -> Validate Input -> Enfor
 ### Layouts, Loading, Error and Not-Found Boundaries
 
 - **Layouts (6)**: `src/app/layout.tsx` (root document), `src/app/app/layout.tsx` (tenant frame, `requireCmsScope("tenant", { allowPendingApproval: true })`), `src/app/app/pengaturan/layout.tsx` (settings frame, `requireTenantAdmin`), `src/app/app/anggota/layout.tsx` and `src/app/app/laporan/layout.tsx` (guard only, T-236: `requireTenantAdmin({})` / `requireReportAdmin()` above the segment's `loading.tsx`, so an Operator is redirected to `/app` before an admin skeleton renders), `src/app/platform/layout.tsx` (platform frame, `resolvePlatformAccess`).
-- **Tenant Loading Boundaries (27)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `info/loading.tsx` (T-273), `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `invoice/[shipmentNumber]/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/pengirim/[nomor]/loading.tsx`, `kontak/penerima/loading.tsx`, `kontak/penerima/[nomor]/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `label/cetak/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/label/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/kurir/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
-- **Tenant Error Boundaries (22)**: `error.tsx` beside every tenant loading boundary above (`src/app/app/error.tsx` and `info/error.tsx` included) **except** the five settings sub-pages (`pengaturan/label`, `pengaturan/pickup`, `pengaturan/outlet`, `pengaturan/kurir`, `pengaturan/koneksi`), which share `src/app/app/pengaturan/error.tsx` so the settings sub-menu stays while a page fails.
+- **Tenant Loading Boundaries (28)**: `src/app/app/loading.tsx`, `anggota/loading.tsx`, `info/loading.tsx` (T-273), `cek-resi/loading.tsx`, `cek-tarif/loading.tsx`, `invoice/[shipmentNumber]/loading.tsx`, `kontak/baru/loading.tsx`, `kontak/[contactId]/loading.tsx`, `kontak/pengirim/loading.tsx`, `kontak/pengirim/[nomor]/loading.tsx`, `kontak/penerima/loading.tsx`, `kontak/penerima/[nomor]/loading.tsx`, `label/loading.tsx`, `label/[shipmentId]/loading.tsx`, `label/cetak/loading.tsx`, `laporan/cetak-resi/loading.tsx`, `laporan/pencairan/loading.tsx` (T-275), `laporan/pengiriman/loading.tsx`, `pengaturan/loading.tsx`, `pengaturan/label/loading.tsx`, `pengaturan/pickup/loading.tsx`, `pengaturan/outlet/loading.tsx`, `pengaturan/kurir/loading.tsx`, `pengaturan/koneksi/loading.tsx`, `pengiriman/loading.tsx`, `pengiriman/baru/loading.tsx`, `pengiriman/rts/loading.tsx`, `pengiriman/[shipmentId]/loading.tsx`.
+- **Tenant Error Boundaries (23)**: `error.tsx` beside every tenant loading boundary above (`src/app/app/error.tsx` and `info/error.tsx` included) **except** the five settings sub-pages (`pengaturan/label`, `pengaturan/pickup`, `pengaturan/outlet`, `pengaturan/kurir`, `pengaturan/koneksi`), which share `src/app/app/pengaturan/error.tsx` so the settings sub-menu stays while a page fails.
 - **Platform Boundaries (6)**: `src/app/platform/loading.tsx`, `src/app/platform/error.tsx`, `src/app/platform/tenant/loading.tsx`, `src/app/platform/tenant/[tenantId]/loading.tsx`, `src/app/platform/pendaftaran/loading.tsx`, `src/app/platform/audit/loading.tsx`; every platform page fails into `src/app/platform/error.tsx`.
 - **Dedicated Not-Found Boundaries (7)**: `src/app/app/pengiriman/[shipmentId]/not-found.tsx`, `src/app/app/label/[shipmentId]/not-found.tsx`, `src/app/app/invoice/[shipmentNumber]/not-found.tsx`, `src/app/app/kontak/[contactId]/not-found.tsx`, `src/app/app/kontak/pengirim/[nomor]/not-found.tsx`, `src/app/app/kontak/penerima/[nomor]/not-found.tsx` (both re-export the legacy route's), `src/app/platform/tenant/[tenantId]/not-found.tsx`. Any other `notFound()` falls through to the framework 404.
 - **Public pages** have no route-level `loading`, `error` or `not-found` file.
@@ -516,7 +519,7 @@ Browser evidence for v3 screens is recorded per task in `TASKS.md` (T-210–T-23
 Run these read-only commands before committing:
 
 ```bash
-# 1. Verify Page Count (Must equal 41)
+# 1. Verify Page Count (Must equal 42)
 find src/app -name 'page.tsx' | wc -l
 
 # 2. Verify Route Handler Count (Must equal 4)
