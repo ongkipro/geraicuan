@@ -15,6 +15,7 @@ import {
 } from "@/db/tenant-context";
 import {
   MengantarOrderPayloadError,
+  MengantarOrderRefusedError,
   orchestrateFixtureBackedMengantarOrders,
   type MengantarOrderTransportLookup,
 } from "@/lib/mengantar-order";
@@ -75,6 +76,10 @@ export async function confirmFixtureBackedShipmentIssuance(
   // `submitPreparedBatch`): nothing was submitted, so surface the safe code
   // that already carries telemetry instead of a generic "unavailable" refusal.
   if (batch.payloadRejectionCode) {
+    // T-280: refused by Mengantar after the claim (released to the queue) carries its message.
+    if (batch.providerMessage !== undefined) {
+      throw new MengantarOrderRefusedError(batch.payloadRejectionCode, batch.providerMessage);
+    }
     throw new MengantarOrderPayloadError(batch.payloadRejectionCode);
   }
 

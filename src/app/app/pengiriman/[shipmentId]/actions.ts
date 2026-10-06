@@ -18,7 +18,13 @@ import { formatIdr } from "@/lib/label-format";
 import { COD_FORMULA_RETIRED_MESSAGE } from "@/lib/mengantar-cod-fee";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import {
+  isLiveMengantarOrdersEnabled,
+  LiveMengantarOrdersDisabledError,
+  resolveLiveMengantarOrderTransport,
+} from "@/lib/mengantar-live-transport";
+import {
   MengantarOrderPayloadError,
+  MengantarOrderRefusedError,
   MengantarOrderTransportUnavailableError,
 } from "@/lib/mengantar-order";
 import { OrderRateLimitedError } from "@/lib/order-rate-limit";
@@ -66,6 +72,19 @@ const PAYLOAD_ERROR_MESSAGES: Record<string, string> = {
     "Jadwal penjemputan kiriman ini sudah lewat atau di luar 09.00–18.00 WIB. Buat kiriman baru dan pilih jadwal lagi.",
   ORDER_PICKUP_VOLUME_MISSING:
     "Penjemputan terjadwal perlu kendaraan (Motor/Mobil/Truk). Buat kiriman baru dan pilih kendaraan.",
+  // T-280: Mengantar answered and created nothing; the shipment is back in the queue.
+  ORDER_PROVIDER_CONFLICT:
+    "Mengantar sedang memproses pesanan lain di akun ini. Tunggu sebentar lalu terbitkan lagi.",
+  ORDER_PROVIDER_REFUSED_400:
+    "Mengantar menolak pesanan ini, jadi tidak ada resi yang dibuat. Periksa data kiriman lalu terbitkan lagi.",
+  ORDER_PROVIDER_REFUSED_403:
+    "Akun Mengantar belum diizinkan untuk pesanan ini (misalnya COD Pos). Pilih kurir lain atau hubungi Mengantar.",
+  ORDER_PROVIDER_REFUSED_422:
+    "Mengantar menolak data pesanan ini, jadi tidak ada resi yang dibuat. Periksa data kiriman lalu terbitkan lagi.",
+  PICKUP_TIME_REFUSED:
+    "Mengantar menolak jadwal penjemputan ini. Pilih jadwal lain atau gunakan Drop di outlet.",
+  ORDER_NOT_SENT:
+    "Pesanan belum terkirim ke Mengantar, jadi tidak ada resi yang dibuat. Coba terbitkan lagi.",
 };
 
 /** T-186: the server's own refusal of a COD Ongkir charge, with the exact figure. */
@@ -136,18 +155,17 @@ export async function confirmShipmentIssuance(
   }
 
   const principal = await requireTenantPrincipal();
-  // No live Mengantar `/order` transport exists yet — the only
-  // `MengantarOrderTransportLookup` implementation reads a sanitized fixture
-  // (`resolveSanctionedOrderFixtureTransport`) and is disabled outright in
-  // production. Issuance refuses here with an honest message rather than
-  // silently exercising a code path with nothing real behind it; see
-  // `src/lib/sanctioned-order-fixture.ts` and TASKS.md's T-80 entry for what
-  // a real transport needs (verified provider contract, timeout/retry/error
-  // handling, and it must reuse `resolveTransport`'s existing shape here).
-  if (!isSanctionedOrderFixtureEnabled()) {
+  // T-280 (D-42): the live transport when switched on, else the sanctioned fixture
+  // (development only), else no issuance at all.
+  const resolveTransport = isLiveMengantarOrdersEnabled()
+    ? resolveLiveMengantarOrderTransport
+    : isSanctionedOrderFixtureEnabled()
+      ? resolveSanctionedOrderFixtureTransport
+      : null;
+  if (!resolveTransport) {
     return {
       error:
-        "Penerbitan dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan.",
+        "Penerbitan resi belum diaktifkan untuk gerai ini. Hubungi admin GeraiCUAN.",
     };
   }
 
@@ -158,7 +176,7 @@ export async function confirmShipmentIssuance(
       principalId: principal.userId,
       tenantId: principal.tenantId,
       confirmation: { shipmentId, estimateSnapshotId, estimateServiceId, codShippingChargeIdr },
-      resolveTransport: resolveSanctionedOrderFixtureTransport,
+      resolveTransport,
     });
     revalidatePath("/app/pengiriman/[shipmentId]", "page");
     revalidatePath("/app/pengiriman");
@@ -181,6 +199,13 @@ export async function confirmShipmentIssuance(
       },
     };
   } catch (error) {
+    if (error instanceof MengantarOrderRefusedError) {
+      const known = PAYLOAD_ERROR_MESSAGES[error.safeCode] ?? PAYLOAD_ERROR_FALLBACK_MESSAGE;
+      return {
+        code: error.safeCode,
+        error: error.providerMessage ? `${known} Pesan Mengantar: “${error.providerMessage}”` : known,
+      };
+    }
     if (error instanceof OrderRateLimitedError) {
       return { error: "Terlalu banyak konfirmasi. Tunggu beberapa menit lalu coba lagi." };
     }
@@ -206,6 +231,7 @@ export async function confirmShipmentIssuance(
       error instanceof OrderBatchUnavailableError ||
       error instanceof TenantContextDeniedError ||
       error instanceof MengantarOrderTransportUnavailableError ||
+      error instanceof LiveMengantarOrdersDisabledError ||
       error instanceof ShipmentIssuanceUnavailableError
     ) {
       return {

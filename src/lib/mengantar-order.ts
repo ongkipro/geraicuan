@@ -10,6 +10,8 @@ import {
   deriveProviderAccountKey,
   markProviderBatchUnknown,
   prepareProviderBatches,
+  refreshProviderBatchClaim,
+  releaseProviderBatchClaim,
   type OrderConfirmation,
   type PreparedProviderBatch,
   type ProviderBatchScope,
@@ -31,6 +33,7 @@ import {
   mengantarDocumentedOrderCourier,
   mengantarOrderableService,
 } from "@/lib/mengantar-couriers";
+import { mengantarAnswerMessage } from "@/lib/mengantar-http";
 import { checkPickupSchedule } from "@/lib/shipment-draft-logic";
 import { toBillableWeightKg } from "@/lib/shipment-draft";
 import {
@@ -169,6 +172,8 @@ export type FixtureOrderOrchestrationResult = {
      * the operator instead of crashing the confirmation.
      */
     payloadRejectionCode?: string;
+    /** T-280: Mengantar's own short refusal text, when it refused after the claim. */
+    providerMessage?: string | null;
   }>;
 };
 
@@ -198,20 +203,64 @@ export class MengantarOrderConflictError extends Error {
   }
 }
 
+/**
+ * T-280 (T-227 #2): Mengantar answered and created nothing — a final HTTP 409, a
+ * documented request refusal (400 dangerous goods / dropshipper, 403 Pos COD eligibility
+ * or the dropshipper feature), or a refused `POST /time` slot. The batch goes back
+ * to the queue instead of SUBMISSION_UNKNOWN, because there is nothing to reconcile.
+ * `providerMessage` is the provider's short text (credential-free), for the operator.
+ */
+export class MengantarOrderRefusedError extends Error {
+  readonly safeCode: string;
+  readonly providerMessage: string | null;
+
+  constructor(safeCode: string, providerMessage: string | null = null) {
+    super("Mengantar refused the request; nothing was created.");
+    this.safeCode = safeCode;
+    this.providerMessage = providerMessage;
+  }
+}
+
 export const ORDER_CONFLICT_MAX_ATTEMPTS = 3;
 const ORDER_CONFLICT_BACKOFF_MS = 500;
 
-/** The one place an HTTP transport turns a `POST /order` response into a body. */
-export async function readMengantarOrderHttpResponse(response: Response): Promise<unknown> {
-  if (response.status === 409) throw new MengantarOrderConflictError();
-  if (!response.ok) {
+/** HTTP statuses on which Mengantar's docs say the request was refused and nothing created. */
+// Create Order documents 400 (dropshipper, dangerous goods) and 403 (Pos COD, dropshipper
+// feature) as refusals; any other status, 422 included, is not proof that nothing was created.
+const ORDER_REFUSAL_STATUSES = new Set([400, 403]);
+
+/**
+ * The one place a `POST /order` answer becomes a body. 409 is retried by the caller;
+ * a documented refusal (400/403) created nothing; any other non-2xx (5xx, 401…)
+ * or an unreadable 2xx body leaves the outcome unknown (never retried before
+ * reconciliation).
+ */
+export function readMengantarOrderAnswer(answer: { status: number; body: unknown }, secret?: string): unknown {
+  if (answer.status === 409) throw new MengantarOrderConflictError();
+  if (ORDER_REFUSAL_STATUSES.has(answer.status)) {
+    throw new MengantarOrderRefusedError(
+      `ORDER_PROVIDER_REFUSED_${answer.status}`,
+      mengantarAnswerMessage(answer.body, secret),
+    );
+  }
+  if (answer.status < 200 || answer.status >= 300) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_HTTP_STATUS");
   }
-  try {
-    return await response.json();
-  } catch {
+  if (answer.body === undefined) {
     throw new MengantarOrderSubmissionUnknownError("ORDER_RESPONSE_SCHEMA_UNKNOWN");
   }
+  return answer.body;
+}
+
+/** `readMengantarOrderAnswer` for a fetch `Response` (tests and stub transports). */
+export async function readMengantarOrderHttpResponse(response: Response): Promise<unknown> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    body = undefined;
+  }
+  return readMengantarOrderAnswer({ body, status: response.status });
 }
 
 async function submitWithConflictRetry(
@@ -223,10 +272,10 @@ async function submitWithConflictRetry(
       return await submit();
     } catch (error) {
       if (!(error instanceof MengantarOrderConflictError)) throw error;
-      // A final 409 still means nothing was created, but the batch is already
-      // claimed, so it takes the existing SUBMISSION_UNKNOWN path (never accepted).
+      // T-280 (T-227 #2): a final 409 means nothing was created, so the claimed
+      // batch goes back to the queue (never accepted, nothing to reconcile).
       if (attempt >= ORDER_CONFLICT_MAX_ATTEMPTS) {
-        throw new MengantarOrderSubmissionUnknownError("ORDER_PROVIDER_CONFLICT");
+        throw new MengantarOrderRefusedError("ORDER_PROVIDER_CONFLICT");
       }
       await sleep(ORDER_CONFLICT_BACKOFF_MS * 2 ** (attempt - 1));
     }
@@ -623,6 +672,12 @@ export async function withProviderAccountSerialization<T>(
   }
 }
 
+class ProviderBatchClaimLostError extends Error {
+  constructor() {
+    super("The provider batch claim was lost before sending.");
+  }
+}
+
 async function markUnknown(
   input: FixtureOrderOrchestrationInput,
   batchId: string,
@@ -696,8 +751,13 @@ async function submitPreparedBatch(
     } as const;
   }
 
+  // T-280: until `submit` is called for the first order nothing exists at Mengantar
+  // (a reserved slot is not an order), so a failure in that window releases the claim.
+  let completed = 0;
+  let sent = false;
   try {
     for (const { order, pickupTime } of payloads) {
+      sent = false;
       // DATA-13: Mengantar answers 409 to concurrent creation on one account for
       // every courier, not only the dynamic-AWB ones, so every submission is
       // serialized per account and a 409 is retried inside the lock.
@@ -705,6 +765,11 @@ async function submitPreparedBatch(
         input.lockPool,
         batch.providerAccountKey,
         async () => {
+          // Review F1: the claim may have been swept while this waited for the lock.
+          const stillOurs = await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>
+            refreshProviderBatchClaim(tx, context, batch.id),
+          );
+          if (!stillOurs) throw new ProviderBatchClaimLostError();
           const pickupTimeId = pickupTime
             ? normalizeMengantarPickupTimeResponse(
                 await transport.reservePickupTime!(Object.freeze({ ...pickupTime })),
@@ -712,6 +777,7 @@ async function submitPreparedBatch(
               )
             : null;
           const payload = buildMengantarOrderRequest(order, { pickupTimeId });
+          sent = true;
           return submitWithConflictRetry(
             () => transport.submit(payload),
             input.sleep ?? defaultSleep,
@@ -722,6 +788,8 @@ async function submitPreparedBatch(
       await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>
         completeProviderOrder(tx, context, batch.id, result!),
       );
+      completed += 1;
+      sent = false;
     }
     await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>
       completeProviderBatch(tx, context, batch.id),
@@ -733,6 +801,31 @@ async function submitPreparedBatch(
       status: "COMPLETED",
     } as const;
   } catch (error) {
+    if (error instanceof ProviderBatchClaimLostError) {
+      // Nothing was sent; the batch already belongs to reconciliation.
+      return { id: batch.id, created: batch.created, submitted: false, status: "SUBMISSION_UNKNOWN" } as const;
+    }
+    const refused = error instanceof MengantarOrderRefusedError;
+    if (completed === 0 && (refused || !sent)) {
+      const safeCode = refused
+        ? error.safeCode
+        : error instanceof MengantarOrderPayloadError || error instanceof MengantarOrderSubmissionUnknownError
+          ? error.safeCode
+          : "ORDER_NOT_SENT";
+      const released = await withTenantContext(input.db, input.principalId, input.tenantId, (tx, context) =>
+        releaseProviderBatchClaim(tx, context, batch.id, safeCode),
+      );
+      if (released) {
+        return {
+          id: batch.id,
+          created: batch.created,
+          submitted: false,
+          status: "SUBMISSION_QUEUED",
+          payloadRejectionCode: safeCode,
+          providerMessage: refused ? error.providerMessage : null,
+        } as const;
+      }
+    }
     const safeCode = error instanceof MengantarOrderSubmissionUnknownError
       ? error.safeCode
       : "ORDER_SUBMISSION_OUTCOME_UNKNOWN";
@@ -863,7 +956,10 @@ export async function orchestrateFixtureBackedMengantarOrders(
       outletId: batch.outletId,
       credentialSource: batch.credentialSource,
       courier: batch.courier,
-      safeProviderStatus: result.payloadRejectionCode ? "NOT_CALLED" : result.status,
+      // A refusal after the call (T-280) went back to the queue; a payload guard never called.
+      safeProviderStatus: result.payloadRejectionCode
+        ? result.providerMessage !== undefined ? "SUBMISSION_QUEUED" : "NOT_CALLED"
+        : result.status,
       retryResult: result.payloadRejectionCode ? "rejected" : "accepted",
       queueResult: result.payloadRejectionCode
         ? "not_applicable"

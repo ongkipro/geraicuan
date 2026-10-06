@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   claimProviderBatch,
@@ -21,6 +21,8 @@ import { withTenantContext } from "@/db/tenant-context";
 import {
   buildMengantarOrderRequest,
   MengantarOrderPayloadError,
+  MengantarOrderRefusedError,
+  MengantarOrderTransportUnavailableError,
   orchestrateFixtureBackedMengantarOrders,
   ORDER_CONFLICT_MAX_ATTEMPTS,
   readMengantarOrderHttpResponse,
@@ -34,6 +36,7 @@ import {
   enforceEstimateRateLimit,
 } from "@/lib/estimate-rate-limit";
 import { OrderRateLimitedError } from "@/lib/order-rate-limit";
+import { resolveLiveMengantarOrderTransport } from "@/lib/mengantar-live-transport";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 import type { ShipmentLifecycleEvent } from "@/lib/shipment-telemetry";
 
@@ -1239,37 +1242,115 @@ describe("fixture-backed Mengantar order orchestration", () => {
       });
     });
 
-    it("maps a final 409 to the unknown path without accepting the order or retrying again", async () => {
+    it("returns a final 409 to the queue (nothing was created), and a later confirmation submits again (T-280)", async () => {
       const confirmation = await seedEstimatedShipment(15, tenantA, outletA, "JNE");
-      const http = httpTransport([409]);
+      const http = httpTransport([409, 409, 409, 200]);
 
       const result = await orchestrateFixtureBackedMengantarOrders({
         ...input([confirmation], http.transport),
         sleep: http.sleep,
       });
 
-      expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+      expect(result.batches[0]).toMatchObject({
+        status: "SUBMISSION_QUEUED", submitted: false, payloadRejectionCode: "ORDER_PROVIDER_CONFLICT",
+      });
       expect(http.calls()).toBe(ORDER_CONFLICT_MAX_ATTEMPTS);
       expect(http.sleeps).toEqual([500, 1000]);
       expect(await snapshot()).toEqual({
-        status: "SUBMISSION_UNKNOWN",
+        status: "SUBMISSION_QUEUED",
         providerOrderId: null,
         providerBatchId: null,
         cnoteNo: null,
-        safeResponseCode: "ORDER_PROVIDER_CONFLICT",
+        safeResponseCode: null,
       });
+      const [batch] = await adminDb.select({ status: schema.providerBatches.status, safeErrorCode: schema.providerBatches.safeErrorCode })
+        .from(schema.providerBatches);
+      expect(batch).toEqual({ status: "SUBMISSION_QUEUED", safeErrorCode: "ORDER_PROVIDER_CONFLICT" });
       const [shipment] = await adminDb
         .select({ status: schema.shipments.status })
         .from(schema.shipments)
         .where(eq(schema.shipments.id, confirmation.shipmentId));
-      expect(shipment?.status).toBe("SUBMISSION_UNKNOWN");
+      expect(shipment?.status).not.toBe("SUBMISSION_UNKNOWN");
 
+      // Resumable: the next confirmation submits once more and is accepted.
       const again = await orchestrateFixtureBackedMengantarOrders({
         ...input([confirmation], http.transport),
         sleep: http.sleep,
       });
-      expect(again.batches[0]?.submitted).toBe(false);
-      expect(http.calls()).toBe(ORDER_CONFLICT_MAX_ATTEMPTS);
+      expect(again.batches[0]).toMatchObject({ status: "COMPLETED", submitted: true });
+      expect(http.calls()).toBe(ORDER_CONFLICT_MAX_ATTEMPTS + 1);
+      expect((await snapshot())?.status).toBe("ISSUED");
+    });
+
+    it("returns a documented refusal (400/403) to the queue with Mengantar's message, but leaves 422, 5xx and a lost answer unknown (T-280)", async () => {
+      const refusing = (status: number, message: string): MengantarOrderTransport => ({
+        async submit() {
+          return readMengantarOrderHttpResponse(new Response(JSON.stringify({ success: false, message }), { status }));
+        },
+      });
+      for (const [sequence, status] of [[16, 400], [17, 403]] as const) {
+        const confirmation = await seedEstimatedShipment(sequence, tenantA, outletA, "JNE");
+        const result = await orchestrateFixtureBackedMengantarOrders(input([confirmation], refusing(status, "Barang berbahaya tidak didukung kurir")));
+        expect(result.batches[0]).toMatchObject({
+          status: "SUBMISSION_QUEUED", submitted: false,
+          payloadRejectionCode: `ORDER_PROVIDER_REFUSED_${status}`,
+          providerMessage: "Barang berbahaya tidak didukung kurir",
+        });
+      }
+      const undocumented = await seedEstimatedShipment(18, tenantA, outletA, "JNE");
+      const unprocessable = await orchestrateFixtureBackedMengantarOrders(input([undocumented], refusing(422, "Unprocessable")));
+      expect(unprocessable.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+      const serverError = await seedEstimatedShipment(19, tenantA, outletA, "JNE");
+      const failed = await orchestrateFixtureBackedMengantarOrders(input([serverError], refusing(502, "Bad gateway")));
+      expect(failed.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+      const lost = await seedEstimatedShipment(20, tenantA, outletA, "JNE");
+      const dropped = await orchestrateFixtureBackedMengantarOrders(input([lost], {
+        async submit() { throw new Error("socket hang up after the request was written"); },
+      }));
+      expect(dropped.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+      const unknown = await adminDb.select({ status: schema.shipments.status }).from(schema.shipments)
+        .where(eq(schema.shipments.status, "SUBMISSION_UNKNOWN"));
+      expect(unknown).toHaveLength(3);
+    });
+
+    it("releases the claim when the pickup slot is refused before POST /order is sent (T-280)", async () => {
+      const confirmation = await seedEstimatedShipment(21, tenantA, outletA, "JNE");
+      await adminPool.query(
+        "UPDATE shipment_drafts SET handover_type = 'PICKUP', pickup_vehicle = 'MOTOR', pickup_date = '2026-10-06', pickup_slot = '13:00' WHERE shipment_id = $1",
+        [confirmation.shipmentId],
+      );
+      let submits = 0;
+      const result = await orchestrateFixtureBackedMengantarOrders({
+        ...input([confirmation], {
+          async submit() { submits += 1; return {}; },
+          async reservePickupTime() { throw new MengantarOrderRefusedError("ORDER_PICKUP_SLOT_UNAVAILABLE", "invalid pickup time"); },
+        }),
+        now: () => new Date("2026-10-06T01:00:00Z"), // 08:00 WIB, five hours before the slot
+      });
+      expect(submits).toBe(0);
+      expect(result.batches[0]).toMatchObject({
+        status: "SUBMISSION_QUEUED", submitted: false, payloadRejectionCode: "ORDER_PICKUP_SLOT_UNAVAILABLE",
+      });
+      expect((await snapshot())?.status).toBe("SUBMISSION_QUEUED");
+    });
+
+    it("releases the claim when POST /time fails without an answer, since no order was sent (T-280)", async () => {
+      const confirmation = await seedEstimatedShipment(22, tenantA, outletA, "JNE");
+      await adminPool.query(
+        "UPDATE shipment_drafts SET handover_type = 'PICKUP', pickup_vehicle = 'MOBIL', pickup_date = '2026-10-06', pickup_slot = '15:00' WHERE shipment_id = $1",
+        [confirmation.shipmentId],
+      );
+      let submits = 0;
+      const result = await orchestrateFixtureBackedMengantarOrders({
+        ...input([confirmation], {
+          async submit() { submits += 1; return {}; },
+          async reservePickupTime() { throw new Error("connect ETIMEDOUT"); },
+        }),
+        now: () => new Date("2026-10-06T01:00:00Z"),
+      });
+      expect(submits).toBe(0);
+      expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_QUEUED", submitted: false, payloadRejectionCode: "ORDER_NOT_SENT" });
+      expect((await snapshot())?.status).toBe("SUBMISSION_QUEUED");
     });
 
     it("falls back to `ORDER_ID` when `_id` is absent", async () => {
@@ -1677,5 +1758,124 @@ describe("fixture-backed Mengantar order orchestration", () => {
     );
     expect(raw).not.toMatch(/https?:|api[_-]?key|secret|phone|address|sender|receiver|recipient/i);
     expect(raw).not.toMatch(/\b(?:\+?62|08)\d{7,}\b/);
+  });
+});
+
+describe("T-280 live transport through the orchestrator (review F1–F4)", () => {
+  // A synthetic platform-default account; fetch is stubbed, nothing leaves the process.
+  const KEY = "SYNTHETIC-PLATFORM-KEY";
+  const calls: Array<{ path: string; method: string; body: unknown }> = [];
+  let answers: Array<(path: string) => Response | Promise<Response>> = [];
+
+  beforeEach(async () => {
+    calls.length = 0;
+    answers = [];
+    vi.stubEnv("MENGANTAR_LIVE_ORDERS_ENABLED", "1");
+    vi.stubEnv("MENGANTAR_API_KEY", KEY);
+    vi.stubEnv("MENGANTAR_BASE_URL", "https://api.mengantar.test/");
+    vi.stubEnv("MENGANTAR_PICKUP_ADDRESS_ID", "pickup-a");
+    vi.stubEnv("MENGANTAR_ORIGIN_AREA_ID", "origin-a");
+    await adminPool.query("UPDATE tenants SET mengantar_credential_policy = 'PLATFORM_DEFAULT_ALLOWED'");
+    vi.stubGlobal("fetch", async (input: URL | string, init: RequestInit = {}) => {
+      const url = new URL(String(input));
+      const path = url.pathname.replace(`/api/public/${KEY}`, "");
+      calls.push({ body: init.body ? JSON.parse(String(init.body)) : undefined, method: init.method ?? "GET", path });
+      const next = answers.shift();
+      if (!next) throw new Error("unexpected request");
+      return next(path);
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const live = (confirmations: readonly OrderConfirmation[]) => scopedInput(confirmations, resolveLiveMengantarOrderTransport);
+  const json = (status: number, body: unknown) => () => new Response(JSON.stringify(body), { status });
+  const accepted = (cnote: string) => json(200, {
+    success: true,
+    data: [{ _id: "000000000000000000000280", ORDER_ID: "ORDER-T280", batch: "B-T280", batch_id: "000000000000000000000281", isPaid: true, cnote_no: cnote }],
+    batch: "B-T280",
+    batch_id: "000000000000000000000281",
+  });
+  const batchState = async () => (await adminDb.select({ status: schema.providerBatches.status }).from(schema.providerBatches))[0]?.status;
+
+  it("issues through the live client with the platform account and the platform pickup address", async () => {
+    const confirmation = await seedEstimatedShipment(40, tenantA, outletA, "JNE");
+    answers.push(accepted("SANITIZED-CNOTE-T280"));
+    const result = await orchestrateFixtureBackedMengantarOrders(live([confirmation]));
+    expect(result.batches[0]).toMatchObject({ status: "COMPLETED", submitted: true });
+    expect(calls).toEqual([{ method: "POST", path: "/order", body: expect.objectContaining({ courier: "JNE", pickup: { type: "dropOff", address_id: "pickup-a" } }) }]);
+  });
+
+  it("refuses, before any claim or request, a platform-default scope whose pickup address is not the platform's (F3)", async () => {
+    const confirmation = await seedEstimatedShipment(41, tenantA, outletA2, "JNE");
+    await expect(orchestrateFixtureBackedMengantarOrders(live([confirmation]))).rejects.toBeInstanceOf(MengantarOrderTransportUnavailableError);
+    expect(calls).toHaveLength(0);
+    expect(await batchState()).toBeUndefined();
+  });
+
+  it("maps a lost answer to unknown, a 422 to unknown (undocumented), and a 400 to the queue with the key redacted (F2)", async () => {
+    const lost = await seedEstimatedShipment(42, tenantA, outletA, "JNE");
+    answers.push(() => { throw new TypeError("socket hang up"); });
+    expect((await orchestrateFixtureBackedMengantarOrders(live([lost]))).batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+
+    const unprocessable = await seedEstimatedShipment(43, tenantA, outletA, "JNE");
+    answers.push(json(422, { success: false, message: "Unprocessable" }));
+    expect((await orchestrateFixtureBackedMengantarOrders(live([unprocessable]))).batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN" });
+
+    const refused = await seedEstimatedShipment(44, tenantA, outletA, "JNE");
+    answers.push(json(400, { success: false, message: `invalid request for ${KEY}` }));
+    const result = await orchestrateFixtureBackedMengantarOrders(live([refused]));
+    expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_QUEUED", payloadRejectionCode: "ORDER_PROVIDER_REFUSED_400", providerMessage: null });
+  });
+
+  it("maps a refused pickup slot through the live client, before POST /order", async () => {
+    const confirmation = await seedEstimatedShipment(45, tenantA, outletA, "JNE");
+    await adminPool.query(
+      "UPDATE shipment_drafts SET handover_type = 'PICKUP', pickup_vehicle = 'MOTOR', pickup_date = '2026-10-06', pickup_slot = '13:00' WHERE shipment_id = $1",
+      [confirmation.shipmentId],
+    );
+    answers.push(json(400, { success: false, message: "invalid pickup time" }));
+    const result = await orchestrateFixtureBackedMengantarOrders({ ...live([confirmation]), now: () => new Date("2026-10-06T01:00:00Z") });
+    expect(calls.map((call) => call.path)).toEqual(["/time"]);
+    expect(calls[0]!.body).toEqual({ address_id: "pickup-a", date: "10-06-2026", time: "13:00" });
+    expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_QUEUED", payloadRejectionCode: "ORDER_PICKUP_SLOT_UNAVAILABLE", providerMessage: "invalid pickup time" });
+  });
+
+  it("sends nothing when the claim was swept while waiting for the account lock (F1)", async () => {
+    const confirmation = await seedEstimatedShipment(46, tenantA, outletA, "JNE");
+    // Holding the account lock elsewhere, then sweeping the claim, is what a slow peer causes.
+    const holder = await appPool.connect();
+    await holder.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [deriveProviderAccountKey(platformAccountIdentity)]);
+    const running = orchestrateFixtureBackedMengantarOrders(live([confirmation]));
+    for (let tries = 0; tries < 50 && (await batchState()) !== "SUBMITTING"; tries += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(await batchState()).toBe("SUBMITTING");
+    await adminPool.query("UPDATE provider_batches SET status = 'SUBMISSION_UNKNOWN', safe_error_code = 'ORDER_CLAIM_STALE'");
+    await holder.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [deriveProviderAccountKey(platformAccountIdentity)]);
+    holder.release();
+    const result = await running;
+    expect(calls).toHaveLength(0);
+    expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: false });
+  });
+
+  it("never releases a batch once one of its orders was issued, even if a later one is refused", async () => {
+    const first = await seedEstimatedShipment(48, tenantA, outletA, "JNE");
+    const second = await seedEstimatedShipment(49, tenantA, outletA, "JNE");
+    answers.push(accepted("SANITIZED-CNOTE-T280-A"), json(400, { success: false, message: "refused" }));
+    const result = await orchestrateFixtureBackedMengantarOrders(live([first, second]));
+    expect(calls.map((call) => call.path)).toEqual(["/order", "/order"]);
+    expect(result.batches).toHaveLength(1);
+    expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+    const members = await adminDb.select({ status: schema.providerOrderSnapshots.status }).from(schema.providerOrderSnapshots);
+    expect(members.map((member) => member.status).sort()).toEqual(["ISSUED", "SUBMISSION_UNKNOWN"]);
+  });
+
+  it("keeps an accepted order unknown when its answer cannot be read, never releasing it", async () => {
+    const confirmation = await seedEstimatedShipment(47, tenantA, outletA, "JNE");
+    answers.push(json(200, { success: true, data: [] }));
+    const result = await orchestrateFixtureBackedMengantarOrders(live([confirmation]));
+    expect(result.batches[0]).toMatchObject({ status: "SUBMISSION_UNKNOWN", submitted: true });
+    expect(await batchState()).toBe("SUBMISSION_UNKNOWN");
   });
 });

@@ -13,6 +13,7 @@ import { UnpaidRecoveryDeniedError } from "@/db/unpaid-recovery-repository";
 
 const fixture = vi.hoisted(() => ({
   issuanceEnabled: false,
+  liveEnabled: false,
   reconciliationEnabled: false,
   recoveryEnabled: false,
   role: "TENANT_ADMIN" as "TENANT_ADMIN" | "OPERATOR",
@@ -51,11 +52,22 @@ vi.mock("@/db/shipment-reconciliation-repository", () => ({
   ShipmentReconciliationDeniedError: class ShipmentReconciliationDeniedError extends Error {},
   ShipmentReconciliationUnavailableError: class ShipmentReconciliationUnavailableError extends Error {},
 }));
-vi.mock("@/lib/mengantar-order", () => ({ MengantarOrderTransportUnavailableError: class MengantarOrderTransportUnavailableError extends Error {} }));
+vi.mock("@/lib/mengantar-order", () => ({
+  MengantarOrderPayloadError: class MengantarOrderPayloadError extends Error {},
+  MengantarOrderRefusedError: class MengantarOrderRefusedError extends Error {
+    constructor(readonly safeCode: string, readonly providerMessage: string | null = null) { super("refused"); }
+  },
+  MengantarOrderTransportUnavailableError: class MengantarOrderTransportUnavailableError extends Error {},
+}));
 vi.mock("@/lib/mengantar-unpaid-recovery", () => ({ MengantarUnpaidRecoveryTransportUnavailableError: class MengantarUnpaidRecoveryTransportUnavailableError extends Error {} }));
 vi.mock("@/lib/order-rate-limit", () => ({
   OrderRateLimitedError: class OrderRateLimitedError extends Error {},
   UnpaidRecoveryRateLimitedError: class UnpaidRecoveryRateLimitedError extends Error {},
+}));
+vi.mock("@/lib/mengantar-live-transport", () => ({
+  isLiveMengantarOrdersEnabled: () => fixture.liveEnabled,
+  LiveMengantarOrdersDisabledError: class LiveMengantarOrdersDisabledError extends Error {},
+  resolveLiveMengantarOrderTransport: vi.fn(),
 }));
 vi.mock("@/lib/sanctioned-order-fixture", () => ({
   isSanctionedOrderFixtureEnabled: () => fixture.issuanceEnabled,
@@ -107,6 +119,7 @@ function confirmationForm() {
 describe("T-39 exported shipment Server Action boundaries", () => {
   beforeEach(() => {
     fixture.issuanceEnabled = false;
+    fixture.liveEnabled = false;
     fixture.reconciliationEnabled = false;
     fixture.recoveryEnabled = false;
     fixture.role = "TENANT_ADMIN";
@@ -154,7 +167,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
   it("keeps issuance production-gated, then permits an Operator only through the sanctioned fixture", async () => {
     fixture.role = "OPERATOR";
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({
-      error: expect.stringContaining("data uji non-produksi"),
+      error: expect.stringContaining("belum diaktifkan"),
     });
     expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
 
@@ -173,6 +186,25 @@ describe("T-39 exported shipment Server Action boundaries", () => {
         labelHref: `/app/label/${shipmentId}`,
       },
     });
+  });
+
+  it("uses the live transport when switched on (T-280, D-42), and shows Mengantar's refusal text", async () => {
+    const { resolveLiveMengantarOrderTransport } = await import("@/lib/mengantar-live-transport");
+    const { resolveSanctionedOrderFixtureTransport } = await import("@/lib/sanctioned-order-fixture");
+    const { MengantarOrderRefusedError } = await import("@/lib/mengantar-order");
+    fixture.liveEnabled = true;
+    fixture.issuanceEnabled = true;
+    vi.mocked(confirmFixtureBackedShipmentIssuance).mockRejectedValueOnce(
+      new MengantarOrderRefusedError("ORDER_PROVIDER_REFUSED_400", "Barang berbahaya tidak didukung"),
+    );
+    const refused = await confirmShipmentIssuance({}, issuanceForm());
+    expect(vi.mocked(confirmFixtureBackedShipmentIssuance).mock.calls.at(-1)?.[0].resolveTransport).toBe(resolveLiveMengantarOrderTransport);
+    expect(vi.mocked(confirmFixtureBackedShipmentIssuance).mock.calls.at(-1)?.[0].resolveTransport).not.toBe(resolveSanctionedOrderFixtureTransport);
+    expect(refused).toEqual({
+      code: "ORDER_PROVIDER_REFUSED_400",
+      error: expect.stringMatching(/Mengantar menolak pesanan ini.*Pesan Mengantar: “Barang berbahaya tidak didukung”/),
+    });
+    fixture.liveEnabled = false;
   });
 
   it("revalidates the detail and queue when issuance becomes unknown", async () => {

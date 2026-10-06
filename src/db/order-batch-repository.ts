@@ -796,6 +796,60 @@ async function queuedBatchShipmentIds(
     .orderBy(asc(providerOrderSnapshots.position));
 }
 
+/**
+ * T-280 (review F1): called inside the account lock just before anything is sent. It
+ * proves the claim is still ours and restarts its stale clock, so the stale sweep
+ * (`markStaleProviderBatchUnknown`, after PROVIDER_BATCH_CLAIM_STALE_AFTER_SECONDS)
+ * cannot declare the batch unknown while the request is in flight — the longest
+ * request window (`POST /time` plus three `POST /order` attempts, ~82 s) is below it.
+ * False means the batch is no longer SUBMITTING: send nothing.
+ */
+export async function refreshProviderBatchClaim(
+  tx: TenantTransaction,
+  context: TenantContext,
+  batchId: string,
+): Promise<boolean> {
+  const refreshed = await tx.execute<{ id: string }>(sql`
+    UPDATE ${providerBatches}
+    SET submission_attempted_at = now(), updated_at = now()
+    WHERE id = ${batchId}
+      AND tenant_id = ${context.tenantId}
+      AND status = 'SUBMITTING'
+    RETURNING id
+  `);
+  return refreshed.rows.length === 1;
+}
+
+/**
+ * T-280 (T-227 #2): undo a claim when Mengantar created nothing — it refused the
+ * request (final 409, 400/403, a refused pickup slot) or the failure came before
+ * `POST /order` was sent. Only a batch still SUBMITTING whose every member is still
+ * SUBMISSION_QUEUED returns to SUBMISSION_QUEUED (resumable, nothing to reconcile);
+ * anything else answers false and the caller takes the unknown path.
+ */
+export async function releaseProviderBatchClaim(
+  tx: TenantTransaction,
+  context: TenantContext,
+  batchId: string,
+  safeErrorCode: string,
+): Promise<boolean> {
+  const released = await tx.execute<{ id: string }>(sql`
+    UPDATE ${providerBatches}
+    SET status = 'SUBMISSION_QUEUED', submission_attempted_at = NULL, safe_error_code = ${safeErrorCode}, updated_at = now()
+    WHERE id = ${batchId}
+      AND tenant_id = ${context.tenantId}
+      AND status = 'SUBMITTING'
+      AND NOT EXISTS (
+        SELECT 1 FROM ${providerOrderSnapshots} member
+        WHERE member.batch_id = ${batchId}
+          AND member.tenant_id = ${context.tenantId}
+          AND member.status <> 'SUBMISSION_QUEUED'
+      )
+    RETURNING id
+  `);
+  return released.rows.length === 1;
+}
+
 export async function markProviderBatchUnknown(
   tx: TenantTransaction,
   context: TenantContext,

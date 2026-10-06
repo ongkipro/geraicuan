@@ -355,11 +355,11 @@ Not relabelled: the version 1 invoice's "Ongkir" (the buyer's shipping charge pe
 
 | ID | Label | Definition | Status |
 |---|---|---|---|
-| OPS-QUEUE-STUCK | Batch tertahan di antrean | batches in `SUBMISSION_QUEUED`/`SUBMITTING` whose `coalesce(submission_attempted_at, created_at)` is older than 15 minutes | Aligned |
+| OPS-QUEUE-STUCK | Batch tertahan di antrean | batches in `SUBMISSION_QUEUED`/`SUBMITTING` whose `coalesce(submission_attempted_at, created_at)` is older than 15 minutes T-280: `submission_attempted_at` is the last pre-send claim refresh inside the account lock (`refreshProviderBatchClaim`), so this excludes the wait for the lock and ages count from that refresh. | Aligned |
 | OPS-UNPAID | Pesanan menunggu pembayaran upstream | orders currently `AWAITING_UPSTREAM_PAYMENT`, with oldest age | Aligned (count); severity drift — T-93 |
 | OPS-UNKNOWN | Status pengiriman tidak diketahui | batch + order + recovery unknown states, with oldest age | Aligned |
 | OPS-FAILURE-SHARE | Kegagalan provider | FAILED batches / batches created in range; one decimal | Drift: whole-percent display — T-89 |
-| OPS-BATCH-DURATION | Durasi penyelesaian batch p50 / p95 | `percentile_cont` of `completed_at − submission_attempted_at` for batches completed in range; shows seconds below one minute | Drift: sub-minute values render "0 menit" — T-92 |
+| OPS-BATCH-DURATION | Durasi penyelesaian batch p50 / p95 | `percentile_cont` of `completed_at − submission_attempted_at` for batches completed in range; shows seconds below one minute T-280: `submission_attempted_at` is the last pre-send claim refresh inside the account lock (`refreshProviderBatchClaim`), so this excludes the wait for the lock and ages count from that refresh. | Drift: sub-minute values render "0 menit" — T-92 |
 | OPS-TENANT-AFFECTED | tenant terdampak | `count(distinct tenant_id)` of the tile's records | Aligned |
 | OPS-FAILURE-COUNT | Kegagalan provider (count) | FAILED batches created in range — OPS-FAILURE-SHARE's numerator, the value of the Kesehatan platform cell (its note shows the share) | Aligned (T-257) |
 
