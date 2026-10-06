@@ -240,4 +240,22 @@ describe("Mengantar estimate normalization", () => {
       .rejects.toEqual(new MengantarEstimateError());
     expect(observed.signal?.aborted).toBe(true);
   });
+
+  it("asks for the Dangerous Goods rate only for a hazardous parcel and keeps only couriers that carry it (T-283)", async () => {
+    const service = (extra: Record<string, unknown>) => ({ currency: "IDR", estimate_delivery: "1-2 hari", price: 9000, unsupported: false, ...extra });
+    const data = { JNE: service({ isDangerousGoodsSupported: true }), SiCepat: service({ isDangerousGoodsSupported: false }), JT: service({}) };
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ data, success: true }), { headers: { "content-type": "application/json" }, status: 200 });
+    }));
+
+    const hazardous = await fetchMengantarEstimate(credentials, { ...request, isDangerousGoods: true });
+    expect(hazardous.map((entry) => entry.providerService)).toEqual(["JNE"]);
+    expect(new URL(urls[0]!).searchParams.get("isDangerousGoods")).toBe("true");
+
+    const ordinary = await fetchMengantarEstimate(credentials, request);
+    expect(ordinary.map((entry) => entry.providerService).sort()).toEqual(["JNE", "JT", "SiCepat"]);
+    expect(new URL(urls[1]!).searchParams.has("isDangerousGoods")).toBe(false);
+  });
 });

@@ -35,6 +35,7 @@ vi.mock("@/db/estimate-repository", () => ({
     destinationAreaId: "canonical-area",
     destinationAreaLabel: "Canonical destination",
     isCod: false,
+    isHazardous: true,
     originAreaId: "origin-area",
     outletId: "00000000-0000-0000-0000-000000000111",
     shipmentId: "00000000-0000-0000-0000-000000000121",
@@ -112,6 +113,8 @@ describe("shipment estimate destination authority", () => {
     expect(fixture.resolveCredentials).toHaveBeenCalledTimes(2);
     expect(fixture.lockAuthority).toHaveBeenCalledOnce();
     expect(fixture.fetchEstimate).toHaveBeenCalledOnce();
+    // T-283: the draft's dangerous-goods flag reaches the estimate request.
+    expect(fixture.fetchEstimate.mock.calls[0]?.[1]).toMatchObject({ isDangerousGoods: true });
     expect(fixture.append).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),

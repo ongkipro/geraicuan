@@ -125,6 +125,7 @@ export async function loadShipmentEstimate(
 
     const estimateRequest = {
       destinationAreaId: prepared.draft.destinationAreaId,
+      isDangerousGoods: prepared.draft.isHazardous,
       originAreaId: prepared.draft.originAreaId,
       weightGrams: prepared.draft.weightGrams,
     };

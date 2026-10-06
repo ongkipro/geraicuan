@@ -20,6 +20,8 @@ export type DraftEstimateInput = {
   destinationAreaLabel: string;
   weightGrams: number;
   isCod: boolean;
+  /** T-283: sent as `isDangerousGoods`; fixed per shipment (a draft with another value is another shipment). */
+  isHazardous: boolean;
 };
 
 export type EstimateRequestMetadata = {
@@ -94,6 +96,7 @@ async function loadEstimateContext(
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       weightGrams: shipmentDrafts.packageWeightGrams,
       isCod: shipmentDrafts.isCod,
+      isHazardous: shipmentDrafts.isHazardous,
     })
     .from(shipments)
     .innerJoin(
@@ -132,6 +135,7 @@ async function loadEstimateContext(
     destinationAreaLabel: row.destinationAreaLabel,
     weightGrams: row.weightGrams,
     isCod: row.isCod,
+    isHazardous: row.isHazardous,
   };
 }
 

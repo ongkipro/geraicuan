@@ -175,6 +175,7 @@ describe("shipment estimate snapshots", () => {
       destinationAreaLabel: request.destinationAreaLabel,
       weightGrams: request.weightGrams,
       isCod: false,
+      isHazardous: false,
     });
 
     const firstSnapshotId = await withTenantContext(

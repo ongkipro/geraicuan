@@ -15,6 +15,12 @@ type DraftEstimateRequest = {
   originAreaId: string;
   destinationAreaId: string;
   weightGrams: number;
+  /**
+   * T-283: docs, Check Shipping Fee — "isDangerousGoods … request the Dangerous Goods rate
+   * and destination coverage"; "isDangerousGoodsSupported indicates courier capability while
+   * unsupported indicates destination coverage. Check both fields before creating an order."
+   */
+  isDangerousGoods?: boolean;
 };
 
 type ProviderService = {
@@ -34,6 +40,7 @@ type ProviderService = {
   minimumWeightCargo?: unknown;
   price?: unknown;
   unsupported?: unknown;
+  isDangerousGoodsSupported?: unknown;
   unsupportedPickup?: unknown;
   unsupported_cod?: unknown;
   unsupportedCodCheckFirstSap?: unknown;
@@ -174,7 +181,7 @@ function belowCargoMinimum(service: ProviderService, weightGrams: number | undef
 
 export function normalizeMengantarEstimateServices(
   data: unknown,
-  request: { weightGrams?: number } = {},
+  request: { weightGrams?: number; isDangerousGoods?: boolean } = {},
 ): SupportedEstimateService[] {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new MengantarEstimateError();
@@ -193,6 +200,8 @@ export function normalizeMengantarEstimateServices(
       !PROVIDER_SERVICE_PATTERN.test(providerService) ||
       providerService.length > MAX_PROVIDER_SERVICE_LENGTH ||
       service.unsupported === true ||
+      // T-283: a dangerous-goods parcel only goes to a courier that says it carries them.
+      (request.isDangerousGoods === true && service.isDangerousGoodsSupported !== true) ||
       isOriginOrPickupUnsupported(service) ||
       // D-29: a discontinued courier (Ninja) is never offered, whatever it quotes.
       !isMengantarServiceOffered(providerService) ||
@@ -288,8 +297,9 @@ export async function fetchMengantarEstimate(
   endpoint.searchParams.set("origin_id", request.originAreaId);
   endpoint.searchParams.set("destination_id", request.destinationAreaId);
   endpoint.searchParams.set("courier", "all");
-  // One weight rule for the estimate and the order: a quote priced at a weight
-  // the order does not repeat is not a quote for that order.
+  // The quote is for the billable weight (whole kg, at least 1 — `toBillableWeightKg`); the
+  // order sends the exact grams ÷ 1000 the docs ask for ("total weight in kg"). Whether
+  // Mengantar re-prices a non-integer order weight is a DATA-13 watch item (T-283, T-285).
   let billableWeightKg: number;
   try {
     billableWeightKg = toBillableWeightKg(request.weightGrams);
@@ -297,6 +307,7 @@ export async function fetchMengantarEstimate(
     throw new MengantarEstimateError();
   }
   endpoint.searchParams.set("weight", String(billableWeightKg));
+  if (request.isDangerousGoods) endpoint.searchParams.set("isDangerousGoods", "true");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -337,5 +348,8 @@ export async function fetchMengantarEstimate(
   }
   const result = payload as { data?: unknown; success?: unknown };
   if (result.success !== true) throw new MengantarEstimateError();
-  return normalizeMengantarEstimateServices(result.data, { weightGrams: request.weightGrams });
+  return normalizeMengantarEstimateServices(result.data, {
+    isDangerousGoods: request.isDangerousGoods === true,
+    weightGrams: request.weightGrams,
+  });
 }
