@@ -31,6 +31,7 @@ import {
 } from "@/db/owner-money-repository";
 import type { AnalyticsPresetId } from "@/lib/analytics-range";
 import { formatWibDateTime } from "@/lib/label-format";
+import { formatRelativeAge } from "@/lib/relative-age";
 import { courierDisplayName } from "@/lib/mengantar-couriers";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { shipmentDetailHref } from "@/lib/shipment-number";
@@ -58,6 +59,8 @@ export type PayoutViewProps = {
   carry: Record<string, string>;
   issues: string[];
   lastPullAt: Date | null;
+  /** The read's database clock (`loadOwnerMoney` generatedAt), for "Terkirim n hari lalu". */
+  now: Date;
   outletId: string | null;
   outlets: { id: string; name: string }[];
   page: number;
@@ -90,12 +93,21 @@ function rowFacts(row: OwnerMoneyRow) {
   };
 }
 
+/**
+ * T-287 (market scan gap 5): how long a delivered COD resi has waited for its payout, so the owner
+ * knows which to chase with Mengantar — from Mengantar's own delivery time, on the read's clock.
+ */
+export function deliveredAge(deliveredAt: Date, now: Date) {
+  return formatRelativeAge(deliveredAt, now, 60) ?? formatWibDateTime(deliveredAt);
+}
+
 /** Spec 17 §T-275 Pencairan COD: the owner's payouts and ongkir margin (D-41). */
 export function PayoutView({
   activeCount,
   carry,
   issues,
   lastPullAt,
+  now,
   outletId,
   outlets,
   page,
@@ -260,6 +272,7 @@ export function PayoutView({
                           <dt className="text-muted-foreground">Ditagih ke penerima</dt><dd className={numeric}><Money amount={row.collectIdr} /></dd>
                           <dt className="text-muted-foreground">Estimasi cair</dt><dd className={numeric}><Money amount={row.estimatedPayoutIdr} /></dd>
                           <dt className="text-muted-foreground">Cair</dt><dd className={numeric}><Money amount={facts.paid} /></dd>
+                          {state === "BELUM_CAIR" && row.deliveredAt ? <><dt className="text-muted-foreground">Terkirim</dt><dd className="text-right" data-slot="delivered-age">{deliveredAge(row.deliveredAt, now)}</dd></> : null}
                           {facts.varianceOff ? <><dt className="text-muted-foreground">Selisih</dt><dd className={cn(numeric, "font-medium text-danger")}>{facts.variance}</dd></> : null}
                           <dt className="text-muted-foreground">Margin ongkir</dt><dd className="text-right"><MarginCell row={row} /></dd>
                         </dl>
@@ -297,6 +310,7 @@ export function PayoutView({
                           <Link className="font-mono text-sm font-semibold text-primary hover:underline" href={shipmentDetailHref(row.publicReference)}>{row.publicReference}</Link>
                           <span className="block font-mono text-xs text-muted-foreground">{row.cnoteNo}</span>
                           {tab === "dicek" ? <span className="block text-xs text-warn">{reviewReason(row)}</span> : null}
+                          {tab === "belum" && row.deliveredAt ? <span className="block text-xs text-muted-foreground" data-slot="delivered-age">Terkirim {deliveredAge(row.deliveredAt, now)}</span> : null}
                         </TableCell>
                         <TableCell>
                           <span className="block">{courierDisplayName(row.courier)}</span>

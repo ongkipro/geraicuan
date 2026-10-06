@@ -398,6 +398,21 @@ describe("T-275 owner money from Mengantar's own invoices (D-41)", () => {
     }
     expect(ownerPayoutState(row(ids.deliveredUnpaid))).toBe("BELUM_CAIR");
     expect(ownerPayoutState(row(ids.undelivered))).toBe("BELUM_CAIR");
+    // T-287: the payout wait starts when Mengantar delivered it; an undelivered resi has none.
+    expect(row(ids.deliveredUnpaid).deliveredAt).toBeInstanceOf(Date);
+    expect(row(ids.undelivered).deliveredAt).toBeNull();
+    // Mengantar's own history time wins over when a (late) pull recorded it, and the earliest
+    // DELIVERED report counts — a later re-observation does not reset the wait.
+    await record(); // a second pull re-observes the same DELIVERED resi later
+    const observed = (await adminPool.query<{ id: string }>(
+      `SELECT id FROM provider_order_status_observations WHERE shipment_id = $1 AND mapped_status = 'DELIVERED' ORDER BY observed_at`,
+      [ids.deliveredUnpaid])).rows;
+    expect(observed).toHaveLength(2);
+    await adminPool.query("UPDATE provider_order_status_observations SET last_history_at = '2026-09-01T03:00:00Z' WHERE id = $1", [observed[0]!.id]);
+    await adminPool.query("UPDATE provider_order_status_observations SET last_history_at = '2026-09-05T03:00:00Z' WHERE id = $1", [observed[1]!.id]);
+    const again = await asAdminA((tx, context) => loadOwnerMoney(tx, context, wide));
+    expect(again.rows.find((candidate) => candidate.shipmentId === ids.deliveredUnpaid)!.deliveredAt).toEqual(new Date("2026-09-01T03:00:00Z"));
+    expect(again.rows).toHaveLength(money.rows.length);
 
     expect(summarizeOwnerMoney(money.rows)).toEqual({
       byCourier: [{ count: 6, courier: "JNE", marginIdr: -11_610, provenIdr: -11_244 }],
@@ -428,7 +443,7 @@ describe("T-275 owner money from Mengantar's own invoices (D-41)", () => {
   it("keeps each payment method's own margin rule", () => {
     const base: OwnerMoneyRow = {
       chargeUnits: BigInt(0), chargedShippingIdr: 24_375, cnoteNo: "X", collectIdr: 369_815, courier: "JNE",
-      estimatedPayoutIdr: 333_125, expectedUnits: null, goodsValueIdr: 325_000, issuedAt: new Date(), latestProviderStatus: null,
+      estimatedPayoutIdr: 333_125, expectedUnits: null, goodsValueIdr: 325_000, deliveredAt: null, issuedAt: new Date(), latestProviderStatus: null,
       outletName: "O", paymentMethod: "COD", publicReference: "GC-10177", refundUnits: BigInt(0), settledUnits: null,
       shipmentId: "s", shippingAmountIdr: 32_500, status: "ISSUED",
     };

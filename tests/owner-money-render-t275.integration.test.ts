@@ -59,3 +59,14 @@ describe("Uang gerai strip (T-275)", () => {
     expect(page).toMatch(/isAdmin && !invalidOutlet \? settle\(read\(\(tx, context\) => loadOwnerMoney\(/);
   });
 });
+
+describe("Pencairan: how long a delivered COD resi has waited (T-287)", () => {
+  it("words the wait from the first delivery on the read's clock, a date past 60 days", async () => {
+    const { deliveredAge } = await import("@/app/app/laporan/pencairan/payout-view");
+    const now = new Date("2026-10-07T05:00:00Z"); // 12.00 WIB
+    expect(deliveredAge(new Date("2026-10-07T03:00:00Z"), now)).toBe("2 jam lalu");
+    expect(deliveredAge(new Date("2026-10-04T05:00:00Z"), now)).toBe("3 hari lalu");
+    expect(deliveredAge(new Date("2026-08-08T05:00:00Z"), now)).toBe("60 hari lalu");
+    expect(deliveredAge(new Date("2026-08-07T05:00:00Z"), now)).toMatch(/2026/);
+  });
+});

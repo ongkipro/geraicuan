@@ -50,6 +50,7 @@ export default async function PayoutPage({ searchParams }: { searchParams: Promi
       carry={payoutCarry(range, outletId)}
       issues={[...new Set(issues)]}
       lastPullAt={money.lastPullAt}
+      now={money.generatedAt}
       outletId={outletId}
       outlets={outlets.map((outlet) => ({ id: outlet.id, name: outlet.name }))}
       page={shown.page}

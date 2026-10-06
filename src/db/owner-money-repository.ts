@@ -60,6 +60,8 @@ export type OwnerMoneyRow = {
   /** SETTLE-EXPECTED-IDR in ten-thousandths; null without COD totals. */
   expectedUnits: bigint | null;
   latestProviderStatus: string | null;
+  /** T-287: when Mengantar reported this resi DELIVERED (its history time, else when we recorded it), or null. */
+  deliveredAt: Date | null;
 };
 
 export type OwnerPayoutState = "BELUM_CAIR" | "SUDAH_CAIR" | "PERLU_DICEK" | "RETUR";
@@ -240,6 +242,7 @@ export async function loadOwnerMoney(
     charge_idr: string;
     refund_idr: string;
     latest_provider_status: string | null;
+    delivered_at: string | null;
     ledger_shipping_idr: string | null;
     generated_at: string;
   }>(sql`
@@ -278,6 +281,15 @@ export async function loadOwnerMoney(
       FROM provider_order_status_observations observation
       WHERE observation.tenant_id = ${context.tenantId} AND observation.shipment_id IN (SELECT id FROM cohort)
       ORDER BY observation.shipment_id, observation.observed_at DESC, observation.id DESC
+    ), delivered AS (
+      -- The provider's own time first (the pull's last history event, the webhook's event time);
+      -- when the status was recorded only as a fallback, which a late pull would understate.
+      SELECT observation.shipment_id,
+        min(coalesce(observation.last_history_at, observation.provider_event_at, observation.observed_at)) AS delivered_at
+      FROM provider_order_status_observations observation
+      WHERE observation.tenant_id = ${context.tenantId} AND observation.shipment_id IN (SELECT id FROM cohort)
+        AND observation.mapped_status = 'DELIVERED'
+      GROUP BY observation.shipment_id
     ), ledger_cost AS (
       -- SETTLE-EXPECTED-IDR's shipping: the ledger's MENGANTAR_SHIPPING_COST with its reversals.
       SELECT entry.shipment_id, coalesce(sum(entry.amount_idr) FILTER (WHERE
@@ -296,6 +308,7 @@ export async function loadOwnerMoney(
       settlement.settled_idr, coalesce(settlement.charge_idr, 0) AS charge_idr,
       coalesce(settlement.refund_idr, 0) AS refund_idr,
       latest_status.provider_status AS latest_provider_status,
+      delivered.delivered_at,
       ledger_cost.provider_cost_idr AS ledger_shipping_idr,
       statement_timestamp() AS generated_at
     FROM cohort
@@ -303,6 +316,7 @@ export async function loadOwnerMoney(
     LEFT JOIN shipment_cod_totals cod_total ON cod_total.shipment_id = cohort.id AND cod_total.tenant_id = ${context.tenantId}
     LEFT JOIN settlement ON settlement.shipment_id = cohort.id
     LEFT JOIN latest_status ON latest_status.shipment_id = cohort.id
+    LEFT JOIN delivered ON delivered.shipment_id = cohort.id
     LEFT JOIN ledger_cost ON ledger_cost.shipment_id = cohort.id
     ORDER BY cohort.resolved_at DESC, cohort.id
   `);
@@ -334,6 +348,7 @@ export async function loadOwnerMoney(
         : row.goods_value_idr === null ? null : Number(row.goods_value_idr),
       issuedAt: new Date(row.resolved_at),
       latestProviderStatus: row.latest_provider_status,
+      deliveredAt: row.delivered_at === null ? null : new Date(row.delivered_at),
       outletName: row.outlet_name,
       paymentMethod,
       publicReference: row.public_reference,
