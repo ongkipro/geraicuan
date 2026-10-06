@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import { appendLedgerForIssuedProviderOrder } from "@/db/ledger-repository";
 import {
@@ -30,6 +30,8 @@ export type AuthoritativeShipmentReconciliation = {
   cnoteNo: string | null;
   isPaid: boolean | null;
   providerOrderId: string | null;
+  /** T-282 (T-227 #3): Mengantar batch `_id` (what `pay-unpaid` takes), when the lookup proved it. */
+  providerBatchId: string | null;
   safeResponseCode: string;
   status: "AWAITING_UPSTREAM_PAYMENT" | "FAILED" | "ISSUED";
 };
@@ -152,6 +154,21 @@ export async function applyAuthoritativeShipmentReconciliation(
     throw new ShipmentReconciliationUnavailableError();
   }
 
+  // T-282 review F2: one Mengantar order belongs to one shipment. Two reconciliations of
+  // look-alike shipments serialize on the order id (transaction-scoped lock), and the second
+  // sees the first's committed claim and refuses instead of booking the same parcel twice.
+  if (result.providerOrderId) {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`reconcile:${context.tenantId}:${result.providerOrderId}`}, 0))`);
+    const owned = await tx.execute<{ id: string }>(sql`
+      SELECT id FROM provider_order_snapshots
+      WHERE tenant_id = ${context.tenantId}
+        AND provider_order_id = ${result.providerOrderId}
+        AND id <> ${target.providerOrderSnapshotId}
+      LIMIT 1
+    `);
+    if (owned.rows.length > 0) throw new ShipmentReconciliationUnavailableError();
+  }
+
   const order = await tx
     .update(providerOrderSnapshots)
     .set({
@@ -159,6 +176,7 @@ export async function applyAuthoritativeShipmentReconciliation(
       providerOrderId: result.providerOrderId,
       isPaid: result.isPaid,
       cnoteNo: result.cnoteNo,
+      ...(result.providerBatchId ? { providerBatchId: result.providerBatchId } : {}),
       safeResponseCode: result.safeResponseCode,
       resolvedAt: sql`now()`,
     })
@@ -236,4 +254,99 @@ export async function applyAuthoritativeShipmentReconciliation(
   if (batch.length !== 1) {
     throw new ShipmentReconciliationUnavailableError();
   }
+}
+
+/**
+ * T-282: what was submitted for a SUBMISSION_UNKNOWN shipment, for matching Mengantar's
+ * stored orders (`GET /order`) when the `POST /order` answer was lost. Recipient fields are
+ * PII: they are compared server-side and never returned, logged or put in an error.
+ */
+export type ShipmentReconciliationFacts = {
+  declaredValueIdr: number;
+  destinationAreaLabel: string;
+  isCod: boolean;
+  providerCodAmountIdr: number | null;
+  recipientName: string;
+  recipientPhone: string;
+  submissionAttemptedAt: Date;
+  weightGrams: number;
+};
+
+export async function loadShipmentReconciliationFacts(
+  tx: TenantTransaction,
+  context: TenantContext,
+  target: ShipmentReconciliationTarget,
+): Promise<ShipmentReconciliationFacts> {
+  requireTenantAdmin(context);
+  const rows = await tx.execute<{
+    declaredValueIdr: number;
+    destinationAreaLabel: string;
+    isCod: boolean;
+    providerCodAmountIdr: number | null;
+    recipientName: string;
+    recipientPhone: string;
+    submissionAttemptedAt: Date | string | null;
+    weightGrams: number;
+  }>(sql`
+    SELECT
+      draft.declared_value_idr AS "declaredValueIdr",
+      provider_order.destination_area_label AS "destinationAreaLabel",
+      provider_order.is_cod AS "isCod",
+      provider_order.provider_cod_amount_idr AS "providerCodAmountIdr",
+      recipient.name AS "recipientName",
+      recipient.phone AS "recipientPhone",
+      batch.submission_attempted_at AS "submissionAttemptedAt",
+      draft.package_weight_grams AS "weightGrams"
+    FROM provider_order_snapshots AS provider_order
+    JOIN provider_batches AS batch
+      ON batch.id = provider_order.batch_id
+      AND batch.tenant_id = provider_order.tenant_id
+    JOIN shipment_drafts AS draft
+      ON draft.shipment_id = provider_order.shipment_id
+      AND draft.tenant_id = provider_order.tenant_id
+    JOIN shipment_parties AS recipient
+      ON recipient.shipment_id = provider_order.shipment_id
+      AND recipient.tenant_id = provider_order.tenant_id
+      AND recipient.role = 'RECIPIENT'
+    WHERE provider_order.id = ${target.providerOrderSnapshotId}
+      AND provider_order.tenant_id = ${context.tenantId}
+      AND provider_order.shipment_id = ${target.shipmentId}
+      AND provider_order.batch_id = ${target.batchId}
+      AND provider_order.status = 'SUBMISSION_UNKNOWN'
+      AND batch.status = 'SUBMISSION_UNKNOWN'
+  `);
+  const row = rows.rows[0];
+  if (rows.rows.length !== 1 || !row || row.submissionAttemptedAt === null) {
+    throw new ShipmentReconciliationUnavailableError();
+  }
+  const submissionAttemptedAt = new Date(row.submissionAttemptedAt);
+  if (Number.isNaN(submissionAttemptedAt.getTime())) throw new ShipmentReconciliationUnavailableError();
+  return { ...row, submissionAttemptedAt };
+}
+
+/**
+ * T-282: which of these Mengantar order ids already belong to a shipment of this tenant, so a
+ * stored order another shipment owns is never matched to the unknown one.
+ * // lazy: on the shared platform-default account another tenant's orders are invisible here
+ * // (RLS); a cross-tenant exact match on phone, name, area, weight and amount in one window is
+ * // left to the ambiguity rules. Upgrade path: a SECURITY DEFINER lookup by provider_account_key.
+ */
+export async function listKnownProviderOrderIds(
+  tx: TenantTransaction,
+  context: TenantContext,
+  providerOrderIds: readonly string[],
+): Promise<Set<string>> {
+  requireTenantAdmin(context);
+  if (providerOrderIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ providerOrderId: providerOrderSnapshots.providerOrderId })
+    .from(providerOrderSnapshots)
+    .where(
+      and(
+        eq(providerOrderSnapshots.tenantId, context.tenantId),
+        isNotNull(providerOrderSnapshots.providerOrderId),
+        inArray(providerOrderSnapshots.providerOrderId, [...providerOrderIds]),
+      ),
+    );
+  return new Set(rows.map((row) => row.providerOrderId!));
 }

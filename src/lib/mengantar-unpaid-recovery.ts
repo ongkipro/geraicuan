@@ -13,8 +13,11 @@ import {
   markUnpaidRecoveryUnknown,
   MengantarUnpaidRecoveryBatchIdMissingError,
   prepareUnpaidRecoveries,
+  refreshUnpaidRecoveryClaim,
+  releaseUnpaidRecoveryClaim,
   UnpaidRecoveryDeniedError,
 } from "@/db/unpaid-recovery-repository";
+import { mengantarAnswerMessage } from "@/lib/mengantar-http";
 import {
   normalizeMengantarProviderIdentifier,
   validateMengantarTransportScope,
@@ -63,6 +66,8 @@ export type FixtureUnpaidRecoveryResult = {
     created: boolean;
     submitted: boolean;
     status: (typeof schema.providerUnpaidRecoveries.$inferSelect)["status"];
+    /** T-282: Mengantar refused the payment; the recovery is back in PAYMENT_QUEUED. */
+    refusal?: { safeCode: string; providerMessage: string | null };
   }>;
 };
 
@@ -72,6 +77,53 @@ export class MengantarUnpaidRecoveryUnknownError extends Error {
   constructor(safeCode: string) {
     super("Mengantar unpaid recovery outcome is unknown.");
     this.safeCode = safeCode;
+  }
+}
+
+/**
+ * T-282: Mengantar answered `pay-unpaid` with a refusal and paid nothing (e.g. the
+ * wallet balance is too low), so the recovery goes back to PAYMENT_QUEUED.
+ * `providerMessage` is the provider's short, credential-free text.
+ */
+export class MengantarPayUnpaidRefusedError extends Error {
+  readonly safeCode: string;
+  readonly providerMessage: string | null;
+
+  constructor(safeCode: string, providerMessage: string | null = null) {
+    super("Mengantar refused the unpaid-order payment; nothing was paid.");
+    this.safeCode = safeCode;
+    this.providerMessage = providerMessage;
+  }
+}
+
+/**
+ * Statuses read as "nothing was paid". The docs list no error for Pay Unpaid
+ * (read 2026-10-06); 400/403 are Create Order's documented refusals on the same
+ * account and are read the same way here (DATA-13, a T-285 watch item). Any other
+ * non-2xx (401, 422, 5xx) or an unreadable body leaves the payment unknown.
+ */
+const PAY_UNPAID_REFUSAL_STATUSES = new Set([400, 403]);
+
+/** The one place a `POST /order/pay-unpaid` answer becomes a body. */
+export function readMengantarPayUnpaidAnswer(answer: { status: number; body: unknown }, secret?: string): unknown {
+  if (PAY_UNPAID_REFUSAL_STATUSES.has(answer.status)) {
+    throw new MengantarPayUnpaidRefusedError(
+      `PAY_UNPAID_REFUSED_${answer.status}`,
+      mengantarAnswerMessage(answer.body, secret),
+    );
+  }
+  if (answer.status < 200 || answer.status >= 300) {
+    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_HTTP_STATUS");
+  }
+  if (answer.body === undefined) {
+    throw new MengantarUnpaidRecoveryUnknownError("PAY_UNPAID_RESPONSE_SCHEMA_UNKNOWN");
+  }
+  return answer.body;
+}
+
+class UnpaidRecoveryClaimLostError extends Error {
+  constructor() {
+    super("The unpaid recovery claim was lost before sending.");
   }
 }
 
@@ -270,6 +322,7 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
       continue;
     }
 
+    let sent = false;
     try {
       const providerBatchId = recovery.providerBatchId!;
       // The documented `courier` spelling ("Sap", not the catalogue's "SAP").
@@ -281,7 +334,16 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
       const response = await withProviderAccountSerialization(
         input.lockPool,
         preparedWithBinding.prepared.scope.providerAccountKey,
-        () => preparedWithBinding.binding.transport.payUnpaid(request),
+        async () => {
+          // T-282 (T-280 review F1): a PAYING claim older than the stale window is swept to
+          // PAYMENT_UNKNOWN by a concurrent request; one swept while waiting here sends nothing.
+          const stillOurs = await withTenantContextForRecovery(input, (tx, context) =>
+            refreshUnpaidRecoveryClaim(tx, context, input.batchId, recovery.id),
+          );
+          if (!stillOurs) throw new UnpaidRecoveryClaimLostError();
+          sent = true;
+          return preparedWithBinding.binding.transport.payUnpaid(request);
+        },
       );
       const normalized = normalizeMengantarPayUnpaidResponse(
         response,
@@ -305,6 +367,38 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
         status: "COMPLETED",
       });
     } catch (error) {
+      if (error instanceof UnpaidRecoveryClaimLostError) {
+        // Nothing was sent; the recovery already belongs to reconciliation.
+        results.push({
+          id: recovery.id,
+          shipmentId: recovery.shipmentId,
+          created: recovery.created,
+          submitted: false,
+          status: "PAYMENT_UNKNOWN",
+        });
+        continue;
+      }
+      // T-282: release only when Mengantar refused, or when nothing was sent; never after
+      // a request may have been accepted.
+      const refused = error instanceof MengantarPayUnpaidRefusedError;
+      if (refused || !sent) {
+        const released = await withTenantContextForRecovery(input, (tx, context) =>
+          releaseUnpaidRecoveryClaim(tx, context, input.batchId, recovery.id),
+        );
+        if (released) {
+          results.push({
+            id: recovery.id,
+            shipmentId: recovery.shipmentId,
+            created: recovery.created,
+            submitted: false,
+            status: "PAYMENT_QUEUED",
+            refusal: refused
+              ? { safeCode: error.safeCode, providerMessage: error.providerMessage }
+              : { safeCode: "PAY_UNPAID_NOT_SENT", providerMessage: null },
+          });
+          continue;
+        }
+      }
       const safeCode = error instanceof MengantarUnpaidRecoveryUnknownError
         ? error.safeCode
         : "PAY_UNPAID_OUTCOME_UNKNOWN";

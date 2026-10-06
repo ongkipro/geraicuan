@@ -59,7 +59,13 @@ vi.mock("@/lib/mengantar-order", () => ({
   },
   MengantarOrderTransportUnavailableError: class MengantarOrderTransportUnavailableError extends Error {},
 }));
-vi.mock("@/lib/mengantar-unpaid-recovery", () => ({ MengantarUnpaidRecoveryTransportUnavailableError: class MengantarUnpaidRecoveryTransportUnavailableError extends Error {} }));
+vi.mock("@/lib/mengantar-unpaid-recovery", () => ({
+  MengantarPayUnpaidRefusedError: class MengantarPayUnpaidRefusedError extends Error {
+    constructor(readonly safeCode: string, readonly providerMessage: string | null = null) { super("refused"); }
+  },
+  MengantarUnpaidRecoveryTransportUnavailableError: class MengantarUnpaidRecoveryTransportUnavailableError extends Error {},
+}));
+vi.mock("@/lib/mengantar-live-reconciliation", () => ({ createLiveMengantarReconciliationLookup: vi.fn(() => "live-lookup") }));
 vi.mock("@/lib/order-rate-limit", () => ({
   OrderRateLimitedError: class OrderRateLimitedError extends Error {},
   UnpaidRecoveryRateLimitedError: class UnpaidRecoveryRateLimitedError extends Error {},
@@ -68,6 +74,7 @@ vi.mock("@/lib/mengantar-live-transport", () => ({
   isLiveMengantarOrdersEnabled: () => fixture.liveEnabled,
   LiveMengantarOrdersDisabledError: class LiveMengantarOrdersDisabledError extends Error {},
   resolveLiveMengantarOrderTransport: vi.fn(),
+  resolveLiveMengantarPayUnpaidTransport: vi.fn(),
 }));
 vi.mock("@/lib/sanctioned-order-fixture", () => ({
   isSanctionedOrderFixtureEnabled: () => fixture.issuanceEnabled,
@@ -94,6 +101,7 @@ vi.mock("@/lib/shipment-unpaid-recovery", () => ({
 vi.mock("@/lib/shipment-reconciliation", () => ({
   reconcileFixtureBackedShipment: vi.fn(),
   ShipmentReconciliationResultUnavailableError: class ShipmentReconciliationResultUnavailableError extends Error {},
+  ShipmentReconciliationUndeterminedError: class ShipmentReconciliationUndeterminedError extends Error {},
 }));
 
 const shipmentId = "00000000-0000-3902-0000-000000000001";
@@ -167,7 +175,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
   it("keeps issuance production-gated, then permits an Operator only through the sanctioned fixture", async () => {
     fixture.role = "OPERATOR";
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({
-      error: expect.stringContaining("belum diaktifkan"),
+      error: "Penerbitan resi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
     });
     expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
 
@@ -264,6 +272,44 @@ describe("T-39 exported shipment Server Action boundaries", () => {
         status: "ISSUED",
       },
     });
+  });
+
+  it("pays live when switched on (T-282), and tells the owner to top up on a refusal", async () => {
+    const { resolveLiveMengantarPayUnpaidTransport } = await import("@/lib/mengantar-live-transport");
+    const { MengantarPayUnpaidRefusedError } = await import("@/lib/mengantar-unpaid-recovery");
+    await expect(recoverShipmentUnpaidPayment({}, confirmationForm())).resolves.toEqual({
+      error: "Pemulihan pembayaran belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+    });
+    expect(recoverFixtureBackedShipmentPayment).not.toHaveBeenCalled();
+
+    fixture.liveEnabled = true;
+    vi.mocked(recoverFixtureBackedShipmentPayment).mockRejectedValueOnce(
+      new MengantarPayUnpaidRefusedError("PAY_UNPAID_REFUSED_400", "Saldo tidak mencukupi"),
+    );
+    const refused = await recoverShipmentUnpaidPayment({}, confirmationForm());
+    expect(vi.mocked(recoverFixtureBackedShipmentPayment).mock.calls.at(-1)?.[0].resolveTransport).toBe(resolveLiveMengantarPayUnpaidTransport);
+    expect(refused).toEqual({
+      error: expect.stringMatching(/saldo Mengantar belum cukup\. Isi saldo \(top up\).*Pesan Mengantar: “Saldo tidak mencukupi”/),
+    });
+    vi.mocked(recoverFixtureBackedShipmentPayment).mockRejectedValueOnce(new MengantarPayUnpaidRefusedError("PAY_UNPAID_NOT_SENT"));
+    await expect(recoverShipmentUnpaidPayment({}, confirmationForm())).resolves.toEqual({
+      error: expect.stringContaining("belum terkirim ke Mengantar"),
+    });
+  });
+
+  it("reconciles live when switched on (T-282), and says nothing changed when undetermined", async () => {
+    const { createLiveMengantarReconciliationLookup } = await import("@/lib/mengantar-live-reconciliation");
+    const { ShipmentReconciliationUndeterminedError } = await import("@/lib/shipment-reconciliation");
+    await expect(reconcileShipmentUnknownSubmission({}, confirmationForm())).resolves.toEqual({
+      error: "Rekonsiliasi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+    });
+    fixture.liveEnabled = true;
+    vi.mocked(reconcileFixtureBackedShipment).mockRejectedValueOnce(new ShipmentReconciliationUndeterminedError());
+    await expect(reconcileShipmentUnknownSubmission({}, confirmationForm())).resolves.toEqual({
+      error: expect.stringMatching(/belum bisa dipastikan otomatis.*tidak diubah.*aplikasi Mengantar.*coba lagi nanti/),
+    });
+    expect(vi.mocked(reconcileFixtureBackedShipment).mock.calls.at(-1)?.[0].resolveAuthoritativeResult).toBe("live-lookup");
+    expect(createLiveMengantarReconciliationLookup).toHaveBeenCalledWith(expect.objectContaining({ principalId: "t39-action-user" }));
   });
 
   it("checks a stale operation through tenant scope without any provider action", async () => {

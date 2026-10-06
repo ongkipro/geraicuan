@@ -10,7 +10,14 @@ import {
   UnpaidRecoveryUnavailableError,
 } from "@/db/unpaid-recovery-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
-import { MengantarUnpaidRecoveryTransportUnavailableError } from "@/lib/mengantar-unpaid-recovery";
+import {
+  isLiveMengantarOrdersEnabled,
+  resolveLiveMengantarPayUnpaidTransport,
+} from "@/lib/mengantar-live-transport";
+import {
+  MengantarPayUnpaidRefusedError,
+  MengantarUnpaidRecoveryTransportUnavailableError,
+} from "@/lib/mengantar-unpaid-recovery";
 import { UnpaidRecoveryRateLimitedError } from "@/lib/order-rate-limit";
 import {
   isSanctionedUnpaidRecoveryFixtureEnabled,
@@ -69,10 +76,16 @@ export async function recoverShipmentUnpaidPayment(
   if (principal.role !== "TENANT_ADMIN") {
     return { error: "Pemulihan pembayaran hanya tersedia untuk pemilik gerai." };
   }
-  if (!isSanctionedUnpaidRecoveryFixtureEnabled()) {
+  // T-282 (D-42): the live transport when switched on, else the sanctioned fixture
+  // (development only), else no recovery at all.
+  const resolveTransport = isLiveMengantarOrdersEnabled()
+    ? resolveLiveMengantarPayUnpaidTransport
+    : isSanctionedUnpaidRecoveryFixtureEnabled()
+      ? resolveSanctionedUnpaidRecoveryFixtureTransport
+      : null;
+  if (!resolveTransport) {
     return {
-      error:
-        "Pemulihan dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan.",
+      error: "Pemulihan pembayaran belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
     };
   }
 
@@ -83,13 +96,24 @@ export async function recoverShipmentUnpaidPayment(
       principalId: principal.userId,
       tenantId: principal.tenantId,
       shipmentId,
-      resolveTransport: resolveSanctionedUnpaidRecoveryFixtureTransport,
+      resolveTransport,
     });
 
     revalidatePath("/app/pengiriman/[shipmentId]", "page");
     revalidatePath("/app/pengiriman");
     return { recovered: result };
   } catch (error) {
+    if (error instanceof MengantarPayUnpaidRefusedError) {
+      revalidatePath("/app/pengiriman/[shipmentId]", "page");
+      if (error.safeCode === "PAY_UNPAID_NOT_SENT") {
+        return { error: "Pembayaran belum terkirim ke Mengantar dan tidak ada saldo yang terpotong. Coba lagi." };
+      }
+      const known =
+        "Mengantar menolak pembayaran ini, biasanya karena saldo Mengantar belum cukup. Isi saldo (top up) di aplikasi Mengantar, lalu jalankan pemulihan lagi.";
+      return {
+        error: error.providerMessage ? `${known} Pesan Mengantar: “${error.providerMessage}”` : known,
+      };
+    }
     if (error instanceof UnpaidRecoveryRateLimitedError) {
       return {
         error: "Terlalu banyak pemulihan. Tunggu beberapa menit lalu coba lagi.",

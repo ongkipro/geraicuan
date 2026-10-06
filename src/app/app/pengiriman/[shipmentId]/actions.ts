@@ -165,7 +165,7 @@ export async function confirmShipmentIssuance(
   if (!resolveTransport) {
     return {
       error:
-        "Penerbitan resi belum diaktifkan untuk gerai ini. Hubungi admin GeraiCUAN.",
+        "Penerbitan resi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
     };
   }
 

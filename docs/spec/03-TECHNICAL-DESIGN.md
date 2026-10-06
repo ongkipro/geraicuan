@@ -264,7 +264,7 @@ sequenceDiagram
     end
 ```
 
-Recovery branches, all Tenant Admin only except the stale check, all on the detail rail (`src/app/app/pengiriman/[shipmentId]/rail-actions.tsx`):
+Recovery branches, all Tenant Admin only except the stale check, all on the detail rail (`src/app/app/pengiriman/[shipmentId]/rail-actions.tsx`). T-282: both actions use the same gate as issuance — the live client when `isLiveMengantarOrdersEnabled()`, else the sanctioned fixture (development only), else a refusal ("… belum diaktifkan di GeraiCUAN"); the detail page unlocks the rail action under either. Live pay-unpaid (`resolveLiveMengantarPayUnpaidTransport`, `src/lib/mengantar-live-transport.ts`) sends `POST /order/pay-unpaid {courier, batch_id}` with the outlet's credentials. Inside the account lock the PAYING claim is re-proved (`refreshUnpaidRecoveryClaim`, which also restarts the 120-second stale clock of `markStaleUnpaidRecoveryUnknown`); a claim swept meanwhile sends nothing. A 400/403 answer paid nothing: `releaseUnpaidRecoveryClaim` puts the recovery back to PAYMENT_QUEUED and the owner is told to top up the Mengantar wallet, with Mengantar's short message (dropped when it quotes the key). A lost answer, a 5xx or another status stays PAYMENT_UNKNOWN. Live reconciliation (`createLiveMengantarReconciliationLookup`, `src/lib/mengantar-live-reconciliation.ts`, D-43) reads Mengantar's stored orders (`GET /order`, read only) around the submission and matches them on everything that was sent. Only one exact match on the gerai's own (private) account changes state; the listing counts as complete only when the answer's `total` equals the rows read. A match on the shared platform-default account, an absence, several matches or an incomplete read change nothing (review round 1: another gerai's order on the shared account is invisible under RLS, and absence does not yet prove non-creation — FAILED is a `// lazy:` ceiling until T-285). `applyAuthoritativeShipmentReconciliation` takes a transaction advisory lock on `reconcile:<tenant>:<providerOrderId>` and refuses when another snapshot of the gerai already holds that order id, so two look-alike shipments reconciled at once never share one order.
 
 ```mermaid
 sequenceDiagram
@@ -276,32 +276,48 @@ sequenceDiagram
     participant SC as checkStaleShipmentOperation
     participant DB as PostgreSQL
     participant L as withProviderAccountSerialization
-    participant F as Sanctioned fixture
+    participant M as Mengantar (live) or sanctioned fixture (dev)
     Note over R,DB: AWAITING_UPSTREAM_PAYMENT, after the gerai funds its Mengantar wallet
     TA->>R: Confirm payment recovery
     R->>UR: shipmentId and confirmation
-    UR->>UR: role TENANT_ADMIN and isSanctionedUnpaidRecoveryFixtureEnabled
-    UR->>DB: prepareUnpaidRecoveries then claimUnpaidRecovery
+    UR->>UR: role TENANT_ADMIN, then live switch, else dev fixture, else refuse
+    UR->>DB: prepareUnpaidRecoveries then claimUnpaidRecovery (PAYING)
     UR->>L: Lock provider account
-    L->>F: pay-unpaid for the provider batch
-    F-->>L: Paid order with cnote_no
-    alt Outcome known
-        UR->>DB: completeUnpaidRecovery and appendLedgerForCompletedUnpaidRecovery
-        UR-->>R: Recovered AWB
-    else Outcome unknown
-        UR->>DB: markUnpaidRecoveryUnknown
+    L->>DB: refreshUnpaidRecoveryClaim (still PAYING?)
+    alt Claim swept while waiting
+        L-->>UR: Nothing sent
         UR-->>R: Reconcile before running recovery again
+    else Claim still ours
+        L->>M: POST /order/pay-unpaid courier and batch_id
+        M-->>L: Answer
+        alt Paid (success, data 1, cnote_no)
+            UR->>DB: completeUnpaidRecovery and appendLedgerForCompletedUnpaidRecovery
+            UR-->>R: Recovered AWB
+        else Refused 400 or 403 (nothing paid)
+            UR->>DB: releaseUnpaidRecoveryClaim (PAYING to PAYMENT_QUEUED)
+            UR-->>R: Top up the Mengantar wallet, with Mengantar's message
+        else Lost answer, 5xx or unreadable
+            UR->>DB: markUnpaidRecoveryUnknown (PAYMENT_UNKNOWN)
+            UR-->>R: Reconcile before running recovery again
+        end
     end
     Note over R,DB: SUBMISSION_UNKNOWN, never retried before reconciliation
     TA->>R: Confirm reconciliation
     R->>RC: shipmentId and confirmation
-    RC->>RC: role TENANT_ADMIN and isSanctionedReconciliationFixtureEnabled
-    RC->>DB: loadShipmentReconciliationTarget
-    RC->>F: resolveSanctionedReconciliationFixture by provider identifiers
-    F-->>RC: Authoritative ISSUED, AWAITING_UPSTREAM_PAYMENT or FAILED
-    RC->>DB: applyAuthoritativeShipmentReconciliation
-    DB->>DB: appendLedgerForIssuedProviderOrder when ISSUED
-    RC-->>R: Reconciled status and label link
+    RC->>RC: role TENANT_ADMIN, then live switch, else dev fixture, else refuse
+    RC->>DB: loadShipmentReconciliationTarget, credentials and submitted facts
+    RC->>M: GET /order courier and dateRange attempt minus 10 to plus 60 min, at most 10 pages of 50
+    M-->>RC: Stored orders
+    RC->>DB: listKnownProviderOrderIds (orders other shipments own are left out)
+    alt Exactly one exact match, private account, listing total equals rows read
+        RC->>M: GET /batch for the batch _id
+        RC->>DB: applyAuthoritativeShipmentReconciliation with provider_batch_id
+        DB->>DB: advisory lock on the order id, refuse if another snapshot holds it
+        DB->>DB: appendLedgerForIssuedProviderOrder when ISSUED
+        RC-->>R: ISSUED or AWAITING_UPSTREAM_PAYMENT
+    else Platform-default account, no match, several matches, no or larger total, page bound or read failed
+        RC-->>R: Not decided automatically, state unchanged
+    end
     Note over R,DB: A claim left SUBMITTING longer than 120 s
     R->>SC: shipmentId (any tenant role)
     SC->>DB: checkShipmentStaleOperation then markStaleProviderBatchUnknown

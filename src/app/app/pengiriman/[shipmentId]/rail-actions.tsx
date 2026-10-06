@@ -54,7 +54,7 @@ function LockedNote({ children }: { children: ReactNode }) {
     <Alert role="status">
       <ShieldCheck aria-hidden="true" />
       <AlertTitle>{children}</AlertTitle>
-      <AlertDescription>Aktif hanya dengan data uji non-produksi yang disetujui. Tidak ada panggilan ke Mengantar.</AlertDescription>
+      <AlertDescription>Belum diaktifkan di GeraiCUAN, jadi tidak ada panggilan ke Mengantar. Hubungi admin GeraiCUAN.</AlertDescription>
     </Alert>
   );
 }

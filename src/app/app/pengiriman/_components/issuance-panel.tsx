@@ -461,7 +461,7 @@ export function IssuanceOutcome() {
         <Alert role="status">
           <ShieldCheck aria-hidden="true" />
           <AlertTitle>Penerbitan dikunci</AlertTitle>
-          <AlertDescription>Penerbitan hanya aktif dengan data uji non-produksi yang disetujui. Tidak ada panggilan ke Mengantar.</AlertDescription>
+          <AlertDescription>Penerbitan resi belum diaktifkan di GeraiCUAN, jadi tidak ada panggilan ke Mengantar. Hubungi admin GeraiCUAN.</AlertDescription>
         </Alert>
       ) : null}
       {state.error && !verification.verified ? (

@@ -283,6 +283,68 @@ export async function claimUnpaidRecovery(
     .returning({ id: providerUnpaidRecoveries.id });
   return claimed.length === 1;
 }
+/**
+ * T-282 (T-280 review F1): re-prove the PAYING claim inside the account lock, just before
+ * `pay-unpaid` is sent, and restart its stale clock. False when a concurrent request already
+ * swept it to PAYMENT_UNKNOWN (`markStaleUnpaidRecoveryUnknown`): then nothing is sent.
+ */
+export async function refreshUnpaidRecoveryClaim(
+  tx: TenantTransaction,
+  context: TenantContext,
+  batchId: string,
+  recoveryId: string,
+): Promise<boolean> {
+  requireTenantAdmin(context);
+  const refreshed = await tx
+    .update(providerUnpaidRecoveries)
+    .set({ attemptedAt: sql`now()`, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(providerUnpaidRecoveries.id, recoveryId),
+        eq(providerUnpaidRecoveries.batchId, batchId),
+        eq(providerUnpaidRecoveries.tenantId, context.tenantId),
+        eq(providerUnpaidRecoveries.status, "PAYING"),
+      ),
+    )
+    .returning({ id: providerUnpaidRecoveries.id });
+  return refreshed.length === 1;
+}
+
+/**
+ * T-282: undo a claim when Mengantar paid nothing — it refused `pay-unpaid` (e.g. the wallet
+ * balance is too low) or the failure came before the request was sent. PAYING → PAYMENT_QUEUED
+ * with the attempt cleared (the CHECKs require `attempted_at`, `completed_at` and
+ * `safe_response_code` NULL there), so the owner can top up and pay again. False when the
+ * claim is no longer PAYING; the caller then takes the unknown path.
+ */
+export async function releaseUnpaidRecoveryClaim(
+  tx: TenantTransaction,
+  context: TenantContext,
+  batchId: string,
+  recoveryId: string,
+): Promise<boolean> {
+  requireTenantAdmin(context);
+  const released = await tx
+    .update(providerUnpaidRecoveries)
+    .set({
+      status: "PAYMENT_QUEUED",
+      attemptedAt: null,
+      completedAt: null,
+      safeResponseCode: null,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(providerUnpaidRecoveries.id, recoveryId),
+        eq(providerUnpaidRecoveries.batchId, batchId),
+        eq(providerUnpaidRecoveries.tenantId, context.tenantId),
+        eq(providerUnpaidRecoveries.status, "PAYING"),
+      ),
+    )
+    .returning({ id: providerUnpaidRecoveries.id });
+  return released.length === 1;
+}
+
 export async function markUnpaidRecoveryUnknown(
   tx: TenantTransaction,
   context: TenantContext,

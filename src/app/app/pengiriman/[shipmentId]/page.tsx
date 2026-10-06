@@ -28,6 +28,7 @@ import { courierServiceName } from "@/db/shipment-invoice-repository";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
 import { mengantarCourierOfService } from "@/lib/mengantar-couriers";
 import { resiWhatsappHref } from "@/lib/whatsapp";
+import { isLiveMengantarOrdersEnabled } from "@/lib/mengantar-live-transport";
 import { providerResponseLabel } from "@/lib/labels/provider";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture";
@@ -275,7 +276,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
         <IssuanceProvider
           codFormulaRetired={view.codFormulaRetired}
           declaredValueIdr={detail.package.declaredValueIdr}
-          fixtureEnabled={isSanctionedOrderFixtureEnabled()}
+          fixtureEnabled={isLiveMengantarOrdersEnabled() || isSanctionedOrderFixtureEnabled()}
           // T-271: an Operator's options carry the customer split only (D-37/D-38 tiers).
           options={issuanceOptionsForRole(buildShipmentEstimateOptions({
             codFormulaRetired: view.codFormulaRetired,
@@ -335,9 +336,9 @@ function NextStepActions({ resiShareHref = null, shipmentId, step }: { resiShare
     case "new-draft":
       return primaryLink(step.href, <Plus aria-hidden="true" />, "Buat kiriman baru");
     case "recover":
-      return <UnpaidRecoveryAction fixtureEnabled={isSanctionedUnpaidRecoveryFixtureEnabled()} shipmentId={shipmentId} />;
+      return <UnpaidRecoveryAction fixtureEnabled={isLiveMengantarOrdersEnabled() || isSanctionedUnpaidRecoveryFixtureEnabled()} shipmentId={shipmentId} />;
     case "reconcile":
-      return <ReconciliationAction fixtureEnabled={isSanctionedReconciliationFixtureEnabled()} shipmentId={shipmentId} />;
+      return <ReconciliationAction fixtureEnabled={isLiveMengantarOrdersEnabled() || isSanctionedReconciliationFixtureEnabled()} shipmentId={shipmentId} />;
     case "none":
       return <p className="text-sm text-muted-foreground" role="status">{step.message}</p>;
   }

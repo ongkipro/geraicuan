@@ -81,6 +81,8 @@ describe("ephemeral tenant shipping-rate checks", () => {
     const result = await checkShippingRates({}, form({ tenantId: "forged", originAreaId: "forged" }));
     expect(result).toEqual({ quote: {
       outletId, originAreaLabel: "Coblong, Bandung", destinationAreaLabel: "Dago, Bandung, 40135",
+      // T-287: the checked area and the words that found it, for the Buat kiriman prefill.
+      destinationAreaId: "canonical-area", destinationQuery: "Dago",
       weightGrams: 1000, retrievedAt: expect.any(String), services: [{
         providerService: "JNE", shippingAmountIdr: 8000, deliveryEstimate: "2 - 3 days", codEligible: false,
       }],

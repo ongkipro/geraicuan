@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { isLiveMengantarOrdersEnabled } from "@/lib/mengantar-live-transport";
 import { parseShipmentPrefill } from "@/lib/shipment-prefill";
 import { eq } from "drizzle-orm";
 import { Clock, FileSearch, Printer, Settings2 } from "lucide-react";
@@ -235,7 +236,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
           provider={{
             codFormulaRetired: data.codFormulaRetired,
             declaredValueIdr: draft.declaredValueIdr,
-            fixtureEnabled: isSanctionedOrderFixtureEnabled(),
+            fixtureEnabled: isLiveMengantarOrdersEnabled() || isSanctionedOrderFixtureEnabled(),
             // T-271: an Operator's options carry the customer split only (D-37/D-38 tiers).
             options: issuanceOptionsForRole(buildShipmentEstimateOptions({
               codFormulaRetired: data.codFormulaRetired,

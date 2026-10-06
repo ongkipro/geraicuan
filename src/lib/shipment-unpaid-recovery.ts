@@ -13,6 +13,7 @@ import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import { markStaleUnpaidRecoveryUnknown } from "@/db/unpaid-recovery-repository";
 import {
+  MengantarPayUnpaidRefusedError,
   orchestrateFixtureBackedMengantarUnpaidRecovery,
   type MengantarPayUnpaidTransportLookup,
 } from "@/lib/mengantar-unpaid-recovery";
@@ -114,6 +115,9 @@ export async function recoverFixtureBackedShipmentPayment(
     batchId: target.batchId,
     resolveTransport: input.resolveTransport,
   });
+  // T-282: Mengantar paid nothing; the recovery is queued again and the owner is told why.
+  const refusal = execution.recoveries.find((recovery) => recovery.shipmentId === target.shipmentId)?.refusal;
+  if (refusal) throw new MengantarPayUnpaidRefusedError(refusal.safeCode, refusal.providerMessage);
   const recovered = await withTenantContext(
     input.db,
     input.principalId,

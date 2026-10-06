@@ -11,6 +11,7 @@ import {
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import { normalizeMengantarProviderIdentifier } from "@/lib/mengantar-order";
+import { isLiveMengantarOrdersEnabled } from "@/lib/mengantar-live-transport";
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 
 export type ShipmentReconciliationLookupKey = Readonly<{
@@ -31,6 +32,9 @@ export type ShipmentReconciliationLookupResult = ShipmentReconciliationLookupKey
   cnoteNo: unknown;
   isPaid: unknown;
   providerOrderId: unknown;
+  /** T-282 (T-227 #3): the Mengantar batch `_id`, when the lookup proved it; else absent or null. */
+  providerBatchId?: unknown;
+  /** `UNDETERMINED`: the lookup could not prove one outcome; nothing changes (D-43). */
   status: unknown;
 };
 
@@ -56,6 +60,21 @@ export class ShipmentReconciliationResultUnavailableError extends Error {
   constructor() {
     super("Authoritative shipment reconciliation result is unavailable.");
   }
+}
+
+/**
+ * T-282 (D-43): Mengantar's stored orders did not prove one outcome — more than one match,
+ * none yet while the order may still appear, or the read could not complete. No state changes.
+ */
+export class ShipmentReconciliationUndeterminedError extends Error {
+  constructor() {
+    super("The provider outcome could not be determined automatically.");
+  }
+}
+
+function optionalBatchId(value: unknown) {
+  if (value === undefined || value === null) return null;
+  return normalizeMengantarProviderIdentifier(value, "RECONCILIATION_BATCH_ID_UNSAFE");
 }
 
 function lookupKey(target: ShipmentReconciliationTarget) {
@@ -99,6 +118,7 @@ function normalizeResult(
   if (!sameLookupKey(key, value)) {
     throw new ShipmentReconciliationResultUnavailableError();
   }
+  if (value.status === "UNDETERMINED") throw new ShipmentReconciliationUndeterminedError();
 
   try {
     if (value.status === "ISSUED") {
@@ -115,6 +135,7 @@ function normalizeResult(
           value.providerOrderId,
           "RECONCILIATION_ORDER_ID_UNSAFE",
         ),
+        providerBatchId: optionalBatchId(value.providerBatchId),
         safeResponseCode: "RECONCILED_ISSUED",
         status: "ISSUED",
       };
@@ -134,6 +155,7 @@ function normalizeResult(
           value.providerOrderId,
           "RECONCILIATION_ORDER_ID_UNSAFE",
         ),
+        providerBatchId: optionalBatchId(value.providerBatchId),
         safeResponseCode: "RECONCILED_AWAITING_PAYMENT",
         status: "AWAITING_UPSTREAM_PAYMENT",
       };
@@ -148,6 +170,7 @@ function normalizeResult(
         cnoteNo: null,
         isPaid: null,
         providerOrderId: null,
+        providerBatchId: null,
         safeResponseCode: "RECONCILED_FAILED",
         status: "FAILED",
       };
@@ -169,14 +192,16 @@ export async function reconcileFixtureBackedShipment(
       loadShipmentReconciliationTarget(tx, context, input.shipmentId),
   );
   const key = lookupKey(target);
-  if (!isSanctionedReconciliationFixtureEnabled()) {
+  // T-282: the live lookup (D-42 switch) or the development fixture; neither → nothing to ask.
+  if (!isLiveMengantarOrdersEnabled() && !isSanctionedReconciliationFixtureEnabled()) {
     throw new ShipmentReconciliationResultUnavailableError();
   }
 
   let raw: ShipmentReconciliationLookupResult;
   try {
     raw = await input.resolveAuthoritativeResult(key);
-  } catch {
+  } catch (error) {
+    if (error instanceof ShipmentReconciliationUndeterminedError) throw error;
     throw new ShipmentReconciliationResultUnavailableError();
   }
   const result = normalizeResult(target, key, raw);

@@ -15,9 +15,12 @@ import {
   resolveSanctionedReconciliationFixture,
   SanctionedReconciliationFixtureUnavailableError,
 } from "@/lib/sanctioned-reconciliation-fixture";
+import { createLiveMengantarReconciliationLookup } from "@/lib/mengantar-live-reconciliation";
+import { isLiveMengantarOrdersEnabled } from "@/lib/mengantar-live-transport";
 import {
   reconcileFixtureBackedShipment,
   ShipmentReconciliationResultUnavailableError,
+  ShipmentReconciliationUndeterminedError,
 } from "@/lib/shipment-reconciliation";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,15 +62,21 @@ export async function reconcileShipmentUnknownSubmission(
   if (principal.role !== "TENANT_ADMIN") {
     return { error: "Rekonsiliasi hasil penyedia hanya tersedia untuk pemilik gerai." };
   }
-  if (!isSanctionedReconciliationFixtureEnabled()) {
-    return { error: "Rekonsiliasi dinonaktifkan karena data uji non-produksi yang disetujui belum diaktifkan." };
+  // T-282 (D-42): Mengantar's stored orders when live, else the development fixture, else nothing.
+  const resolveAuthoritativeResult = isLiveMengantarOrdersEnabled()
+    ? createLiveMengantarReconciliationLookup({ db, principalId: principal.userId, tenantId: principal.tenantId })
+    : isSanctionedReconciliationFixtureEnabled()
+      ? resolveSanctionedReconciliationFixture
+      : null;
+  if (!resolveAuthoritativeResult) {
+    return { error: "Rekonsiliasi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN." };
   }
 
   try {
     const result = await reconcileFixtureBackedShipment({
       db,
       principalId: principal.userId,
-      resolveAuthoritativeResult: resolveSanctionedReconciliationFixture,
+      resolveAuthoritativeResult,
       shipmentId,
       tenantId: principal.tenantId,
     });
@@ -83,6 +92,12 @@ export async function reconcileShipmentUnknownSubmission(
       },
     };
   } catch (error) {
+    if (error instanceof ShipmentReconciliationUndeterminedError) {
+      return {
+        error:
+          "Status pesanan di Mengantar belum bisa dipastikan otomatis. Status kiriman tidak diubah. Cek pesanan ini di aplikasi Mengantar, atau coba lagi nanti.",
+      };
+    }
     if (
       error instanceof ShipmentReconciliationDeniedError
       || error instanceof ShipmentReconciliationUnavailableError
