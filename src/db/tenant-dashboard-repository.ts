@@ -15,7 +15,6 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import type { AnalyticsRange } from "@/lib/analytics-range";
 import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
-import { summarizeLatestReconciliationVariances } from "@/db/ledger-repository";
 import {
   loadProviderDeliveryStatusBasis,
   type ProviderDeliveryStatusBasis,
@@ -39,12 +38,6 @@ export type TenantDashboardSummary = {
   issuedToday: number;
   readyToProgress: number;
   total: number;
-};
-
-export type TenantDashboardActionBreakdown = {
-  awaitingUpstreamPayment: number;
-  failed: number;
-  submissionUnknown: number;
 };
 
 export type TenantDashboardWorkflowBreakdown = {
@@ -143,20 +136,16 @@ export type TenantDashboardCourierRecap = {
 };
 
 type TenantDashboardMetricsBase = {
-  actionRequiredBreakdown: TenantDashboardActionBreakdown;
   summary: TenantDashboardSummary;
   workflowBreakdown: TenantDashboardWorkflowBreakdown;
   generatedAt: Date;
 };
 
-export type TenantDashboardMetrics =
-  | (TenantDashboardMetricsBase & {
-      finance: { reconciliationVarianceCount: number };
-      role: "TENANT_ADMIN";
-    })
-  | (TenantDashboardMetricsBase & {
-      role: "OPERATOR";
-    });
+// T-278: no ACT-UNPAID value and no reconciliation count — no surface renders either, and an
+// Operator must never receive the unpaid figure (spec 19 ACT-UNPAID, PR-25).
+export type TenantDashboardMetrics = TenantDashboardMetricsBase & {
+  role: TenantContext["role"];
+};
 
 export type TenantDashboard = TenantDashboardMetrics & {
   recentShipments: TenantDashboardRecentShipment[];
@@ -683,10 +672,6 @@ export async function loadTenantDashboardMetrics(
         sql<number>`count(*) filter (where ${shipments.status} in ('DRAFT', 'ESTIMATED'))::int`.mapWith(
           Number,
         ),
-      awaitingUpstreamPayment:
-        sql<number>`count(*) filter (where ${shipments.status} = 'AWAITING_UPSTREAM_PAYMENT')::int`.mapWith(
-          Number,
-        ),
       submissionUnknown:
         sql<number>`count(*) filter (where ${shipments.status} = 'SUBMISSION_UNKNOWN')::int`.mapWith(
           Number,
@@ -711,41 +696,22 @@ export async function loadTenantDashboardMetrics(
     throw new Error("Tenant dashboard issued-today count was not loaded.");
   }
 
-  const actionRequiredBreakdown = {
-    awaitingUpstreamPayment: counts.awaitingUpstreamPayment,
-    submissionUnknown: counts.submissionUnknown,
-    failed: counts.failed,
-  };
-
-  const dashboard: TenantDashboardMetricsBase = {
-    actionRequiredBreakdown,
+  return {
     generatedAt: new Date(counts.generatedAt),
     summary: {
       total: counts.total,
       readyToProgress: counts.readyToProgress,
       issuedToday: issuedTodayRow.issuedToday,
       // Spec 19 ACT-NEEDED; equals the ACTION_REQUIRED queue total.
-      actionRequired:
-        actionRequiredBreakdown.submissionUnknown +
-        actionRequiredBreakdown.failed,
+      actionRequired: counts.submissionUnknown + counts.failed,
     },
     workflowBreakdown: {
       draft: counts.draft,
       estimated: counts.estimated,
       issuedToday: issuedTodayRow.issuedToday,
     },
+    role: context.role,
   };
-
-  if (context.role === "TENANT_ADMIN") {
-    const variances = await summarizeLatestReconciliationVariances(tx, context);
-    return {
-      ...dashboard,
-      finance: { reconciliationVarianceCount: variances.varianceCount },
-      role: "TENANT_ADMIN",
-    };
-  }
-
-  return { ...dashboard, role: "OPERATOR" };
 }
 
 export async function loadTenantDashboardShipments(

@@ -438,6 +438,8 @@ afterAll(async () => {
   }
 });
 
+const DASHBOARD_METRIC_KEYS = ["generatedAt", "recentShipments", "role", "summary", "workflowBreakdown"];
+
 describe("tenant dashboard read model", () => {
   it("returns role-safe tenant aggregates and prioritizes actionable recent shipments", async () => {
     const loadFor = (userId: string) =>
@@ -476,11 +478,6 @@ describe("tenant dashboard read model", () => {
       issuedToday: 1,
       actionRequired: 2,
     });
-    expect(adminResult.dashboard.actionRequiredBreakdown).toEqual({
-      awaitingUpstreamPayment: 1,
-      submissionUnknown: 1,
-      failed: 1,
-    });
     expect(adminResult.dashboard.workflowBreakdown).toEqual({
       draft: 1,
       estimated: 1,
@@ -495,14 +492,19 @@ describe("tenant dashboard read model", () => {
       shipmentId(3),
     ]);
     expect(adminResult.dashboard.role).toBe("TENANT_ADMIN");
-    if (adminResult.dashboard.role !== "TENANT_ADMIN") {
-      throw new Error("Expected Tenant Admin dashboard fixture.");
-    }
-    expect(adminResult.dashboard.finance).toEqual({
-      reconciliationVarianceCount: 1,
-    });
     expect(operatorResult.dashboard.role).toBe("OPERATOR");
-    expect(operatorResult.dashboard).not.toHaveProperty("finance");
+    // T-278 (spec 19 ACT-UNPAID, PR-25): the dashboard read carries no unpaid
+    // value for either role — none renders it, and an Operator may not receive it.
+    // The fixture holds one AWAITING_UPSTREAM_PAYMENT shipment, so a count of 1
+    // anywhere in the payload would be that figure.
+    for (const result of [adminResult, operatorResult]) {
+      expect(result.dashboard).not.toHaveProperty("actionRequiredBreakdown");
+      expect(result.dashboard).not.toHaveProperty("finance");
+      expect(JSON.stringify({ ...result.dashboard, recentShipments: undefined })).not.toMatch(/awaiting|unpaid/i);
+      // Bound to the shape, not the spelling: exactly these keys, so a renamed field fails too.
+      expect(Object.keys(result.dashboard).sort()).toEqual(DASHBOARD_METRIC_KEYS);
+      expect(Object.keys(result.dashboard.summary).sort()).toEqual(["actionRequired", "issuedToday", "readyToProgress", "total"]);
+    }
     expect(operatorResult.dashboard.summary).toEqual(
       adminResult.dashboard.summary,
     );
@@ -513,7 +515,7 @@ describe("tenant dashboard read model", () => {
       adminResult.dashboard.summary.issuedToday,
     );
     // Spec 19 ACT-NEEDED equals its linked queue for both roles and excludes
-    // awaiting payment; ACT-UNPAID equals the queue its tile links to.
+    // awaiting payment.
     expect(adminResult.actionQueue.totalCount).toBe(
       adminResult.dashboard.summary.actionRequired,
     );
@@ -525,9 +527,8 @@ describe("tenant dashboard read model", () => {
         (row) => row.status === "AWAITING_UPSTREAM_PAYMENT",
       ),
     ).toBe(false);
-    expect(adminResult.awaitingQueue.totalCount).toBe(
-      adminResult.dashboard.actionRequiredBreakdown.awaitingUpstreamPayment,
-    );
+    // ACT-UNPAID lives only on its own queue filter (PR-52 state panel).
+    expect(adminResult.awaitingQueue.totalCount).toBe(1);
     expect(shipmentQueueHref("READY_TO_PROGRESS")).toContain(
       "status=READY_TO_PROGRESS",
     );
@@ -552,11 +553,6 @@ describe("tenant dashboard read model", () => {
       readyToProgress: 0,
       issuedToday: 1,
       actionRequired: 1,
-    });
-    expect(tenantBResult.actionRequiredBreakdown).toEqual({
-      awaitingUpstreamPayment: 0,
-      submissionUnknown: 0,
-      failed: 1,
     });
     expect(tenantBResult.workflowBreakdown).toEqual({
       draft: 0,

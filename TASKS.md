@@ -2215,7 +2215,8 @@ Rules for this phase:
     against PR-25/UX-8, coloured an interactive nav item violet, and cited two
     nonexistent constraint IDs; all were corrected in the same change.
 
-- [ ] **T-88 — Unify outcome and action-needed definitions across scopes**
+- [x] **T-88 — Unify outcome and action-needed definitions across scopes**
+  - Closed 2026-10-07 by T-278 — the dashboard read carries no ACT-UNPAID value for either role (the tile left with PR-50); `metric-scope-parity` binds issued, unpaid and unknown fixtures created and resolved in different periods across Dasbor, Laporan (`loadCourierPerformance`) and `/platform`, and both roles' ACT-NEEDED; the shared predicate is a recorded `// lazy:` ceiling (`analytics-repository.ts`).
   - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-11
   - Constraints: spec 19 SHP-ISSUED, SHP-UNPAID-OUTCOME, ACT-NEEDED,
@@ -2225,7 +2226,8 @@ Rules for this phase:
   - Remaining scope: Extract/reuse shared outcome predicates, add the missing cross-period unknown fixture and complete role/count parity assertions; reconcile spec19 drift labels with executed evidence. Preserve the delivered resolved_at and queue/link corrections.
   - Done when: Issued, unpaid and unknown fixtures with different creation/resolution periods agree across app, analytics and platform; both roles' action-needed equals its queue, Operator receives no unpaid metric, and Tenant Admin unpaid equals its linked queue. The shared predicate and matching spec19 evidence exist.
 
-- [ ] **T-89 — Correct rate precision and period comparison semantics**
+- [x] **T-89 — Correct rate precision and period comparison semantics**
+  - Closed 2026-10-07 by T-278 — OPS-FAILURE-SHARE one decimal (`formatRate`); KPI comparison per M-0 ("Tidak berubah"; neutral "• Belum ada pada periode sebelumnya" without arrow or tone); SHP-ISSUE-RATE has no period comparison since T-204, so the percentage-point rule has no consumer. After independent review (FAIL round 1): a zero denominator now shows "—" (`health.failures.submissions`, tested; never "0,0%"); `formatRate` rounding at exact .x5 tested (6,25 → 6,3%; 18,75 → 18,8%); "negative current" has no case because every compared figure is a count; the to-date comparison item is superseded by the T-240 previous-period definition in spec 19 M-0 (equal-length span of WIB calendar days, e.g. Hari ini → Kemarin). Browser evidence 2026-10-07 (snap Chromium, 390/1440, dev 3127): `/platform` failure share "5,6%" and "Diperbarui … WIB"; Dasbor 10–16 Agu (previous period empty) shows four neutral "• Belum ada pada periode sebelumnya" pills without arrow or repeated label, contained in their cards at 320/390 after the pill was allowed to wrap (it overflowed at `h-6`).
   - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-15
   - Constraints: spec 19 M-0 counts/rates/comparisons, SHP-ISSUE-RATE,
@@ -2235,7 +2237,8 @@ Rules for this phase:
   - Remaining scope: Finish one-decimal rates, percentage-point deltas, neutral previous-zero wording, zero-denominator suppression, and equal to-date comparisons for current calendar periods. Retain existing denominator context.
   - Done when: Comparison/range tests cover equal, previous-zero, negative current, denominator-zero, .05 rounding and partial-period boundaries; browser evidence verifies rate precision, percentage points and low-volume wording.
 
-- [ ] **T-90 — Align money metrics, adjustments, and the COD split**
+- [x] **T-90 — Align money metrics, adjustments, and the COD split**
+  - Closed 2026-10-07 by T-278 — platform tenant detail FIN-* include insurance and fold adjustments (`metric-scope-parity`); COD fee half-up boundary tested in TypeScript and SQL; the analytics halves (shipping-only cost, snapshot COD flag, resolved-basis fee/estimate) left with the dead loaders; COGS withdrawn by T-177.
   - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-20
   - Constraints: spec 19 FIN-*, SHP-COD, COD-TEST, REC-VARIANCE,
@@ -2258,7 +2261,8 @@ Rules for this phase:
   - Done when: The accepted D-3 decision is recorded, and mixed COD/non-COD/null-COGS fixtures prove its result or complete removal from surfaces, types and export.
   - Evidence (2026-09-17, T-177): implemented as a withdrawal — no margin or COGS figure on any surface, type or export (see T-177). Closes with T-177 once the PR-33 amendment is applied to `docs/spec/02-PRD.md`.
 
-- [ ] **T-92 — Make timezone, generated-at, staleness, and durations consistent**
+- [x] **T-92 — Make timezone, generated-at, staleness, and durations consistent**
+  - Closed 2026-10-07 by T-278 — `/platform` renders its database generated-at through the shared `FreshnessLine` (stale "Muat ulang"); sub-minute durations already read in seconds (T-257, 45 s case now tested); WIB lock by T-140; Keuangan's JavaScript clock left with the page (T-204).
   - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-15
   - Constraints: spec 19 M-0 period/freshness, OPS-BATCH-DURATION
@@ -2267,7 +2271,8 @@ Rules for this phase:
   - Delivered by T-140: fixed WIB across date filters, period labels and legacy timezone URLs. Remaining scope: propagate actual DB generated-at/staleness to platform and finance, and display sub-minute durations in seconds. Preserve existing shared freshness presentation.
   - Done when: Real timestamp/staleness tests pass, a 45-second duration renders seconds, and legacy Asia/Jayapura URLs consistently resolve to WIB under PR-35.
 
-- [ ] **T-93 — Complete and test platform severity rules**
+- [x] **T-93 — Complete and test platform severity rules**
+  - Closed 2026-10-07 by T-278 — any non-zero unpaid is at least Perhatian; `platformHealthSeverities` holds every rule with boundary tests; the rolling-hour and credential-code inputs are tested in SQL; the caption is worded from the thresholds and names the rolling-hour exception to the period filter.
   - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-11
   - Constraints: spec 19 M-2 platform table
@@ -3650,7 +3655,7 @@ Inputs, all 2026-10-06 and read-only: a reconciliation of Phase 12 against the v
 
 - [x] **T-276 — Reconcile documents, architecture diagrams and the queue with the v3 tree.** Done 2026-10-06 (BUILD-LOG T-276). R1 documentation. System map snapshot and maturity re-based on `30a8eb0`, route diagram completed (Pencairan COD, Info terbaru ×2, handover scan, "Gerai"); ARCHITECTURE.md and spec 04 rewritten with context, container and trust diagrams; spec 03 issuance/print-handover-invoice/status/owner-money/registration sequences; spec 05 entity table, ERD and shipment state diagram; spec 02/README fixes; Phase 12 T-94–T-108 closed as superseded by ADR-0001 or done in v3 (T-95, T-99, T-104, T-107) except T-105; T-153 re-stated after T-237a.
 - [x] **T-277 — Review fixes for T-248–T-275.** Done 2026-10-06 (BUILD-LOG T-277). (M) an Operator's invoice payload (`previewShipmentInvoice`, `issueShipmentInvoice`, label and batch pages) carries `shippingChargeIdr`/`totalIdr`, from which Biaya COD + Pembulatan is derivable (D-40); (L) the Cetak resi day line's "n tertunda" ignores the resi filter while the tile honours it; (L) migration 0070 re-adds two `audit_events` CHECKs without `NOT VALID` — record the rule for future migrations (0070 is applied and not edited); (L) owner-money vs report negative-estimate handling recorded; the cold-import 5 s test timeout seen under load.
-- [ ] **T-278 — Close the Phase 12 metric residuals (T-88, T-89, T-90, T-92, T-93).** T-90: insurance in provider cost and the COD rounding boundary checked on the live surfaces (spec 19 FIN-* rows; Keuangan/analytics halves are moot after T-204). Operator receives no ACT-UNPAID value; `metric-scope-parity` gains a cross-period unknown fixture and reads the live Laporan source; OPS-FAILURE-SHARE one decimal; KPI comparison wording per spec 19 M-0; platform generated-at rendered; any non-zero unpaid is at least Perhatian, severity boundaries tested through one pure function, captions state the rolling and credential rules; dead analytics functions removed (`loadShipmentKpis`, `loadShipmentKpiComparison`, `loadShipmentTrend`, `loadShipmentPage`, `loadShipmentExport`, `countTenantShipments`, `formatAnalyticsComparison`; ledger `appendLedgerAdjustment`/`recordLedgerReconciliation`/`reconcileLedgerPeriod` and the unread `reconciliationVarianceCount`/`basis` checked for callers first); spec 19 statuses made truthful.
+- [x] **T-278 — Close the Phase 12 metric residuals (T-88, T-89, T-90, T-92, T-93).** Done 2026-10-07 (BUILD-LOG T-278); ledger `appendLedgerAdjustment`/`recordLedgerReconciliation`/`reconcileLedgerPeriod` kept (PR-16 Must; removing them needs a PRD amendment), the rest of the dead code removed; browser evidence for `/platform` and the Dasbor KPI pill pending (coordinator). T-90: insurance in provider cost and the COD rounding boundary checked on the live surfaces (spec 19 FIN-* rows; Keuangan/analytics halves are moot after T-204). Operator receives no ACT-UNPAID value; `metric-scope-parity` gains a cross-period unknown fixture and reads the live Laporan source; OPS-FAILURE-SHARE one decimal; KPI comparison wording per spec 19 M-0; platform generated-at rendered; any non-zero unpaid is at least Perhatian, severity boundaries tested through one pure function, captions state the rolling and credential rules; dead analytics functions removed (`loadShipmentKpis`, `loadShipmentKpiComparison`, `loadShipmentTrend`, `loadShipmentPage`, `loadShipmentExport`, `countTenantShipments`, `formatAnalyticsComparison`; ledger `appendLedgerAdjustment`/`recordLedgerReconciliation`/`reconcileLedgerPeriod` and the unread `reconciliationVarianceCount`/`basis` checked for callers first); spec 19 statuses made truthful.
 - [ ] **T-279 — Archive a gerai (T-105 residual; spec 17 UX-v3.1, UX-v3.3).** Super Admin only, typed-name confirmation, ACTIVE/SUSPENDED → ARCHIVED, audited, archived tenant refused by tenant scope.
 - [x] **T-280 — Live Mengantar order transport: create resi and push pickup.** Done 2026-10-07 in code and tests (BUILD-LOG T-280); live proof is T-285. A server-only HTTP transport for `POST /order` and `POST /time` behind `MENGANTAR_LIVE_ORDERS_ENABLED=1` (D-5 amended by D-42), resolved through the existing `MengantarOrderTransportLookup` and credential resolution; definite provider refusals (final 409, 400, 403, `invalid pickup time`) return the batch to the queue instead of SUBMISSION_UNKNOWN; transport failures, 422 and 5xx stay unknown. The reserved `time_id` is not persisted (recorded `// lazy:` ceiling: a retry reserves the slot again).
 - [ ] **T-281 — Cancel a shipment on Mengantar (`DELETE /order`).** Tenant Admin action for an ISSUED shipment whose provider status still allows deletion; CANCELLED only after Mengantar confirms; Anteraja 5-minute rule; idempotent; audited; the courier's refusal shown.

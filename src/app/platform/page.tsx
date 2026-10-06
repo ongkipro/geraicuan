@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { FreshnessLine } from "@/app/app/pengiriman/_list/freshness-line";
 import { DateRangePicker } from "@/components/app/date-range-picker";
 import { FilterBar } from "@/components/app/filter-bar";
 import { SectionHelp } from "@/components/app/help-hint";
@@ -15,9 +16,10 @@ import type { HealthTile, PlatformHealth } from "@/db/platform-monitoring-reposi
 import { formatRangeLabel } from "@/lib/analytics-range";
 import { buildPlatformHref } from "@/lib/platform-monitoring-filters";
 import { formatCount, formatDuration } from "@/lib/platform-monitoring-format";
+import { formatRate } from "@/lib/shipment-report-analytics";
 
 import { formatSeconds, formatWib, severityBadge } from "./_components/platform-format";
-import { attentionItems, filtersChanged, platformTrendTotals } from "./_components/platform-logic";
+import { attentionItems, filtersChanged, PLATFORM_HEALTH_CAPTION, platformTrendTotals } from "./_components/platform-logic";
 import { PlatformTrendChart } from "./_components/platform-trend-chart";
 import {
   ArrowLink,
@@ -48,7 +50,7 @@ function HealthRow({ health }: { health: PlatformHealth }) {
   };
   const items: StatItem[] = [
     { badge: badge(health.queue), key: "queue", label: "Antrean pengajuan", metric: "OPS-QUEUE-STUCK", note: health.queue.count ? `Terlama ${formatDuration(health.queue.oldestMs)}` : "Tidak ada yang tertahan", value: formatCount(health.queue.count) },
-    { badge: badge(health.failures), key: "failures", label: "Kegagalan provider", metric: "OPS-FAILURE-COUNT", note: `${Math.round(health.failures.share * 100)}% dari pengajuan`, value: formatCount(health.failures.count) },
+    { badge: badge(health.failures), key: "failures", label: "Kegagalan provider", metric: "OPS-FAILURE-COUNT", note: health.failures.submissions === 0 ? "— (belum ada pengajuan)" : `${formatRate(health.failures.share * 100)} dari pengajuan`, value: formatCount(health.failures.count) },
     { badge: badge(health.unknown), key: "unknown", label: "Status tidak diketahui", metric: "OPS-UNKNOWN", note: `${formatCount(health.unknown.batches)} pengajuan · ${formatCount(health.unknown.orders)} pesanan`, value: formatCount(health.unknown.count) },
     { badge: badge(health.unpaid), key: "unpaid", label: "Menunggu pembayaran", metric: "OPS-UNPAID", note: `${formatCount(health.unpaid.recovering)} pemulihan berjalan`, value: formatCount(health.unpaid.count) },
     { key: "latency", label: "Durasi penyelesaian", metric: "OPS-BATCH-DURATION", note: `Median · 95% dalam ${formatSeconds(health.latency.p95Seconds)}`, value: formatSeconds(health.latency.p50Seconds) },
@@ -59,10 +61,7 @@ function HealthRow({ health }: { health: PlatformHealth }) {
 function HealthHelp() {
   return (
     <SectionHelp label="Cara membaca kesehatan platform">
-      <p>Antrean pengajuan menghitung pengajuan ke Mengantar yang tertahan lebih dari 15 menit. Kritis bila 20 atau lebih, atau yang terlama lebih dari 60 menit.</p>
-      <p>Kegagalan provider adalah pengajuan gagal pada periode ini; persennya dari semua pengajuan periode ini. Status tidak diketahui perlu rekonsiliasi sebelum dicoba lagi.</p>
-      <p>Menunggu pembayaran adalah pesanan yang belum dibayar ke Mengantar. Durasi penyelesaian adalah median waktu pengajuan sampai selesai.</p>
-      <p>Tanda Perhatian atau Kritis hanya muncul bila perlu tindakan.</p>
+      {PLATFORM_HEALTH_CAPTION.map((sentence) => <p key={sentence}>{sentence}</p>)}
     </SectionHelp>
   );
 }
@@ -294,6 +293,8 @@ export default async function PlatformOverviewPage({ searchParams }: PageProps<"
           <h2 className="text-lg leading-snug font-bold" id="kesehatan-platform">Kesehatan platform</h2>
           <HealthHelp />
         </div>
+        {/* T-92: the database clock of the read that produced these figures, with the shared stale action. */}
+        {view.health ? <FreshnessLine generatedAtIso={view.health.generatedAt.toISOString()} key={view.health.generatedAt.toISOString()} text={`Diperbarui ${formatWib(view.health.generatedAt)}`} /> : null}
         {view.health ? <HealthRow health={view.health} /> : <RegionError title="Kesehatan platform" />}
       </section>
       <Attention view={view} />

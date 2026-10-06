@@ -162,6 +162,9 @@ describe("Laporan pengiriman analytics logic (T-235)", () => {
   it("formats rates with one decimal and a dash without a denominator", () => {
     expect(formatRate(returnRate({ deliveredCount: 2, returnedCount: 1 }))).toBe("33,3%");
     expect(formatRate(returnRate({ deliveredCount: 0, returnedCount: 0 }))).toBe("—");
+    // T-89 (spec 19 M-0): exactly one decimal, half away from zero at an exact .x5 (Intl "halfExpand"):
+    // 1/16 = 6,25% → 6,3%; 3/16 = 18,75% → 18,8%; 1/8 = 12,5% stays 12,5%; 0 → "0,0%".
+    expect([1 / 16, 3 / 16, 1 / 8, 0, 2 / 3].map((share) => formatRate(share * 100))).toEqual(["6,3%", "18,8%", "12,5%", "0,0%", "66,7%"]);
   });
 
   it("groups every status into exactly one Ringkasan outcome bucket, in lifecycle order (T-254)", () => {

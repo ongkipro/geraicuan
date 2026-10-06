@@ -72,6 +72,42 @@ describe("platform monitoring trust boundary",()=>{
     const stable=parsePlatformFilters(Object.fromEntries(parsed.canonicalQuery),{route:"/platform/tenant",now,knownTenantIds:[tenantA,tenantB],knownOutletIds:[outletA],knownCouriers:["JNE"]});expect(stable.canonicalQuery.toString()).toBe(parsed.canonicalQuery.toString());
   });
 
+  // T-93: the two failure inputs the pure severity rules cannot see — the rolling code peak
+  // ignores the date range (last 60 minutes before the read), the credential-code flag only
+  // counts FAILED batches in range. Boundary decisions themselves: platform-health-severity.
+  it("T-93: reads the rolling 60-minute code peak outside the range and the credential code inside it",async()=>{
+    const insert=(count:number,status:"COMPLETED"|"FAILED",code:string|null,at:Date)=>admin.query(
+      `INSERT INTO provider_batches(id,tenant_id,outlet_id,pickup_address_id,courier,credential_source,provider_account_key,idempotency_key,status,safe_error_code,submission_attempted_at,completed_at,created_at)
+       SELECT gen_random_uuid(),$1,$2,'pickup-b','SEVTEST','platform_default',md5(random()::text)||md5(random()::text),md5(random()::text)||md5(random()::text),$3,$4,$5,$5,$5 FROM generate_series(1,$6)`,
+      [tenantB,outletB,status,code,at,count]);
+    const health=(range:ReturnType<typeof parseAnalyticsRange>)=>withPlatformContext(appDb,"monitor-super",tx=>readPlatformHealth(tx,{range,scope:{kind:"global"},outletId:null,courier:null,status:null,outcome:null,query:null,page:1},now));
+    const recent=new Date(now.getTime()-10*60_000);
+    const pastRange=parseAnalyticsRange({rentang:"kustom",dari:"2026-07-01",sampai:"2026-07-02",tz:"Asia/Jakarta"},now);
+    const currentRange=parseAnalyticsRange({rentang:"30-hari",tz:"Asia/Jakarta"},now);
+    try{
+      await insert(4,"FAILED","PROVIDER_TIMEOUT",recent);
+      let read=await health(pastRange);
+      expect(read.failures.count).toBe(0);expect(read.failures.severity).toBe("normal");
+      await insert(1,"FAILED","PROVIDER_TIMEOUT",recent);
+      read=await health(pastRange);
+      expect(read.failures.count).toBe(0);expect(read.failures.severity).toBe("kritis");
+      await admin.query("DELETE FROM provider_batches WHERE courier='SEVTEST'");
+
+      // 1 failure in 61 batches = 1,6 %: Normal by share, Kritis only for a credential code.
+      await insert(60,"COMPLETED",null,recent);
+      await insert(1,"FAILED","PROVIDER_TIMEOUT",recent);
+      read=await health(currentRange);
+      expect(read.failures.count).toBe(1);expect(read.failures.share).toBeLessThan(PLATFORM_HEALTH_THRESHOLDS.failureAttentionShare);expect(read.failures.severity).toBe("normal");
+      for(const code of ["AUTH_REJECTED","CREDENTIAL_INVALID","SCHEMA_MISMATCH"]){
+        await admin.query("UPDATE provider_batches SET safe_error_code=$1 WHERE courier='SEVTEST' AND status='FAILED'",[code]);
+        expect((await health(currentRange)).failures.severity,code).toBe("kritis");
+        expect((await health(pastRange)).failures.severity,`${code} outside the range`).toBe("normal");
+      }
+    }finally{
+      await admin.query("DELETE FROM provider_batches WHERE courier='SEVTEST'");
+    }
+  });
+
   it("T-257: binds each status strip count to the rows its filter lists, the audit filters, trend totals and member counts",async()=>{
     await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,created_at) VALUES ('monitor-super','SUPER_ADMIN',$1,'TENANT_SUSPENDED','TENANT',$2,'SUCCESS','2026-08-29T00:00:00Z'),('monitor-super','SUPER_ADMIN',NULL,'PLATFORM_MONITORING_VIEWED','PLATFORM','platform','SUCCESS','2026-08-29T01:00:00Z')",[tenantB,tenantB]);
     await admin.query("INSERT INTO audit_events(actor_id,actor_role,tenant_id,action,target_type,target_id,outcome,metadata,created_at) VALUES ('monitor-member','TENANT_MEMBER',$1,'SHIPMENT_HANDOVER_RECORDED','SHIPMENT','30000000-0000-4000-8000-000000000001','SUCCESS','{\"eventId\":\"50000000-0000-4000-8000-000000000001\"}','2026-08-29T02:00:00Z'),('monitor-member','TENANT_MEMBER',$1,'SHIPMENT_HANDOVER_UNDONE','SHIPMENT','30000000-0000-4000-8000-000000000001','SUCCESS','{\"eventId\":\"50000000-0000-4000-8000-000000000002\"}','2026-08-29T03:00:00Z')",[tenantA]);

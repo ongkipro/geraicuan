@@ -300,15 +300,16 @@ describe("Mengantar look (v3.2)", () => {
   // (spec 19 M-0), never its sign; the arrow and words carry the direction without colour.
   it("tones a KPI delta by the metric's desired direction, with arrow and words (T-273)", async () => {
     const { KpiCard, deltaTone } = await import("@/components/app/kpi-card");
-    const pill = (metricId: string | undefined, change: number) => {
-      const html = renderToStaticMarkup(createElement(KpiCard, { delta: { change, percent: 10 }, label: "L", metricId, value: 1 }));
-      const match = html.match(/<span class="([^"]*)" data-delta-tone="(\w+)">([\s\S]*?)<\/span><span class="text-xs/)!;
-      return { className: match[1], text: match[3].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), tone: match[2], arrow: /lucide-arrow-(up|down)-right|lucide-arrow-right/.exec(match[3])?.[0] };
+    const pill = (metricId: string | undefined, change: number, percent: number | null = 10) => {
+      const html = renderToStaticMarkup(createElement(KpiCard, { delta: { change, percent }, label: "L", metricId, value: 1 }));
+      const match = html.match(/<span class="([^"]*)" data-delta-tone="(\w+)">([\s\S]*?)<\/span>(?:<span class="text-xs text-muted-foreground">([^<]*)<\/span>|<\/div>)/)!;
+      return { className: match[1], text: match[3].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), tone: match[2], arrow: /lucide-arrow-(up|down)-right|lucide-arrow-right/.exec(match[3])?.[0], label: match[4] };
     };
     const created = pill("SHP-CREATED", 5);
     expect(created).toMatchObject({ arrow: "lucide-arrow-up-right", tone: "ok" });
     expect(created.className).toContain("bg-ok-surface text-ok");
     expect(created.text).toBe("Naik 5 (10%) (membaik)");
+    expect(created.label).toBeTruthy();
     const returned = pill("SHP-OUTCOME-RETURNED", 3);
     expect(returned).toMatchObject({ arrow: "lucide-arrow-up-right", tone: "danger" });
     expect(returned.className).toContain("bg-danger-surface text-danger");
@@ -316,7 +317,17 @@ describe("Mengantar look (v3.2)", () => {
     expect(pill("SHP-OUTCOME-RETURNED", -3)).toMatchObject({ arrow: "lucide-arrow-down-right", tone: "ok" });
     expect(pill("SHP-ISSUED", -2)).toMatchObject({ arrow: "lucide-arrow-down-right", tone: "danger" });
     // Unchanged, or a metric without a declared direction: the neutral pill, no judgement text.
-    expect(pill("SHP-CREATED", 0)).toMatchObject({ arrow: "lucide-arrow-right", text: "Tetap", tone: "neutral" });
+    // Spec 19 M-0 (T-278): equal → "→ Tidak berubah"; previous 0 and current not 0 → the
+    // neutral "• Belum ada pada periode sebelumnya", with no arrow and no tone even for a
+    // metric that declares a direction.
+    expect(pill("SHP-CREATED", 0)).toMatchObject({ arrow: "lucide-arrow-right", text: "Tidak berubah", tone: "neutral" });
+    for (const id of ["SHP-CREATED", "SHP-OUTCOME-RETURNED"]) {
+      const fromZero = pill(id, 7, null);
+      expect(fromZero).toMatchObject({ arrow: undefined, text: "• Belum ada pada periode sebelumnya", tone: "neutral" });
+      expect(fromZero.className).toContain("bg-muted");
+      // The pill already names the comparison; the "vs …" label is not repeated after it.
+      expect(fromZero.label).toBeUndefined();
+    }
     expect(pill("UNKNOWN-METRIC", 4)).toMatchObject({ text: "Naik 4 (10%)", tone: "neutral" });
     expect(pill("UNKNOWN-METRIC", 4).className).toContain("bg-muted");
     // Every Dasbor KPI declares its direction, so none renders uncoloured.

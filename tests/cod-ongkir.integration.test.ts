@@ -14,7 +14,6 @@ import {
   formatDraftIdr,
   issuanceCharges,
 } from "@/lib/shipment-draft-logic";
-import { loadShipmentPage } from "@/db/analytics-repository";
 import {
   calculateCodAmounts,
   calculateCodOngkirAmounts,
@@ -543,7 +542,7 @@ describe("T-186 COD Ongkir confirmation: application and row-level security", ()
   });
 });
 
-describe("T-186 an issued COD Ongkir shipment: ledger, label, report and analytics", () => {
+describe("T-186 an issued COD Ongkir shipment: ledger, label and report", () => {
   const charge = 20_000;
   const basis = 9_800;
   const now = new Date("2026-09-12T05:00:00.000Z");
@@ -656,7 +655,7 @@ describe("T-186 an issued COD Ongkir shipment: ledger, label, report and analyti
     expect(text).not.toMatch(/Nilai barang \S/);
   });
 
-  it("states the method in the report, its export and the analytics read model", async () => {
+  it("states the method in the report and its export", async () => {
     const ongkir = await seedQueued(31, "COD_ONGKIR");
     await seedQueued(32, "COD");
 
@@ -673,11 +672,6 @@ describe("T-186 an issued COD Ongkir shipment: ledger, label, report and analyti
     const paymentColumn = SHIPMENT_REPORT_COLUMNS.find((column) => column.metricId === "RPT-SHP-PAYMENT-MODE")!;
     expect(paymentColumn.value(ongkirRow)).toBe("COD_ONGKIR");
     expect(serializeShipmentReportCsv([ongkirRow])).toContain('"COD_ONGKIR"');
-
-    const analytics = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-      loadShipmentPage(tx, context, range, { limit: 50, offset: 0 }));
-    expect(analytics.rows.find((row) => row.shipmentId === ongkir.shipmentId)).toMatchObject({ isCod: true, paymentMethod: "COD_ONGKIR", providerCodAmountIdr: charge });
-    expect(analytics.rows.map((row) => row.paymentMethod).sort()).toEqual(["COD", "COD_ONGKIR"]);
 
     // The other tenant sees none of it.
     const foreign = await withTenantContext(appDb, userB, tenantB, (tx, context) =>

@@ -35,11 +35,10 @@ describe("tenant analytics URL filters", () => {
         courier: "JNE",
         lifecycleStatus: "ISSUED",
       },
-      eventBasis: "outcome",
       page: 2,
     });
     expect(parsed.canonicalQuery.toString()).toBe(
-      `rentang=7-hari&tz=Asia%2FJakarta&outlet=${outletId}&kurir=JNE&status=ISSUED&basis=outcome&halaman=2`,
+      `rentang=7-hari&tz=Asia%2FJakarta&outlet=${outletId}&kurir=JNE&status=ISSUED&halaman=2`,
     );
     expect(
       serializeTenantAnalyticsQuery(parsed.query).toString(),
@@ -68,20 +67,24 @@ describe("tenant analytics URL filters", () => {
         "outlet_tidak_dikenal",
         "kurir_tidak_dikenal",
         "status_tidak_dikenal",
-        "basis_tidak_dikenal",
       ]),
     );
     expect(parsed.canonicalQuery.toString()).not.toContain("outlet=");
   });
 
-  it("preserves the current-exception supporting basis", () => {
-    const parsed = parseTenantAnalyticsQuery(
-      { basis: "exceptions", outlet: outletId },
-      { now, knownOutletIds: [outletId], knownCouriers: ["JNE"] },
-    );
-
-    expect(parsed.filterRejected).toBe(false);
-    expect(parsed.query.eventBasis).toBe("exceptions");
-    expect(parsed.canonicalQuery.toString()).toContain("basis=exceptions");
+  // T-278: `basis` belonged to the removed Analitik table. An old link's value —
+  // valid or not — is ignored: it neither rejects the filters nor survives into
+  // the canonical query (and so never reaches the CSV link).
+  it("ignores the retired basis parameter", () => {
+    for (const basis of ["exceptions", "not-a-basis"]) {
+      const parsed = parseTenantAnalyticsQuery(
+        { basis, outlet: outletId },
+        { now, knownOutletIds: [outletId], knownCouriers: ["JNE"] },
+      );
+      expect(parsed.filterRejected).toBe(false);
+      expect(parsed.issues).toEqual([]);
+      expect(parsed.query).not.toHaveProperty("eventBasis");
+      expect(parsed.canonicalQuery.toString()).not.toContain("basis");
+    }
   });
 });

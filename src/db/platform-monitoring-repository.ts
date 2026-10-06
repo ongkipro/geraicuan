@@ -23,7 +23,6 @@ export const PLATFORM_HEALTH_THRESHOLDS = {
   queueStuckMs: 15 * 60_000,
   queueCriticalAgeMs: 60 * 60_000,
   queueCriticalCount: 20,
-  unpaidAttentionAgeMs: 2 * 60 * 60_000,
   unpaidCriticalAgeMs: 24 * 60 * 60_000,
   unknownCriticalAgeMs: 30 * 60_000,
   failureAttentionShare: 0.02,
@@ -33,6 +32,32 @@ export const PLATFORM_HEALTH_THRESHOLDS = {
 } as const;
 
 export type HealthSeverity = "normal" | "perhatian" | "kritis";
+
+export type PlatformHealthSignals = {
+  queue: { count: number; oldestMs: number | null };
+  unpaid: { count: number; oldestMs: number | null };
+  unknown: { count: number; oldestMs: number | null };
+  /** `recentCodePeak`: the most FAILED batches sharing one code in the last 60 minutes (not the range). */
+  failures: { share: number; recentCodePeak: number; hasCriticalCode: boolean };
+};
+
+/**
+ * Spec 19 M-2 platform severities, every rule in one place (T-93). Ages are strict ("older
+ * than"), counts and the rolling-code peak inclusive, as the M-2 table states them.
+ */
+export function platformHealthSeverities(signals: PlatformHealthSignals): Record<keyof PlatformHealthSignals, HealthSeverity> {
+  const t = PLATFORM_HEALTH_THRESHOLDS;
+  const { failures, queue, unknown, unpaid } = signals;
+  return {
+    queue: queue.count >= t.queueCriticalCount || (queue.oldestMs ?? 0) > t.queueCriticalAgeMs ? "kritis" : queue.count > 0 ? "perhatian" : "normal",
+    // T-93: any unpaid order asks for attention; age only decides Kritis.
+    unpaid: (unpaid.oldestMs ?? 0) > t.unpaidCriticalAgeMs ? "kritis" : unpaid.count > 0 ? "perhatian" : "normal",
+    unknown: (unknown.oldestMs ?? 0) > t.unknownCriticalAgeMs ? "kritis" : unknown.count > 0 ? "perhatian" : "normal",
+    failures: failures.share > t.failureCriticalShare || failures.recentCodePeak >= t.failureRecentCodeCount || failures.hasCriticalCode
+      ? "kritis"
+      : failures.share > t.failureAttentionShare ? "perhatian" : "normal",
+  };
+}
 export type HealthTile = {
   count: number;
   oldestMs: number | null;
@@ -44,7 +69,8 @@ export type PlatformHealth = {
   queue: HealthTile;
   unpaid: HealthTile & { recovering: number };
   unknown: HealthTile & { batches: number; orders: number; recoveries: number };
-  failures: HealthTile & { codes: { code: string; count: number }[]; share: number };
+  /** `submissions` is OPS-FAILURE-SHARE's denominator; with 0 the share is shown as "—" (spec 19 M-0). */
+  failures: HealthTile & { codes: { code: string; count: number }[]; share: number; submissions: number };
   latency: {
     p50Seconds: number | null;
     p95Seconds: number | null;
@@ -281,20 +307,26 @@ export async function readPlatformHealth(
         WHERE b.completed_at >= ${rangeStart} AND b.completed_at < ${rangeEnd} AND b.submission_attempted_at IS NOT NULL ${bScope} ${bOutlet} ${bCourier}
         GROUP BY b.courier ORDER BY b.courier`)
     : { rows: [] };
+  const severity = platformHealthSeverities({
+    queue: { count: queueCount, oldestMs: queueOldestMs },
+    unpaid: { count: unpaidCount, oldestMs: unpaidOldestMs },
+    unknown: { count: unknownCount, oldestMs: unknownOldestMs },
+    failures: { share: failureShare, recentCodePeak: asNumber(failureRaw?.recent_code_peak), hasCriticalCode: Boolean(failureRaw?.has_critical_code) },
+  });
   return {
     generatedAt: now,
     queue: {
       count: queueCount,
       oldestMs: queueOldestMs,
       affectedTenants: asNumber(queueRaw?.affected),
-      severity: queueCount >= PLATFORM_HEALTH_THRESHOLDS.queueCriticalCount || (queueOldestMs ?? 0) > PLATFORM_HEALTH_THRESHOLDS.queueCriticalAgeMs ? "kritis" : queueCount > 0 ? "perhatian" : "normal",
+      severity: severity.queue,
     },
     unpaid: {
       count: unpaidCount,
       oldestMs: unpaidOldestMs,
       affectedTenants: asNumber(unpaidRaw?.affected),
       recovering: asNumber(unpaidRaw?.recovering),
-      severity: (unpaidOldestMs ?? 0) > PLATFORM_HEALTH_THRESHOLDS.unpaidCriticalAgeMs ? "kritis" : (unpaidOldestMs ?? 0) > PLATFORM_HEALTH_THRESHOLDS.unpaidAttentionAgeMs ? "perhatian" : "normal",
+      severity: severity.unpaid,
     },
     unknown: {
       count: unknownCount,
@@ -303,15 +335,16 @@ export async function readPlatformHealth(
       recoveries: asNumber(unknownRaw?.recoveries),
       oldestMs: unknownOldestMs,
       affectedTenants: asNumber(unknownRaw?.affected),
-      severity: (unknownOldestMs ?? 0) > PLATFORM_HEALTH_THRESHOLDS.unknownCriticalAgeMs ? "kritis" : unknownCount > 0 ? "perhatian" : "normal",
+      severity: severity.unknown,
     },
     failures: {
       count: failed,
       oldestMs: asDate(failureRaw?.oldest_at) ? now.getTime() - asDate(failureRaw?.oldest_at)!.getTime() : null,
       affectedTenants: asNumber(failureRaw?.affected),
       share: failureShare,
+      submissions: total,
       codes: codeRows.rows.map((row) => ({ code: safeOperationalCode(row.code) ?? "TANPA_KODE", count: asNumber(row.count) })),
-      severity: failureShare > PLATFORM_HEALTH_THRESHOLDS.failureCriticalShare || asNumber(failureRaw?.recent_code_peak) >= PLATFORM_HEALTH_THRESHOLDS.failureRecentCodeCount || Boolean(failureRaw?.has_critical_code) ? "kritis" : failureShare > PLATFORM_HEALTH_THRESHOLDS.failureAttentionShare ? "perhatian" : "normal",
+      severity: severity.failures,
     },
     latency: {
       p50Seconds: latencyRaw?.p50 === null || latencyRaw?.p50 === undefined ? null : Number(latencyRaw.p50),

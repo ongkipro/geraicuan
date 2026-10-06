@@ -2,8 +2,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { loadShipmentKpis, loadShipmentPage } from "@/db/analytics-repository";
 import * as schema from "@/db/schema";
+import { loadShipmentReportPage } from "@/db/shipment-report-repository";
 import { courierDisplayName, courierRecapOrder, MENGANTAR_COURIERS } from "@/lib/mengantar-couriers";
 import { withTenantContext } from "@/db/tenant-context";
 import {
@@ -16,8 +16,9 @@ import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 // Spec 19 SHP-OUTCOME-DELIVERED / -RETURNED / -FAILED and
 // CRR-SHIPMENTS / CRR-DELIVERED / CRR-RETURNED / CRR-SHIPPING-IDR: every number
-// the /app outcome and courier regions render must equal the Analitik number for
-// the same tenant, outlet, courier and WIB period.
+// the /app outcome and courier counts render must equal the Laporan pengiriman
+// number for the same tenant, outlet, courier and WIB period (T-278: the live
+// report read replaced the removed Analitik table).
 
 const adminUrl = process.env.DATABASE_URL;
 const appUrl = process.env.APP_DATABASE_URL;
@@ -139,6 +140,12 @@ async function seed(fixture: Fixture) {
       declared_value_idr, is_cod, created_at, updated_at
     ) VALUES ($1,$2,$3,$4,'Parity fixture',1000,1,100000,$5,$6,$6)`,
     [shipmentId, tenantId, `area-${fixture.sequence}`, `Tujuan ${fixture.sequence}`, fixture.cod, fixture.createdAt],
+  );
+  // Laporan pengiriman lists a shipment only with its recipient party.
+  await admin.query(
+    `INSERT INTO shipment_parties (tenant_id, shipment_id, role, name, phone, address, created_at)
+     VALUES ($1,$2,'RECIPIENT','Penerima','081299990000','Alamat penerima',$3)`,
+    [tenantId, shipmentId, fixture.createdAt],
   );
 
   if (!fixture.courier) return;
@@ -277,20 +284,18 @@ afterAll(async () => {
 const outletFilters = { outletId: outletA };
 const analyticsFilters = { courier: null, lifecycleStatus: null, outletId: outletA } as const;
 
-async function analyticsCount(
+async function reportCount(
   lifecycleStatus: (typeof schema.shipmentStatuses)[number] | null,
   courier: string | null,
 ) {
   return withTenantContext(appDb, adminA, tenantA, async (tx, context) => {
-    const page = await loadShipmentPage(
-      tx,
-      context,
+    const page = await loadShipmentReportPage(tx, context, {
+      filters: { ...analyticsFilters, courier, lifecycleStatus },
+      page: 1,
+      pageSize: 1,
       range,
-      { limit: 1, offset: 0 },
-      { ...analyticsFilters, courier, lifecycleStatus },
-      "created",
-    );
-    return page.totalCount;
+    });
+    return page.totals.shipmentCount;
   });
 }
 
@@ -307,19 +312,19 @@ describe("dashboard shipping outcome", () => {
     expect(outcome.generatedAt).toBeInstanceOf(Date);
   });
 
-  it("equals the Analitik lifecycle counts for the same period and outlet", async () => {
+  it("equals the Laporan pengiriman lifecycle counts for the same period and outlet", async () => {
     const outcome = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadTenantDashboardOutcomeSummary(tx, context, range, outletFilters),
     );
 
-    expect(outcome.delivered.totalCount).toBe(await analyticsCount("DELIVERED", null));
-    expect(outcome.failed.totalCount).toBe(await analyticsCount("FAILED", null));
+    expect(outcome.delivered.totalCount).toBe(await reportCount("DELIVERED", null));
+    expect(outcome.failed.totalCount).toBe(await reportCount("FAILED", null));
     const returned =
-      (await analyticsCount("RTS_QUEUED", null)) +
-      (await analyticsCount("RTS_IN_TRANSIT", null)) +
-      (await analyticsCount("RTS_RECEIVED", null));
+      (await reportCount("RTS_QUEUED", null)) +
+      (await reportCount("RTS_IN_TRANSIT", null)) +
+      (await reportCount("RTS_RECEIVED", null));
     expect(outcome.returned.totalCount).toBe(returned);
-    expect(outcome.cohortCount).toBe(await analyticsCount(null, null));
+    expect(outcome.cohortCount).toBe(await reportCount(null, null));
     // Each split adds up to its own total, so no cell escapes its metric ID.
     for (const row of [outcome.delivered, outcome.returned, outcome.failed]) {
       expect(row.codCount + row.nonCodCount).toBe(row.totalCount);
@@ -369,31 +374,22 @@ describe("dashboard per-courier recap", () => {
     });
   });
 
-  it("equals the Analitik courier numbers for the same filters", async () => {
+  it("equals the Laporan pengiriman courier counts for the same filters", async () => {
     const recap = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadTenantDashboardCourierRecap(tx, context, range, outletFilters),
     );
 
     for (const row of recap.rows) {
-      expect(row.shipmentCount).toBe(await analyticsCount(null, row.courier));
-      expect(row.deliveredCount).toBe(await analyticsCount("DELIVERED", row.courier));
+      expect(row.shipmentCount).toBe(await reportCount(null, row.courier));
+      expect(row.deliveredCount).toBe(await reportCount("DELIVERED", row.courier));
       const returned =
-        (await analyticsCount("RTS_QUEUED", row.courier)) +
-        (await analyticsCount("RTS_IN_TRANSIT", row.courier)) +
-        (await analyticsCount("RTS_RECEIVED", row.courier));
+        (await reportCount("RTS_QUEUED", row.courier)) +
+        (await reportCount("RTS_IN_TRANSIT", row.courier)) +
+        (await reportCount("RTS_RECEIVED", row.courier));
       expect(row.returnedCount).toBe(returned);
-
-      const kpis = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, range, { ...analyticsFilters, courier: row.courier }),
-      );
-      expect(row.shippingCostIdr).toBe(kpis.providerShippingIdr);
     }
-
-    const tenantKpis = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
-      loadShipmentKpis(tx, context, range, analyticsFilters),
-    );
-    const total = recap.rows.reduce((sum, row) => sum + (row.shippingCostIdr ?? 0), 0);
-    expect(total).toBe(tenantKpis.providerShippingIdr);
+    // CRR-SHIPPING-IDR (ledger basis, adjustments folded in) is bound by the
+    // fixture-absolute recap test above; its Analitik twin was removed (T-278).
   });
 
   it("scopes to the tenant and to the selected outlet", async () => {
@@ -441,16 +437,16 @@ describe("dashboard per-courier recap", () => {
 // tenant predicate deleted, because RLS hides the foreign rows underneath. AGENTS.md
 // forbids RLS being the only control, so bind the predicate itself.
 // Review SF9: the three settled rows cover 3 of 13 statuses. The remainder row must
-// equal what Analitik reports for every other status, or the table understates the cohort.
+// equal what Laporan pengiriman reports for every other status, or the table understates the cohort.
 describe("dashboard outcome accounts for the whole cohort", () => {
-  it("matches Analitik for the statuses that are neither delivered, returned nor failed", async () => {
+  it("matches Laporan pengiriman for the statuses that are neither delivered, returned nor failed", async () => {
     const outcome = await withTenantContext(appDb, adminA, tenantA, (tx, context) =>
       loadTenantDashboardOutcomeSummary(tx, context, range, outletFilters),
     );
     const settled = new Set(["DELIVERED", "RTS_QUEUED", "RTS_IN_TRANSIT", "RTS_RECEIVED", "FAILED"]);
     const unsettled = schema.shipmentStatuses.filter((status) => !settled.has(status));
     let expected = 0;
-    for (const status of unsettled) expected += await analyticsCount(status, null);
+    for (const status of unsettled) expected += await reportCount(status, null);
 
     expect(outcome.inProgress.totalCount).toBe(expected);
     expect(outcome.inProgress.codCount + outcome.inProgress.nonCodCount).toBe(expected);

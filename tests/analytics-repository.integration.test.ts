@@ -1,18 +1,14 @@
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  AnalyticsExportLimitError,
   AnalyticsFilterDeniedError,
-  countTenantShipments,
+  codDisbursementEstimateExpression,
   loadAnalyticsFilterOptions,
   loadCourierPerformance,
-  loadShipmentExport,
-  loadShipmentKpiComparison,
-  loadShipmentKpis,
-  loadShipmentPage,
-  loadShipmentTrend,
+  mengantarCodFeeExpression,
 } from "@/db/analytics-repository";
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
@@ -319,387 +315,33 @@ afterAll(async () => {
   }
 });
 
-function range(timezone: "Asia/Jakarta" | "Asia/Jayapura") {
+function range() {
   return parseAnalyticsRange(
     {
       rentang: "kustom",
       dari: "2026-08-30",
       sampai: "2026-08-31",
-      tz: timezone,
+      tz: "Asia/Jakarta",
     },
     new Date("2026-08-31T04:00:00Z"),
   );
 }
 
+// T-278: the KPI, trend, page and export loaders this file used to cover had no
+// caller after T-204 removed Analitik and were deleted; Laporan pengiriman reads
+// `shipment-report-repository` plus the courier performance and filter reads below.
 describe("tenant shipment analytics repository", () => {
-  it.each(["Asia/Jakarta", "Asia/Jayapura"] as const)(
-    "uses authoritative event and ledger time with %s normalized to WIB",
-    async (timezone) => {
-      const selected = range(timezone);
-      const result = await withTenantContext(
-        appDb,
-        userA,
-        tenantA,
-        async (tx, context) => ({
-          kpis: await loadShipmentKpis(tx, context, selected),
-          trend: await loadShipmentTrend(tx, context, selected),
-          page: await loadShipmentPage(tx, context, selected, {
-            limit: 50,
-            offset: 0,
-          }),
-        }),
-      );
-
-      expect(result.kpis).toEqual({
-        createdCount: 4,
-        issuedCount: 2,
-        resolvedSubmissionCount: 2,
-        providerShippingIdr: 18_000,
-        // T-193: the fee Mengantar keeps on COD 113_663 (3_785, not the stored
-        // 3_300 + 363), and the VAT inside it, round(3_785 × 11 / 111).
-        codFeeIdr: 3_785,
-        codFeeVatIncludedIdr: 375,
-        // COD 113_663 − shipping 10_000 − Mengantar's 3.33% of the COD (3_785.08):
-        // 99_878, the exact shortfall T-175 found. The stored fee said 100_000.
-        codDisbursementEstimateIdr: 99_878,
-      });
-      expect(result.trend.generatedAt).toBeInstanceOf(Date);
-      expect(result.trend.points.reduce((sum, row) => sum + row.createdCount, 0)).toBe(4);
-      expect(result.trend.points.reduce((sum, row) => sum + row.issuedCount, 0)).toBe(2);
-      expect(result.page.rows.map((row) => row.shipmentId)).toEqual([
-        createdInsideIssuedAfter,
-        failed,
-        awaiting,
-        exactStart,
-      ]);
-    },
-  );
-
-  it("buckets created and issued events independently", async () => {
-    const jakarta = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-      loadShipmentTrend(tx, context, range("Asia/Jakarta")),
-    );
-    const jayapura = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-      loadShipmentTrend(tx, context, range("Asia/Jayapura")),
-    );
-    expect(jakarta.generatedAt).toBeInstanceOf(Date);
-    expect(jakarta.points).toEqual([
-      { key: "2026-08-30", createdCount: 2, issuedCount: 1 },
-      { key: "2026-08-31", createdCount: 2, issuedCount: 1 },
-    ]);
-    expect(jayapura.generatedAt).toBeInstanceOf(Date);
-    expect(jayapura.points).toEqual(jakarta.points);
-  });
-
-  it("uses the selected event basis for supporting rows", async () => {
-    const selected = range("Asia/Jakarta");
-    const result = await withTenantContext(
-      appDb,
-      userA,
-      tenantA,
-      async (tx, context) => ({
-        created: await loadShipmentPage(
-          tx,
-          context,
-          selected,
-          { limit: 50, offset: 0 },
-        ),
-        issued: await loadShipmentPage(
-          tx,
-          context,
-          selected,
-          { limit: 50, offset: 0 },
-          undefined,
-          "issued",
-        ),
-        exceptions: await loadShipmentPage(
-          tx,
-          context,
-          selected,
-          { limit: 50, offset: 0 },
-          undefined,
-          "exceptions",
-        ),
-      }),
-    );
-
-    expect(result.created.totalCount).toBe(4);
-    expect(result.issued).toMatchObject({
-      totalCount: 2,
-      rows: [
-        { shipmentId: exactStart },
-        { shipmentId: createdBeforeIssuedInside },
-      ],
-    });
-    expect(result.exceptions).toMatchObject({
-      totalCount: 2,
-      rows: [
-        { shipmentId: failed },
-        { shipmentId: awaiting },
-      ],
-    });
-  });
-
-  it("keeps current backlog out of historical comparison", async () => {
-    const selected = range("Asia/Jakarta");
-    const previous = parseAnalyticsRange(
-      {
-        rentang: "kustom",
-        dari: "2026-08-28",
-        sampai: "2026-08-29",
-        tz: "Asia/Jakarta",
-      },
-      new Date("2026-08-31T04:00:00Z"),
-    );
-    const result = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-      loadShipmentKpiComparison(tx, context, selected, previous),
-    );
-    expect(result.current).toMatchObject({ createdCount: 4, issuedCount: 2 });
-    expect(result.previous).toMatchObject({ createdCount: 1, issuedCount: 0 });
-    expect(result.current).not.toHaveProperty("awaitingPaymentCount");
-    expect(result.backlogSnapshot).toMatchObject({
-      awaitingPaymentCount: 1,
-      needsActionCount: 1,
-    });
-    expect(result.backlogSnapshot.asOf).toBeInstanceOf(Date);
-  });
-
-  it("keeps issued events and ledger amounts tenant scoped", async () => {
-    const result = await withTenantContext(
-      appDb,
-      userB,
-      tenantB,
-      async (tx, context) => ({
-        kpis: await loadShipmentKpis(tx, context, range("Asia/Jakarta")),
-        count: await countTenantShipments(tx, context),
-      }),
-    );
-    expect(result).toEqual({
-      kpis: {
-        createdCount: 1,
-        issuedCount: 1,
-        resolvedSubmissionCount: 1,
-        providerShippingIdr: 7_000,
-        codFeeIdr: 0,
-        codFeeVatIncludedIdr: 0,
-        codDisbursementEstimateIdr: 0,
-      },
-      count: 1,
-    });
-  });
-
-  it("shares outlet, courier, and lifecycle predicates across every analytics read model", async () => {
-    const selected = range("Asia/Jakarta");
-    const previous = parseAnalyticsRange(
-      {
-        rentang: "kustom",
-        dari: "2026-08-28",
-        sampai: "2026-08-29",
-        tz: "Asia/Jakarta",
-      },
-      new Date("2026-08-31T04:00:00Z"),
-    );
-    const filters = {
-      outletId: outletA,
-      courier: "JNE",
-      lifecycleStatus: "ISSUED" as const,
-    };
-
-    const result = await withTenantContext(
-      appDb,
-      userA,
-      tenantA,
-      async (tx, context) => ({
-        options: await loadAnalyticsFilterOptions(tx, context),
-        comparison: await loadShipmentKpiComparison(
-          tx,
-          context,
-          selected,
-          previous,
-          filters,
-        ),
-        trend: await loadShipmentTrend(tx, context, selected, filters),
-        page: await loadShipmentPage(
-          tx,
-          context,
-          selected,
-          { limit: 1, offset: 0 },
-          filters,
-        ),
-        exported: await loadShipmentExport(
-          tx,
-          context,
-          selected,
-          filters,
-        ),
-      }),
-    );
-
-    expect(result.options).toEqual({
+  it("lists only the tenant's own outlets and couriers as filter options", async () => {
+    const options = await withTenantContext(appDb, userA, tenantA, loadAnalyticsFilterOptions);
+    expect(options).toEqual({
       outlets: [{ id: outletA, name: "Outlet A" }],
       couriers: ["J&T", "JNE"],
     });
-    expect(result.comparison.current).toEqual({
-      createdCount: 1,
-      issuedCount: 1,
-      resolvedSubmissionCount: 1,
-      providerShippingIdr: 10_000,
-      codFeeIdr: 3_785,
-      codFeeVatIncludedIdr: 375,
-      // Same shipment, same figure: 113_663 − 10_000 − 3_785.08 = 99_878.
-      codDisbursementEstimateIdr: 99_878,
-    });
-    expect(result.comparison.previous).toMatchObject({
-      createdCount: 1,
-      issuedCount: 0,
-    });
-    expect(result.trend.points.reduce((sum, row) => sum + row.createdCount, 0)).toBe(1);
-    expect(result.trend.points.reduce((sum, row) => sum + row.issuedCount, 0)).toBe(1);
-    expect(result.page).toMatchObject({
-      totalCount: 1,
-      rows: [{ shipmentId: createdInsideIssuedAfter }],
-    });
-    expect(result.exported).toMatchObject({
-      totalCount: 1,
-      rows: [{ shipmentId: createdInsideIssuedAfter }],
-    });
-
-    await expect(
-      withTenantContext(appDb, userA, tenantA, (tx, context) =>
-        loadShipmentExport(
-          tx,
-          context,
-          selected,
-          { ...filters, courier: null },
-          1,
-        ),
-      ),
-    ).rejects.toBeInstanceOf(AnalyticsExportLimitError);
-
-    await expect(
-      withTenantContext(appDb, userA, tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, selected, {
-          outletId: outletA,
-          courier: "J&T",
-          lifecycleStatus: "FAILED",
-        }),
-      ),
-    ).resolves.toEqual({
-      createdCount: 0,
-      issuedCount: 0,
-      resolvedSubmissionCount: 0,
-      providerShippingIdr: 0,
-      codFeeIdr: 0,
-      codFeeVatIncludedIdr: 0,
-      codDisbursementEstimateIdr: 0,
-    });
-  });
-
-  it("estimates the Mengantar disbursement from issued COD shipments on the settlement shipping basis, with no margin, COGS or goods figure (T-177)", async () => {
-    // Sequence 1 is the only COD order in range: COD 113_663 = goods 100_000
-    // + shipping 10_000 + fee 3_300 + VAT 363, a row written under the old
-    // additive formula. Mengantar deducts its special shipping price (7_000
-    // stored here) **and keeps 3.33% of the whole COD amount** — the rate proven
-    // on 2,866 real settlement lines — so the estimate is
-    //   113_663 − 7_000 − 113_663 × 333 / 10_000
-    //   = 113_663 − 7_000 − 3_785.0779 = 102_877.9221 → 102_878.
-    // It used to subtract the *stored* fee and VAT (3_663, i.e. 3.33% of goods
-    // plus shipping), which read 103_000: Rp 122 more than Mengantar pays, the
-    // same shortfall T-175 found in the COD amount itself. Non-COD orders, the
-    // unissued drafts and tenant B's order contribute nothing.
-    await adminPool.query(
-      "UPDATE provider_order_snapshots SET provider_charged_shipping_idr = 7000 WHERE shipment_id = $1",
-      [createdBeforeIssuedInside],
-    );
-    await adminPool.query(
-      "UPDATE shipments SET cogs_amount_idr = 999000 WHERE id = ANY($1)",
-      [[createdBeforeIssuedInside, tenantBShipment]],
-    );
-    // A COD total left behind by an earlier COD estimate does not make a
-    // shipment that was issued as non-COD pay out COD money (version 1 values
-    // for goods 100_000 + shipping 8_000).
-    const stale = orderIds(2);
-    await adminPool.query(
-      `INSERT INTO shipment_cod_totals
-        (tenant_id, shipment_id, snapshot_id, estimate_service_id, currency,
-         goods_value_idr, shipping_amount_idr, service_fee_idr, vat_amount_idr, provider_cod_amount_idr)
-       VALUES ($1, $2, $3, $4, 'IDR', 100000, 8000, 3240, 356, 111596)`,
-      [tenantA, exactStart, stale.snapshot, stale.service],
-    );
-    try {
-      const kpis = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, range("Asia/Jakarta")),
-      );
-      expect(kpis.codDisbursementEstimateIdr).toBe(102_878);
-      // T-193: one Biaya COD, so COD − shipping − Biaya COD = the estimate, to the rupiah.
-      expect(kpis.codFeeIdr).toBe(3_785);
-      expect(113_663 - 7_000 - kpis.codFeeIdr).toBe(kpis.codDisbursementEstimateIdr);
-      // The read model itself carries no merchandise figure, whatever a legacy
-      // column still holds.
-      expect(Object.keys(kpis).sort()).toEqual([
-        "codDisbursementEstimateIdr",
-        "codFeeIdr",
-        "codFeeVatIncludedIdr",
-        "createdCount",
-        "issuedCount",
-        "providerShippingIdr",
-        "resolvedSubmissionCount",
-      ]);
-    } finally {
-      await adminPool.query(
-        "UPDATE provider_order_snapshots SET provider_charged_shipping_idr = NULL WHERE shipment_id = $1",
-        [createdBeforeIssuedInside],
-      );
-      await adminPool.query(
-        "UPDATE shipments SET cogs_amount_idr = NULL WHERE id = ANY($1)",
-        [[createdBeforeIssuedInside, tenantBShipment]],
-      );
-      await adminPool.query("DELETE FROM shipment_cod_totals WHERE shipment_id = $1", [exactStart]);
-    }
-  });
-
-  it("reports one Biaya COD from the issued order, whatever the ledger booked (T-193)", async () => {
-    // Sequence 1's issuance was ledgered before T-178 (revenue 3_300 + VAT row
-    // 363). A MENGANTAR_COD_FEE_COST row (4_000) booked in the same period on a
-    // non-COD shipment must not move the figure either: Biaya COD is Mengantar's
-    // fee on each issued COD order, round(113_663 × 333 / 10_000) = 3_785, and
-    // its VAT is inside it.
-    const ids = orderIds(2);
-    const inserted = await adminPool.query<{ id: string }>(
-      `INSERT INTO ledger_entries
-        (tenant_id, outlet_id, shipment_id, provider_batch_id,
-         provider_order_snapshot_id, entry_type, financial_class, amount_idr,
-         currency, effective_at, source_event, source_event_id, actor_type)
-       VALUES ($1,$2,$3,$4,$5,'MENGANTAR_COD_FEE_COST','EXPENSE',4000,'IDR',
-         '2026-08-30T17:30:00Z','PROVIDER_ORDER_ISSUED',$5::uuid::text,'SYSTEM')
-       RETURNING id`,
-      [tenantA, outletA, exactStart, ids.batch, ids.order],
-    );
-    try {
-      const kpis = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, range("Asia/Jakarta")),
-      );
-      expect(kpis.codFeeIdr).toBe(3_785);
-      expect(kpis.codFeeVatIncludedIdr).toBe(375);
-      // The new type is a cost, and the legacy provider-shipping figure does not absorb it.
-      expect(kpis.providerShippingIdr).toBe(18_000);
-    } finally {
-      // Ledger rows are immutable; remove the fixture the way clean() does.
-      const client = await adminPool.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query("SET LOCAL session_replication_role = replica");
-        await client.query("DELETE FROM ledger_entries WHERE id = $1", [inserted.rows[0]!.id]);
-        await client.query("COMMIT");
-      } finally {
-        client.release();
-      }
-    }
   });
 
   it("reports courier issuance rates with an explicit resolved denominator", async () => {
     const result = await withTenantContext(appDb, userA, tenantA, (tx, context) =>
-      loadCourierPerformance(tx, context, range("Asia/Jakarta")),
+      loadCourierPerformance(tx, context, range()),
     );
 
     expect(result).toEqual([
@@ -708,25 +350,53 @@ describe("tenant shipment analytics repository", () => {
     ]);
   });
 
-  it("rejects another tenant's outlet before querying analytics", async () => {
-    await expect(
-      withTenantContext(appDb, userA, tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, range("Asia/Jakarta"), {
-          outletId: outletB,
-          courier: null,
-          lifecycleStatus: null,
-        }),
-      ),
-    ).rejects.toBeInstanceOf(AnalyticsFilterDeniedError);
+  it("rejects another tenant's outlet or courier before querying analytics", async () => {
+    for (const filters of [
+      { outletId: outletB, courier: null, lifecycleStatus: null },
+      { outletId: null, courier: "SICEPAT", lifecycleStatus: null },
+    ]) {
+      await expect(
+        withTenantContext(appDb, userA, tenantA, (tx, context) =>
+          loadCourierPerformance(tx, context, range(), filters),
+        ),
+      ).rejects.toBeInstanceOf(AnalyticsFilterDeniedError);
+    }
+  });
 
-    await expect(
-      withTenantContext(appDb, userA, tenantA, (tx, context) =>
-        loadShipmentKpis(tx, context, range("Asia/Jakarta"), {
-          outletId: null,
-          courier: "SICEPAT",
-          lifecycleStatus: null,
-        }),
-      ),
-    ).rejects.toBeInstanceOf(AnalyticsFilterDeniedError);
+  // Spec 19 RPT-SHP-COD-FEE-IDR / FIN-COD-DISBURSEMENT-EST: the SQL the Laporan
+  // rows, totals and Pencairan COD share. M-0: half-up to a whole rupiah, once.
+  it("computes Mengantar's COD fee half-up and the disbursement estimate from it (T-90)", async () => {
+    const read = () => withTenantContext(appDb, userA, tenantA, async (tx) => {
+      const [row] = await tx
+        .select({ fee: mengantarCodFeeExpression, estimate: codDisbursementEstimateExpression })
+        .from(schema.shipmentCodTotals)
+        .innerJoin(
+          schema.providerOrderSnapshots,
+          and(
+            eq(schema.providerOrderSnapshots.shipmentId, schema.shipmentCodTotals.shipmentId),
+            eq(schema.providerOrderSnapshots.tenantId, schema.shipmentCodTotals.tenantId),
+          ),
+        )
+        .where(eq(schema.shipmentCodTotals.shipmentId, createdBeforeIssuedInside));
+      return { estimate: Number(row!.estimate), fee: Number(row!.fee) };
+    });
+    // A row stored under the old additive formula: COD 113 663; the fee is
+    // 3.33% of the COD amount (3 785.08 → 3 785), not the stored 3 300 + 363.
+    expect(await read()).toEqual({ estimate: 113_663 - 10_000 - 3_785, fee: 3_785 });
+
+    // Exactly half a rupiah — COD an odd multiple of 5 000: 5 000 → 166,5, 105 000 → 3 496,5,
+    // 115 000 → 3 829,5 — rounds up; floor or half-even would differ on at least one. The
+    // expression is evaluated over literal amounts under the table's own name, because the
+    // stored rows' COD-formula CHECKs admit none of these amounts.
+    const boundary = await withTenantContext(appDb, userA, tenantA, (tx) => tx.execute<{ cod: number; fee: string }>(sql`
+      SELECT shipment_cod_totals.provider_cod_amount_idr AS cod, ${mengantarCodFeeExpression} AS fee
+      FROM (VALUES (5000), (105000), (115000), (114999)) AS shipment_cod_totals(provider_cod_amount_idr)
+      ORDER BY 1`));
+    expect(boundary.rows.map((row) => [Number(row.cod), Number(row.fee)])).toEqual([
+      [5_000, 167],
+      [105_000, 3_497],
+      [114_999, 3_829],
+      [115_000, 3_830],
+    ]);
   });
 });

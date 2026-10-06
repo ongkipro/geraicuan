@@ -3,13 +3,12 @@
  * and the COD fee, never merchandise revenue, goods value, COGS or margin.
  * D-3b is withdrawn and T-91 resolves as a withdrawal; this file proves the
  * removal on the read-model types, the draft input type and the exports.
- * Sibling guards: `analytics-repository` (the KPI read model's exact keys),
- * `shipment-draft` (a posted COGS is neither parsed nor stored).
+ * Sibling guard: `shipment-draft` (a posted COGS is neither parsed nor stored).
+ * T-278: the Analitik KPI type left with its loader; the Laporan KPI type stands in.
  */
 import { describe, expect, it } from "vitest";
 
-import type { ShipmentKpis } from "@/db/analytics-repository";
-import type { ShipmentReportCourierTotal, ShipmentReportRow } from "@/db/shipment-report-repository";
+import type { ShipmentReportCourierTotal, ShipmentReportKpis, ShipmentReportRow } from "@/db/shipment-report-repository";
 import type { TenantDashboardPeriodMetrics } from "@/db/tenant-dashboard-repository";
 import { serializeShipmentReportCsv } from "@/lib/analytics-export";
 import type { ShipmentDraftInput } from "@/lib/shipment-draft";
@@ -20,7 +19,7 @@ const MERCHANDISE_FIGURE = /margin|laba|profit|keuntungan|omset|omzet|cogs|\bhpp
 
 // Type-level removal: each line fails `tsc --noEmit` if the field comes back.
 export function withdrawnFieldsStayWithdrawn(
-  kpis: ShipmentKpis,
+  kpis: ShipmentReportKpis,
   dashboard: TenantDashboardPeriodMetrics,
   row: ShipmentReportRow,
   total: ShipmentReportCourierTotal,

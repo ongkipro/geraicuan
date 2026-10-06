@@ -210,6 +210,15 @@ describe("T-193 one COD fee", () => {
     expect(codChargeBreakdown({ goodsValueIdr: 100_000, shippingAmountIdr: 10_000, providerCodAmountIdr: 113_663 })).toBeNull();
   });
 
+  // T-90 (T-278), spec 19 M-0: the fee lands on exactly half a rupiah whenever the COD amount is
+  // an odd multiple of 5 000; half-up rounds it up (floor and half-even would not, at 3 496,5).
+  it("rounds Mengantar's fee half-up at the exact half-rupiah boundary", () => {
+    expect(mengantarCodFeeIdr(5_000)).toBe(167);
+    expect(mengantarCodFeeIdr(105_000)).toBe(3_497);
+    expect(mengantarCodFeeIdr(115_000)).toBe(3_830);
+    expect(mengantarCodFeeIdr(114_999)).toBe(3_829);
+  });
+
   it("reports the VAT inside the fee as fee × 11 / 111, half-up, never more than the fee", () => {
     for (let fee = 0; fee <= 200_000; fee += 1) {
       const vat = vatIncludedInMengantarCodFeeIdr(fee);

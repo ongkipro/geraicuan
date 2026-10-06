@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export type KpiDelta = {
   /** Signed change against the comparison period. */
   change: number;
-  /** Percentage change, `null` when the previous period was zero. */
+  /** Percentage change, `null` when the previous period was zero (M-0: no percentage, neutral). */
   percent: number | null;
 };
 
@@ -41,12 +41,18 @@ const DELTA_TONE = {
   ok: { className: "bg-ok-surface text-ok", sr: " (membaik)" },
 } as const;
 
+/**
+ * Spec 19 M-0 comparison wording: equal → "→ Tidak berubah"; previous 0 and current not 0 →
+ * "• Belum ada pada periode sebelumnya" — no arrow and no favourable/unfavourable tone, because
+ * a change from nothing has no size to judge; otherwise the count and its relative percentage.
+ */
 function deltaWords({ change, percent }: KpiDelta) {
-  if (change === 0) return { icon: ArrowRight, text: "Tetap" };
-  const size = `${number.format(Math.abs(change))}${percent === null ? "" : ` (${number.format(Math.round(Math.abs(percent)))}%)`}`;
+  if (change === 0) return { icon: ArrowRight, neutral: true, text: "Tidak berubah" };
+  if (percent === null) return { icon: null, neutral: true, text: "• Belum ada pada periode sebelumnya" };
+  const size = `${number.format(Math.abs(change))} (${number.format(Math.round(Math.abs(percent)))}%)`;
   return change > 0
-    ? { icon: ArrowUpRight, text: `Naik ${size}` }
-    : { icon: ArrowDownRight, text: `Turun ${size}` };
+    ? { icon: ArrowUpRight, neutral: false, text: `Naik ${size}` }
+    : { icon: ArrowDownRight, neutral: false, text: `Turun ${size}` };
 }
 
 /**
@@ -74,7 +80,8 @@ export function KpiCard({
   value: string | number;
 }) {
   const words = delta ? deltaWords(delta) : null;
-  const tone = DELTA_TONE[delta ? deltaTone(metricId, delta.change) : "neutral"];
+  const toneKey = delta && words && !words.neutral ? deltaTone(metricId, delta.change) : "neutral";
+  const tone = DELTA_TONE[toneKey];
   return (
     <Card className="gap-3 [--card-spacing:--spacing(5)] max-md:[--card-spacing:--spacing(4)]" data-metric-id={metricId}>
       <div className="flex items-center justify-between gap-2 px-(--card-spacing)">
@@ -91,12 +98,13 @@ export function KpiCard({
       {note ? <p className="px-(--card-spacing) text-xs text-muted-foreground">{note}</p> : null}
       {words ? (
         <div className="flex flex-wrap items-center gap-2 px-(--card-spacing)">
-          <span className={cn("inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-xs font-medium", tone.className)} data-delta-tone={delta ? deltaTone(metricId, delta.change) : "neutral"}>
-            <words.icon aria-hidden="true" className="size-3.5" />
+          <span className={cn("inline-flex min-h-6 max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-xs leading-snug font-medium", tone.className)} data-delta-tone={toneKey}>
+            {words.icon ? <words.icon aria-hidden="true" className="size-3.5" /> : null}
             {words.text}
             {tone.sr ? <span className="sr-only">{tone.sr}</span> : null}
           </span>
-          <span className="text-xs text-muted-foreground">{comparison}</span>
+          {/* M-0: "Belum ada pada periode sebelumnya" already names the comparison. */}
+          {delta && delta.percent === null && delta.change !== 0 ? null : <span className="text-xs text-muted-foreground">{comparison}</span>}
         </div>
       ) : null}
     </Card>

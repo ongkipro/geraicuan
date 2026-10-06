@@ -8,7 +8,6 @@ import {
 } from "@/lib/analytics-range";
 
 export type AnalyticsShipmentStatus = (typeof shipmentStatuses)[number];
-export type AnalyticsEventBasis = "created" | "issued" | "outcome" | "exceptions";
 export type AnalyticsFilters = {
   courier: string | null;
   lifecycleStatus: AnalyticsShipmentStatus | null;
@@ -22,7 +21,6 @@ export const EMPTY_ANALYTICS_FILTERS: AnalyticsFilters = {
 };
 
 export type TenantAnalyticsQuery = {
-  eventBasis: AnalyticsEventBasis;
   filters: AnalyticsFilters;
   page: number;
   range: AnalyticsRange;
@@ -32,8 +30,7 @@ export type TenantAnalyticsIssue =
   | AnalyticsIssue
   | "outlet_tidak_dikenal"
   | "kurir_tidak_dikenal"
-  | "status_tidak_dikenal"
-  | "basis_tidak_dikenal";
+  | "status_tidak_dikenal";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type ParseOptions = {
@@ -62,7 +59,6 @@ export function serializeTenantAnalyticsQuery(
   if (query.filters.lifecycleStatus) {
     params.set("status", query.filters.lifecycleStatus);
   }
-  if (query.eventBasis !== "created") params.set("basis", query.eventBasis);
   if (query.page > 1) params.set("halaman", String(query.page));
   return params;
 }
@@ -112,18 +108,9 @@ export function parseTenantAnalyticsQuery(
     }
   }
 
-  const requestedBasis = first(params.basis);
-  let eventBasis: AnalyticsEventBasis = "created";
-  if (requestedBasis) {
-    if (requestedBasis === "created" || requestedBasis === "issued" || requestedBasis === "outcome" || requestedBasis === "exceptions") {
-      eventBasis = requestedBasis;
-    } else {
-      issues.push("basis_tidak_dikenal");
-    }
-  }
-
+  // T-278: `basis` (the removed Analitik table's event basis) is no longer read; an old link's
+  // value is ignored and dropped from the canonical query.
   const query = {
-    eventBasis,
     filters: { courier, lifecycleStatus, outletId },
     page: page.page,
     range,
@@ -134,8 +121,7 @@ export function parseTenantAnalyticsQuery(
       (issue) =>
         issue === "outlet_tidak_dikenal" ||
         issue === "kurir_tidak_dikenal" ||
-        issue === "status_tidak_dikenal" ||
-        issue === "basis_tidak_dikenal",
+        issue === "status_tidak_dikenal",
     ),
     issues,
     query,

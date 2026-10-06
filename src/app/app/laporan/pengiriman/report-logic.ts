@@ -16,20 +16,18 @@ export function reportIssueMessage(issue: TenantAnalyticsIssue) {
     case "outlet_tidak_dikenal": return "Outlet tidak tersedia pada gerai ini.";
     case "kurir_tidak_dikenal": return "Kurir tidak tersedia pada gerai ini.";
     case "status_tidak_dikenal": return "Status kiriman tidak dikenali.";
-    case "basis_tidak_dikenal": return "Basis laporan tidak dikenali.";
     default: return analyticsIssueMessage(issue);
   }
 }
 
 /**
  * The URL state the report carries into its pagination and its CSV link: the canonical query
- * without the page (and without `basis`, which this page never sets). The export link therefore
+ * without the page. The export link therefore
  * asks for exactly the filtered set on screen, never only the page being viewed.
  */
 export function reportCarry(canonicalQuery: URLSearchParams): Record<string, string> {
   const carry = new URLSearchParams(canonicalQuery);
   carry.delete("halaman");
-  carry.delete("basis");
   return Object.fromEntries(carry);
 }
 

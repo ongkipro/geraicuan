@@ -1,6 +1,24 @@
-import type { HealthSeverity, PlatformHealth, TenantUsageRow } from "@/db/platform-monitoring-repository";
+import { type HealthSeverity, PLATFORM_HEALTH_THRESHOLDS as T, type PlatformHealth, type TenantUsageRow } from "@/db/platform-monitoring-repository";
 import type { PlatformFilters } from "@/lib/platform-monitoring-filters";
 import { formatCount, formatDuration } from "@/lib/platform-monitoring-format";
+import { formatRate } from "@/lib/shipment-report-analytics";
+
+const minutes = (ms: number) => ms / 60_000;
+const percent = (share: number) => `${share * 100}%`;
+
+/**
+ * The "Cara membaca kesehatan platform" caption (spec 19 M-2, T-93), worded from the same
+ * thresholds `platformHealthSeverities` applies, so a changed threshold changes its sentence. It
+ * names where a rule ignores the period filter (the rolling hour).
+ */
+export const PLATFORM_HEALTH_CAPTION: readonly string[] = [
+  `Antrean pengajuan menghitung pengajuan ke Mengantar yang tertahan lebih dari ${minutes(T.queueStuckMs)} menit. Kritis bila ${T.queueCriticalCount} atau lebih, atau yang terlama lebih dari ${minutes(T.queueCriticalAgeMs)} menit.`,
+  `Kegagalan provider adalah pengajuan gagal pada periode ini; persennya dari semua pengajuan periode ini. Perhatian di atas ${percent(T.failureAttentionShare)}, Kritis di atas ${percent(T.failureCriticalShare)}.`,
+  `Kritis juga bila ${T.failureRecentCodeCount} pengajuan gagal dengan kode yang sama dalam ${minutes(T.failureRecentWindowMs)} menit terakhir — dihitung dari waktu halaman dimuat, bukan dari periode filter — atau bila ada kegagalan autentikasi, kredensial, atau skema pada periode ini.`,
+  `Status tidak diketahui perlu rekonsiliasi sebelum dicoba lagi; Kritis bila yang terlama lebih dari ${minutes(T.unknownCriticalAgeMs)} menit.`,
+  `Menunggu pembayaran adalah pesanan yang belum dibayar ke Mengantar; Perhatian bila ada satu pun, Kritis bila yang terlama lebih dari ${minutes(T.unpaidCriticalAgeMs) / 60} jam. Durasi penyelesaian adalah median waktu pengajuan sampai selesai.`,
+  "Tanda Perhatian atau Kritis hanya muncul bila perlu tindakan.",
+];
 
 export type AttentionItem = {
   detail: string;
@@ -20,7 +38,7 @@ export function attentionItems(health: PlatformHealth | null, tenants: readonly 
   if (health) {
     const signals = [
       { detail: `${formatCount(health.queue.count)} pengajuan tertahan · terlama ${formatDuration(health.queue.oldestMs)}`, key: "queue", tile: health.queue, title: "Antrean pengajuan" },
-      { detail: `${formatCount(health.failures.count)} pengajuan gagal · ${Math.round(health.failures.share * 100)}% dari periode`, key: "failures", tile: health.failures, title: "Kegagalan provider" },
+      { detail: `${formatCount(health.failures.count)} pengajuan gagal · ${health.failures.submissions === 0 ? "—" : formatRate(health.failures.share * 100)} dari periode`, key: "failures", tile: health.failures, title: "Kegagalan provider" },
       { detail: `${formatCount(health.unknown.count)} hasil belum pasti · perlu rekonsiliasi`, key: "unknown", tile: health.unknown, title: "Status tidak diketahui" },
       { detail: `${formatCount(health.unpaid.count)} kiriman · ${formatCount(health.unpaid.recovering)} pemulihan berjalan`, key: "unpaid", tile: health.unpaid, title: "Menunggu pembayaran" },
     ];

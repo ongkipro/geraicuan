@@ -28,7 +28,7 @@ const { AuthShell } = await import("@/app/login/_components/auth-shell");
 const { LoginForm } = await import("@/app/login/_components/login-form");
 const { firstRegistrationError, RegistrationForm, registrationFormData, registrationStepErrors, registrationStepOf } = await import("@/app/daftar/registration-form");
 const { PasswordResetForm } = await import("@/app/atur-ulang-password/reset-form");
-const { attentionItems, filtersChanged, platformTrendTotals } = await import("@/app/platform/_components/platform-logic");
+const { attentionItems, filtersChanged, PLATFORM_HEALTH_CAPTION, platformTrendTotals } = await import("@/app/platform/_components/platform-logic");
 const { auditActor, formatAgo, formatSeconds, formatWib, severityBadge, tenantStatusChange } = await import("@/app/platform/_components/platform-format");
 const { AuditFeed, PlatformPagination, TimeCell } = await import("@/app/platform/_components/platform-ui");
 const { FilterSelect } = await import("@/app/platform/_components/filter-select");
@@ -154,7 +154,7 @@ describe("public auth markup", () => {
 const tile = (severity: "normal" | "perhatian" | "kritis", count = 1) => ({ affectedTenants: 1, count, oldestMs: 60_000, severity });
 const health = {
   accounts: [],
-  failures: { ...tile("perhatian", 3), codes: [], share: 0.05 },
+  failures: { ...tile("perhatian", 3), codes: [], share: 0.05, submissions: 60 },
   generatedAt: new Date(),
   latency: { byCourier: [], p50Seconds: 12, p95Seconds: 90 },
   queue: tile("normal", 0),
@@ -190,6 +190,9 @@ describe("platform logic", () => {
     expect(severityBadge("normal")).toEqual({ label: "Normal", tone: "neutral" });
     expect(severityBadge("kritis").tone).toBe("danger");
     expect(formatSeconds(1.25)).toBe("1,3 detik");
+    // Spec 19 OPS-BATCH-DURATION / T-92: below a minute in seconds, never "0 menit".
+    expect(formatSeconds(45)).toBe("45 detik");
+    expect(formatSeconds(60)).toBe("1 menit");
     expect(formatSeconds(null)).toBe("—");
     expect(tenantStatusChange({ fromStatus: null, toStatus: "PROVISIONING" })).toBe("Menjadi Disiapkan");
     expect(tenantStatusChange({ fromStatus: "ACTIVE", toStatus: "SUSPENDED" })).toBe("Aktif → Ditangguhkan");
@@ -346,6 +349,47 @@ describe("T-257 platform alignment", () => {
     const shown = render(await PlatformAuditPage({ searchParams: Promise.resolve({ kunjungan: "tampil" }) } as never));
     expect(toggle(shown)).toMatch(/checked/);
     expect(shown).toContain("Hapus filter");
+  });
+
+  // T-89 / T-92 / T-93 (T-278): the Ringkasan's health region — one-decimal failure share
+  // (OPS-FAILURE-SHARE, M-0), the database generated-at with the shared stale action, and the
+  // caption stating the rolling-hour and credential-code rules.
+  it("renders the failure share with one decimal, the generated-at line and the severity rules (T-278)", async () => {
+    const { parseAnalyticsRange } = await import("@/lib/analytics-range");
+    const { default: PlatformOverviewPage } = await import("@/app/platform/page");
+    const generatedAt = new Date("2026-09-26T16:00:00Z");
+    auditView.current = {
+      audit: null, counts: null, detail: null, finance: null, issues: [], now: generatedAt, prefix: null, tenants: [], trend: null, usage: null,
+      filters: { action: null, courier: null, outcome: null, outletId: null, page: 1, query: null, range: parseAnalyticsRange({ rentang: "30-hari", tz: "Asia/Jakarta" }, generatedAt), scope: { kind: "global" }, status: null },
+      health: { ...health, failures: { ...tile("normal", 1), codes: [], share: 1 / 61, submissions: 61 }, generatedAt, unpaid: { ...tile("perhatian", 1), recovering: 0 } },
+    };
+    const html = render(await PlatformOverviewPage({ searchParams: Promise.resolve({}) } as never));
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(text).toContain("1,6% dari pengajuan");
+    expect(text).not.toMatch(/\b2% dari pengajuan/);
+    // M-0: no submissions in the period → the page note says "—", never "0,0%".
+    const shown = auditView.current as { health: typeof health };
+    auditView.current = { ...shown, health: { ...shown.health, failures: { ...tile("normal", 0), codes: [], share: 0, submissions: 0 } } };
+    const empty = render(await PlatformOverviewPage({ searchParams: Promise.resolve({}) } as never)).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(empty).toContain("— (belum ada pengajuan)");
+    expect(empty).not.toContain("0,0% dari pengajuan");
+    expect(html).toMatch(/data-slot="freshness-line"[^>]*><span>Diperbarui 26 Sep 2026, 23\.00 WIB<\/span>/);
+    // The caption (inside the help popover, so read from what the page maps into it).
+    const caption = PLATFORM_HEALTH_CAPTION.join(" ");
+    expect(caption).toContain("5 pengajuan gagal dengan kode yang sama dalam 60 menit terakhir");
+    expect(caption).toContain("bukan dari periode filter");
+    expect(caption).toContain("kegagalan autentikasi, kredensial, atau skema pada periode ini");
+    expect(caption).toContain("Menunggu pembayaran adalah pesanan yang belum dibayar ke Mengantar; Perhatian bila ada satu pun, Kritis bila yang terlama lebih dari 24 jam");
+    expect(caption).toContain("Perhatian di atas 2%, Kritis di atas 10%");
+    expect(caption).toContain("Kritis bila yang terlama lebih dari 30 menit");
+    // The young unpaid order the repository now marks Perhatian reaches "Perlu perhatian".
+    expect(text).toMatch(/Menunggu pembayaran 1 kiriman · 0 pemulihan berjalan/);
+    const detail = attentionItems({ ...health, failures: { ...tile("perhatian", 3), codes: [], share: 0.0549, submissions: 55 } }, []).find((item) => item.key === "failures")?.detail;
+    expect(detail).toContain("5,5% dari periode");
+    // M-0: no submissions in the period → no rate, "—" (never "0,0%").
+    const none = attentionItems({ ...health, failures: { ...tile("perhatian", 0), codes: [], share: 0, submissions: 0 } }, []).find((item) => item.key === "failures")?.detail;
+    expect(none).toContain("— dari periode");
+    expect(none).not.toMatch(/0,0%/);
   });
 
   it("T-259: a gerai row stored without its gerai reads \"Gerai tidak tercatat\"; a platform-wide row keeps \"Platform\"", () => {
