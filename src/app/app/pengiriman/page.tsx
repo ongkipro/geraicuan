@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db/client";
+import { scheduleAutoStatusPull } from "@/lib/mengantar-status-pull";
 import { loadProviderDeliveryStatusBasis } from "@/db/provider-settlement-repository";
 import { loadShipmentQueuePage } from "@/db/shipment-queue-repository";
 import { withTenantContext } from "@/db/tenant-context";
@@ -67,6 +68,8 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
   const rangeCarry: Record<string, string> = Object.fromEntries(serializeAnalyticsRange(range));
   const carry = parsed.search ? { ...rangeCarry, cari: parsed.search } : rangeCarry;
   const isAdmin = principal.role === "TENANT_ADMIN";
+  // T-284: the same automatic follow-up as Dasbor (once per stale outlet, after the response).
+  scheduleAutoStatusPull(principal);
   // T-231: "Tanpa update" reads provider observations, which RLS shows to a Tenant Admin only.
   const query = !isAdmin && isStaleShipmentFilter(parsed.status)
     ? { ...parsed, issues: [...parsed.issues, "Filter tanpa update hanya untuk Pemilik gerai; semua status ditampilkan."], status: "ALL" as const }

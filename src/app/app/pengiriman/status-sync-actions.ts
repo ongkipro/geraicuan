@@ -5,28 +5,19 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { db } from "@/db/client";
 import {
-  claimProviderSettlementPull,
-  providerSettlementAccountKey,
   ProviderSettlementDeniedError,
   ProviderSettlementThrottledError,
-  recordProviderSettlementPull,
 } from "@/db/provider-settlement-repository";
-import { TenantContextDeniedError, withTenantContext } from "@/db/tenant-context";
+import { TenantContextDeniedError } from "@/db/tenant-context";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
+import { MengantarConfigurationError } from "@/lib/mengantar-credentials";
 import {
-  lockMengantarAccountAuthority,
-  MengantarConfigurationError,
-  resolveMengantarAccountCredentials,
-  sameMengantarAccountAuthority,
-} from "@/lib/mengantar-credentials";
-import {
-  fetchMengantarSettlement,
   MengantarSettlementError,
   MengantarSettlementTooLargeError,
 } from "@/lib/mengantar-settlement";
+import { runMengantarStatusPull } from "@/lib/mengantar-status-pull";
 
 /*
  * T-204: the read-only Mengantar pull that moves shipments to DELIVERED,
@@ -103,31 +94,8 @@ export async function pullMengantarStatus(
   const period = { start: range.startInclusive, end: range.endExclusive };
 
   try {
-    // Committed on its own before provider I/O, so failures and parallel tabs still spend the slot.
-    await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-      claimProviderSettlementPull(tx, context, outletId));
-    const prepared = await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
-      await lockMengantarAccountAuthority(tx, context, outletId);
-      return resolveMengantarAccountCredentials(tx, context, outletId);
-    });
-
-    // Provider I/O stays outside any transaction; the authority is re-checked before writing.
-    const snapshot = await fetchMengantarSettlement(prepared.credentials, period);
-
-    const result = await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
-      await lockMengantarAccountAuthority(tx, context, outletId);
-      const current = await resolveMengantarAccountCredentials(tx, context, outletId);
-      if (!sameMengantarAccountAuthority(prepared.authority, current.authority)) {
-        throw new MengantarConfigurationError();
-      }
-      return recordProviderSettlementPull(tx, context, {
-        outletId,
-        credentialSource: current.source,
-        providerAccountKey: providerSettlementAccountKey(context.tenantId, outletId, current.source),
-        period,
-        snapshot,
-      });
-    });
+    // T-284: the same pull the automatic follow-up runs (`runMengantarStatusPull`).
+    const result = await runMengantarStatusPull(principal, outletId, period);
     // The pages that host this action show the pull's basis line, so they are refreshed
     // every time; a delivery transition also changes the shipment detail.
     revalidatePath("/app/pengiriman");

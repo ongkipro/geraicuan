@@ -29,6 +29,7 @@ import { buildAnalyticsDecisionContext } from "@/lib/analytics-decision-context"
 import { analyticsIssueMessage, buildTrendBuckets, parseAnalyticsRange, previousAnalyticsRange, serializeAnalyticsRange } from "@/lib/analytics-range";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatWibDateTime } from "@/lib/label-format";
+import { scheduleAutoStatusPull } from "@/lib/mengantar-status-pull";
 import { providerDeliveryBasisSentence } from "@/lib/provider-delivery-status";
 import { TENANT_APPROVAL_COPY } from "@/lib/tenant-approval";
 import { cn } from "@/lib/utils";
@@ -86,6 +87,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   if (principal.scope !== "tenant") redirect("/login/tenant");
   const { role, tenantId, userId } = principal;
   const isAdmin = role === "TENANT_ADMIN";
+  // T-284: statuses follow Mengantar on the owner's visit — a read-only pull after the response.
+  scheduleAutoStatusPull(principal);
   // T-244: one line to Info terbaru while this member has unread announcements (a failed count hides it).
   const unreadInfo = await withTenantContext(db, userId, tenantId, (tx, context) => countUnreadAnnouncements(tx, context.userId), { allowPendingApproval: true }).catch(() => 0);
   const infoNotice = <UnreadInfoNotice count={unreadInfo} />;
