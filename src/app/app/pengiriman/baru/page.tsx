@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { parseShipmentPrefill } from "@/lib/shipment-prefill";
 import { eq } from "drizzle-orm";
 import { Clock, FileSearch, Printer, Settings2 } from "lucide-react";
 import type { Metadata } from "next";
@@ -61,7 +62,7 @@ function steps(stage: "fill" | "estimate" | "issue" | "done"): FlowStep[] {
   ].map((step, index) => ({ ...step, state: index < at ? "done" : index === at ? "current" : "pending" }));
 }
 
-export default async function NewShipmentPage({ searchParams }: { searchParams: Promise<{ draft?: string }> }) {
+export default async function NewShipmentPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   let principal;
   try {
     principal = await requireCmsScope("tenant", { allowPendingApproval: true });
@@ -90,7 +91,8 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
     );
   }
 
-  const requestedDraftId = (await searchParams).draft;
+  const query = await searchParams;
+  const requestedDraftId = typeof query.draft === "string" ? query.draft : undefined;
   const data = await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
     // In turn, not Promise.all: one transaction, one connection (T-197).
     const readyOutlets = await listReadyShipmentOutlets(tx, context);
@@ -151,7 +153,8 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
       <>
         {header}
         {/* The form renders the stepper itself: step 1 carries its live "n/4 bagian lengkap" (T-249). */}
-        <ShipmentCreateForm gerai={data.gerai} nowIso={new Date().toISOString()} outlets={data.outlets} sellerMoney={principal.role === "TENANT_ADMIN"} steps={steps("fill")} submissionId={randomUUID()} />
+        {/* T-287: Cek tarif's checked route and weight, validated against the listed outlets. */}
+        <ShipmentCreateForm gerai={data.gerai} nowIso={new Date().toISOString()} outlets={data.outlets} prefill={parseShipmentPrefill(query, data.outlets.map((outlet) => outlet.id))} sellerMoney={principal.role === "TENANT_ADMIN"} steps={steps("fill")} submissionId={randomUUID()} />
       </>
     );
   }

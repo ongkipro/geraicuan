@@ -4,17 +4,16 @@ import { Check, Copy, MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { whatsappHref } from "@/lib/whatsapp";
 
-/** The stored phone is canonical ("08…"): the leading 0 becomes Indonesia's 62. */
-export function whatsappHref(phone: string) {
-  return `https://wa.me/62${phone.replace(/^0/, "")}`;
-}
 
 /** Icon-only on a list row (named by `aria-label`), labelled outline in a page header. */
 export function WhatsAppButton({ labelled = false, name, phone }: { labelled?: boolean; name: string; phone: string }) {
+  const href = whatsappHref(phone);
+  if (!href) return null;
   return (
     <Button asChild size={labelled ? "default" : "icon-sm"} variant={labelled ? "outline" : "ghost"}>
-      <a aria-label={labelled ? undefined : `Kirim WhatsApp ke ${name}`} href={whatsappHref(phone)} rel="noreferrer" target="_blank">
+      <a aria-label={labelled ? undefined : `Kirim WhatsApp ke ${name}`} href={href} rel="noreferrer" target="_blank">
         <MessageCircle aria-hidden="true" />
         {labelled ? "WhatsApp" : null}
       </a>

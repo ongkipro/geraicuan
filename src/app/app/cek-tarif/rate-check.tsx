@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgePercent, Calculator, Check, CircleAlert, Info, Layers, Loader2, RotateCcw, Settings, Truck, Zap } from "lucide-react";
+import { BadgePercent, Calculator, Check, CircleAlert, Info, Layers, Loader2, PackagePlus, RotateCcw, Settings, Truck, Zap } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -24,6 +24,7 @@ import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier"
 import { areaDisplayCase, formatWeight, formatWibDateTime } from "@/lib/label-format";
 import { courierDisplayName, mengantarCourierOfService, mengantarOrderableService } from "@/lib/mengantar-couriers";
 import { kilogramsToGrams } from "@/lib/shipment-draft-logic";
+import { shipmentPrefillHref } from "@/lib/shipment-prefill";
 import { cn } from "@/lib/utils";
 
 export type RateQuote = NonNullable<ShippingRateActionState["quote"]>;
@@ -320,7 +321,23 @@ export function RateResults({ quote }: { quote: RateQuote }) {
           </p>
           <p className="text-xs text-muted-foreground">Diperiksa {formatWibDateTime(quote.retrievedAt)}</p>
         </div>
-        <StatusBadge className="self-start" icon={Calculator} label="Estimasi" tone="info" />
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          <StatusBadge icon={Calculator} label="Estimasi" tone="info" />
+          {/* T-287: the walk-in flow — quote, then take the customer's details on this route. */}
+          {quote.services.length > 0 ? (
+            <Button asChild className="max-md:h-11">
+              <Link
+                href={shipmentPrefillHref({
+                  destination: { areaId: quote.destinationAreaId, areaLabel: quote.destinationAreaLabel, query: quote.destinationQuery },
+                  outletId: quote.outletId,
+                  weightGrams: quote.weightGrams,
+                })}
+              >
+                <PackagePlus aria-hidden="true" />Buat kiriman ke tujuan ini
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
       {quote.services.length === 0 ? (
         <EmptyState description="Coba kecamatan tujuan atau berat lain." icon={Truck} title="Belum ada layanan untuk rute ini" />

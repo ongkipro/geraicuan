@@ -303,7 +303,7 @@ describe("Cek tarif", () => {
     { codEligible: false, deliveryEstimate: "3 - 5 days", providerService: "SAPLite", shippingAmountIdr: 17_500 },
     { codEligible: true, deliveryEstimate: "1 hari", providerService: "JNE YES", shippingAmountIdr: 34_000 },
   ];
-  const quote = { destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN", originAreaLabel: "SURABAYA", outletId: "o1", retrievedAt: "2026-09-14T17:00:00Z", services, weightGrams: 1000 };
+  const quote = { destinationAreaId: "area-kebayoran", destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN", destinationQuery: "kebayoran baru", originAreaLabel: "SURABAYA", outletId: "o1", retrievedAt: "2026-09-14T17:00:00Z", services, weightGrams: 1000 };
 
   it("groups couriers in quote order and sorts services cheapest first under the chip filter", () => {
     const all = rateView(services, null);

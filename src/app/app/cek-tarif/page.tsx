@@ -22,7 +22,9 @@ function auditState(scenario: string | null, outletId: string): ShippingRateActi
   if (scenario !== "quick-rate-demo" && scenario !== "quick-rate-empty" && scenario !== "quick-rate-stale") return {};
   return {
     quote: {
+      destinationAreaId: "audit-kebayoran-baru",
       destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN",
+      destinationQuery: "kebayoran baru",
       originAreaLabel: "SURABAYA, JAWA TIMUR",
       outletId,
       retrievedAt: "2026-09-14T17:00:00Z",

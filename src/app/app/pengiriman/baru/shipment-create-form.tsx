@@ -1,5 +1,6 @@
 "use client";
 
+import { prefillWeightKg, type ShipmentPrefill } from "@/lib/shipment-prefill";
 import {
   ArrowRight,
   CalendarDays,
@@ -164,10 +165,13 @@ export function ShipmentCreateForm({
   gerai,
   nowIso,
   outlets,
+  prefill = null,
   sellerMoney,
   steps,
   submissionId,
 }: {
+  /** T-287: route and weight carried from Cek tarif; re-validated on save like any pick. */
+  prefill?: ShipmentPrefill | null;
   gerai: { name: string; phone: string | null };
   /**
    * T-271 (D-37/D-38): the Tenant Admin sees the fee parts (Biaya COD and its rate); an Operator
@@ -193,7 +197,7 @@ export function ShipmentCreateForm({
   const dateOptions = pickupDateOptions(now);
 
   // 1 Penyerahan & asal
-  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
+  const [outletId, setOutletId] = useState(prefill?.outletId ?? outlets[0]?.id ?? "");
   const [pickupAddressId, setPickupAddressId] = useState("");
   const [changingOrigin, setChangingOrigin] = useState(false);
   const pickup = effectivePickup(outlets, outletId, pickupAddressId);
@@ -225,7 +229,9 @@ export function ShipmentCreateForm({
   }, [senderOpen]);
   const [recipient, setRecipient] = useState({ address: "", name: "", phone: "" });
   const [recipientContact, setRecipientContact] = useState<ShipmentContactSelection | null>(null);
-  const [destination, setDestination] = useState<Destination>({ mode: "empty" });
+  const [destination, setDestination] = useState<Destination>(
+    prefill ? { ...prefill.destination, mode: "manual", outletId: prefill.outletId } : { mode: "empty" },
+  );
 
   // 3 Pembayaran — Non-COD is the default (spec 10 §5.1).
   const [cod, setCod] = useState(false);
@@ -234,7 +240,7 @@ export function ShipmentCreateForm({
   const [declaredValue, setDeclaredValue] = useState("");
 
   // 4 Produk & paket
-  const [rows, setRows] = useState<ProductRowState[]>([{ key: 0, name: "", quantity: "1", weightKg: "" }]);
+  const [rows, setRows] = useState<ProductRowState[]>([{ key: 0, name: "", quantity: "1", weightKg: prefillWeightKg(prefill?.weightGrams ?? null) }]);
   const composed = composeProductRows(rows);
   const weightGrams = composeProductWeightGrams(rows);
   const [instruction, setInstruction] = useState("");
@@ -801,6 +807,12 @@ export function ShipmentCreateForm({
               </FormField>
               <DestinationAreaPicker
                 defaultArea={destination.mode === "contact" ? { areaId: destination.areaId, areaLabel: destination.areaLabel } : null}
+                // Only while the prefilled pick is still the form's destination: after an outlet
+                // switch reset it, coming back must not show an area the form no longer holds.
+                defaultSelection={prefill && destination.mode === "manual" && destination.outletId === outletId
+                  && destination.areaId === prefill.destination.areaId
+                  ? { ...prefill.destination, outletId: prefill.outletId }
+                  : null}
                 description={destinationLabel ? "Area dari database Mengantar; dicek ulang saat disimpan." : "Ketik kecamatan, kelurahan, kota atau kode pos, lalu pilih."}
                 disabled={!outletId}
                 error={destinationError}

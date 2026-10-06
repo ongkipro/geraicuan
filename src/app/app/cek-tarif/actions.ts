@@ -34,7 +34,10 @@ export type ShippingRateActionState = {
   quote?: {
     outletId: string;
     originAreaLabel: string;
+    /** T-287: the checked Mengantar area and the words that found it, for "Buat kiriman" prefill. */
+    destinationAreaId: string;
     destinationAreaLabel: string;
+    destinationQuery: string;
     weightGrams: number;
     retrievedAt: string;
     services: {
@@ -171,7 +174,9 @@ export async function checkShippingRates(
     return { quote: {
       outletId,
       originAreaLabel: prepared.originAreaLabel,
+      destinationAreaId: destination.option.areaId,
       destinationAreaLabel: destination.option.areaLabel,
+      destinationQuery: areaQuery,
       weightGrams,
       retrievedAt: new Date().toISOString(),
       services: filterTenantCourierServices(services, prepared.disabledCouriers).map(({ providerService, shippingAmountIdr, deliveryEstimate, codEligible }) => ({

@@ -1,4 +1,4 @@
-import { FilePen, FileText, PenLine, Plus, Printer, Tag } from "lucide-react";
+import { FilePen, FileText, MessageCircle, PenLine, Plus, Printer, Tag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -24,7 +24,10 @@ import { withTenantContext } from "@/db/tenant-context";
 import { loadTenantDisabledCouriers } from "@/db/tenant-settings-repository";
 import { CmsAuthorizationDeniedError, requireCmsScope } from "@/lib/cms-auth";
 import { formatDimensions, formatWibDateTime } from "@/lib/label-format";
+import { courierServiceName } from "@/db/shipment-invoice-repository";
 import { deliveryEstimateLabel, serviceDisplayName } from "@/lib/labels/courier";
+import { mengantarCourierOfService } from "@/lib/mengantar-couriers";
+import { resiWhatsappHref } from "@/lib/whatsapp";
 import { providerResponseLabel } from "@/lib/labels/provider";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-method";
 import { isSanctionedOrderFixtureEnabled } from "@/lib/sanctioned-order-fixture";
@@ -109,6 +112,17 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
     ?? null;
   const estimateLabel = orderedService ? deliveryEstimateLabel(orderedService.deliveryEstimate) : null;
   const courierKey = provider?.courier ?? provider?.providerService ?? null;
+  // T-287: "Kirim resi via WhatsApp" — a wa.me link the user sends; only once the resi exists.
+  const resiShareHref = provider && detail.recipient
+    ? resiWhatsappHref({
+        courierService: courierServiceName(provider.courier ?? mengantarCourierOfService(provider.providerService) ?? provider.providerService, provider.providerService),
+        phone: detail.recipient.phone,
+        recipientName: detail.recipient.name,
+        resi: awb,
+        senderName: detail.sender?.name ?? null,
+        status: detail.status,
+      })
+    : null;
 
   const header = (
     <PageHeader
@@ -240,7 +254,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
       <Card aria-labelledby="tindakan-heading" role="region">
         <CardContent className="flex flex-col gap-3">
           <h2 className="text-lg font-bold" id="tindakan-heading">Tindakan berikutnya</h2>
-          <NextStepActions shipmentId={detail.shipmentId} step={step} />
+          <NextStepActions resiShareHref={resiShareHref} shipmentId={detail.shipmentId} step={step} />
           {staleCheck ? <StaleCheckAction shipmentId={detail.shipmentId} /> : null}
         </CardContent>
       </Card>
@@ -281,7 +295,7 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
 }
 
 /** Spec 10 §4.11: one filled primary per status; the rest outline. */
-function NextStepActions({ shipmentId, step }: { shipmentId: string; step: DetailNextStep }) {
+function NextStepActions({ resiShareHref = null, shipmentId, step }: { resiShareHref?: string | null; shipmentId: string; step: DetailNextStep }) {
   const primaryLink = (href: string, icon: ReactNode, label: string) => (
     <Button asChild className="w-full font-semibold">
       <Link href={href}>{icon}{label}</Link>
@@ -297,6 +311,14 @@ function NextStepActions({ shipmentId, step }: { shipmentId: string; step: Detai
             <Button asChild variant="outline"><Link href={step.labelHref}><Tag aria-hidden="true" />Cetak label saja</Link></Button>
             <Button asChild variant="outline"><Link href={step.invoiceHref}><FileText aria-hidden="true" />Invoice</Link></Button>
           </div>
+          {/* T-287: after printing, the counter sends the resi to the customer (wa.me, user-sent). */}
+          {resiShareHref ? (
+            <Button asChild className="w-full" variant="outline">
+              <a data-slot="resi-share" href={resiShareHref} rel="noreferrer" target="_blank">
+                <MessageCircle aria-hidden="true" />Kirim resi via WhatsApp
+              </a>
+            </Button>
+          ) : null}
         </>
       );
     case "issue":

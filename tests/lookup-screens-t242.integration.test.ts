@@ -34,7 +34,7 @@ describe("Cek tarif (T-242)", () => {
     { codEligible: false, deliveryEstimate: "3 - 5 days", providerService: "SAPLite", shippingAmountIdr: 17_500 },
     { codEligible: true, deliveryEstimate: "1-3 Hari", providerService: "spx", shippingAmountIdr: 20_000 },
   ];
-  const quote = { destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN", originAreaLabel: "SURABAYA", outletId: "o1", retrievedAt: "2026-09-14T17:00:00Z", services, weightGrams: 1000 };
+  const quote = { destinationAreaId: "area-kebayoran", destinationAreaLabel: "KEBAYORAN BARU, JAKARTA SELATAN", destinationQuery: "kebayoran baru", originAreaLabel: "SURABAYA", outletId: "o1", retrievedAt: "2026-09-14T17:00:00Z", services, weightGrams: 1000 };
 
   it("reads day ranges from the courier's estimate, and nothing from text without days", () => {
     expect(estimateDays("2-3 Day")).toEqual([2, 3]);
