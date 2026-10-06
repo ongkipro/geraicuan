@@ -1,38 +1,95 @@
 # Data Model: GeraiCUAN
 
 - Status: Draft
-- Owner: Engineering owner [TBD owner=Paduka Ongki; due=before first migration]
+- Owner: Engineering owner — no named engineering owner is recorded (the PRD's accountable product owner is Paduka Ongki). The former "before first migration" due point has passed: migrations `drizzle/0000` through `drizzle/0072` exist and define the live schema, mirrored by `src/db/schema.ts`.
 
 ## Entities
-| Entity | Tenant-scoped | Purpose |
-|---|---:|---|
-| `tenants` | No | Platform customer lifecycle and status. |
-| `users` | No | Authenticated principal identity. |
-| `memberships` | Yes | User role in one tenant: `TENANT_ADMIN` or `OPERATOR`. |
-| `outlets` | Yes | Tenant shipment origin and operational pickup identity. Its `default_pickup_address_id`/`default_origin_area_id` pair and labels are the denormalized mirror of the outlet's default `outlet_pickup_points` row. |
-| `outlet_pickup_points` | Yes | The outlet's Mengantar pickup addresses as a list: provider `pickup_address_id`, its derived origin area, their labels, and which entry is the outlet default. |
-| `mengantar_connections` | Yes | Outlet private credential reference and non-secret connection metadata; row presence selects `private`, absence selects `platform_default`; never plaintext secrets. |
-| `managed_secret_payloads` | Yes | Server-only authenticated-encryption envelope for an outlet's private Mengantar API key, keyed by canonical purpose/reference and encryption-key version; never plaintext or browser-readable metadata. |
-| `mengantar_location_cache` | No | Optional bounded cache of provider-authoritative area/pickup identifiers and Indonesian display hierarchy, created only after an accepted address-search contract proves caching is needed. |
-| `contacts` | Yes | Reusable sender/recipient directory entry with role tags, normalized contact details, an optional kategori and a per-tenant `contact_number` that addresses its detail page (DATA-19). |
-| `tenant_contact_counters` | Yes (no RLS, no runtime privilege) | Contact numbering state per tenant; written only by the before-insert allocator (DATA-19). |
-| `contact_addresses` | Yes | One or more reusable addresses for a contact, including selected Mengantar address metadata. |
-| `shipment_parties` | Yes | Immutable sender/recipient contact snapshots used for provider payload and label history. |
-| `provider_batches` | Yes | Idempotency key, courier, upstream batch ID, queue/status. |
-| `provider_order_snapshots` | Yes | Sanitized request/response fields, provider order ID, AWB, fees, `is_paid`. |
-| `print_events` | Yes | Shipment label print/reprint event and actor/time. |
-| `shipment_handover_events` | Yes | "Tandai sudah diserahkan": append-only handover and undo events per shipment — who, when (server time), method, note; the latest event is the current state (DATA-24). |
-| `shipment_invoices` | Yes | Immutable nota for one issued shipment: number, issuer, snapshot document and charge (DATA-14). |
-| `provider_order_history_events` | Yes | Courier tracking events per shipment, append-only, both roles read (DATA-18). |
-| `tenant_label_settings` | Yes | Per-size choice of which fields the thermal label prints (Informasi label, DATA-17). |
-| `tenant_brand_settings` | Yes | Gerai logo (validated bytes), catatan resi, kategori usaha, email CS, website, default label size and switched-off couriers (DATA-20). |
-| `tenant_logo_versions` | Yes | Every gerai logo ever saved, content-addressed by SHA-256, append-only; an issued invoice names the version it printed (DATA-20, T-247). |
-| `ledger_entries` | Yes | Immutable operational money entry, source transition, effective time, and reversal reference. |
-| `reconciliation_runs` | Yes | Daily/monthly tenant reconciliation period, source totals, variance, status, and actor. |
-| `platform_announcements` | No (platform-wide) | Info terbaru written by the Admin platform: title, plain-text body, category, pinned, `published_at` (NULL = draft) (DATA-21). |
-| `platform_announcement_reads` | Per user | One read receipt per (user, announcement), insert-only (DATA-21). |
-| `wilayah_areas` | No (tenant-neutral reference) | Kemendagri kecamatan and kelurahan/desa with an upstream kode pos hint; suggests destination areas while typing, never a destination authority (DATA-22, D-32). |
-| `audit_events` | Scope-tagged | Security-sensitive Super Admin/tenant-admin changes. |
+Live set: every table created in `drizzle/0000`–`drizzle/0072` minus `shipment_reference_counters` (created 0038, dropped 0040) — 45 tables, the same set as the `pgTable` definitions in `src/db/schema.ts`. "RLS" is what the migrations state (`ENABLE` and `FORCE ROW LEVEL SECURITY`); grants are those of the runtime role `geraicuan_app`, with the migrations that set them. A table without RLS is either platform/identity data the Better Auth adapter reads, or a counter the runtime role cannot touch at all. No provider location cache exists (DATA-7).
+
+**Identity and auth**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `users` | No | None · `SELECT`, `UPDATE (email_verified, updated_at)` (0003, 0051) | Authenticated principal identity. |
+| `sessions` | No (per user) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth session: token, expiry, IP address and user agent for one signed-in user. |
+| `accounts` | No (per user) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth credential/provider account linked to a user (password hash or provider tokens); server-only. |
+| `verifications` | No (platform) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth short-lived verification values (identifier, value, expiry) such as email verification and password reset. |
+| `rate_limits` | No (platform) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth database rate-limit storage (`rateLimit.storage: "database"` in `src/lib/auth.ts`): key, count, last request. |
+| `public_auth_rate_limits` | No (platform) | None · `SELECT, INSERT, UPDATE, DELETE` (0051) | Public sign-up/auth abuse counters keyed `scope:hmac-hex` with a fixed window (DATA-12). |
+
+**Platform, reference and announcements**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `platform_roles` | No (platform) | ENABLE + FORCE · `SELECT` (0001) | Grants a user the platform role; CHECK allows only `SUPER_ADMIN`. |
+| `platform_announcements` | No (platform-wide) | ENABLE + FORCE | Info terbaru written by the Admin platform: title, plain-text body, category, pinned, `published_at` (NULL = draft) (DATA-21). |
+| `platform_announcement_reads` | Per user | ENABLE + FORCE | One read receipt per (user, announcement), insert-only (DATA-21). |
+| `wilayah_areas` | No (tenant-neutral reference) | ENABLE + FORCE · `SELECT` (0067) | Kemendagri kecamatan and kelurahan/desa with an upstream kode pos hint; suggests destination areas while typing, never a destination authority (DATA-22, D-32). |
+| `audit_events` | Scope-tagged | ENABLE + FORCE | Security-sensitive Super Admin/tenant-admin changes. |
+
+**Tenancy and configuration**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `tenants` | No | ENABLE + FORCE | Platform customer lifecycle and status. |
+| `memberships` | Yes | ENABLE + FORCE | User role in one tenant: `TENANT_ADMIN` or `OPERATOR`. |
+| `outlets` | Yes | ENABLE + FORCE | Tenant shipment origin and operational pickup identity. Its `default_pickup_address_id`/`default_origin_area_id` pair and labels are the denormalized mirror of the outlet's default `outlet_pickup_points` row. |
+| `outlet_pickup_points` | Yes | ENABLE + FORCE | The outlet's Mengantar pickup addresses as a list: provider `pickup_address_id`, its derived origin area, their labels, and which entry is the outlet default. |
+| `mengantar_connections` | Yes | ENABLE + FORCE | Outlet private credential reference and non-secret connection metadata; row presence selects `private`, absence selects `platform_default`; never plaintext secrets. |
+| `managed_secret_payloads` | Yes | ENABLE + FORCE | Server-only authenticated-encryption envelope for an outlet's private Mengantar API key, keyed by canonical purpose/reference and encryption-key version; never plaintext or browser-readable metadata. |
+| `mengantar_credential_rate_limits` | Yes | ENABLE + FORCE · `SELECT, INSERT`, `UPDATE (count, last_request)` (0025, 0036) | Per tenant, outlet and actor request counters for private Mengantar credential operations. |
+| `shipment_rate_limits` | Yes | ENABLE + FORCE · `SELECT, INSERT`, `UPDATE (count, last_request)` (0019, 0036) | Per tenant, actor and operation request counters for shipment and provider operations (for example `settlement-pull`, 0039). |
+| `tenant_label_settings` | Yes | ENABLE + FORCE | Per-size choice of which fields the thermal label prints (Informasi label, DATA-17). |
+| `tenant_brand_settings` | Yes | ENABLE + FORCE | Gerai logo (validated bytes), catatan resi, kategori usaha, email CS, website, default label size and switched-off couriers (DATA-20). |
+| `tenant_logo_versions` | Yes | ENABLE + FORCE | Every gerai logo ever saved, content-addressed by SHA-256, append-only; an issued invoice names the version it printed (DATA-20, T-247). |
+| `tenant_shipment_counters` | Yes (no RLS, no runtime privilege) | None · `REVOKE ALL` from the runtime role (0040) | Per-tenant shipment numbering state (`last_number`, `shipment_prefix`, lock time); touched only by SECURITY DEFINER functions (DATA-10). |
+
+**Contacts**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `contacts` | Yes | ENABLE + FORCE | Reusable sender/recipient directory entry with role tags, normalized contact details, an optional kategori and a per-tenant `contact_number` that addresses its detail page (DATA-19). |
+| `tenant_contact_counters` | Yes (no RLS, no runtime privilege) | None · `REVOKE ALL` from the runtime role (0064) | Contact numbering state per tenant; written only by the before-insert allocator (DATA-19). |
+| `contact_addresses` | Yes | ENABLE + FORCE | One or more reusable addresses for a contact, including selected Mengantar address metadata. |
+
+**Shipment and estimate**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `shipments` | Yes | ENABLE + FORCE · `SELECT, INSERT`, `UPDATE (status, cogs_amount_idr, updated_at)`; no `DELETE` (0000, 0033, 0035) | The shipment aggregate: tenant, outlet, creator, per-tenant number and `public_reference` (DATA-10), and lifecycle `status` (DATA-2). |
+| `shipment_drafts` | Yes | ENABLE + FORCE · `SELECT, INSERT`, column-scoped `UPDATE`; no `DELETE` (0008, 0033, 0035, 0042) | Editable intake fields of one shipment before issuance (one row per shipment, `shipment_id` PK): destination, package, declared value, COD/payment method, pickup choice. |
+| `shipment_parties` | Yes | ENABLE + FORCE | Immutable sender/recipient contact snapshots used for provider payload and label history. |
+| `shipment_estimate_snapshots` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0010) | One Mengantar estimate request per shipment: origin/destination area, weight, COD request, credential source, retrieval time. |
+| `shipment_estimate_services` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0010) | Each courier service returned by an estimate snapshot: provider-returned shipping, insurance, normal/special price, COD fee and eligibility. |
+| `shipment_cod_totals` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0011) | Immutable COD components for one shipment and its selected estimate service, with `cod_formula_version` (DATA-3). |
+| `shipment_rts_events` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0032) | Return-to-sender timeline notes per shipment (DATA-8); read by the RTS page, no application writer in `src/` today. |
+
+**Provider**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `provider_batches` | Yes | ENABLE + FORCE | Idempotency key, courier, upstream batch ID, queue/status. |
+| `provider_order_snapshots` | Yes | ENABLE + FORCE | Sanitized request/response fields, provider order ID, AWB, fees, `is_paid`. |
+| `provider_unpaid_recoveries` | Yes | ENABLE + FORCE · `SELECT, INSERT`, `UPDATE (status, safe_response_code, attempted_at, completed_at, updated_at)` (0014) | Tenant Admin request to pay an unpaid non-COD Mengantar order, one per order snapshot (DATA-5 "Pay-unpaid"). |
+| `provider_order_history_events` | Yes | ENABLE + FORCE | Courier tracking events per shipment, append-only, both roles read (DATA-18). |
+
+**Money, ledger and settlement**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `ledger_entries` | Yes | ENABLE + FORCE | Immutable operational money entry, source transition, effective time, and reversal reference. |
+| `reconciliation_runs` | Yes | ENABLE + FORCE | Daily/monthly tenant reconciliation period, source totals, variance, status, and actor. |
+| `provider_settlement_pulls` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0039) | One row per read-only Mengantar settlement/status pull (DATA-9). |
+| `provider_settlement_items` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0039) | Matched per-AWB settlement, charge and refund evidence from a pull (DATA-9). |
+| `provider_order_status_observations` | Yes | ENABLE + FORCE · `SELECT, INSERT` (0039) | Provider status seen per matched shipment per pull and the transition decision it caused (DATA-9, 0047). |
+
+**Print, handover and invoice**
+
+| Entity | Tenant-scoped | RLS · runtime grants | Purpose |
+|---|---|---|---|
+| `print_events` | Yes | ENABLE + FORCE | Shipment label print/reprint event and actor/time. |
+| `shipment_handover_events` | Yes | ENABLE + FORCE | "Tandai sudah diserahkan": append-only handover and undo events per shipment — who, when (server time), method, note; the latest event is the current state (DATA-24). |
+| `shipment_invoices` | Yes | ENABLE + FORCE | Immutable nota for one issued shipment: number, issuer, snapshot document and charge (DATA-14). |
 
 ## DATA-1 — Isolation invariant
 - Owner: Engineering owner
@@ -43,6 +100,66 @@ Every tenant-owned table has non-null `tenant_id`; foreign keys and composite un
 - Owner: Engineering owner
 
 `DRAFT → ESTIMATED → SUBMISSION_QUEUED → SUBMISSION_UNKNOWN|ISSUED|AWAITING_UPSTREAM_PAYMENT|FAILED`. `ISSUED` requires a provider `cnote_no`. Print events reference issued shipments only.
+
+### Lifecycle diagram (from code)
+The pre-issuance line above is the original contract. The diagram below is drawn from the code as it stands: the status set is `shipmentStatuses` (`src/lib/domain-enums.ts`, mirrored by the `shipments_status_valid` CHECK, last replaced in 0063). Edges up to `ISSUED`/`AWAITING_UPSTREAM_PAYMENT`/`FAILED` come from the writers (`estimate-repository.ts`, `order-batch-repository.ts`, `shipment-reconciliation-repository.ts`, `unpaid-recovery-repository.ts`). Edges after issuance are exactly `ALLOWED_TRANSITIONS` (`src/lib/provider-delivery-status.ts`), with its SQL twin `provider_delivery_outcome` (replaced in 0068). `FAILED` is reached only by reconciling an unknown submission; nothing in `src/` moves `SUBMISSION_QUEUED` straight to `FAILED`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> ESTIMATED : estimate saved
+    ESTIMATED --> ESTIMATED : re-estimate
+    ESTIMATED --> SUBMISSION_QUEUED : operator confirms
+    SUBMISSION_QUEUED --> ISSUED : provider returns cnote_no
+    SUBMISSION_QUEUED --> AWAITING_UPSTREAM_PAYMENT : non-COD, unpaid, no cnote_no
+    SUBMISSION_QUEUED --> SUBMISSION_UNKNOWN : outcome not known
+    SUBMISSION_UNKNOWN --> ISSUED : reconciled
+    SUBMISSION_UNKNOWN --> AWAITING_UPSTREAM_PAYMENT : reconciled unpaid
+    SUBMISSION_UNKNOWN --> FAILED : reconciled failed
+    AWAITING_UPSTREAM_PAYMENT --> ISSUED : unpaid recovery paid
+    ISSUED --> IN_TRANSIT
+    ISSUED --> PROBLEM
+    ISSUED --> DELIVERED
+    ISSUED --> RTS_QUEUED
+    ISSUED --> RTS_IN_TRANSIT
+    ISSUED --> CANCELLED
+    AWAITING_UPSTREAM_PAYMENT --> IN_TRANSIT
+    AWAITING_UPSTREAM_PAYMENT --> PROBLEM
+    AWAITING_UPSTREAM_PAYMENT --> DELIVERED
+    AWAITING_UPSTREAM_PAYMENT --> RTS_QUEUED
+    AWAITING_UPSTREAM_PAYMENT --> RTS_IN_TRANSIT
+    AWAITING_UPSTREAM_PAYMENT --> CANCELLED
+    IN_TRANSIT --> PROBLEM
+    IN_TRANSIT --> DELIVERED
+    IN_TRANSIT --> RTS_QUEUED
+    IN_TRANSIT --> RTS_IN_TRANSIT
+    IN_TRANSIT --> CANCELLED
+    PROBLEM --> DELIVERED
+    PROBLEM --> RTS_QUEUED
+    PROBLEM --> RTS_IN_TRANSIT
+    PROBLEM --> CANCELLED
+    RTS_QUEUED --> RTS_IN_TRANSIT : return resi seen
+    RTS_QUEUED --> RTS_RECEIVED
+    RTS_IN_TRANSIT --> RTS_RECEIVED
+    FAILED --> [*]
+    DELIVERED --> [*]
+    CANCELLED --> [*]
+    RTS_RECEIVED --> [*]
+    note right of ISSUED
+        Handover overlay (DATA-24) - HANDED_OVER and UNDONE
+        events in shipment_handover_events. Recorded only
+        while ISSUED, printed, with cnote_no. Never changes
+        status - the pickup scan (ISSUED to IN_TRANSIT) does.
+    end note
+    note left of RTS_RECEIVED
+        Return to sender. No provider value
+        reaches RTS_RECEIVED yet (DATA-13 gap).
+    end note
+```
+
+- **RTS.** Mengantar's single `RTS` value maps to `RTS_QUEUED`; `RTS` with a return resi (`cnote_no_rts`) maps to `RTS_IN_TRANSIT`. A return never becomes a delivery. `RTS_RECEIVED` is in the graph but no captured or documented provider value reaches it today (DATA-13 gap).
+- **Terminal.** `FAILED`, `DELIVERED`, `RTS_RECEIVED` and `CANCELLED` have no outgoing edge. `CANCELLED` is set only from a Mengantar report; no GeraiCUAN action sets it. `AWAITING_UPSTREAM_PAYMENT → CANCELLED` was added in 0068 (T-247, D-33).
+- **Not lifecycle states.** `PENDING PICKUP`, `ACTIVE` and similar provider values are recorded and leave the status unchanged (`NO_LIFECYCLE_STATE`). The handover overlay is not a status either: Cetak resi's queues (Belum dicetak, Siap diserahkan, Diserahkan) are derived from print and handover events on `ISSUED` shipments (spec 19 LBL-*).
 
 ## DATA-3 — Money and provider snapshots
 - Owner: Engineering owner
@@ -82,38 +199,181 @@ Store currency as `IDR` and all amounts as whole integer rupiah, except provider
 Persist provider IDs together with their last accepted human-readable label at operational snapshot boundaries. Outlet pickup configuration stores `default_pickup_address_id` with `default_pickup_address_label` and `default_origin_area_id` with `default_origin_area_label`; both labels are null for legacy rows or non-null as one pair. New writes accept only a pickup from the current account-scoped provider response and derive the area ID and both labels from that same response. A cached area row is never sufficient evidence that an ID remains supported; estimate/order behavior remains authoritative. No provider location cache exists. Since D-32 (T-245) a local Kemendagri reference, `wilayah_areas` (DATA-22), suggests areas while typing; it carries no provider ID, no tenant table references it, and only a provider option from a live search is ever stored or verified.
 
 ## ERD
+Relationships are the foreign keys in `drizzle/0000`–`drizzle/0072` (cross-checked against `src/db/schema.ts`; no FK added by a migration is missing from the schema file and none was dropped later). Most tenant-owned FKs are composite — `(parent_id, tenant_id) → parent(id, tenant_id)` — so a child cannot point at another tenant's row (DATA-1); the diagrams draw them as one edge. Tables without a foreign key appear as stand-alone entities. Four diagrams by domain keep each one readable; an entity repeated across diagrams is the same table.
+
+### ERD 1 — Identity, auth, platform and reference
 ```mermaid
 erDiagram
+    USERS ||--o{ SESSIONS : signs_in
+    USERS ||--o{ ACCOUNTS : authenticates
+    USERS ||--o| PLATFORM_ROLES : holds
+    USERS ||--o{ MEMBERSHIPS : joins
     TENANTS ||--o{ MEMBERSHIPS : has
-    TENANTS ||--o{ OUTLETS : owns
-    TENANTS ||--o{ CONTACTS : owns
-    OUTLETS ||--o| MENGANTAR_CONNECTIONS : configures
-    CONTACTS ||--o{ CONTACT_ADDRESSES : has
-    OUTLETS ||--o{ SHIPMENTS : originates
-    SHIPMENTS ||--o{ SHIPMENT_PARTIES : snapshots
-    SHIPMENTS }o--|| PROVIDER_BATCHES : belongs_to
-    SHIPMENTS ||--o{ LEDGER_ENTRIES : produces
-    OUTLETS ||--o{ RECONCILIATION_RUNS : closes
+    USERS |o--o{ AUDIT_EVENTS : acts
+    TENANTS |o--o{ AUDIT_EVENTS : scopes
+    USERS ||--o{ PLATFORM_ANNOUNCEMENTS : writes
+    PLATFORM_ANNOUNCEMENTS ||--o{ PLATFORM_ANNOUNCEMENT_READS : read_by
+    USERS ||--o{ PLATFORM_ANNOUNCEMENT_READS : reads
+    USERS {
+      text id PK
+      text email
+    }
     TENANTS {
       uuid id PK
-      string status
+      text status
+    }
+    MEMBERSHIPS {
+      uuid tenant_id FK
+      text user_id FK
+      text role
+    }
+    VERIFICATIONS {
+      text id PK
+      text identifier
+    }
+    RATE_LIMITS {
+      text id PK
+      text key
+    }
+    PUBLIC_AUTH_RATE_LIMITS {
+      text key PK
+      integer count
+    }
+    WILAYAH_AREAS {
+      text code PK
+      smallint level
+      text district_name
+    }
+```
+
+### ERD 2 — Tenancy, configuration and contacts
+```mermaid
+erDiagram
+    TENANTS ||--o{ OUTLETS : owns
+    OUTLETS ||--o{ OUTLET_PICKUP_POINTS : lists
+    TENANTS ||--o{ MENGANTAR_CONNECTIONS : scopes
+    OUTLETS ||--o| MENGANTAR_CONNECTIONS : configures
+    TENANTS ||--o{ MANAGED_SECRET_PAYLOADS : scopes
+    OUTLETS ||--o{ MANAGED_SECRET_PAYLOADS : encrypts_for
+    TENANTS ||--o{ MENGANTAR_CREDENTIAL_RATE_LIMITS : scopes
+    OUTLETS ||--o{ MENGANTAR_CREDENTIAL_RATE_LIMITS : throttles
+    USERS ||--o{ MENGANTAR_CREDENTIAL_RATE_LIMITS : actor
+    TENANTS ||--o{ SHIPMENT_RATE_LIMITS : scopes
+    USERS ||--o{ SHIPMENT_RATE_LIMITS : actor
+    TENANTS ||--o{ TENANT_LABEL_SETTINGS : per_label_size
+    TENANTS ||--o| TENANT_BRAND_SETTINGS : brands
+    TENANTS ||--o{ TENANT_LOGO_VERSIONS : saves
+    TENANTS ||--o| TENANT_SHIPMENT_COUNTERS : numbers_shipments
+    TENANTS ||--o| TENANT_CONTACT_COUNTERS : numbers_contacts
+    TENANTS ||--o{ CONTACTS : owns
+    CONTACTS ||--o{ CONTACT_ADDRESSES : has
+    TENANTS {
+      uuid id PK
+      text status
     }
     OUTLETS {
       uuid id PK
       uuid tenant_id FK
+      text default_pickup_address_id
     }
+    MENGANTAR_CONNECTIONS {
+      uuid id PK
+      uuid outlet_id FK
+      text secret_reference
+    }
+    TENANT_SHIPMENT_COUNTERS {
+      uuid tenant_id PK
+      integer last_number
+      text shipment_prefix
+    }
+```
+
+### ERD 3 — Shipment, estimate and provider order
+```mermaid
+erDiagram
+    OUTLETS ||--o{ SHIPMENTS : originates
+    USERS |o--o{ SHIPMENTS : creates
+    SHIPMENTS ||--o| SHIPMENT_DRAFTS : drafts
+    SHIPMENTS ||--o{ SHIPMENT_PARTIES : snapshots
+    SHIPMENTS ||--o{ SHIPMENT_ESTIMATE_SNAPSHOTS : estimates
+    OUTLETS ||--o{ SHIPMENT_ESTIMATE_SNAPSHOTS : origin
+    SHIPMENT_ESTIMATE_SNAPSHOTS ||--o{ SHIPMENT_ESTIMATE_SERVICES : returns
+    SHIPMENTS ||--o| SHIPMENT_COD_TOTALS : totals
+    SHIPMENT_ESTIMATE_SNAPSHOTS ||--o{ SHIPMENT_COD_TOTALS : priced_by
+    SHIPMENT_ESTIMATE_SERVICES ||--o{ SHIPMENT_COD_TOTALS : selected
+    OUTLETS ||--o{ PROVIDER_BATCHES : submits
+    PROVIDER_BATCHES ||--o{ PROVIDER_ORDER_SNAPSHOTS : contains
+    SHIPMENTS ||--o{ PROVIDER_ORDER_SNAPSHOTS : ordered_as
+    SHIPMENT_ESTIMATE_SNAPSHOTS ||--o{ PROVIDER_ORDER_SNAPSHOTS : quoted_by
+    SHIPMENT_ESTIMATE_SERVICES ||--o{ PROVIDER_ORDER_SNAPSHOTS : service
+    PROVIDER_ORDER_SNAPSHOTS ||--o| PROVIDER_UNPAID_RECOVERIES : recovers
+    MEMBERSHIPS ||--o{ PROVIDER_UNPAID_RECOVERIES : requests
+    SHIPMENTS ||--o{ PROVIDER_ORDER_HISTORY_EVENTS : tracks
+    SHIPMENTS ||--o{ SHIPMENT_RTS_EVENTS : returns
     SHIPMENTS {
       uuid id PK
       uuid tenant_id FK
       uuid outlet_id FK
-      string status
+      text created_by_user_id FK
+      integer tenant_number
+      text status
     }
+    PROVIDER_ORDER_SNAPSHOTS {
+      uuid id PK
+      uuid batch_id FK
+      uuid shipment_id FK
+      text cnote_no
+      boolean is_paid
+    }
+    SHIPMENT_COD_TOTALS {
+      uuid id PK
+      uuid shipment_id FK
+      integer cod_formula_version
+    }
+```
+
+### ERD 4 — Money, ledger, settlement, print, handover and invoice
+```mermaid
+erDiagram
+    SHIPMENTS |o--o{ LEDGER_ENTRIES : sources
+    PROVIDER_BATCHES |o--o{ LEDGER_ENTRIES : sources
+    PROVIDER_ORDER_SNAPSHOTS |o--o{ LEDGER_ENTRIES : sources
+    RECONCILIATION_RUNS |o--o{ LEDGER_ENTRIES : adjusts
+    MEMBERSHIPS |o--o{ LEDGER_ENTRIES : actor
+    LEDGER_ENTRIES |o--o{ LEDGER_ENTRIES : reverses
+    OUTLETS ||--o{ RECONCILIATION_RUNS : closes
+    MEMBERSHIPS ||--o{ RECONCILIATION_RUNS : actor
+    OUTLETS ||--o{ PROVIDER_SETTLEMENT_PULLS : pulls
+    PROVIDER_SETTLEMENT_PULLS ||--o{ PROVIDER_SETTLEMENT_ITEMS : matches
+    SHIPMENTS ||--o{ PROVIDER_SETTLEMENT_ITEMS : settled_by
+    PROVIDER_SETTLEMENT_PULLS |o--o{ PROVIDER_ORDER_STATUS_OBSERVATIONS : observes
+    SHIPMENTS ||--o{ PROVIDER_ORDER_STATUS_OBSERVATIONS : observed
+    SHIPMENTS ||--o{ PRINT_EVENTS : printed
+    PROVIDER_ORDER_SNAPSHOTS ||--o{ PRINT_EVENTS : prints_awb
+    SHIPMENTS ||--o{ SHIPMENT_HANDOVER_EVENTS : handed_over
+    SHIPMENTS ||--o| SHIPMENT_INVOICES : invoiced
+    PROVIDER_ORDER_SNAPSHOTS ||--o{ SHIPMENT_INVOICES : charges
+    TENANT_LOGO_VERSIONS |o--o{ SHIPMENT_INVOICES : prints_logo
     LEDGER_ENTRIES {
       uuid id PK
       uuid tenant_id FK
       uuid shipment_id FK
-      string type
-      bigint amount
+      uuid reverses_entry_id FK
+      text entry_type
+      bigint amount_idr
+    }
+    SHIPMENT_HANDOVER_EVENTS {
+      uuid id PK
+      uuid shipment_id FK
+      integer sequence
+      text kind
+      text method
+    }
+    SHIPMENT_INVOICES {
+      uuid id PK
+      uuid shipment_id FK
+      text invoice_number
+      text logo_sha256 FK
     }
 ```
 

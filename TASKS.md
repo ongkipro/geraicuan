@@ -2216,6 +2216,7 @@ Rules for this phase:
     nonexistent constraint IDs; all were corrected in the same change.
 
 - [ ] **T-88 — Unify outcome and action-needed definitions across scopes**
+  - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-11
   - Constraints: spec 19 SHP-ISSUED, SHP-UNPAID-OUTCOME, ACT-NEEDED,
     ACT-UNPAID; D-2; PR-25; UX-8; TEN-1
@@ -2225,6 +2226,7 @@ Rules for this phase:
   - Done when: Issued, unpaid and unknown fixtures with different creation/resolution periods agree across app, analytics and platform; both roles' action-needed equals its queue, Operator receives no unpaid metric, and Tenant Admin unpaid equals its linked queue. The shared predicate and matching spec19 evidence exist.
 
 - [ ] **T-89 — Correct rate precision and period comparison semantics**
+  - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-15
   - Constraints: spec 19 M-0 counts/rates/comparisons, SHP-ISSUE-RATE,
     OPS-FAILURE-SHARE; D-1
@@ -2234,6 +2236,7 @@ Rules for this phase:
   - Done when: Comparison/range tests cover equal, previous-zero, negative current, denominator-zero, .05 rounding and partial-period boundaries; browser evidence verifies rate precision, percentage points and low-volume wording.
 
 - [ ] **T-90 — Align money metrics, adjustments, and the COD split**
+  - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-20
   - Constraints: spec 19 FIN-*, SHP-COD, COD-TEST, REC-VARIANCE,
     REC-VARIANCE-NET; D-4; PR-16, DATA-3, DATA-4
@@ -2256,6 +2259,7 @@ Rules for this phase:
   - Evidence (2026-09-17, T-177): implemented as a withdrawal — no margin or COGS figure on any surface, type or export (see T-177). Closes with T-177 once the PR-33 amendment is applied to `docs/spec/02-PRD.md`.
 
 - [ ] **T-92 — Make timezone, generated-at, staleness, and durations consistent**
+  - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-15
   - Constraints: spec 19 M-0 period/freshness, OPS-BATCH-DURATION
   - Dependencies: T-88
@@ -2264,6 +2268,7 @@ Rules for this phase:
   - Done when: Real timestamp/staleness tests pass, a 45-second duration renders seconds, and legacy Asia/Jayapura URLs consistently resolve to WIB under PR-35.
 
 - [ ] **T-93 — Complete and test platform severity rules**
+  - 2026-10-06 (T-276): re-audited against the v3 tree; remaining work routed to T-278 (spec 19 rows re-labelled there with executed evidence).
   - Primary requirement: PR-11
   - Constraints: spec 19 M-2 platform table
   - Dependencies: T-88
@@ -2273,7 +2278,8 @@ Rules for this phase:
 
 ### Shell foundation
 
-- [ ] **T-94 — Build the shared status, scope, breadcrumb, and navigation-count foundation**
+- [x] **T-94 — Build the shared status, scope, breadcrumb, and navigation-count foundation**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: spec 10 v3 has no Pattern sections; detail pages use back links (spec 17 UX-v3 rows), the sidebar count plumbing (`app-sidebar.tsx`) carries the PR-91 Info terbaru count only, the Kiriman/Keuangan counts have no v3 surface (T-204), severity badges delivered by T-257.
   - Primary requirement: PR-17
   - Constraints: spec 10 § CMS page patterns Foundation; UX-3; UX-7
   - Dependencies: T-88
@@ -2281,7 +2287,8 @@ Rules for this phase:
   - Remaining scope: Add contextual breadcrumbs, shared platform severity presentation where still missing, and server-derived navigation counts: ACT-NEEDED for Kiriman, ACT-UNPAID for Tenant Admin only, REC-VARIANCE-COUNT for Keuangan, outlet readiness for Pengaturan, and platform Kritis count. Preserve shared neutral scope/role labels and existing status primitives.
   - Done when: Breadcrumbs render for descendants; source/queue count parity and role-exclusion tests pass; both scopes retain the same token/font/focus treatment at390/768/1440. No metric count is inferred in the browser.
 
-- [ ] **T-95 — Add the scope-bounded command palette**
+- [x] **T-95 — Add the scope-bounded command palette**
+  - Closed 2026-10-06 by T-276 — DONE-IN-V3 / SUPERSEDED: Ctrl/Cmd+K role-scoped page search in `site-header.tsx`; spec 10 §4.3 defines it as "Cari halaman…"; record lookup lives in Histori `cari`, Cek resi and contact search.
   - Primary requirement: PR-17
   - Constraints: spec 10 Foundation command palette; TEN-1, TEN-2, IAM-2,
     SEC-2; PR-12, PR-18 visibility rules
@@ -2292,7 +2299,8 @@ Rules for this phase:
 
 ### Pattern adoption
 
-- [ ] **T-96 — Adopt the Settings pattern on Outlet & koneksi**
+- [x] **T-96 — Adopt the Settings pattern on Outlet & koneksi**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: Pengaturan split into outlet/koneksi/kurir/label/pickup with per-card save (spec 17 UX-v3); label preview delivered as Informasi label (PR-86, T-229/T-243).
   - Primary requirement: PR-19
   - Constraints: spec 10 Pattern 4; UX-10; PR-27, PR-28
   - Dependencies: T-94
@@ -2300,7 +2308,8 @@ Rules for this phase:
   - Remaining scope: Add the unsaved-change guard and provider-label preview; verify readiness agreement and all remaining UX-5 states. Preserve delivered layout, per-section saves and credential/location authority.
   - Done when: Ready/not-ready fixtures agree between badge and checklist, unsaved changes receive the specified guard, provider-label preview is correct, and three-width UX-5 state evidence plus outlet regression tests pass.
 
-- [ ] **T-97 — Adopt the Settings pattern on Anggota & akses**
+- [x] **T-97 — Adopt the Settings pattern on Anggota & akses**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3 (T-256): `/app/anggota` header invite Dialog, last-admin reason badge; the v3 contract is a stat strip plus rows with "Kelola akses".
   - Primary requirement: PR-23
   - Constraints: spec 10 Pattern 4; UX-5 Members; IAM-2
   - Dependencies: T-94
@@ -2308,7 +2317,8 @@ Rules for this phase:
   - Remaining scope: Complete status tabs, table row menus, single header invite Dialog and last-admin lock/tooltip; replace the redundant count/bottom-invite presentation. Preserve existing action boundaries and deactivation consequences.
   - Done when: Empty/invited/active/deactivated/validation/pending/success/last-admin browser states pass at three widths, and existing governance tests remain green.
 
-- [ ] **T-98 — Adopt the Command center pattern on Ringkasan**
+- [x] **T-98 — Adopt the Command center pattern on Ringkasan**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: Dasbor anatomy (spec 17 `/app` row) has no ranked attention list; the Operator's urgent work is the Cetak resi queue (T-263).
   - Primary requirement: PR-25
   - Constraints: spec 10 Pattern 1; spec 19 M-2 tenant thresholds and ranking,
     M-3 `/app` charts; UX-8
@@ -2317,7 +2327,8 @@ Rules for this phase:
   - Remaining scope: Complete TENANT_ATTENTION_THRESHOLDS and ranked actionable exceptions with role filtering, placing urgent work ahead of the long recent table on mobile. Preserve the delivered filter, KPI and current-versus-previous trend regions.
   - Done when: Threshold and mixed-fixture ranking tests pass; Operator never receives Tenant Admin-only attention items; first-run/healthy/actionable/partial-stale/loading/error browser evidence passes.
 
-- [ ] **T-99 — Adopt the Command center pattern on platform Ringkasan**
+- [x] **T-99 — Adopt the Command center pattern on platform Ringkasan**
+  - Closed 2026-10-06 by T-276 — DONE-IN-V3: ranked "Perlu perhatian" (`platform/_components/platform-logic.ts`) and p95 value on `/platform` (T-257); the daily p95 line is not in UX-v3.7. Residual metric work moved to T-278.
   - Primary requirement: PR-11
   - Constraints: spec 10 Pattern 1; spec 19 M-2 platform thresholds and ranking,
     M-3 `/platform` charts
@@ -2326,7 +2337,8 @@ Rules for this phase:
   - Remaining scope: Complete ranked exceptions, p95 duration view and compact applied-scope presentation after metric prerequisites; preserve the existing chart/table disclosure. T-134 owns visual parity of existing surfaces, not these additional features.
   - Done when: Ranking, chart/table parity and duration source tests pass; healthy/warning/critical/degraded/empty states are verified for global and tenant scopes.
 
-- [ ] **T-100 — Build the analytics dashboard views**
+- [x] **T-100 — Build the analytics dashboard views**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: `/app/analitik` removed by T-204; Distribusi status lives in Laporan (T-235/T-254).
   - Primary requirement: PR-26
   - Constraints: spec 19 M-3 `/app/analitik` rows; UX-9; DATA-4
   - Dependencies: T-89, T-90
@@ -2334,7 +2346,8 @@ Rules for this phase:
   - Remaining scope: Add previous-period ghost series, lifecycle distribution and financial-class composition views with summary/table parity after metric alignment. Do not rebuild delivered analytics composition or courier view.
   - Done when: Every existing and new analytics chart agrees with its table and aligned spec19 metric; principal never enters revenue; no-data/filtered-empty/partial-error/stale browser states pass at three widths.
 
-- [ ] **T-101 — Add the reconciliation variance view to Keuangan**
+- [x] **T-101 — Add the reconciliation variance view to Keuangan**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: `/app/keuangan` removed by T-204; the money view is the read-only Pencairan COD page (T-275, PR-93).
   - Primary requirement: PR-20
   - Constraints: spec 19 REC-VARIANCE, M-3 `/app/keuangan`; PR-16
   - Dependencies: T-90, T-92
@@ -2342,7 +2355,8 @@ Rules for this phase:
   - Remaining scope: Add the signed reconciliation variance history chart and its caption/link between the existing queue and ledger, preserving both authoritative tables.
   - Done when: Chart values equal filtered history rows; matched/variance/reversal/loading/error browser evidence passes.
 
-- [ ] **T-102 — Adopt the Queue pattern on Kiriman**
+- [x] **T-102 — Adopt the Queue pattern on Kiriman**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3 (T-212, T-263, T-266): Histori kiriman tiles, `cari`, pagination; bulk print moved to Cetak resi selection (PR-87).
   - Primary requirement: PR-18
   - Constraints: spec 10 Pattern 2 bulk rule; UX-4 row actions; TD-14
   - Dependencies: T-94
@@ -2350,7 +2364,8 @@ Rules for this phase:
   - Remaining scope: Add counted lifecycle tabs, search, state/role row menus and selection-only safe print/export bulk actions. Preserve the accepted responsive table and existing URL filters/pager.
   - Done when: Reload/back preserve URL state; tests exclude provider issuance/recovery from bulk actions; system-empty/filtered-empty/loading/error/partial-stale browser evidence and long-AWB containment remain passing.
 
-- [ ] **T-103 — Adopt the Queue pattern on Retur, Kontak, and Label**
+- [x] **T-103 — Adopt the Queue pattern on Retur, Kontak, and Label**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: Retur, Pengirim/Penerima and Cetak resi rebuilt against spec 17 UX-v3 (T-212, T-230, T-241, T-263); remaining state evidence belongs to T-219.
   - Primary requirement: PR-18
   - Constraints: spec 10 Pattern 2; PR-12, PR-29, PR-7
   - Dependencies: T-102
@@ -2358,7 +2373,8 @@ Rules for this phase:
   - Remaining scope: Apply applicable remaining T-102 interaction controls to these routes and close their missing state/print-preservation evidence. Do not duplicate queue foundations or redesign the label sheet.
   - Done when: Each route has empty/filtered-empty/populated/error evidence at three widths, applicable controls retain scope/state, and label sheet size/output is preserved.
 
-- [ ] **T-104 — Adopt the Queue pattern on platform Tenant and Audit with readable events**
+- [x] **T-104 — Adopt the Queue pattern on platform Tenant and Audit with readable events**
+  - Closed 2026-10-06 by T-276 — DONE-IN-V3: type-exhaustive audit sentences (`src/lib/labels/audit.ts`, `tests/audit-labels`), `status-gerai` strip and "Buat gerai" dialog (`create-tenant.tsx`).
   - Primary requirement: PR-21
   - Constraints: spec 10 Patterns 2 and 3 timeline wording; PR-11 redaction
   - Dependencies: T-94
@@ -2367,6 +2383,7 @@ Rules for this phase:
   - Done when: An exhaustive event mapping test rejects missing sentences; both routes pass empty/filtered/error states and provisioning entry/focus evidence.
 
 - [ ] **T-105 — Adopt the Detail pattern on platform tenant detail**
+  - 2026-10-06 (T-276): the only Phase 12 presentation residual still required by a current contract (spec 17 UX-v3.1, UX-v3.3 "suspend/archive"); breadcrumb/local nav superseded by the back-link pattern, readable timeline done. Implementation: T-279.
   - Primary requirement: PR-21
   - Constraints: spec 10 Pattern 3; confirmation ladder typed-name rule
   - Dependencies: T-90, T-104
@@ -2374,7 +2391,8 @@ Rules for this phase:
   - Remaining scope: Add breadcrumb, applicable local navigation, readable event timeline and the still-unimplemented archival policy/action only within its accepted authorization/audit contract. Preserve existing typed-name suspension/reactivation rather than reimplementing it.
   - Done when: Existing typed-name and audit tests remain passing; archival is implemented with a supported lifecycle policy, exact-name guard and audit evidence, or explicitly deferred by the owner with the requirement/task updated; active/suspended/loading/error browser states pass.
 
-- [ ] **T-106 — Adopt the Detail pattern on shipment and contact detail**
+- [x] **T-106 — Adopt the Detail pattern on shipment and contact detail**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3 (T-213, T-241/T-246/T-250): grouped detail with back link; remaining lifecycle browser evidence belongs to T-219.
   - Primary requirement: PR-18
   - Constraints: spec 10 Pattern 3; UX-4; TD-14 release gate
   - Dependencies: T-102
@@ -2382,7 +2400,8 @@ Rules for this phase:
   - Remaining scope: Complete contextual breadcrumbs and missing full-lifecycle browser evidence; preserve existing grouped detail/next actions and release-gated controls.
   - Done when: Every UX-4 lifecycle and production-gate state is browser-verified, contact/detail regressions pass, and required confirmations retain named invalid focus.
 
-- [ ] **T-107 — Adopt the Flow pattern on shipment creation, bulk import, new contact, and provisioning**
+- [x] **T-107 — Adopt the Flow pattern on shipment creation, bulk import, new contact, and provisioning**
+  - Closed 2026-10-06 by T-276 — DONE-IN-V3: "Isi data · Cek tarif · Terbitkan resi" stepper, section progress and sticky summary rail (T-249, T-274); bulk import removed (T-204); provisioning dialog done.
   - Primary requirement: PR-3
   - Constraints: spec 10 Pattern 5; PR-4, PR-5, PR-9, PR-21; TD-14
   - Dependencies: T-106
@@ -2390,7 +2409,8 @@ Rules for this phase:
   - Remaining scope: Add only the remaining multistep/completed-summary/persistent-money presentation and provisioning Dialog; retain single-step new-contact flow and existing validation/persistence. Coordinate the Dialog with T-104 instead of building it twice.
   - Done when: COD display equals calculateCodAmounts; back/forward steps preserve input; validation/pending/partial-failure/success states pass for each flow, without provider issuance beyond TD-14.
 
-- [ ] **T-108 — Screen the whole admin panel against Phase 12 contracts**
+- [x] **T-108 — Screen the whole admin panel against Phase 12 contracts**
+  - Closed 2026-10-06 by T-276 — SUPERSEDED-BY-V3: the Phase 12 pattern contracts no longer exist; whole-product screening is T-219 and T-288.
   - Primary requirement: PR-22
   - Constraints: UX-11; spec 10 § CMS page patterns; spec 19 M-6
   - Dependencies: T-87 through T-107 (T-91 once D-3 is decided)
@@ -2746,6 +2766,7 @@ Owner steering across 2026-09-15/16: the admin dashboard is too wide and too fla
   - Evidence (2026-09-16): migration 0041 adds the five draft fields plus `destination_area_verified_at` and four provider money columns; payload carries 22 keys; guards refuse a COD order without a COD total, an unverified destination area and an unconvertible weight, each mutation-bound. Independent review found the first payout formula mixed two provider price scales (`price` vs `estimatedSpecialPrice`), so the shipped formula is `provider_cod_amount − (special ?? normal)`, matching Keuangan's SETTLE-EXPECTED-IDR and the T-146 invoice evidence, with the COD-fee term removed, a scale-mismatch guard that hides the figure, and Indonesian disclosure of what remains inside it. Migration 0042 grants the column-scoped UPDATE for the re-verification recovery; `verifyShipmentDraftDestinationArea` re-checks the stored area with the provider and stamps only on an exact id+label match. `MengantarOrderPayloadError` is now caught, mapped to per-code Indonesian messages, emitted as a lifecycle event, and isolated per batch.
 
 - [ ] **T-153 — Verify the Mengantar order request against the provider contract.** *(accepted 2026-09-16; owner approved live calls and one created order on 2026-09-16)*
+  - 2026-10-06 (T-276): the request contract is no longer the blocker — T-237a (2026-09-28) had the documented body accepted live and the resi issued; what remains is a live transport inside the app (T-280) and the per-path live proofs (T-285), owner-approved by D-42.
   - **Findings (2026-09-16, live production account, read-only unless stated).** `scripts/capture-mengantar-order-contract.mjs` recorded the stored order record from `GET /order` (68 fields, 100 records, key names kept and every value reduced to a type, scale or enum — no customer data, no credential) into `tests/fixtures/mengantar-order-contract.shape.json`.
     - **Two of the three provisional PR-47 keys are wrong.** The provider's own hazardous flag is `isDangerousGoods`, not `is_hazardous`. There is **no** shipping-instruction field on a stored order at all; the closest is `destinationMark`, which on this account holds an invoice reference. A landmark has no field of its own either — the address is `RECEIVER_ADDR1`/`ADDR2`/`ADDR3`, so a landmark belongs in the second address line.
     - **Settlement vocabulary confirmed:** `price` (integer) and `estimatedPrice` (fractional) are separate, `COD_FEE` is its own fractional field, and `cnote_no_rts`/`cnote_no_fwd` exist alongside `cnote_no` — matching migration 0043's basis.
@@ -3246,6 +3267,7 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
 - [x] **T-224 — System map v3.** Done 2026-09-26: spec 18 rewritten from the code (35 pages, 3 handlers, 24 action files / 42 actions, 4 layouts, 27 loading, 20 error, 5 not-found); `system-map-inventory` 6/6 with the four T-209 skips removed. Coordinator: invoice pages mark Cetak resi current; spec 17 row for `/app/label/cetak`; stale spec 19 `data-metric-id` line replaced. Rewrite `docs/spec/18-SYSTEM-MAP.md` page-by-page for the v3 routes (URL, role, job, reads, actions, states, reference HTML) and re-enable `system-map-inventory` tests against it. PR-82. After T-211–T-218.
 - [x] **T-225 — Sign-in and sign-up polish (extended by the owner 2026-09-26, D-21).** Done 2026-09-26: `AuthShell visual` — at ≥ 1024 px Masuk (tenant, primary ground; Super Admin, navy ground + "Khusus Super Admin") and Daftar get a left panel (GC mark, headline, Kirim · Cetak resi · Invoice, static nota mock `INV-SBN-10001`, "Gratis" on tenant only), card alone below 1024 px; login form logic unchanged. `/daftar` = 3 client-side steps (Akun · Gerai · Awalan) with one `registerStore` submission; each step runs the server's own `validateRegistration` (now client-safe: `normalizePartyPhone` → `shipment-draft-logic.ts`, email/password rules → `public-auth-routes.ts`, both re-exported from the old modules); server field errors open the step of the first error and focus it; values survive steps and server errors (controlled fields, submission via `startTransition`, no form reset). Prefix 2–3 (`SHIPMENT_PREFIX_PATTERN`), suggestion ≤ 3 initials ("Sekar Batik Nusantara" → SBN, "Phi Store" → PS), Pengaturan card/action text "mis. PHI, A29". Migration 0060: trigger `tenant_shipment_counters_new_prefix_guard` (new/changed prefix 2–3; not `CHECK NOT VALID`, which would block allocation for legacy 4–5 rows) + `register_tenant_self_service_with_prefix` (wraps the unchanged 0051 function, stores the prefix unlocked). Invoice numbers need no change (`INV-` || reference). Tests: `tenant-registration` +3 (prefix stored/defaulted, server refusal, DB refusal + legacy 5-char row keeps allocating + grants), `platform-public-render` +3 (steps markup, step validation mapping, split panel), `shipment-number` suggestion/normalise cases; `shipment-reference-repository` fixtures TKPJ/RACE → TKJ/RCE; `bootstrap-super-admin` reads the moved constants. tsc 0; lint 0; full suite on the iso DB 114 files / 1,328 passed; `verify-migration-upgrade` through 0060 (temporary DB, dropped); 0060 applied to iso and dev DBs. Browser (dev app): `/login/tenant`, `/login/super-admin`, `/daftar` steps 1–3 at 1440 and 390, empty-step errors, Enter advances, forced server error (request tampered in the browser) → back to Gerai with focus on Nama gerai, real throwaway registration `t225-k7q2@example.test` stored prefix `A29` unlocked, mail recorded only (not approved; left on the dev DB); 390: no overflow, 13 px floor, 48 px controls. Auth pages use colour tokens only (no hex or arbitrary colours; coordinator palette swap pending). Open: registration checkbox is 20 px visual (hit area widened by the shared Checkbox); `/lupa-password`, `/atur-ulang-password`, `/verifikasi-email/*` keep the centered card by design (UX-v3.10).
 - [ ] **T-227 — Provider follow-ups from T-223.** (1) the future live transport must use `readMengantarOrderHttpResponse` (409 handling); (2) a final 409 lands in `SUBMISSION_UNKNOWN` though Mengantar refused — add a path back to the queue; (3) reconciliation does not fill `provider_batch_id`, so reconciled/legacy rows cannot pay-unpaid; (4) owner: should `unsupportedCodCheckFirstSap` block COD?; (5) `lastHistory.desc` may carry recipient names — covered by spec 13 retention? Items 1 and 6 of the T-223 report wait on T-153.
+  - 2026-10-06 (T-276): items 1–3 are owned by T-280 (live transport with `readMengantarOrderHttpResponse`; definite refusals back to the queue) and T-282 (reconciliation fills `provider_batch_id`); item 4 stays an owner question.
 - [x] **T-228 — Spec 10 v3.2 Mengantar look (D-18, PR-85).** Done 2026-09-26: canvas #F2F4F8, navy ink #203551, borderless 16 px cards with a strengthened shadow (Mengantar's 0.2 alpha was invisible), pastel tiles, primary top bar, transparent sidebar with white pill + 40×40 icon square, H1 32 px (26 on phone), primary outline buttons, focused Buat kiriman; D7/D8 rejected (`--muted-foreground` #4F5B6B ≥ 6.1:1, `--input` #8C8C8C ≥ 3.05:1). 19 routes screened at 390/1024/1440, 0 overflow; render tests 197/197. Coordinator follow-ups: skeleton fill `foreground/10` (was invisible on the canvas), contact danger card border + tint restored. Open → page audit: most pages still show a description line; 36 px icon buttons on detail/Pengirim; 16 px checkboxes on Cetak resi. Rewrite §2.1 tokens and §3/§4 shell/anatomy from the analysis §1–§3, §7–§8; apply in `globals.css` and `src/components/app/*` (top bar, sidebar, PageHeader, Card, tiles, outline button); Buat kiriman focused layout (D11). Re-screen every route 1440/390. After T-212–T-218.
 - [x] **T-229 — Informasi label editor (PR-86).** Done 2026-09-26: migration 0059 `tenant_label_settings` (DATA-17: PK tenant+size, FORCE RLS, member read, Tenant Admin write, column-scoped UPDATE; no rows = the pre-0059 label); `/app/pengaturan/label` (size option cards, shadcn Switch rows added from the registry — `radix-ui` already installed, no new dependency — live preview of the real `LabelSheet`, one Simpan for both sizes); `LabelSheet` is now a client component taking both sizes and applying the print context's size; label page and `/app/label/cetak` load it. Return warning replaces the footer's issue time (measured one 7 pt line with a 13-character reference; label.css and geometry unchanged), so it is offered for both sizes. Tests: `tests/label-info-settings.integration.test.ts` 9/9 (defaults byte-identical, each switch per size, city/province, warning, operator refused in action/repository/RLS, other tenant isolated); settings render 2 new; full suite 114 files / 1,322 passed. Browser (dev app, 1440/390): live preview per size, save keeps state, real label `/app/label/10178` and batch view apply the saved choice per size, operator redirected; demo settings rows deleted afterwards. Gotcha fixed: React resets a form after its action and Radix switches inside it revert — the switches now sit outside the form.
 - [x] **T-230 — Print-format modal (PR-87)** Done 2026-09-26: row selection + "Cetak terpilih (N)", Dialog step 1 size / step 2 content, batch view `/app/label/cetak` records one print per shipment and one invoice per shipment on repeat (DB test). on Cetak resi (labels / invoices / both; 10×15, 10×10). With T-222.
@@ -3259,6 +3281,7 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
 - [x] **T-237 — Mengantar documented contract offline (D-26..D-30) + owner additions (SPX/cargo, "ninja hapus aja").** Done 2026-09-26, offline only (no live Mengantar call of any kind; docs read from `api-public.mengantar.com/docs` through a web fetcher). (D-26) `buildMengantarOrderRequest` (`src/lib/mengantar-order.ts`) builds the documented `POST /order` body `{courier, pickup:{type, address_id, time_id?, volume?}, orders:[{customerName, customerPhone, customerAddress, customerAddressDataId, parcelContent, weight (kg = grams/1000), quantity, goodsValue | COD, deliveryInstruction?, destinationMark?, isDangerousGoods, cargo?}]}`; the old snake_case builder is removed and the fixture transport uses the new one; courier spelled per docs (`SAP` → "Sap"), `cargo` for `<courier>Cargo`, refusals before claim for undocumented courier/service (spx, paxel, SAPLite), cargo + dangerous goods, scheduled pickup without a `POST /time` transport/slot/vehicle. Response: `_id`/`ORDER_ID`, `cnote_no`, `isPaid`; `batch_id` stored (item or envelope, must agree; `mengantarBatchIdLocation`), `batch` code alone → NULL. Pay-unpaid parses the documented `{success, data:<count>, cnote_no:[…]}`; fixtures `mengantar-order.sanitized.json` / `mengantar-pay-unpaid.sanitized.json` rewritten to the documented shapes. `scripts/probe-mengantar-order-documented.mjs` (one non-COD dropOff; refuses without `--i-have-owner-approval` + `MENGANTAR_LIVE_PROBE=1`, verified exit 2 with no request) — **not run**. (D-27) slots 09:00–17:00 starts ("09.00–18.00 WIB"), 08:00 drafts still valid/shown, refused at send; no migration (0061 CHECK already 08–17). (D-28) COD Ongkir amount = ongkir dipotong Mengantar + biaya COD (version 3 break-even), computed read-only in section 5 and the rail; the editable charge field is gone and the server refuses any other value (`NOT_COMPUTED`); sent as `COD` with no `goodsValue`. (D-29) Ninja removed: not in `MENGANTAR_COURIERS`/display map, `public/couriers/ninja.svg` deleted, quote dropped by the estimate and from stored snapshots, historical rows render plain "Ninja". (D-30) COD off when `unsupportedCodCheckFirstSap: true`. Cargo tiers priced from `cargoPrice`/`cargoEstimated*`/`cargoDiscount`, hidden below `minimumWeightCargo`. Evidence: see BUILD-LOG 2026-09-26 T-237. Docs: DATA-13 (D / D-s / L levels), DATA-15, PR-70, PR-64, D-12 amendment, D-29 wording, spec 16/17/19, `docs/courier-logos.md`. No migration.
 - [x] **T-237a — Live proof of the documented order (owner approval required at run time).** Done 2026-09-28: owner approved a production run; one non-COD dropOff JNE order accepted (HTTP 200, `cnote_no` issued, `isPaid: true`, `batch_id` in item and envelope); owner cancels it in the Mengantar app (resi redacted). Sanitized capture committed and read by `normalizeMengantarOrderResponse` in `tests/mengantar-order-documented`; DATA-13 live note. Still open below. Run `scripts/probe-mengantar-order-documented.mjs` once (non-COD dropOff) through `secrets-env`, commit the sanitized capture `tests/fixtures/mengantar-order-documented.live.json`, move DATA-13 order rows D → L, record where `batch_id` was seen. Open questions it answers: `goodsValue: 0` handling, exact-kg re-pricing. Still open without it: live `POST /time` transport (scheduled pickup), the SPX `courier` value (not documented — ask Mengantar), SAP Lite ordering.
 - [ ] **T-226 — Docs refresh.** README, PRD.md, ARCHITECTURE.md, STATUS.md, spec README aligned to v3.1 (free aggregator SaaS, three cores, removed modules marked history).
+  - 2026-10-06: delivered by T-276 (README, spec README, PRD v3 notes, ARCHITECTURE.md, spec 03/04/05); STATUS.md "Current" is rewritten by T-288 with that run's numbers.
 - [x] **T-240 — Date-range presets (owner 2026-09-26: "untuk filter by date tambahkan hari ini, kemarin, 7 hari terakhir, 30 hari terakhir, bulan ini").** Done 2026-09-26. `DateRangePicker` (`src/components/app/date-range-picker.tsx`) lists exactly Hari ini, Kemarin, 7 hari terakhir, 30 hari terakhir, Bulan ini (buttons with `aria-pressed`), then the range calendar; the trigger names the active preset, a picked range (or a legacy preset) reads as its dates; the `label` prop is gone from all 8 callers. Laporan pengiriman and Riwayat cetak resi gained the summary line (dates · WIB) the other pages already had. No change to `src/lib/analytics-range.ts`: all five ids already existed (PR-53/T-163) with WIB calendar-day windows and the equal-span comparison; `minggu-ini`/`bulan-lalu` stay parseable, unknown ids fall back to 30 hari terakhir. Specs 10 §5, 17 (T-163 presets bullet), 19 (period basis, per-preset comparison) updated. Evidence: `tests/date-range-presets-t240.integration.test.ts` (list order, 16 range+comparison cases at WIB 23:59/00:00, month start, year start, mid-month; URL round-trip ×5; legacy ids; 4 invalid ids; trigger render) + related suites 8 files / 120 passed, DB suites on the iso DB 6 files / 36 passed; lint 0 on touched files; tsc 0 in touched files (3 errors in `label/page.tsx`, `pengiriman/page.tsx`, `state-summary-panel` test belong to concurrent status-tile work). Browser (dev app, isolated context `t240`): Histori and Dasbor at 1440 (40 px) and 390 (44 px), keyboard Tab+Enter picks a preset and returns focus to the trigger, Terapkan writes `?rentang=kemarin`, no document overflow; Laporan custom range shows dates on trigger and summary. Screenshots: session scratchpad `t240/`.
 - [x] **T-241 — Pengirim/Penerima list + detail after the reference (owner 2026-09-26: "slugnya rapikan, bukan ?f76sg, id aja mungkin pakai slug").** Done 2026-09-26. URLs `/app/kontak/pengirim/<n>` and `/app/kontak/penerima/<n>`, `<n>` = per-tenant `contacts.contact_number` (migration 0064: `tenant_contact_counters` + SECURITY DEFINER before-insert trigger mirroring shipment numbering, backfill by `(created_at, id)`, unique `(tenant_id, contact_number)`); no UUID, name or phone in any URL. Legacy `/app/kontak/<uuid>?dari=…` → `permanentRedirect` to the numbered URL (tenant-scoped; another tenant's/unknown/malformed id → "Kontak tidak ditemukan"); create and archive return to the numbered URL. Optional `contacts.category` (nullable, CHECK over 9 fixed codes, labels in `src/lib/contact-category.ts`), editable on create and on the detail Kontak card. List: tabs Aktif/Diarsipkan/Semua with counts, live search (term not in URL), Nama (+ kategori / "Juga …" badge) · WhatsApp · Alamat utama · Kiriman (count + % terkirim, "—" when none) · Status · Aksi (WhatsApp, salin, Detail), phone record cards, 20 per page. Detail: header (status, peran, N alamat terdaftar, WhatsApp, wilayah of the primary address), WhatsApp + Salin nomor + "Buat kiriman dari kontak ini", 4 KPIs from GeraiCUAN data only (Total kiriman + % terkirim, Nilai COD of issued COD, Tingkat retur, Kiriman 30 hari terakhir; no Mengantar score, D-30), address book with Utama + new "Jadikan utama" (`setPrimaryContactAddressAction`), Riwayat kiriman tabs Semua/COD/Non-COD (`?riwayat=`, paginated, courier logo, counterpart + city, status, pembayaran), archive zone Tenant Admin only. Attribution rule (DATA-19): `shipment_parties` has no contact id, so a shipment belongs to a contact when, in the same tenant, its SENDER (Pengirim) / RECIPIENT (Penerima) party has the same national phone number (`checkDuplicateShipment`'s normalization); metrics CON-SHP-* in spec 19. Open: the "Buat kiriman dari kontak ini" link has no contact preselect — `pengiriman/baru` is owned by concurrent T-237 work. Evidence: `tests/contact-numbers-t241.integration.test.ts` + contact-actions, contact-lookup-screens, contact-directory on the iso DB 4 files / 62 passed; `scripts/verify-migration-upgrade.mjs` passed through 0066 on a temp DB; tsc 0; eslint 0 on T-241 files. Browser (dev app, contexts `t241-resume` tenant admin and `t241-operator`): both lists and details at 1440 and 390, 0 px overflow, legacy UUID URL lands on `/app/kontak/penerima/7`, operator sees no archive zone. Specs 05 (DATA-19), 17, 18, 19 updated. Screenshots: session scratchpad `t241/`.
 - [x] **T-243 — Pengaturan after the owner's reference: Profil gerai & brand (logo on the resi), Informasi label preview, Mitra kurir, pickup notes, courier logo on the label (owner 2026-09-26: "untuk logo nanti tampil di resi, kasih referensi imagenya").** Done 2026-09-26. Migration `0065_gerai_brand_settings.sql` (DATA-20): `tenant_brand_settings` (logo bytea + mime + sha256, catatan resi ≤ 60, kategori, email CS, website https-only, default label size, disabled couriers; RLS like `tenant_label_settings`), three label switches (Logo kurir, Logo gerai, Catatan resi), four pickup-note columns. Logo: PNG/JPEG/WebP sniffed from magic bytes, ≤ 200 KB, ≤ 1000 × 1000, SVG refused, original stored (no image library); served only by `GET /app/brand/logo` (session tenant, `private, no-cache`, ETag = SHA-256, 304, nosniff, sandbox CSP). Label: courier black print logo (`public/couriers/print/*.svg`, 6.5 mm, text fallback), gerai logo (grayscale, ≤ 20 × 7 mm box in the head row), catatan resi in the sender row's second line — inline styles only, `label.css` and row geometry unchanged at 10 × 15 and 10 × 10. Invoice prints the logo at the top. `LabelPreviewFrame` (paper on desk, exact-size caption, zoom Pas layar/100%/150% ToggleGroup, "Data contoh" badge, sticky on desktop, "Lihat pratinjau" jump on phone) shared by Informasi label, the label page and the batch view; gerai default label size preselects the label page and the batch dialog. Mitra kurir page (`/app/pengaturan/kurir`): Switch per courier, filter hook `filterTenantCourierServices` applied in `checkShippingRates` (Cek tarif), the Buat kiriman loader and the detail page's issuance step — `mengantar-estimate.ts`/`mengantar-couriers.ts` untouched. Pickup notes (PIC, WhatsApp PIC, jadwal, akses driver) labelled "Catatan internal, tidak dikirim ke Mengantar". Reference skipped: quota, printer model settings, notifications, WITA/WIT, H2H text. Specs 05 (DATA-20), 10 §4.10/§10/§14, 17, 18 updated. Evidence: `tests/gerai-brand-t243.integration.test.ts` (15) + label-info-settings, label-thermal, outlet-pickup-points, settings-screens-t217, invoice-print, label-render, label-batch-print, label-print, client-bundle-boundary, quick-rate-actions on the iso DB: 11 files / 137 passed; `verify-migration-upgrade.mjs` passed through 0066 on a temp DB; tsc 0; eslint 0 on T-243 files. Browser (dev app, isolated context `t243-resume`): Profil gerai, Informasi label, Mitra kurir, Titik pickup at 1440 and 390 (0 px overflow; no text under 13 px outside the sheet on Profil gerai and Informasi label); real upload of a test PNG, label preview with gerai + courier logo at 10 × 15 and 10 × 10 with identical package row heights with the three switches on and off; label page `/app/label/10178`; invoice INV-GC-10178 with the logo; `/app/brand/logo` 200 with headers, 304 on ETag, 401 without session; test logo and catatan removed afterwards. Screenshots: session scratchpad `t243/`.
@@ -3618,3 +3641,23 @@ Owner (2026-09-26): "saas gerai agregator expedisi, cetak resi, invoice (belum d
   - [x] `/app/laporan/pencairan` (sidebar Laporan → Pencairan COD): Ringkasan, Margin per kurir, Resi COD by Belum cair / Perlu dicek / Sudah cair / Retur with expected vs paid, Selisih, margin basis; reuses the read-only "Perbarui status dari Mengantar" pull, which now also revalidates this page and Dasbor.
   - [x] Specs 02 (PR-93), 17 (§T-275), 18 (route, URL state `status`, inventory), 19 (§OWN-*); DECISIONS D-41.
   - Evidence: BUILD-LOG 2026-10-01 T-275; screenshots in the session scratchpad `t275/`.
+
+## Phase 20 — Whole-project completion: live Mengantar automation, security, reconciliation (accepted 2026-10-06)
+
+Owner (2026-10-06): "cek keseluruhan, kamu analisa project, update atau baca sistem map, update logs, baru kau lanjutkan juga sempurnakan yang belum … review, validasi, analisa, termasuk component, architect, mermaid diagram … hingga menjadi kesatuan yang sempurna"; then "pastikan untuk resi dan sistem ini auto dari mengantar, sampai push pickup dan create resi … bangun juga mulai sign up, sign in, dan kebutuhan security … kau di izinkan untuk menyempurnakan". Owner answers the same day: live Mengantar calls are approved, including test orders and a scheduled pickup ("boleh semuanya"), plus a cancel feature that also cancels on Mengantar; commit per task on `feat/phase14-completion`, no push, no merge (D-42).
+
+Inputs, all 2026-10-06 and read-only: a reconciliation of Phase 12 against the v3 tree (metric and presentation), an independent adversarial review of `ff005a2..30a8eb0` (T-248–T-275), a documentation-versus-code audit, a Mengantar public-docs-versus-code gap matrix (`api-public.mengantar.com/docs`), an Indonesian gerai-ekspedisi market scan, and an authentication/security review. Findings are routed to exactly one task below.
+
+- [x] **T-276 — Reconcile documents, architecture diagrams and the queue with the v3 tree.** Done 2026-10-06 (BUILD-LOG T-276). R1 documentation. System map snapshot and maturity re-based on `30a8eb0`, route diagram completed (Pencairan COD, Info terbaru ×2, handover scan, "Gerai"); ARCHITECTURE.md and spec 04 rewritten with context, container and trust diagrams; spec 03 issuance/print-handover-invoice/status/owner-money/registration sequences; spec 05 entity table, ERD and shipment state diagram; spec 02/README fixes; Phase 12 T-94–T-108 closed as superseded by ADR-0001 or done in v3 (T-95, T-99, T-104, T-107) except T-105; T-153 re-stated after T-237a.
+- [ ] **T-277 — Review fixes for T-248–T-275.** (M) an Operator's invoice payload (`previewShipmentInvoice`, `issueShipmentInvoice`, label and batch pages) carries `shippingChargeIdr`/`totalIdr`, from which Biaya COD + Pembulatan is derivable (D-40); (L) the Cetak resi day line's "n tertunda" ignores the resi filter while the tile honours it; (L) migration 0070 re-adds two `audit_events` CHECKs without `NOT VALID` — record the rule for future migrations (0070 is applied and not edited); (L) owner-money vs report negative-estimate handling recorded; the cold-import 5 s test timeout seen under load.
+- [ ] **T-278 — Close the Phase 12 metric residuals (T-88, T-89, T-90, T-92, T-93).** T-90: insurance in provider cost and the COD rounding boundary checked on the live surfaces (spec 19 FIN-* rows; Keuangan/analytics halves are moot after T-204). Operator receives no ACT-UNPAID value; `metric-scope-parity` gains a cross-period unknown fixture and reads the live Laporan source; OPS-FAILURE-SHARE one decimal; KPI comparison wording per spec 19 M-0; platform generated-at rendered; any non-zero unpaid is at least Perhatian, severity boundaries tested through one pure function, captions state the rolling and credential rules; dead analytics functions removed (`loadShipmentKpis`, `loadShipmentKpiComparison`, `loadShipmentTrend`, `loadShipmentPage`, `loadShipmentExport`, `countTenantShipments`, `formatAnalyticsComparison`; ledger `appendLedgerAdjustment`/`recordLedgerReconciliation`/`reconcileLedgerPeriod` and the unread `reconciliationVarianceCount`/`basis` checked for callers first); spec 19 statuses made truthful.
+- [ ] **T-279 — Archive a gerai (T-105 residual; spec 17 UX-v3.1, UX-v3.3).** Super Admin only, typed-name confirmation, ACTIVE/SUSPENDED → ARCHIVED, audited, archived tenant refused by tenant scope.
+- [ ] **T-280 — Live Mengantar order transport: create resi and push pickup.** A server-only HTTP transport for `POST /order` and `POST /time` behind `MENGANTAR_LIVE_ORDERS_ENABLED=1` (D-5 amended by D-42), resolved through the existing `MengantarOrderTransportLookup` and credential resolution; definite provider refusals (final 409, `invalid pickup time`, `COURIER_DISABLED`, Pos 403) return the batch to the queue instead of SUBMISSION_UNKNOWN; transport failures stay unknown; the reserved `time_id` is persisted.
+- [ ] **T-281 — Cancel a shipment on Mengantar (`DELETE /order`).** Tenant Admin action for an ISSUED shipment whose provider status still allows deletion; CANCELLED only after Mengantar confirms; Anteraja 5-minute rule; idempotent; audited; the courier's refusal shown.
+- [ ] **T-282 — Live pay-unpaid and live reconciliation.** `POST /order/pay-unpaid` and `GET /order?order_id=` behind the same switch; reconciliation fills `provider_batch_id` (T-227 #3).
+- [ ] **T-283 — Estimate precision.** `isDangerousGoods` sent and enforced via `isDangerousGoodsSupported`; one weight rule for estimate and order.
+- [ ] **T-284 — Automatic status following.** Status pull without a manual click, bounded per account.
+- [ ] **T-285 — Live proofs.** Owner-approved (2026-10-06): scheduled-pickup order → cancel, and the other mutating paths each proven once with sanitized evidence.
+- [ ] **T-286 — Authentication and security findings (review 2026-10-06; no Critical/High).** (M1) no HSTS / `frame-ancestors` / `nosniff` / `Referrer-Policy` / CSP on the app — add `headers()` in `next.config.ts` and verify on both hosts; (M2) Super Admin sign-in is single-factor and limited per IP only — per-email sign-in limit through `consumePublicAuthRateLimit`, a shorter session lifetime, a 12-character bootstrap minimum, and TOTP two-factor for the platform scope; (L1) sessions survive suspension/deactivation/role change — delete them in the same transaction; (L2) unused Better Auth endpoints (`/verify-password`, `/change-password`, `/update-user`, `/update-session`, `/list-accounts`, `/account-info`, `/unlink-account`, social) stay reachable — add them to `disabledPaths`. Operational: confirm `BETTER_AUTH_TRUSTED_PROXY_CIDRS` resolves a real client IP at deploy.
+- [ ] **T-287 — Counter quick wins inside the PRD.** Cek tarif carries destination, weight and service into Buat kiriman; "Kirim resi via WhatsApp" (`wa.me`, user-sent) on detail and label; COD payout age.
+- [ ] **T-288 — Final integration.** Full suite, tsc, lint, migration check, browser evidence at 390/1440, system map, STATUS, BUILD-LOG.

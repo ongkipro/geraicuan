@@ -5,7 +5,7 @@
 ## Product Boundary
 - Public surface: sales page plus Tenant Login and Super Admin Login.
 - Operational surface: authenticated CMS Admin only.
-- Three cores (spec 02 §v3.1): **kirim** (Mengantar order + resi), **cetak resi** (gerai label masking the Mengantar airway bill), **invoice** (one immutable nota per issued shipment, not a payment receipt). Tracking, returns, contacts and shipment reports support them.
+- Three cores (spec 02 §v3.1): **kirim** (Mengantar order + resi), **cetak resi** (gerai label masking the Mengantar airway bill), **invoice** (one immutable nota per issued shipment, not a payment receipt). Tracking, returns, contacts and shipment reports support them, as do two later requirements outside the three cores: handover recording on Cetak resi ("Tandai sudah diserahkan", PR-94, D-36) and the Tenant Admin's own money view (Uang gerai on Dasbor and Pencairan COD, PR-93, D-41).
 - Removed in v3 (data kept, pages gone): bulk CSV import, Keuangan, Analitik.
 - Out of scope: any charge for using GeraiCUAN (it is free), payment collection, tax invoices, inventory, custom domains, custom courier pricing, statutory accounting, and a public developer API.
 
@@ -27,7 +27,7 @@
 - Mengantar non-mutating address, account estimate, and performance probes returned HTTP 200 on 2026-08-28.
 - Official Mengantar documentation reviewed on 2026-09-01 now owns the accepted account-pickup and general area-search contracts in `03-TECHNICAL-DESIGN.md`; documentation acceptance is not production availability evidence.
 - The observed estimate/performance response did not expose insurance fields; GeraiCUAN must not invent an insurance fee.
-- Open work is Phase 18 (UI v3 screens) and Phase 19 (invoice UI, Mengantar precision, system map, sign-in polish) in root `TASKS.md`.
+- Open work lives in root `TASKS.md` (unchecked items there are authoritative). At the time of writing it includes verifying the live Mengantar order paths against the provider contract (T-153), the `pg_trgm` production gate of the wilayah reference (T-245), whole-product screening and independent review (T-219), and the documentation refresh (T-226) and the Phase 20 queue (T-277–T-288).
 - Local fixture and browser evidence is not production provider-mutation evidence. Production Mengantar issuance and recovery remain blocked until the separate TD-14 release gate is explicitly approved.
 - No deployment or production readiness claim is made by this specification pack.
 

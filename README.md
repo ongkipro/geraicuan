@@ -45,7 +45,7 @@ origin checks for the same explicit host.
 | Role | Email | Password | Expected destination |
 | --- | --- | --- | --- |
 | Tenant Admin | `tenant@geraicuan.com` | `admin123` | `/app` |
-| Operator | `operator@geraicuan.com` | `admin123` | `/app` |
+| Operator | `operator@geraicuan.com` | `admin123` | `/app/label` (Cetak resi; `tenantLandingPath` while the gerai is `ACTIVE`) |
 | Super Admin | `super@geraicuan.com` | `admin123` | `/platform` |
 
 `pnpm db:seed-local` only accepts `127.0.0.1` and the database
