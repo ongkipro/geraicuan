@@ -1,4 +1,4 @@
-// T-274: Cetak resi's end-of-day line — LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY, LBL-READY-PENDING —
+// T-274: Cetak resi's end-of-day line — LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY, LBL-DAY-PENDING —
 // real against the isolated test database (runtime role, RLS on), on a fixed clock and at the WIB
 // day's edges. Fixtures live in their own tenants and are removed by tenant; no Mengantar call.
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -164,7 +164,7 @@ const MIDNIGHT = "2026-09-30T17:00:00.000Z";
 const JUST_BEFORE = "2026-09-30T16:59:59.999Z";
 const TOMORROW = "2026-10-01T17:00:00.000Z";
 
-describe("loadLabelDaySummary (spec 19 LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY, LBL-READY-PENDING)", () => {
+describe("loadLabelDaySummary (spec 19 LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY, LBL-DAY-PENDING)", () => {
   it("counts exactly at the WIB day's edges on a fixed clock", async () => {
     const atMidnight = await seedShipment("a"); // first print at 00.00 WIB: printed today, ready
     await printAt("a", atMidnight, MIDNIGHT);
@@ -197,19 +197,19 @@ describe("loadLabelDaySummary (spec 19 LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY,
     expect(await read("a", (tx, context) => loadLabelDaySummary(tx, context, CLOCK))).toEqual({
       "LBL-HANDED-OVER-TODAY": 2, // handedToday, printedYesterdayHandedToday
       "LBL-PRINTED-TODAY": 2, // atMidnight, handedToday
-      "LBL-READY-PENDING": 3, // justBefore, reprinted, undone
+      "LBL-DAY-PENDING": 3, // justBefore, reprinted, undone
     });
     expect(await read("b", (tx, context) => loadLabelDaySummary(tx, context, CLOCK))).toEqual({
       "LBL-HANDED-OVER-TODAY": 0,
       "LBL-PRINTED-TODAY": 1,
-      "LBL-READY-PENDING": 0,
+      "LBL-DAY-PENDING": 0,
     });
     // The next WIB day, 1 ms after its midnight: yesterday's prints are pending, the handovers were yesterday.
     const nextDay = new Date("2026-10-01T17:00:00.001Z");
     expect(await read("a", (tx, context) => loadLabelDaySummary(tx, context, nextDay))).toEqual({
       "LBL-HANDED-OVER-TODAY": 0,
       "LBL-PRINTED-TODAY": 1, // the next midnight's print, now today
-      "LBL-READY-PENDING": 4, // + atMidnight; the next midnight's print is today, not before it
+      "LBL-DAY-PENDING": 4, // + atMidnight; the next midnight's print is today, not before it
     });
   });
 
@@ -227,8 +227,9 @@ describe("loadLabelDaySummary (spec 19 LBL-PRINTED-TODAY, LBL-HANDED-OVER-TODAY,
       await loadLabelIndexPage(tx, context, { printState: "sudah", status: "issued" }),
       await countHandedOverToday(tx, context),
     ] as const);
-    expect(day["LBL-READY-PENDING"]).toBe(page.summary["LBL-READY-PENDING"]);
-    expect(day["LBL-READY-PENDING"]).toBe(1);
+    // Unfiltered, the day line's own ID (T-277) equals the Tertunda tile.
+    expect(day["LBL-DAY-PENDING"]).toBe(page.summary["LBL-READY-PENDING"]);
+    expect(day["LBL-DAY-PENDING"]).toBe(1);
     expect(day["LBL-HANDED-OVER-TODAY"]).toBe(handedOverToday);
     expect(day["LBL-HANDED-OVER-TODAY"]).toBe(1);
     expect(day["LBL-PRINTED-TODAY"]).toBe(1);

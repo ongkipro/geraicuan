@@ -12,6 +12,7 @@ CI must run type checks, unit/integration tests, tenant-isolation tests, sanitiz
 - Owner: Engineering owner
 
 Use versioned Drizzle/PostgreSQL migrations. Apply additive schema first, backfill separately, then enforce non-null/unique/RLS constraints. Test empty-database and representative fixture upgrades. A failed migration uses a documented forward fix or verified rollback; never delete tenant shipment records as rollback.
+- **Lock-light changes on busy tables (T-277, review of 0070).** Re-adding a CHECK constraint uses `ADD CONSTRAINT … NOT VALID` followed by `VALIDATE CONSTRAINT` (a weaker lock), and a new index on a populated table uses `CREATE INDEX CONCURRENTLY` in a migration of its own, outside a transaction. `audit_events` gains a row per platform page view, so a full-table check under ACCESS EXCLUSIVE blocks every audited action. Applied migrations are never edited: 0070 re-added two `audit_events` CHECKs without `NOT VALID`; the rule applies from 0073 on.
 
 ## Environments
 Use isolated local/test/staging/production databases and Mengantar credentials. Sandbox verification is limited to a documented non-COD estimate until a separate approval allows order creation. Secrets live outside repository and CI output.

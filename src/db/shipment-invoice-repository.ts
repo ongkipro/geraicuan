@@ -134,8 +134,33 @@ export async function loadShipmentInvoice(
     )
     .limit(1);
   return row
-    ? { ...row, document: row.document as ShipmentInvoiceDocument }
+    ? invoiceForRole({ ...row, document: row.document as ShipmentInvoiceDocument }, context.role)
     : null;
+}
+
+/**
+ * T-277 (review of T-271, D-40): what a template version 2 COD nota prints is derived from the
+ * collection and Nilai barang alone, so an Operator's copy carries nothing more. The stored quote
+ * list price (`shippingChargeIdr`) beside the collection makes Biaya COD + Pembulatan derivable, so
+ * for an Operator it becomes the printed Ongkir (collected − Nilai barang; the whole collection for
+ * COD Ongkir), `totalIdr` the collection, and insurance — never collected from a COD recipient —
+ * 0. The Tenant Admin, Non-COD, and version 1 (an immutable earlier document that prints the
+ * stored lines) are returned as stored.
+ */
+export function invoiceForRole(invoice: ShipmentInvoice, role: TenantContext["role"]): ShipmentInvoice {
+  if (
+    role === "TENANT_ADMIN"
+    || invoice.templateVersion < 2
+    || invoice.collectionMode === "NON_COD"
+    || invoice.courierCollectionIdr === null
+  ) {
+    return invoice;
+  }
+  const collected = invoice.courierCollectionIdr;
+  const ongkir = invoice.collectionMode === "COD_SHIPPING_ONLY"
+    ? collected
+    : Math.max(0, collected - invoice.declaredValueIdr);
+  return { ...invoice, insuranceIdr: 0, shippingChargeIdr: ongkir, totalIdr: collected };
 }
 
 /** T-238: Mengantar reported the order cancelled; no new invoice, an issued one stays readable. */

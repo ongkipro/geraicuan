@@ -37,7 +37,7 @@ vi.mock("@/db/label-print-repository", () => ({
 }));
 // T-274: LBL-HANDED-OVER-TODAY now comes with the day line (one statement, the list's transaction).
 vi.mock("@/app/app/label/label-day-summary", () => ({
-  loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": state.today, "LBL-PRINTED-TODAY": 0, "LBL-READY-PENDING": 0 }),
+  loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": state.today, "LBL-PRINTED-TODAY": 0, "LBL-DAY-PENDING": 0 }),
 }));
 
 const { default: LabelIndexPage } = await import("@/app/app/label/page");

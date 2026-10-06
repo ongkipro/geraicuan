@@ -27,7 +27,7 @@ vi.mock("@/app/app/pengiriman/_list/tenant-page", () => ({
 }));
 vi.mock("@/db/tenant-settings-repository", () => ({ loadTenantBrand: async () => ({ defaultLabelSize: "10x15" }) }));
 const state = vi.hoisted(() => ({
-  day: { "LBL-HANDED-OVER-TODAY": 2, "LBL-PRINTED-TODAY": 3, "LBL-READY-PENDING": 1 },
+  day: { "LBL-HANDED-OVER-TODAY": 2, "LBL-PRINTED-TODAY": 3, "LBL-DAY-PENDING": 1 },
   summary: { "LBL-ALL": 9, "LBL-CANCELLED": 1, "LBL-HANDED-OVER": 2, "LBL-PRINTED": 4, "LBL-READY-PENDING": 1, "LBL-READY-TODAY": 3, "LBL-UNPRINTED": 12 },
 }));
 vi.mock("@/db/label-print-repository", () => ({ loadLabelIndexPage: async () => ({ rows: [], summary: state.summary }) }));
@@ -94,12 +94,12 @@ describe("Cetak resi: the day line (both roles, every tab)", () => {
       expect(text(line![1])).toBe("Hari ini: 3 dicetak · 2 diserahkan · 1 tertunda");
       expect(line![1]).toMatch(/data-metric-id="LBL-PRINTED-TODAY">3</);
       expect(line![1]).toMatch(/data-metric-id="LBL-HANDED-OVER-TODAY">2</);
-      expect(line![1]).toMatch(/<a class="[^"]*text-warn[^"]*" href="\/app\/label\?rentang=30-hari&amp;tz=Asia%2FJakarta&amp;cetak=sudah"><b[^>]*data-metric-id="LBL-READY-PENDING">1<\/b>/);
+      expect(line![1]).toMatch(/<a class="[^"]*text-warn[^"]*" href="\/app\/label\?rentang=30-hari&amp;tz=Asia%2FJakarta&amp;cetak=sudah"><b[^>]*data-metric-id="LBL-DAY-PENDING">1<\/b>/);
     }
   });
 
   it("with nothing pending, tertunda is plain text; the closing state takes LBL-HANDED-OVER-TODAY from the same summary", async () => {
-    state.day = { "LBL-HANDED-OVER-TODAY": 5, "LBL-PRINTED-TODAY": 5, "LBL-READY-PENDING": 0 };
+    state.day = { "LBL-HANDED-OVER-TODAY": 5, "LBL-PRINTED-TODAY": 5, "LBL-DAY-PENDING": 0 };
     state.summary = { ...state.summary, "LBL-PRINTED": 0, "LBL-READY-PENDING": 0, "LBL-READY-TODAY": 0 };
     const html = await render({ cetak: "sudah" });
     const line = /data-slot="day-summary">([\s\S]*?)<\/p>/.exec(html)![1];

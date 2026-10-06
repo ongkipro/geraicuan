@@ -12,15 +12,15 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
  * - LBL-PRINTED-TODAY: shipments whose first PRINTED event falls in today (WIB), any status now;
  *   a reprint of an older label does not count again.
  * - LBL-HANDED-OVER-TODAY: the current handover recorded today (WIB) — `countHandedOverToday`'s rule.
- * - LBL-READY-PENDING: still ISSUED with an issued resi, printed, not handed over, first printed
+ * - LBL-DAY-PENDING (T-277: own ID; the tile is LBL-READY-PENDING, which honours the resi filter): still ISSUED with an issued resi, printed, not handed over, first printed
  *   before today — the Tertunda group of Siap diserahkan.
  * `at` fixes the clock (tests); omitted, it is the transaction's clock, the one the tiles use, so
- * read in the tiles' transaction the line and the Tertunda count agree.
+ * read in the tiles' transaction the line and the unfiltered Tertunda count agree.
  */
 export type LabelDaySummary = {
   "LBL-HANDED-OVER-TODAY": number;
   "LBL-PRINTED-TODAY": number;
-  "LBL-READY-PENDING": number;
+  "LBL-DAY-PENDING": number;
 };
 
 export async function loadLabelDaySummary(tx: TenantTransaction, context: TenantContext, at?: Date): Promise<LabelDaySummary> {
@@ -55,6 +55,6 @@ export async function loadLabelDaySummary(tx: TenantTransaction, context: Tenant
   return {
     "LBL-HANDED-OVER-TODAY": row?.handedOverToday ?? 0,
     "LBL-PRINTED-TODAY": row?.printedToday ?? 0,
-    "LBL-READY-PENDING": row?.pending ?? 0,
+    "LBL-DAY-PENDING": row?.pending ?? 0,
   };
 }

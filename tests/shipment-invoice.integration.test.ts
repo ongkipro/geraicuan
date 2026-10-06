@@ -15,6 +15,7 @@ import { calculateCodAmounts } from "@/db/cod-totals-repository";
 import {
   courierServiceName,
   INVOICE_TEMPLATE_VERSION,
+  invoiceForRole,
   issueShipmentInvoice,
   loadShipmentInvoice,
 } from "@/db/shipment-invoice-repository";
@@ -300,7 +301,8 @@ describe("shipment invoice issuance", () => {
     const cod = await seedShipment({ sequence: 2, cod: "COD", insuranceIdr: null });
     const codOngkir = await seedShipment({ sequence: 3, cod: "COD_SHIPPING_ONLY", insuranceIdr: null });
 
-    const [full, shippingOnly] = await asUser(operatorA, tenantA, async (tx, context) => [
+    // The stored columns, as the Tenant Admin reads them (an Operator's copy: the T-277 block).
+    const [full, shippingOnly] = await asUser(adminA, tenantA, async (tx, context) => [
       await issueShipmentInvoice(tx, context, cod.shipmentId),
       await issueShipmentInvoice(tx, context, codOngkir.shipmentId),
     ]);
@@ -458,10 +460,11 @@ describe("invoice template version 2 (T-271, D-40)", () => {
     const fixture = await seedShipment({ sequence: 30, cod: "COD", codAmountIdr: cod.providerCodAmountIdr, insuranceIdr: null });
     const issued = await asUser(operatorA, tenantA, (tx, context) => issueShipmentInvoice(tx, context, fixture.shipmentId));
     expect(INVOICE_TEMPLATE_VERSION).toBe(2);
-    expect(issued).toMatchObject({ ok: true, invoice: { templateVersion: 2, courierCollectionIdr: 163_443, declaredValueIdr: 150_000, shippingChargeIdr: 8000 } });
-    const { rows } = await adminPool.query<{ template_version: number }>(
-      "SELECT template_version FROM shipment_invoices WHERE shipment_id = $1", [fixture.shipmentId]);
-    expect(rows).toEqual([{ template_version: 2 }]);
+    // T-277: the Operator's copy carries the printed Ongkir, not the quote; the row keeps the quote.
+    expect(issued).toMatchObject({ ok: true, invoice: { templateVersion: 2, courierCollectionIdr: 163_443, declaredValueIdr: 150_000, shippingChargeIdr: 13_443, totalIdr: 163_443 } });
+    const { rows } = await adminPool.query<{ template_version: number; shipping_charge_idr: number }>(
+      "SELECT template_version, shipping_charge_idr FROM shipment_invoices WHERE shipment_id = $1", [fixture.shipmentId]);
+    expect(rows).toEqual([{ template_version: 2, shipping_charge_idr: 8000 }]);
     if (!issued.ok) return;
     const body = nota(renderToStaticMarkup(createElement(InvoiceSheet, { invoice: issued.invoice, medium: "80mm" })));
     expect(body).toMatch(/Nilai barang Rp 150\.000 Ongkir Rp 13\.443 Total Rp 163\.443/);
@@ -505,6 +508,51 @@ describe("invoice template version 2 (T-271, D-40)", () => {
     // Version 1 renders as it always did: the quote price as Ongkir, the collection apart.
     const body = nota(renderToStaticMarkup(createElement(InvoiceSheet, { invoice: reprint.invoice, medium: "80mm" })));
     expect(body).toMatch(/Ongkir Rp 8\.000 Total ongkir Rp 8\.000 Pembayaran: COD — ditagih kurir ke penerima: Rp 111\.721 Nilai barang \(informasi\): Rp 150\.000/);
+  });
+});
+
+describe("an Operator's invoice payload (T-277, D-40)", () => {
+  // Every number the browser receives, for every money shape the fee could be derived from.
+  const amounts = (value: unknown): number[] => typeof value === "number" ? [value]
+    : value && typeof value === "object" ? Object.values(value).flatMap(amounts) : [];
+
+  it("carries no figure from which Biaya COD + Pembulatan derives, through the loader and both actions", async () => {
+    const { issueShipmentInvoice: issueAction, previewShipmentInvoice } = await import("@/app/app/invoice/actions");
+    const cod = calculateCodAmounts(150_000, 8_000);
+    const fixture = await seedShipment({ sequence: 50, cod: "COD", codAmountIdr: cod.providerCodAmountIdr, insuranceIdr: 2_000 });
+    const fee = cod.providerCodAmountIdr - 150_000 - 8_000;
+    expect(fee).toBeGreaterThan(0);
+
+    principal.current = { scope: "tenant", userId: operatorA, tenantId: tenantA, role: "OPERATOR", tenantStatus: "ACTIVE" };
+    const preview = await previewShipmentInvoice(String(fixture.tenantNumber));
+    const issued = await issueAction(String(fixture.tenantNumber));
+    const loaded = await asUser(operatorA, tenantA, (tx, context) => loadShipmentInvoice(tx, context, fixture.shipmentId));
+    for (const result of [preview, issued, loaded && { ok: true as const, invoice: loaded }]) {
+      if (!result || !result.ok) throw new Error("invoice unavailable");
+      const numbers = amounts(result.invoice);
+      // Neither the quote list price, the insurance nor the fee itself reaches an Operator.
+      expect(numbers).not.toContain(8_000);
+      expect(numbers).not.toContain(2_000);
+      expect(numbers).not.toContain(fee);
+      expect(numbers).not.toContain(10_000); // the stored total, quote + insurance
+      expect(result.invoice.totalIdr).toBe(result.invoice.courierCollectionIdr);
+      expect(result.invoice.courierCollectionIdr! - result.invoice.declaredValueIdr - result.invoice.shippingChargeIdr).toBe(0);
+    }
+
+    // The Tenant Admin reads the stored row unchanged.
+    principal.current = { ...principal.current, userId: adminA, role: "TENANT_ADMIN" };
+    const byAdmin = await issueAction(String(fixture.tenantNumber));
+    expect(byAdmin).toMatchObject({ ok: true, invoice: { shippingChargeIdr: 8_000, insuranceIdr: 2_000, totalIdr: 10_000 } });
+  });
+
+  it("leaves Non-COD and version 1 COD invoices as stored for an Operator", () => {
+    const base = { collectionMode: "NON_COD", courierCollectionIdr: null, declaredValueIdr: 50_000, insuranceIdr: 1_000, shippingChargeIdr: 9_000, templateVersion: 2, totalIdr: 10_000 } as const;
+    const nonCod = { ...base } as unknown as Parameters<typeof invoiceForRole>[0];
+    expect(invoiceForRole(nonCod, "OPERATOR")).toBe(nonCod);
+    const v1 = { ...base, collectionMode: "COD", courierCollectionIdr: 61_000, templateVersion: 1 } as unknown as Parameters<typeof invoiceForRole>[0];
+    expect(invoiceForRole(v1, "OPERATOR")).toBe(v1);
+    const codOngkir = { ...base, collectionMode: "COD_SHIPPING_ONLY", courierCollectionIdr: 9_400 } as unknown as Parameters<typeof invoiceForRole>[0];
+    expect(invoiceForRole(codOngkir, "OPERATOR")).toMatchObject({ insuranceIdr: 0, shippingChargeIdr: 9_400, totalIdr: 9_400 });
   });
 });
 

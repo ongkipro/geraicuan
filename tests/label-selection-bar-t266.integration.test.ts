@@ -47,7 +47,7 @@ vi.mock("@/db/label-print-repository", () => ({
   loadLabelIndexPage: async () => ({ rows, summary: summary.current }),
 }));
 // T-274: the day line reads its own counts.
-vi.mock("@/app/app/label/label-day-summary", () => ({ loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": 0, "LBL-PRINTED-TODAY": 0, "LBL-READY-PENDING": 0 }) }));
+vi.mock("@/app/app/label/label-day-summary", () => ({ loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": 0, "LBL-PRINTED-TODAY": 0, "LBL-DAY-PENDING": 0 }) }));
 
 const { default: LabelIndexPage } = await import("@/app/app/label/page");
 const { selectionBarClassName } = await import("@/app/app/label/batch-selection");

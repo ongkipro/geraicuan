@@ -131,7 +131,7 @@ function QueueSwitch({ current, hrefFor, summary }: {
 
 /** T-274: the operator's day has an end — "Hari ini: n dicetak · n diserahkan · n tertunda". */
 function DaySummaryLine({ day, pendingHref }: { day: LabelDaySummary; pendingHref: string }) {
-  const pending = day["LBL-READY-PENDING"];
+  const pending = day["LBL-DAY-PENDING"];
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 text-[0.8125rem] text-muted-foreground md:text-sm" data-slot="day-summary">
       <span className="font-semibold text-foreground">Hari ini:</span>
@@ -141,10 +141,10 @@ function DaySummaryLine({ day, pendingHref }: { day: LabelDaySummary; pendingHre
       <span aria-hidden="true">·</span>
       {pending > 0 ? (
         <Link className="font-medium text-warn underline-offset-4 hover:underline" href={pendingHref}>
-          <b className="font-semibold tabular-nums" data-metric-id="LBL-READY-PENDING">{numberFormat.format(pending)}</b>&nbsp;tertunda
+          <b className="font-semibold tabular-nums" data-metric-id="LBL-DAY-PENDING">{numberFormat.format(pending)}</b>&nbsp;tertunda
         </Link>
       ) : (
-        <span><b className="font-semibold text-foreground tabular-nums" data-metric-id="LBL-READY-PENDING">0</b> tertunda</span>
+        <span><b className="font-semibold text-foreground tabular-nums" data-metric-id="LBL-DAY-PENDING">0</b> tertunda</span>
       )}
     </p>
   );

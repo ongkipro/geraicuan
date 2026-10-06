@@ -61,7 +61,7 @@ const rows = [10178, 10177, 10175].map((number, index) => ({
 }));
 
 // T-274: the day line reads its own counts.
-vi.mock("@/app/app/label/label-day-summary", () => ({ loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": 0, "LBL-PRINTED-TODAY": 0, "LBL-READY-PENDING": 0 }) }));
+vi.mock("@/app/app/label/label-day-summary", () => ({ loadLabelDaySummary: async () => ({ "LBL-HANDED-OVER-TODAY": 0, "LBL-PRINTED-TODAY": 0, "LBL-DAY-PENDING": 0 }) }));
 vi.mock("@/db/label-print-repository", () => ({
   loadLabelIndexPage: async () => ({ rows, summary: { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 } }),
 }));
