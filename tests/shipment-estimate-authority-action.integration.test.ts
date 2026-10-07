@@ -38,6 +38,7 @@ vi.mock("@/db/estimate-repository", () => ({
     isHazardous: true,
     originAreaId: "origin-area",
     outletId: "00000000-0000-0000-0000-000000000111",
+    pickupAddressId: "pickup-address",
     shipmentId: "00000000-0000-0000-0000-000000000121",
     weightGrams: 1000,
   })),
@@ -161,11 +162,11 @@ describe("shipment estimate destination authority", () => {
   });
 });
 
-describe("T-289 (QA H1): a platform-default draft whose pickup is not the platform pickup", () => {
+describe("T-289 (QA H1) / T-291: a platform-default draft whose pickup is not the platform pickup", () => {
   const platform = {
     ...currentCredentials,
     authority: { ...currentCredentials.authority, connectionUpdatedAt: null, source: "platform_default" as const },
-    originAreaId: "platform-origin",
+    pickupAddressId: "platform-pickup",
     source: "platform_default" as const,
   };
 
@@ -177,14 +178,14 @@ describe("T-289 (QA H1): a platform-default draft whose pickup is not the platfo
     expect(fixture.append).not.toHaveBeenCalled();
   });
 
-  it("still estimates when the draft leaves from the platform origin", async () => {
-    fixture.resolveCredentials.mockReset().mockResolvedValue({ ...platform, originAreaId: "origin-area" });
+  it("still estimates when the draft leaves from the platform pickup, whatever the configured origin (T-291)", async () => {
+    fixture.resolveCredentials.mockReset().mockResolvedValue({ ...platform, originAreaId: "env-origin", pickupAddressId: "pickup-address" });
     await loadShipmentEstimate({}, estimateForm());
     expect(fixture.fetchEstimate).toHaveBeenCalledOnce();
   });
 
   it("does not apply to a private account, whose own pickup points imply their own origins", async () => {
-    fixture.resolveCredentials.mockReset().mockResolvedValue({ ...currentCredentials, originAreaId: "another-origin" });
+    fixture.resolveCredentials.mockReset().mockResolvedValue({ ...currentCredentials, pickupAddressId: "another-pickup" });
     await loadShipmentEstimate({}, estimateForm());
     expect(fixture.fetchEstimate).toHaveBeenCalledOnce();
   });

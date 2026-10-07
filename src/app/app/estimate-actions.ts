@@ -28,10 +28,12 @@ import {
 } from "@/lib/shipment-telemetry";
 
 /**
- * T-289 (QA H1): every platform-default gerai shares one Mengantar account, whose orders may only
- * leave from the platform pickup (T-280). A draft whose pickup point implies another origin can
- * never be ordered there, and Mengantar answers its estimate with `success: false` — so it is
- * refused before the request with a message that says what to change.
+ * T-289 (QA H1) / T-291: every platform-default gerai shares one Mengantar account, whose orders
+ * may only leave from the platform pickup (T-280 compares the pickup address). A draft from any
+ * other pickup point can never be ordered there, so it is refused before the estimate with a
+ * message that says what to change. The pickup address is compared, not the origin area: the
+ * platform pickup's origin comes from Mengantar's address list and need not equal
+ * `MENGANTAR_ORIGIN_AREA_ID`.
  */
 class PlatformPickupMismatchError extends Error {}
 
@@ -127,7 +129,7 @@ export async function loadShipmentEstimate(
     );
     if (
       prepared.resolved.source === "platform_default"
-      && prepared.draft.originAreaId !== prepared.resolved.originAreaId
+      && prepared.draft.pickupAddressId !== prepared.resolved.pickupAddressId
     ) {
       throw new PlatformPickupMismatchError();
     }

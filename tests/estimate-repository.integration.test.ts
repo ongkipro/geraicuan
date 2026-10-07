@@ -171,6 +171,8 @@ describe("shipment estimate snapshots", () => {
       shipmentId: shipmentA,
       outletId: outletA,
       originAreaId: request.originAreaId,
+      // T-291: a draft without its own pickup point falls back to the outlet default.
+      pickupAddressId: "pickup-a",
       destinationAreaId: request.destinationAreaId,
       destinationAreaLabel: request.destinationAreaLabel,
       weightGrams: request.weightGrams,

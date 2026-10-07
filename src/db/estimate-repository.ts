@@ -16,6 +16,8 @@ export type DraftEstimateInput = {
   shipmentId: string;
   outletId: string;
   originAreaId: string;
+  /** T-291: the provider pickup the draft leaves from (outlet default for a pre-T-157 draft). */
+  pickupAddressId: string | null;
   destinationAreaId: string;
   destinationAreaLabel: string;
   weightGrams: number;
@@ -92,6 +94,10 @@ async function loadEstimateContext(
         ${shipmentDrafts.originAreaId},
         ${outlets.defaultOriginAreaId}
       )`,
+      pickupAddressId: sql<string | null>`coalesce(
+        ${shipmentDrafts.pickupAddressId},
+        ${outlets.defaultPickupAddressId}
+      )`,
       destinationAreaId: shipmentDrafts.destinationAreaId,
       destinationAreaLabel: shipmentDrafts.destinationAreaLabel,
       weightGrams: shipmentDrafts.packageWeightGrams,
@@ -131,6 +137,7 @@ async function loadEstimateContext(
     shipmentId: row.shipmentId,
     outletId: row.outletId,
     originAreaId: row.originAreaId,
+    pickupAddressId: row.pickupAddressId,
     destinationAreaId: row.destinationAreaId,
     destinationAreaLabel: row.destinationAreaLabel,
     weightGrams: row.weightGrams,
