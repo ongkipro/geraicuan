@@ -229,6 +229,13 @@ credentials and change nothing.
 Record the date, release commit and each result in `BUILD-LOG.md` (never a
 secret, recipient address or token).
 
+**Phase 20 checks (T-286, T-289, T-288; 2026-10-07)**
+- [ ] Security headers on both hosts: `curl -sI https://app.geraicuan.com/login` and `https://bos.geraicuan.com/login` show `content-security-policy` with `frame-ancestors 'none'`, `x-frame-options: DENY`, `x-content-type-options: nosniff`, `referrer-policy: strict-origin-when-cross-origin`, `strict-transport-security`.
+- [ ] Signed in, a `/app` page response carries `Cache-Control` containing `no-store` (T-289 M9; in `next dev` Next's own `no-cache, must-revalidate` was seen, so confirm on the production build), and the versioned logo route still answers with its long-lived cache (the `/app/:path*` header must not have replaced it — performance only).
+- [ ] `BETTER_AUTH_TRUSTED_PROXY_CIDRS` makes the sign-in rate limit see the real client IP (two sign-ins from different networks are counted separately).
+- [ ] Every existing Super Admin enrolls TOTP on the next sign-in (`/verifikasi-dua-langkah`); recovery SQL is in SEC-9.
+- [ ] Production issuance stays off until D-5's release evidence: `MENGANTAR_LIVE_ORDERS_PRODUCTION_APPROVED` unset.
+
 ### 4. Rollback
 
 - **The new container refuses to start** (`Refusing to start: …`): nothing was
