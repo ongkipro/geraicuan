@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-09-29
+Updated: 2026-10-07
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -31,15 +31,13 @@ security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
 
 
-## Current — 2026-09-29 (branch `feat/phase14-completion`, head `ce03512`)
+## Current — 2026-10-07 (branch `feat/phase14-completion`, head `6b302a0`, not pushed or merged)
 
-- **Product scope built:** kirim (Buat kiriman with section progress + one-screen summary rail), cetak resi (thermal label redesign T-255/T-258: recipient name + phone on one line, Mengantar area pattern, patokan, courier/gerai logos), invoice, Histori/Retur/Cetak resi stat strips (T-248), Pengirim/Penerima (T-241/T-250), Laporan (T-251/T-254), Pengaturan (T-243/T-252/T-253), Info terbaru (T-244/T-256), Super Admin pages (T-257), wilayah suggestions (T-245, D-32), audit tenant id guard (T-259, D-35).
-- **Mengantar, proven live (2026-09-28, T-237a):** `POST /order` with the documented body (non-COD dropOff JNE) accepted on production; `cnote_no` issued in the create response; `_id`, `ORDER_ID`, `batch_id` (item + envelope) captured and read by `normalizeMengantarOrderResponse`. A read-only `GET /order?tracking_id=` on 2026-09-29 returned the same resi and `ORDER_ID` with `status: "active"`, which the pull maps to "waiting" (no lifecycle change). The test order is **still active — the owner must cancel it** (resi redacted).
-- **Mengantar, not proven live:** scheduled pickup (`POST /time`), COD and COD Ongkir orders, cargo, pay-unpaid, status pull across a real delivery (status words beyond `active`; "ON PROCESS" seen only in dev data is unmapped on purpose), the webhook (built, off by default), the SPX `courier` value (SPX/Paxel/SAP Lite on hold as "Segera hadir", T-260).
-- **Verification at `ce03512`:** `tsc --noEmit` 0, `npx eslint .` 0, full integration suite on the isolated DB 128 files / 1,598 passed; migrations through `0069` applied to the dev DB and checked by `scripts/verify-migration-upgrade.mjs`.
-- **Independent review:** last adversarial review covered `6901379` (T-237–T-247; no Critical/High, findings fixed in T-247). **T-248–T-260 (`ff005a2`..`ce03512`) have test, lint, type and browser evidence but no independent review yet.**
-- **Release gates open:** independent review of T-248–T-260; `pg_trgm` availability on the production Coolify Postgres (owner checks, RELEASE.md step 6); owner cancels the T-237a test order; M1 unpaid-cancel matching by provider order id (T-247 open item); `Backup-Proof` for every migration since the last release boundary.
-- **Dev environment:** dev app `http://100.127.67.86:3127` on the dev DB (55461), fixture password `admin123` (README); the isolated test DB is on 55462.
+- **Phase 20 in progress** (owner 2026-10-06, D-42: live Mengantar calls approved incl. test orders, pickup and cancel; commit per task). Done, each with an independent review PASS: T-276 documents and diagrams (C4 context/container, trust, issuance/print/status/owner-money/registration sequences, ERDs, shipment state diagram), T-277 Operator-safe invoice payload, T-278 Phase 12 metric residuals, T-280 live `POST /order` + `POST /time` transport, T-282 live pay-unpaid + safe live reconciliation (D-43), T-283 dangerous-goods estimates, T-284 automatic status following, T-287 counter quick wins (Cek tarif → Buat kiriman prefill, Kirim resi via WhatsApp, COD payout age).
+- **Mengantar, live in code (switch `MENGANTAR_LIVE_ORDERS_ENABLED=1`; production also needs `MENGANTAR_LIVE_ORDERS_PRODUCTION_APPROVED=1`, D-5):** create resi, scheduled pickup, pay-unpaid, reconciliation lookup; definite refusals return to the queue, lost answers stay unknown; claims are refreshed inside the account lock. Proven live so far: read-only calls (estimate, area search, status/settlement pull — an automatic pull ran on 2026-10-06 against the platform account). **Not yet proven live:** an app-created order, a scheduled pickup, pay-unpaid, cancel (T-281 not built yet) — all in T-285. The T-237a probe order from 2026-09-28 still needs cancelling.
+- **Open in Phase 20:** T-286 authentication hardening (security headers, per-email sign-in limit, Super Admin TOTP, session revocation; a worker is on it, migration 0073), T-281 cancel on Mengantar and T-279 gerai archival (both wait for 0073 to merge first, migration order), T-285 live proofs, T-288 final integration. Earlier open items stay: T-153, T-179, T-219, T-227 #4–5, T-245 production `pg_trgm` gate.
+- **Verification at `6b302a0`:** full integration suite green after T-282 (ledger `full-suite` PASS; the run before its last fix: 146 files / 1,837 tests with one failure since fixed); `tsc --noEmit` 0; `npx eslint .` 0; migrations through 0072; every Phase 20 run closed PASS in `.delivery/`.
+- **Dev environment (this session):** ephemeral migrated + seeded dev DB on 55480, dev app `http://100.127.67.86:3127` started with only the four Mengantar names from `secrets-env`; isolated test DBs on 55470–55472.
 
 ## COD money and the thermal label — T-175, T-176, T-177, T-178, T-91, T-150, T-151, T-174 (2026-09-17)
 
