@@ -13,7 +13,7 @@ import { loadTenantDashboardOutcomeSummary } from "@/db/tenant-dashboard-reposit
 import { PROVIDER_DELIVERY_TRANSITION_OUTCOMES } from "@/lib/provider-delivery-status";
 import { withTenantContext } from "@/db/tenant-context";
 import { parseAnalyticsRange } from "@/lib/analytics-range";
-import type { ProviderSettlementSnapshot } from "@/lib/mengantar-settlement";
+import type { ProviderOrderStatus, ProviderSettlementSnapshot } from "@/lib/mengantar-settlement";
 import {
   decideProviderDeliveryTransition,
   PROVIDER_DELIVERY_STATUS_MAP,
@@ -61,14 +61,14 @@ const range = parseAnalyticsRange(
   new Date("2026-09-30T05:00:00.000Z"),
 );
 
-function statusSnapshot(orderStatuses: { cnoteNo: string; status: string }[]): ProviderSettlementSnapshot {
+function statusSnapshot(orderStatuses: ProviderOrderStatus[]): ProviderSettlementSnapshot {
   // Only the `GET /order` half of a pull: no invoice moves money here, and the
   // ledger must not change because a parcel was delivered.
   return { invoiceCount: 0, orderCount: orderStatuses.length, items: [], refunds: [], orderStatuses };
 }
 
 function pull(
-  orderStatuses: { cnoteNo: string; status: string }[],
+  orderStatuses: ProviderOrderStatus[],
   actor = adminA,
   tenantId = tenantA,
   outletId = outletA,
@@ -479,5 +479,39 @@ describe("delivery transitions stay inside the actor's tenant and outlet", () =>
     for (const statement of lockingReads) {
       expect(statement, statement).toMatch(/"shipments"\."tenant_id"\s*=\s*\$\d/i);
     }
+  });
+});
+
+describe("T-281 review: a record deleted before pickup", () => {
+  const deleted = (cnoteNo: string): ProviderOrderStatus => ({ cnoteNo, status: "PENDING PICKUP", deletedBeforePickup: true });
+
+  it("cancels a shipment that is itself still pre-pickup, storing the raw provider status", async () => {
+    const shipmentId = await seedIssuedShipment({ cnoteNo: "SANITIZED-T281-DEL-1" });
+    await pull([deleted("SANITIZED-T281-DEL-1")]);
+    expect((await statusOf(shipmentId)).status).toBe("CANCELLED");
+    expect(await observationsOf(shipmentId)).toEqual([{
+      provider_status: "PENDING PICKUP", from_status: "ISSUED", mapped_status: "CANCELLED", transition_outcome: "APPLIED",
+    }]);
+  });
+
+  it("never cancels a shipment already past pickup", async () => {
+    const shipmentId = await seedIssuedShipment({ cnoteNo: "SANITIZED-T281-DEL-2" });
+    await adminPool.query("UPDATE shipments SET status = 'IN_TRANSIT' WHERE id = $1", [shipmentId]);
+    await pull([deleted("SANITIZED-T281-DEL-2")]);
+    expect((await statusOf(shipmentId)).status).toBe("IN_TRANSIT");
+    expect(await observationsOf(shipmentId)).toEqual([{
+      provider_status: "PENDING PICKUP", from_status: "IN_TRANSIT", mapped_status: "CANCELLED", transition_outcome: "REFUSED",
+    }]);
+  });
+
+  it("lets a live record for the same AWB outrank the deleted one, in either page order", async () => {
+    const first = await seedIssuedShipment({ cnoteNo: "SANITIZED-T281-DEL-3" });
+    const second = await seedIssuedShipment({ cnoteNo: "SANITIZED-T281-DEL-4" });
+    await pull([
+      deleted("SANITIZED-T281-DEL-3"), { cnoteNo: "SANITIZED-T281-DEL-3", status: "DELIVERED" },
+      { cnoteNo: "SANITIZED-T281-DEL-4", status: "DELIVERED" }, deleted("SANITIZED-T281-DEL-4"),
+    ]);
+    expect((await statusOf(first)).status).toBe("DELIVERED");
+    expect((await statusOf(second)).status).toBe("DELIVERED");
   });
 });

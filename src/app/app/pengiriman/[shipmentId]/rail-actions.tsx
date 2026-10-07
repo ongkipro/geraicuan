@@ -1,9 +1,13 @@
 "use client";
 
-import { CircleAlert, CircleCheck, Printer, RotateCw, ShieldCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Loader2, Printer, RotateCw, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
+import {
+  cancelShipmentOnMengantar,
+  type ShipmentCancelActionState,
+} from "@/app/app/pengiriman/[shipmentId]/cancel-actions";
 import {
   reconcileShipmentUnknownSubmission,
   type ShipmentReconciliationActionState,
@@ -17,6 +21,16 @@ import {
   type ShipmentUnpaidRecoveryActionState,
 } from "@/app/app/pengiriman/[shipmentId]/unpaid-recovery-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
 
@@ -165,5 +179,83 @@ export function StaleCheckAction({ shipmentId }: { shipmentId: string }) {
       {state.message ? <p className="text-xs text-muted-foreground" role="status">{state.message}</p> : null}
       {state.error ? <p className="text-xs text-destructive" role="alert">{state.error}</p> : null}
     </form>
+  );
+}
+
+/**
+ * T-281 (D-42) "Batalkan kiriman": Tenant Admin only, on Resi terbit or Menunggu pembayaran
+ * (the page decides; the action re-checks everything). Destructive outline at rest; the dialog
+ * names the consequence and needs the checkbox. The outcome stays on screen after the page
+ * re-renders as Dibatalkan (`cancellable` false then renders only the outcome).
+ */
+export function CancelShipmentAction({ cancellable, publicReference, shipmentId }: {
+  cancellable: boolean;
+  publicReference: string;
+  shipmentId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [consented, setConsented] = useState(false);
+  // The dialog closes on the answer; the outcome is announced on the rail.
+  const [state, action, pending] = useActionState(async (previous: ShipmentCancelActionState, formData: FormData) => {
+    const next = await cancelShipmentOnMengantar(previous, formData);
+    setOpen(false);
+    setConsented(false);
+    return next;
+  }, {} as ShipmentCancelActionState);
+  const id = useId();
+  const resultRef = useFocusOnResult(state.error ?? state.cancelled);
+
+  const outcome = state.cancelled ? (
+    <Alert ref={resultRef} role="status" tabIndex={-1}>
+      <CircleCheck aria-hidden="true" className="text-ok" />
+      <AlertTitle>{state.cancelled.already ? "Kiriman sudah dibatalkan sebelumnya" : "Kiriman dibatalkan di Mengantar"}</AlertTitle>
+      <AlertDescription>Label tidak dapat dicetak lagi. Invoice yang sudah terbit tetap tersimpan.</AlertDescription>
+    </Alert>
+  ) : state.error ? (
+    <Alert ref={resultRef} tabIndex={-1} variant="destructive">
+      <CircleAlert aria-hidden="true" />
+      <AlertTitle>Kiriman belum dibatalkan</AlertTitle>
+      <AlertDescription>{state.error}</AlertDescription>
+    </Alert>
+  ) : null;
+  if (!cancellable) return state.cancelled ? <div className="border-t pt-3">{outcome}</div> : null;
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-3" data-slot="cancel-shipment">
+      <AlertDialog onOpenChange={(next) => { if (!pending) setOpen(next); }} open={open}>
+        <AlertDialogTrigger asChild>
+          {/* Destructive outline: quiet at rest, the consequence is named in the dialog. */}
+          <Button
+            className="w-full border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            type="button"
+            variant="outline"
+          >
+            <XCircle aria-hidden="true" />Batalkan kiriman
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Batalkan kiriman <span className="font-mono">{publicReference}</span>?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Pesanan dibatalkan di Mengantar dan tidak dapat diurungkan. Resi tidak bisa dipakai lagi; untuk mengirim paket ini, buat kiriman baru.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <form action={action} aria-busy={pending} className="flex flex-col gap-4">
+            <input name="shipmentId" type="hidden" value={shipmentId} />
+            <ConsentCheck disabled={pending} id={`${id}-consent`} onChange={setConsented}>
+              Saya paham pembatalan di Mengantar tidak dapat diurungkan.
+            </ConsentCheck>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={pending}>Kembali</AlertDialogCancel>
+              <Button disabled={pending || !consented} type="submit" variant="destructive">
+                {pending ? <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <XCircle aria-hidden="true" />}
+                {pending ? "Membatalkan…" : "Ya, batalkan kiriman"}
+              </Button>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+      {outcome}
+    </div>
   );
 }

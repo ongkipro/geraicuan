@@ -156,6 +156,19 @@ describe("Mengantar settlement contract", () => {
     expect(JSON.stringify(page)).not.toMatch(/SENTINEL/);
   });
 
+  it("flags an order deleted before pickup, keeping its raw status, and keeps skipping one deleted after delivery (T-281)", () => {
+    const base = { cnote_no_rts: null, isBreach: false };
+    const page = normalizeMengantarOrderPage({ success: true, count: 3, data: [
+      { ...base, _id: "a", cnote_no: "SANITIZED-DEL-PENDING", status: "PENDING PICKUP", isDeleted: true },
+      { ...base, _id: "b", cnote_no: "SANITIZED-DEL-ACTIVE", status: "active", isDeleted: true },
+      { ...base, _id: "c", cnote_no: "SANITIZED-DEL-DELIVERED", status: "DELIVERED", isDeleted: true },
+    ] });
+    expect(page.orders.map((order) => [order.cnoteNo, order.status, order.deletedBeforePickup])).toEqual([
+      ["SANITIZED-DEL-PENDING", "PENDING PICKUP", true],
+      ["SANITIZED-DEL-ACTIVE", "active", true],
+    ]);
+  });
+
   it("pages every invoice type and orders with GET, the period and no credential in errors", async () => {
     const requests: URL[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: URL, init: RequestInit) => {

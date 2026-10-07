@@ -72,6 +72,8 @@ export const auditEventActions = [
   // T-267 (0070): one row per recorded handover or undo, bound to its shipment_handover_events row.
   "SHIPMENT_HANDOVER_RECORDED",
   "SHIPMENT_HANDOVER_UNDONE",
+  // T-281 (0074): a Tenant Admin cancelled the shipment on Mengantar (DELETE /order confirmed).
+  "SHIPMENT_CANCELLED",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
@@ -2278,7 +2280,8 @@ export const auditEvents = pgTable(
         'ANNOUNCEMENT_PUBLISHED',
         'ANNOUNCEMENT_UNPUBLISHED',
         'SHIPMENT_HANDOVER_RECORDED',
-        'SHIPMENT_HANDOVER_UNDONE'
+        'SHIPMENT_HANDOVER_UNDONE',
+        'SHIPMENT_CANCELLED'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),

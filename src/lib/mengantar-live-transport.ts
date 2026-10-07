@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderBatchScope } from "@/db/order-batch-repository";
+import { deriveProviderAccountKey, type ProviderBatchScope } from "@/db/order-batch-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { resolveMengantarAccountCredentials, type MengantarAccountCredentials } from "@/lib/mengantar-credentials";
 import { assertMengantarCredentialsUsable, mengantarAnswerMessage, requestMengantar } from "@/lib/mengantar-http";
@@ -144,3 +144,74 @@ export const resolveLiveMengantarPayUnpaidTransport: MengantarPayUnpaidTransport
   };
   return binding;
 };
+
+/**
+ * T-281 (D-42): `DELETE /order` `{courier, ids: [_id]}` — what one cancellation answer means.
+ * `DELETED`: Mengantar names our `_id` in `deletedOrderIds`. `SKIPPED`: a success that does not
+ * name it (the docs: an order past pickup "simply skips"), so nothing was deleted. `REFUSED`: a
+ * 4xx or an explicit `success: false` (the courier may refuse with a message), nothing was
+ * deleted. `UNKNOWN`: no answer, a 5xx or anything unreadable — the order may or may not be gone.
+ * `providerMessage` is Mengantar's short text without the key (`mengantarAnswerMessage`).
+ */
+export type MengantarCancelOutcome =
+  | { kind: "DELETED" }
+  | { kind: "SKIPPED"; providerMessage: string | null }
+  | { kind: "REFUSED"; providerMessage: string | null }
+  | { kind: "UNKNOWN"; safeCode: string };
+
+export type MengantarCancelRequest = { courier: string; ids: [string] };
+
+export function readMengantarDeleteOrderAnswer(
+  answer: { status: number; body: unknown },
+  providerOrderId: string,
+  secret?: string,
+): MengantarCancelOutcome {
+  const providerMessage = mengantarAnswerMessage(answer.body, secret);
+  if (answer.status >= 400 && answer.status < 500) return { kind: "REFUSED", providerMessage };
+  if (answer.status < 200 || answer.status >= 300) return { kind: "UNKNOWN", safeCode: "CANCEL_HTTP_STATUS" };
+  const body = answer.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { kind: "UNKNOWN", safeCode: "CANCEL_RESPONSE_SCHEMA_UNKNOWN" };
+  const record = body as { success?: unknown; deletedOrderIds?: unknown };
+  if (record.success === false) return { kind: "REFUSED", providerMessage };
+  if (
+    record.success !== true
+    || !Array.isArray(record.deletedOrderIds)
+    || !record.deletedOrderIds.every((id) => typeof id === "string")
+  ) {
+    return { kind: "UNKNOWN", safeCode: "CANCEL_RESPONSE_SCHEMA_UNKNOWN" };
+  }
+  return record.deletedOrderIds.includes(providerOrderId)
+    ? { kind: "DELETED" }
+    : { kind: "SKIPPED", providerMessage };
+}
+
+export type MengantarCancelTransport = {
+  /** The account the call goes to; the caller serializes on it (`withProviderAccountSerialization`). */
+  providerAccountKey: string;
+  /** Never throws for a provider answer; a lost answer is `UNKNOWN`. */
+  cancel(request: Readonly<MengantarCancelRequest>): Promise<MengantarCancelOutcome>;
+};
+
+/**
+ * T-281: the live cancel transport — the same credential and scope rules as the order resolver
+ * (`resolveLiveMengantarAccount`), resolved inside the caller's tenant transaction.
+ */
+export async function resolveLiveMengantarCancelTransport(
+  scope: Readonly<LiveAccountScope>,
+  tx: TenantTransaction,
+  context: TenantContext,
+): Promise<MengantarCancelTransport> {
+  const credentials = await resolveLiveMengantarAccount(scope, tx, context);
+  return {
+    providerAccountKey: deriveProviderAccountKey(liveMengantarAccountIdentity(scope)),
+    async cancel(request) {
+      let answer;
+      try {
+        answer = await requestMengantar(credentials, "DELETE", "/order", { body: request });
+      } catch {
+        return { kind: "UNKNOWN", safeCode: "CANCEL_TRANSPORT_FAILED" };
+      }
+      return readMengantarDeleteOrderAnswer(answer, request.ids[0], credentials.apiKey);
+    },
+  };
+}

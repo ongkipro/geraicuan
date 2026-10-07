@@ -1,5 +1,7 @@
 import "server-only";
 
+import { normalizeProviderDeliveryStatus } from "@/lib/provider-delivery-status";
+import { MENGANTAR_DELETABLE_PROVIDER_STATUSES } from "@/lib/shipment-cancel-rules";
 import type { MengantarAccountCredentials } from "@/lib/mengantar-credentials";
 
 // Read-only settlement contract. Shapes and identities are pinned by
@@ -74,6 +76,11 @@ export type ProviderOrderStatus = {
   isBreach?: boolean | null;
   claimStatus?: string | null;
   ticketStatus?: string | null;
+  /**
+   * T-281: `isDeleted` on a record still in a deletable (pre-pickup) status. `status` stays the
+   * raw provider value; the pull infers a cancel from this flag, and only from a pre-pickup state.
+   */
+  deletedBeforePickup?: boolean;
   /** T-238: `history[]` (documented) and `lastHistory` (observed), cleaned and de-duplicated. */
   historyEvents?: ProviderHistoryEvent[];
 };
@@ -383,12 +390,21 @@ export function normalizeMengantarOrderPage(payload: unknown) {
   const orders: ProviderOrderStatus[] = [];
   for (const raw of body.data) {
     const order = record(raw);
-    if (order.isDeleted === true) continue;
     if (typeof order.cnote_no !== "string" || !order.cnote_no.trim()) continue;
+    // T-281 review F1: Mengantar deletes an order only before pickup (docs, Delete Orders), so a
+    // deleted record still in a deletable status is flagged — the pull may then settle a cancel
+    // whose answer or record was lost (the repository applies it only from a pre-pickup state).
+    // A deleted record in any other status (the production capture holds a deleted DELIVERED
+    // one: removed from the list, not cancelled) stays skipped.
+    const deletedBeforePickup = order.isDeleted === true
+      && typeof order.status === "string"
+      && MENGANTAR_DELETABLE_PROVIDER_STATUSES.has(normalizeProviderDeliveryStatus(order.status));
+    if (order.isDeleted === true && !deletedBeforePickup) continue;
     orders.push({
       cnoteNo: identifier(order.cnote_no),
       status: status(order.status),
       ...orderHistoryEvidence(order),
+      ...(deletedBeforePickup ? { deletedBeforePickup: true } : {}),
     });
   }
   return { count, orders, pageLength: body.data.length };

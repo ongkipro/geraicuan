@@ -304,6 +304,15 @@ export async function refreshUnpaidRecoveryClaim(
         eq(providerUnpaidRecoveries.batchId, batchId),
         eq(providerUnpaidRecoveries.tenantId, context.tenantId),
         eq(providerUnpaidRecoveries.status, "PAYING"),
+        // T-281 review F2: a cancel may have deleted the order since the claim; pay only while
+        // the shipment still waits for its payment.
+        sql`EXISTS (
+          SELECT 1 FROM provider_order_snapshots snapshot
+          JOIN shipments shipment ON shipment.id = snapshot.shipment_id AND shipment.tenant_id = snapshot.tenant_id
+          WHERE snapshot.id = ${providerUnpaidRecoveries.providerOrderSnapshotId}
+            AND snapshot.tenant_id = ${context.tenantId}
+            AND shipment.status = 'AWAITING_UPSTREAM_PAYMENT'
+        )`,
       ),
     )
     .returning({ id: providerUnpaidRecoveries.id });

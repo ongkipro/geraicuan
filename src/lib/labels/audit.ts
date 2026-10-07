@@ -34,6 +34,7 @@ const actionPredicate: Record<AuditAction, string> = {
   ANNOUNCEMENT_UNPUBLISHED: "menurunkan info terbaru",
   SHIPMENT_HANDOVER_RECORDED: "menandai paket sudah diserahkan ke kurir",
   SHIPMENT_HANDOVER_UNDONE: "membatalkan penandaan paket diserahkan",
+  SHIPMENT_CANCELLED: "membatalkan kiriman di Mengantar",
 };
 
 const actorLabels: Record<string, string> = {

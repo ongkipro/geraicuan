@@ -39,6 +39,7 @@ import { filterTenantCourierServices } from "@/lib/gerai-settings";
 import { buildShipmentEstimateOptions, issuanceOptionsForRole } from "@/lib/shipment-estimate-options";
 import { shipmentNumberFromReference } from "@/lib/shipment-number";
 import { SHIPMENT_STATUS_PRESENTATION } from "@/lib/shipment-queue";
+import { cancellableShipmentStatus } from "@/lib/shipment-cancel-rules";
 import { HANDOVER_ATTENTION_LABEL, handoverOverdue, handoverRecordText, handoverUndoAllowed } from "@/lib/shipment-handover";
 
 import { loadShipmentDetailView, type ShipmentDetailView } from "./detail-data";
@@ -52,7 +53,7 @@ import {
 } from "./detail-model";
 import { AttentionSignals, BackToQueue, DefinitionGrid, DetailCard, IdentityStrip, RouteHeader, TrackingTimeline, type DefinitionItem } from "./detail-parts";
 import { HandoverUndoButton } from "./handover-undo";
-import { ReconciliationAction, StaleCheckAction, UnpaidRecoveryAction } from "./rail-actions";
+import { CancelShipmentAction, ReconciliationAction, StaleCheckAction, UnpaidRecoveryAction } from "./rail-actions";
 
 export const metadata: Metadata = { title: "Detail kiriman", robots: { index: false } };
 
@@ -228,6 +229,9 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
   );
 
   const status = SHIPMENT_STATUS_PRESENTATION[detail.status];
+  const cancelOffered = principal.role === "TENANT_ADMIN"
+    && isLiveMengantarOrdersEnabled()
+    && (cancellableShipmentStatus(detail.status) || detail.status === "CANCELLED");
   const responseCode = provider?.safeResponseCode ?? provider?.batchSafeErrorCode ?? null;
   const rail = (
     <aside aria-label="Status dan tindakan" className="flex w-full shrink-0 flex-col gap-6 lg:order-2 lg:w-88">
@@ -257,6 +261,14 @@ export default async function ShipmentDetailPage({ params, searchParams }: PageP
           <h2 className="text-lg font-bold" id="tindakan-heading">Tindakan berikutnya</h2>
           <NextStepActions resiShareHref={resiShareHref} shipmentId={detail.shipmentId} step={step} />
           {staleCheck ? <StaleCheckAction shipmentId={detail.shipmentId} /> : null}
+          {/* T-281: Tenant Admin, live switch on; kept mounted once CANCELLED so the outcome stays visible. */}
+          {cancelOffered ? (
+            <CancelShipmentAction
+              cancellable={cancellableShipmentStatus(detail.status)}
+              publicReference={detail.publicReference}
+              shipmentId={detail.shipmentId}
+            />
+          ) : null}
         </CardContent>
       </Card>
     </aside>

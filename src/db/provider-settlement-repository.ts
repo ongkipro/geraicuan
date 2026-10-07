@@ -173,6 +173,21 @@ export type ProviderDeliveryTransitionResult = {
  * nothing. COD principal and the ledger are untouched: this writes
  * `shipments.status` and nothing else.
  */
+/**
+ * T-281 review: a record deleted while still pre-pickup reads as a cancel, but Mengantar also
+ * deletes orders for reasons it does not document, and a deleted record's status may stop
+ * updating. The cancel is applied only while our shipment is itself pre-pickup; from any later
+ * state it is refused (stored on the observation, never applied).
+ */
+const INFERRED_CANCEL_FROM: ReadonlySet<ShipmentStatus> = new Set(["ISSUED", "AWAITING_UPSTREAM_PAYMENT"]);
+
+function decideInferredCancel(currentStatus: ShipmentStatus): ProviderDeliveryDecision {
+  const decision = decideProviderDeliveryTransition("CANCELED", currentStatus);
+  return decision.outcome === "APPLIED" && !INFERRED_CANCEL_FROM.has(currentStatus)
+    ? { ...decision, outcome: "REFUSED" }
+    : decision;
+}
+
 async function applyProviderDeliveryTransitions(
   tx: TenantTransaction,
   context: TenantContext,
@@ -202,9 +217,11 @@ async function applyProviderDeliveryTransitions(
     // The match join already proved the shipment is this tenant's; a row missing
     // here means it moved out from under the pull, so decide nothing about it.
     if (!current) continue;
-    const decision = decideProviderDeliveryTransition(observation.status, current.status, {
-      returnCnoteNo: observation.returnCnoteNo,
-    });
+    const decision = observation.deletedBeforePickup
+      ? decideInferredCancel(current.status)
+      : decideProviderDeliveryTransition(observation.status, current.status, {
+        returnCnoteNo: observation.returnCnoteNo,
+      });
     decisions.set(observation.shipmentId, { ...decision, fromStatus: current.status });
     if (decision.outcome === "UNRECOGNISED") unrecognised.add(decision.normalizedStatus);
     if (decision.outcome === "REFUSED") refusedCount += 1;
@@ -272,7 +289,10 @@ export async function recordProviderSettlementPull(
   const statusByShipment = new Map<string, ObservedOrder>();
   for (const order of snapshot.orderStatuses) {
     const match = matches.get(order.cnoteNo);
-    if (match) statusByShipment.set(match.shipmentId, { ...order, ...match });
+    // A live record outranks a deleted one for the same shipment, whatever the page order.
+    if (match && !(order.deletedBeforePickup && statusByShipment.has(match.shipmentId))) {
+      statusByShipment.set(match.shipmentId, { ...order, ...match });
+    }
   }
   const unmatchedAwbCount = input.credentialSource === "private"
     ? [...providerAwbs].filter((awb) => !matches.has(awb)).length

@@ -24,6 +24,10 @@ describe("T-202 audit and tenant-status labels (spec 10 §8, spec 18 /platform/a
       .toBe("Admin platform membuka pemantauan platform");
     expect(auditActionSentence({ action: "TENANT_SELF_REGISTERED", actorRole: "TENANT_MEMBER", outcome: "SUCCESS" }))
       .toBe("Pemilik gerai mendaftarkan gerai baru");
+    // T-281 (0074): the Mengantar cancellation, worded and named as a shipment.
+    expect(auditActionSentence({ action: "SHIPMENT_CANCELLED", actorRole: "TENANT_MEMBER", outcome: "SUCCESS" }))
+      .toBe("Anggota gerai membatalkan kiriman di Mengantar");
+    expect(auditObjectLabel({ action: "SHIPMENT_CANCELLED", targetType: "SHIPMENT" })).toBe("Kiriman");
   });
 
   it("reads a denied event as an attempt and an unknown code as a generic sentence", () => {
