@@ -60,7 +60,7 @@ export function SavedDraftSections({
           ]}
         />
         {draft.handoverType === "PICKUP" ? (
-          <p className="text-xs text-muted-foreground">Jadwal dan kendaraan disimpan di GeraiCUAN, belum dikirim ke Mengantar.</p>
+          <p className="text-xs text-muted-foreground">Jadwal dan kendaraan dikirim ke Mengantar saat resi diterbitkan.</p>
         ) : null}
       </SectionCard>
 

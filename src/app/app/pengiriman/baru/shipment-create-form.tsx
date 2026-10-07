@@ -214,8 +214,9 @@ export function ShipmentCreateForm({
   const slots = availablePickupSlots(pickupDate, now);
   const [pickupSlot, setPickupSlot] = useState<string>(slots[0] ?? "");
   const effectiveSlot = slots.includes(pickupSlot as (typeof slots)[number]) ? pickupSlot : slots[0] ?? "";
-  // T-232 / PR-90: optional; "" stores NULL.
-  const [pickupVehicle, setPickupVehicle] = useState<PickupVehicle | "">("");
+  // T-285: required for a scheduled pickup (Mengantar `pickup.volume`); Motor, the usual counter
+  // pickup, is preselected.
+  const [pickupVehicle, setPickupVehicle] = useState<PickupVehicle>("MOTOR");
 
   // 2 Pengirim (masking) & penerima
   const [masking, setMasking] = useState(false);
@@ -606,17 +607,8 @@ export function ShipmentCreateForm({
                   </FormField>
                 </div>
                 <fieldset className="mt-2.5 flex flex-col gap-2">
-                  <legend className="sr-only">Kendaraan penjemputan (opsional)</legend>
-                  <div className="flex min-h-5 items-center justify-between gap-2 max-md:min-h-11">
-                    <span aria-hidden="true" className="text-sm font-medium">
-                      Kendaraan penjemputan <span className="font-normal text-muted-foreground">(opsional)</span>
-                    </span>
-                    {pickupVehicle ? (
-                      <Button className="h-5 px-0 font-semibold max-md:h-11" onClick={() => setPickupVehicle("")} type="button" variant="link">
-                        Kosongkan
-                      </Button>
-                    ) : null}
-                  </div>
+                  <legend className="sr-only">Kendaraan penjemputan</legend>
+                  <span aria-hidden="true" className="text-sm font-medium">Kendaraan penjemputan</span>
                   <div className="grid grid-cols-3 gap-3">
                     {PICKUP_VEHICLES.map((vehicle) => {
                       const Icon = PICKUP_VEHICLE_ICONS[vehicle];
@@ -637,7 +629,7 @@ export function ShipmentCreateForm({
                   <FieldError id="pickupVehicle-error" message={errors.pickupVehicle} />
                 </fieldset>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Info aria-hidden="true" className="size-4 shrink-0" />Jadwal dan kendaraan disimpan di GeraiCUAN, belum dikirim ke Mengantar.
+                  <Info aria-hidden="true" className="size-4 shrink-0" />Jadwal dan kendaraan dikirim ke Mengantar saat resi diterbitkan.
                 </p>
               </div>
             ) : null}

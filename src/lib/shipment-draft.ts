@@ -104,7 +104,7 @@ export type ShipmentDraftInput = {
   handoverType?: HandoverType | null;
   pickupDate?: string | null;
   pickupSlot?: string | null;
-  /** T-232 / PR-90: optional pickup vehicle; always null unless the handover is PICKUP. */
+  /** T-232 / PR-90: the pickup vehicle — required for a PICKUP since T-285, null for a drop-off. */
   pickupVehicle?: PickupVehicle | null;
 };
 
@@ -392,12 +392,12 @@ export function validateShipmentDraft(formData: FormData, now: Date = new Date()
           pickupDate = date;
           pickupSlot = slot;
         }
-        // T-232: optional; absent stores NULL. A value for a drop-off is ignored, like its schedule.
+        // T-285: required — Mengantar's scheduledPickup needs `pickup.volume` (docs, Create Order),
+        // found when the first live pickup order was refused before sending. A value for a
+        // drop-off is ignored, like its schedule.
         const vehicle = readText(formData, "pickupVehicle");
-        if (vehicle !== "") {
-          if (isPickupVehicle(vehicle)) pickupVehicle = vehicle;
-          else errors.pickupVehicle = "Pilih kendaraan penjemputan: Motor, Mobil, atau Truk.";
-        }
+        if (isPickupVehicle(vehicle)) pickupVehicle = vehicle;
+        else errors.pickupVehicle = "Pilih kendaraan penjemputan: Motor, Mobil, atau Truk.";
       }
     }
   }

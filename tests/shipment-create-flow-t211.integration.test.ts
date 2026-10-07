@@ -132,7 +132,7 @@ function draftForm(extra: Record<string, string>) {
 
 describe("PR-70 server validation of the handover", () => {
   it("stores a pickup with its date and slot", () => {
-    const result = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00" }), TEN_AM_WIB);
+    const result = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00", pickupVehicle: "MOTOR" }), TEN_AM_WIB);
     expect(result.ok && result.input).toMatchObject({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "17:00" });
     const early = validateShipmentDraft(draftForm({ handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "08:00" }), TEN_AM_WIB);
     expect(early.ok ? null : early.errors.pickupSlot).toMatch(/09\.00–18\.00 WIB/);
@@ -202,13 +202,13 @@ describe("rail charges", () => {
 describe("PR-90 pickup vehicle (T-232, D-19)", () => {
   const pickup = { handoverType: "PICKUP", pickupDate: "2026-09-27", pickupSlot: "09:00" };
 
-  it("stores an optional Motor/Mobil/Truk for a pickup and NULL when none is chosen", () => {
+  it("stores Motor/Mobil/Truk for a pickup and refuses a pickup without one (T-285: Mengantar needs pickup.volume)", () => {
     for (const vehicle of ["MOTOR", "MOBIL", "TRUK"]) {
       const result = validateShipmentDraft(draftForm({ ...pickup, pickupVehicle: vehicle }), TEN_AM_WIB);
       expect(result.ok && result.input.pickupVehicle, vehicle).toBe(vehicle);
     }
     const none = validateShipmentDraft(draftForm({ ...pickup, pickupVehicle: "" }), TEN_AM_WIB);
-    expect(none.ok && none.input).toMatchObject({ handoverType: "PICKUP", pickupVehicle: null });
+    expect(none.ok ? null : none.errors.pickupVehicle).toMatch(/Motor, Mobil, atau Truk/);
   });
 
   it("refuses an unknown vehicle and ignores one sent with Drop di outlet", () => {
