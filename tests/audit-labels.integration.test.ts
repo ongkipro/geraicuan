@@ -28,6 +28,9 @@ describe("T-202 audit and tenant-status labels (spec 10 §8, spec 18 /platform/a
     expect(auditActionSentence({ action: "SHIPMENT_CANCELLED", actorRole: "TENANT_MEMBER", outcome: "SUCCESS" }))
       .toBe("Anggota gerai membatalkan kiriman di Mengantar");
     expect(auditObjectLabel({ action: "SHIPMENT_CANCELLED", targetType: "SHIPMENT" })).toBe("Kiriman");
+    // T-279 (0075): archiving a gerai.
+    expect(auditActionSentence({ action: "TENANT_ARCHIVED", actorRole: "SUPER_ADMIN", outcome: "SUCCESS" }))
+      .toBe("Admin platform mengarsipkan gerai");
   });
 
   it("reads a denied event as an attempt and an unknown code as a generic sentence", () => {

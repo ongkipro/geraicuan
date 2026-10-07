@@ -14,7 +14,7 @@ if (!adminUrl || new URL(adminUrl).hostname !== "127.0.0.1" || new URL(adminUrl)
 const admin = new Pool({ connectionString: adminUrl });
 afterAll(() => admin.end());
 
-const LIFECYCLE = ["TENANT_CREATED", "TENANT_SUSPENDED", "TENANT_REACTIVATED"];
+const LIFECYCLE = ["TENANT_CREATED", "TENANT_SUSPENDED", "TENANT_REACTIVATED", "TENANT_ARCHIVED"];
 
 /** Everything runs in one transaction that is rolled back: no audit row is left behind. */
 async function inRolledBack(work: (client: PoolClient) => Promise<void>) {

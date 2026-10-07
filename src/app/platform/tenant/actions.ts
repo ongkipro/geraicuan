@@ -40,7 +40,7 @@ function formString(formData: FormData, key: string) {
 }
 
 function lifecycleAction(value: string | undefined): TenantLifecycleAction | null {
-  return value === "create" || value === "suspend" || value === "reactivate"
+  return value === "create" || value === "suspend" || value === "reactivate" || value === "archive"
     ? value
     : null;
 }
@@ -129,19 +129,30 @@ export async function submitPlatformTenantLifecycle(
         ? `Gerai ${resultName} berhasil dibuat.`
         : action === "suspend"
           ? `Gerai ${resultName} berhasil ditangguhkan.`
-          : `Gerai ${resultName} berhasil diaktifkan kembali.`,
+          : action === "archive"
+            ? `Gerai ${resultName} berhasil diarsipkan. Semua anggotanya sudah keluar dan tidak dapat masuk lagi.`
+            : `Gerai ${resultName} berhasil diaktifkan kembali.`,
       nextAttemptId: randomUUID(),
       resultToken: randomUUID(),
       tenant: { id: tenant.id, name: resultName, status: tenant.status },
     };
   } catch (error) {
     if (error instanceof TenantLifecycleDeniedError) {
+      // T-279: archive names the refused case, since a gerai awaiting approval or already
+      // archived can never be archived and retrying will not help.
+      const archiveMessage = action !== "archive"
+        ? undefined
+        : error.reason === "status"
+          ? "Hanya gerai aktif atau ditangguhkan yang dapat diarsipkan. Gerai yang menunggu persetujuan atau sudah diarsipkan tidak dapat diarsipkan."
+          : error.reason === "name"
+            ? "Nama konfirmasi tidak sama persis dengan nama gerai."
+            : undefined;
       return {
         errors: action === "create"
           ? { confirmation: "Gerai tidak dapat dibuat." }
-          : { confirmationName: "Nama gerai tidak cocok atau status sudah berubah." },
+          : { confirmationName: archiveMessage ?? "Nama gerai tidak cocok atau status sudah berubah." },
         outcome: "denied",
-        message: "Gerai tidak ditemukan, status berubah, atau nama konfirmasi tidak cocok.",
+        message: archiveMessage ?? "Gerai tidak ditemukan, status berubah, atau nama konfirmasi tidak cocok.",
         nextAttemptId: randomUUID(),
         resultToken: randomUUID(),
         values,

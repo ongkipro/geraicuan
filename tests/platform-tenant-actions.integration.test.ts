@@ -22,6 +22,7 @@ vi.mock("@/db/tenant-lifecycle", async (importOriginal) => {
 });
 
 import { submitPlatformTenantLifecycle } from "@/app/platform/tenant/actions";
+import { TenantLifecycleDeniedError } from "@/db/tenant-lifecycle";
 
 function lifecycleForm(values: Record<string, string>) {
   const form = new FormData();
@@ -116,6 +117,44 @@ describe("platform tenant lifecycle action", () => {
     expect(result).toMatchObject({ outcome: "success", tenant: { id: tenantId } });
     expect(result.nextAttemptId).not.toBe(attemptId);
     expect(mocks.revalidate).toHaveBeenCalledWith("/platform/tenant");
+  });
+
+  it("archives (T-279) through the lifecycle with the typed name and says which refusal happened", async () => {
+    const tenantId = randomUUID();
+    const form = () => lifecycleForm({
+      attemptId: randomUUID(),
+      confirmation: "confirmed",
+      confirmationName: "  Sekar Batik ",
+      lifecycleAction: "archive",
+      tenantId,
+    });
+
+    mocks.execute.mockResolvedValueOnce({ id: tenantId, status: "ARCHIVED" });
+    const success = await submitPlatformTenantLifecycle({}, form());
+    expect(mocks.execute).toHaveBeenLastCalledWith(
+      {},
+      { scope: "platform", userId: "super-admin" },
+      "archive",
+      expect.objectContaining({ expectedName: "Sekar Batik", tenantId }),
+    );
+    expect(success).toMatchObject({ outcome: "success", tenant: { status: "ARCHIVED" } });
+    expect(success.message).toContain("berhasil diarsipkan");
+
+    mocks.execute.mockRejectedValueOnce(new TenantLifecycleDeniedError("status"));
+    const wrongStatus = await submitPlatformTenantLifecycle({}, form());
+    expect(wrongStatus).toMatchObject({ outcome: "denied" });
+    expect(wrongStatus.message).toContain("Hanya gerai aktif atau ditangguhkan");
+
+    mocks.execute.mockRejectedValueOnce(new TenantLifecycleDeniedError("name"));
+    const wrongName = await submitPlatformTenantLifecycle({}, form());
+    expect(wrongName).toMatchObject({ errors: { confirmationName: expect.stringContaining("tidak sama persis") }, outcome: "denied" });
+
+    // No typed name: refused before the repository runs.
+    const blank = await submitPlatformTenantLifecycle({}, lifecycleForm({
+      attemptId: randomUUID(), confirmation: "confirmed", lifecycleAction: "archive", tenantId,
+    }));
+    expect(blank).toMatchObject({ errors: { confirmationName: expect.any(String) }, outcome: "invalid" });
+    expect(mocks.execute).toHaveBeenCalledTimes(3);
   });
 
   it("keeps the attempt and values when an unknown failure may be retryable", async () => {

@@ -14,7 +14,7 @@ A request obtains active tenant context only from authenticated membership or ex
 A tenant actor can access only rows whose `tenant_id` matches their membership. Tenant-scoped joins, mutations, background jobs, exports, print history, provider batches, and logs retain tenant identity. RLS enforces the same predicate as defense in depth.
 
 ## Tenant lifecycle
-`PROVISIONING`, `ACTIVE`, `SUSPENDED`, `ARCHIVED`. Suspension prevents new estimates, submissions, and prints, but retains data pending the privacy retention decision. Super Admin actions are audited. Tenant admins cannot create platform roles or alter another tenant.
+`PROVISIONING`, `ACTIVE`, `SUSPENDED`, `ARCHIVED`. Suspension prevents new estimates, submissions, and prints, but retains data pending the privacy retention decision. Archiving (T-279, Super Admin only, from ACTIVE or SUSPENDED) is terminal: members are signed out in the same transaction and refused by every tenant scope exactly like suspension, and data is retained the same way. Super Admin actions are audited. Tenant admins cannot create platform roles or alter another tenant.
 
 ## Tests
 Cross-tenant list/read/update/delete, upstream retry, queued batch, and label/reprint tests must prove denial as well as same-tenant success.

@@ -36,6 +36,7 @@ const { StatStrip } = await import("@/components/app/stat-strip");
 const { auditActionLabel, auditActionOptions } = await import("@/lib/labels/audit");
 const { auditEventActions } = await import("@/db/schema");
 const { TenantLifecycle } = await import("@/app/platform/tenant/_components/tenant-lifecycle");
+const { TenantArchive } = await import("@/app/platform/tenant/_components/tenant-archive");
 const { RegistrationReview } = await import("@/app/platform/pendaftaran/_components/registration-review");
 
 const render = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
@@ -219,6 +220,18 @@ describe("platform markup", () => {
     expect(html).toContain("Sekar Batik");
     expect(render(createElement(TenantLifecycle, { initialAttemptId: "a", status: "SUSPENDED", tenantId: "b", tenantName: "X" }))).toContain('value="reactivate"');
     expect(render(createElement(TenantLifecycle, { initialAttemptId: "a", status: "ARCHIVED", tenantId: "b", tenantName: "X" }))).toBe("");
+  });
+
+  it("offers archive (T-279) as one destructive outline trigger for ACTIVE and SUSPENDED only", () => {
+    for (const status of ["ACTIVE", "SUSPENDED"]) {
+      const html = render(createElement(TenantArchive, { initialAttemptId: "a", status, tenantId: "b", tenantName: "Sekar Batik" }));
+      expect(html, status).toContain('id="arsip-tenant"');
+      expect(html, status).toMatch(/<button[^>]*data-variant="outline"[^>]*>Arsipkan gerai<\/button>/);
+      expect(html, status).toContain("tidak dapat masuk lagi");
+    }
+    for (const status of ["ARCHIVED", "PROVISIONING"]) {
+      expect(render(createElement(TenantArchive, { initialAttemptId: "a", status, tenantId: "b", tenantName: "X" })), status).toBe("");
+    }
   });
 
   it("offers approval only to a verified owner and always one outline rejection", () => {

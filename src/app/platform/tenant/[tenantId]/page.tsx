@@ -35,6 +35,7 @@ import {
 } from "../../_components/platform-ui";
 import { loadPlatformView, type PlatformView } from "../../_components/platform-view";
 import { PrefixUnlock } from "../_components/prefix-unlock";
+import { TenantArchive } from "../_components/tenant-archive";
 import { TenantLifecycle } from "../_components/tenant-lifecycle";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Detail gerai" };
@@ -276,7 +277,7 @@ function TenantStrip({ counts, finance }: { counts: NonNullable<PlatformView["co
   return <StatStrip items={items} label="Ringkasan gerai" />;
 }
 
-function PrefixCard({ prefix, tenantId, tenantName }: { prefix: PlatformView["prefix"]; tenantId: string; tenantName: string }) {
+function PrefixCard({ archived, prefix, tenantId, tenantName }: { archived: boolean; prefix: PlatformView["prefix"]; tenantId: string; tenantName: string }) {
   return (
     <PlatformCard id="awalan-tenant" title="Awalan nomor kiriman">
       <p>
@@ -289,7 +290,10 @@ function PrefixCard({ prefix, tenantId, tenantName }: { prefix: PlatformView["pr
             </>
           )}
       </p>
-      <PrefixUnlock initialAttemptId={randomUUID()} locked={Boolean(prefix?.lockedAt)} tenantId={tenantId} tenantName={tenantName} />
+      {/* T-279: an archived gerai creates no more shipments, so its prefix is not unlocked. */}
+      {archived ? null : (
+        <PrefixUnlock initialAttemptId={randomUUID()} locked={Boolean(prefix?.lockedAt)} tenantId={tenantId} tenantName={tenantName} />
+      )}
     </PlatformCard>
   );
 }
@@ -342,12 +346,13 @@ export default async function PlatformTenantDetailPage({ params, searchParams }:
       {/* T-257: the two short regions share a row; Pengajuan runs full width instead of beside a one-outlet card. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>section>[data-slot=card]]:h-full">
         <Outlets detail={detail} />
-        <PrefixCard prefix={prefix} tenantId={tenant.id} tenantName={tenant.name} />
+        <PrefixCard archived={tenant.status === "ARCHIVED"} prefix={prefix} tenantId={tenant.id} tenantName={tenant.name} />
       </div>
       <Submissions detail={detail} />
       {view.finance ? <FinanceSummary finance={view.finance} timezone={range.timezoneLabel} /> : <RegionError title="Keuangan & rekonsiliasi" />}
       <TenantAudit view={view} />
       <TenantLifecycle initialAttemptId={randomUUID()} status={tenant.status} tenantId={tenant.id} tenantName={tenant.name} />
+      <TenantArchive initialAttemptId={randomUUID()} status={tenant.status} tenantId={tenant.id} tenantName={tenant.name} />
     </>
   );
 }

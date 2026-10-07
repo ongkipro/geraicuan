@@ -21,22 +21,24 @@ beforeAll(async () => {
       ('cms-super-suspended', 'Suspended CMS Super', 'cms-super-suspended@example.test', 'SUSPENDED'),
       ('cms-tenant', 'CMS Tenant', 'cms-tenant@example.test', 'ACTIVE'),
       ('cms-user-suspended', 'Suspended CMS User', 'cms-user-suspended@example.test', 'SUSPENDED'),
-      ('cms-suspended-tenant', 'CMS Suspended Tenant', 'cms-suspended-tenant@example.test', 'ACTIVE')`,
+      ('cms-suspended-tenant', 'CMS Suspended Tenant', 'cms-suspended-tenant@example.test', 'ACTIVE'),
+      ('cms-archived-tenant', 'CMS Archived Tenant', 'cms-archived-tenant@example.test', 'ACTIVE')`,
   );
   await adminPool.query(
     "INSERT INTO platform_roles (user_id) VALUES ($1), ($2)",
     ["cms-super", "cms-super-suspended"],
   );
   const tenants = await adminPool.query(
-    "INSERT INTO tenants (name, status) VALUES ($1, 'ACTIVE'), ($2, 'SUSPENDED') RETURNING id, status",
-    ["Active CMS Tenant", "Suspended CMS Tenant"],
+    "INSERT INTO tenants (name, status) VALUES ($1, 'ACTIVE'), ($2, 'SUSPENDED'), ($3, 'ARCHIVED') RETURNING id, status",
+    ["Active CMS Tenant", "Suspended CMS Tenant", "Archived CMS Tenant"],
   );
   await adminPool.query(
     `INSERT INTO memberships (tenant_id, user_id, role) VALUES
       ($1, 'cms-tenant', 'OPERATOR'),
       ($1, 'cms-user-suspended', 'OPERATOR'),
-      ($2, 'cms-suspended-tenant', 'TENANT_ADMIN')`,
-    [tenants.rows[0].id, tenants.rows[1].id],
+      ($2, 'cms-suspended-tenant', 'TENANT_ADMIN'),
+      ($3, 'cms-archived-tenant', 'TENANT_ADMIN')`,
+    [tenants.rows[0].id, tenants.rows[1].id, tenants.rows[2].id],
   );
 });
 
@@ -59,6 +61,8 @@ describe("CMS authorization", () => {
     await expect(resolveCmsPrincipal("cms-super-suspended")).resolves.toBeNull();
     await expect(resolveCmsPrincipal("cms-user-suspended")).resolves.toBeNull();
     await expect(resolveCmsPrincipal("cms-suspended-tenant")).resolves.toBeNull();
+    // T-279: an archived gerai is refused exactly like a suspended one.
+    await expect(resolveCmsPrincipal("cms-archived-tenant")).resolves.toBeNull();
     await expect(resolveCmsPrincipal("missing-user")).resolves.toBeNull();
   });
 

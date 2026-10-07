@@ -74,6 +74,8 @@ export const auditEventActions = [
   "SHIPMENT_HANDOVER_UNDONE",
   // T-281 (0074): a Tenant Admin cancelled the shipment on Mengantar (DELETE /order confirmed).
   "SHIPMENT_CANCELLED",
+  // T-279 (0075): a Super Admin archived a gerai (ACTIVE or SUSPENDED -> ARCHIVED).
+  "TENANT_ARCHIVED",
 ] as const;
 export const auditEventTargetTypes = [
   "TENANT",
@@ -2247,6 +2249,8 @@ export const auditEvents = pgTable(
         table.action,
         sql`(${table.metadata} ->> 'attemptId')`,
       )
+      // T-279: TENANT_ARCHIVED receipts are not in this index (rebuilding it would lock
+      // audit_events, MIG-1); the per-attempt advisory lock in `executeTenantLifecycle` keeps one.
       .where(sql`${table.action} IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED') AND ${table.metadata} ? 'attemptId'`),
     // T-267 (0070): one audit row per handover event.
     uniqueIndex("audit_events_shipment_handover_event_key")
@@ -2281,7 +2285,8 @@ export const auditEvents = pgTable(
         'ANNOUNCEMENT_UNPUBLISHED',
         'SHIPMENT_HANDOVER_RECORDED',
         'SHIPMENT_HANDOVER_UNDONE',
-        'SHIPMENT_CANCELLED'
+        'SHIPMENT_CANCELLED',
+        'TENANT_ARCHIVED'
       )`,
     ),
     check("audit_events_outcome_valid", sql`outcome IN ('SUCCESS', 'DENIED')`),
@@ -2290,7 +2295,7 @@ export const auditEvents = pgTable(
     // it NOT VALID: rows written before it (the implicit prefix lock) are not re-checked.
     check(
       "audit_events_tenant_recorded",
-      sql`tenant_id IS NOT NULL OR target_type = 'PLATFORM' OR (outcome = 'DENIED' AND action IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED'))`,
+      sql`tenant_id IS NOT NULL OR target_type = 'PLATFORM' OR (outcome = 'DENIED' AND action IN ('TENANT_CREATED', 'TENANT_SUSPENDED', 'TENANT_REACTIVATED', 'TENANT_ARCHIVED'))`,
     ),
   ],
 );

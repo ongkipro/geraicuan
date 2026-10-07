@@ -419,6 +419,25 @@ describe("L1: membership and store changes end sessions in the same transaction"
     for (const id of userIds) expect(await sessionCount(id), id).toBe(1);
   });
 
+  it("an archive (T-279) signs out every member of that store, nobody else, and none can come back", async () => {
+    await expect(executeTenantLifecycle(appDb, { userId: ids.platform }, "archive", {
+      attemptId: randomUUID(), expectedName: "T286 A", tenantId: tenantA,
+    })).resolves.toEqual({ id: tenantA, status: "ARCHIVED" });
+    for (const id of [ids.adminA, ids.adminA2, ids.operatorA]) expect(await sessionCount(id), id).toBe(0);
+    expect(await sessionCount(ids.adminB)).toBe(1);
+    expect(await sessionCount(ids.platform)).toBe(1);
+
+    // Refused by every tenant scope like a suspended store: no principal, no tenant context,
+    // no new session from the right password.
+    const { resolveCmsPrincipal } = await import("@/lib/cms-auth");
+    await expect(resolveCmsPrincipal(ids.adminA)).resolves.toBeNull();
+    await expect(withTenantContext(db, ids.adminA, tenantA, async () => "opened")).rejects.toThrow();
+    const refused = await signIn(ids.operatorA, "tenant");
+    expect(refused.status).toBe(401);
+    expect(await sessionCount(ids.operatorA)).toBe(0);
+    expect((await signIn(ids.adminB, "tenant")).status).toBe(200);
+  });
+
   it("the revocation helper acts only for a Super Admin and only on a suspended store", async () => {
     const call = (actor: string, tenant: string) => appPool.connect().then(async (client) => {
       try {

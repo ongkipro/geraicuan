@@ -526,6 +526,13 @@
       "when": 1791338622733,
       "tag": "0074_shipment_cancelled_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1791343480106,
+      "tag": "0075_tenant_archive",
+      "breakpoints": true
     }
   ]
 }

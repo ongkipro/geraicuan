@@ -8,7 +8,9 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 
 export type VerifiedPrincipal = { userId: string };
-export type TenantLifecycleAction = "create" | "suspend" | "reactivate";
+export type TenantLifecycleAction = "create" | "suspend" | "reactivate" | "archive";
+/** Why a transition was refused; only a verified Super Admin learns more than "denied". */
+export type TenantLifecycleDenialReason = "missing" | "status" | "name";
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -17,7 +19,7 @@ const UUID_PATTERN =
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export class TenantLifecycleDeniedError extends Error {
-  constructor() {
+  constructor(readonly reason?: TenantLifecycleDenialReason) {
     super("Platform super-admin authorization is required.");
   }
 }
@@ -34,9 +36,25 @@ export class TenantLifecycleAttemptConflictError extends Error {
   }
 }
 
+const ACTION_NAMES = {
+  archive: "TENANT_ARCHIVED",
+  create: "TENANT_CREATED",
+  reactivate: "TENANT_REACTIVATED",
+  suspend: "TENANT_SUSPENDED",
+} as const;
+
 function actionName(action: TenantLifecycleAction) {
-  return `TENANT_${action === "create" ? "CREATED" : action === "suspend" ? "SUSPENDED" : "REACTIVATED"}` as const;
+  return ACTION_NAMES[action];
 }
+
+type TenantStatus = (typeof schema.tenantStatuses)[number];
+
+/** Allowed source statuses per transition. Archive is terminal: nothing leaves ARCHIVED here. */
+const TRANSITIONS: Record<Exclude<TenantLifecycleAction, "create">, { from: readonly TenantStatus[]; to: TenantStatus }> = {
+  archive: { from: ["ACTIVE", "SUSPENDED"], to: "ARCHIVED" },
+  reactivate: { from: ["SUSPENDED"], to: "ACTIVE" },
+  suspend: { from: ["ACTIVE"], to: "SUSPENDED" },
+};
 
 async function appendAudit(
   tx: Transaction,
@@ -242,9 +260,7 @@ export async function executeTenantLifecycle(
       throw new TenantLifecycleInputError("Tenant ID is required.");
     }
 
-    const transition = action === "suspend"
-      ? { from: "ACTIVE" as const, to: "SUSPENDED" as const }
-      : { from: "SUSPENDED" as const, to: "ACTIVE" as const };
+    const transition = TRANSITIONS[action];
     const targetResult = await tx.execute<{
       id: string;
       name: string;
@@ -257,12 +273,14 @@ export async function executeTenantLifecycle(
     `);
     const target = targetResult.rows[0];
 
-    if (
-      !target
-      || target.status !== transition.from
-      || (input.expectedName !== undefined
-        && input.expectedName.trim() !== target.name)
-    ) {
+    // Archiving is irreversible, so its typed name is required; the other transitions check it
+    // when the caller sends one.
+    const nameMismatch = (input.expectedName === undefined && action === "archive")
+      || (input.expectedName !== undefined && input.expectedName.trim() !== target?.name);
+    const denial: TenantLifecycleDenialReason | undefined = !target
+      ? "missing"
+      : !transition.from.includes(target.status) ? "status" : nameMismatch ? "name" : undefined;
+    if (denial) {
       await appendAudit(
         tx,
         actor.userId,
@@ -275,14 +293,14 @@ export async function executeTenantLifecycle(
         transition.to,
         attempt,
       );
-      return { denied: true } as const;
+      return { denied: true, reason: denial } as const;
     }
 
     const update = await tx.execute(
       sql`UPDATE tenants
         SET status = ${transition.to}, updated_at = now()
         WHERE id = ${target.id}::uuid
-          AND status = ${transition.from}`,
+          AND status = ${target.status}`,
     );
     if (update.rowCount !== 1) {
       await appendAudit(
@@ -297,12 +315,12 @@ export async function executeTenantLifecycle(
         transition.to,
         attempt,
       );
-      return { denied: true } as const;
+      return { denied: true, reason: "status" } as const;
     }
 
-    if (action === "suspend") {
+    if (action === "suspend" || action === "archive") {
       // T-286 (L1): every member of the suspended store signs out with the suspension
-      // (`revoke_suspended_tenant_sessions`, migration 0073).
+      // (`revoke_suspended_tenant_sessions`, migration 0073; T-279/0075 extends it to archive).
       await tx.execute(sql`SELECT public.revoke_suspended_tenant_sessions(${target.id}::uuid)`);
     }
 
@@ -315,7 +333,7 @@ export async function executeTenantLifecycle(
       "SUCCESS",
       tenant.id,
       tenant.id,
-      transition.from,
+      target.status,
       tenant.status,
       attempt,
     );
@@ -323,7 +341,7 @@ export async function executeTenantLifecycle(
   });
 
   if ("denied" in result) {
-    throw new TenantLifecycleDeniedError();
+    throw new TenantLifecycleDeniedError("reason" in result ? result.reason : undefined);
   }
 
   return result.tenant;
