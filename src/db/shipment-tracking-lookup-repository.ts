@@ -13,6 +13,7 @@ import {
 import { listProviderHistoryEvents } from "@/db/provider-tracking-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
+import { latestProviderStatusCandidate } from "@/db/shipment-event-predicates";
 
 /**
  * PR-51 tracking lookup key. At least one of `tenantNumber` / `awb` is set; `prefix` is the
@@ -119,6 +120,7 @@ export async function lookupShipmentByTrackingKey(
       and(
         eq(providerOrderStatusObservations.tenantId, context.tenantId),
         eq(providerOrderStatusObservations.shipmentId, row.shipmentId),
+        latestProviderStatusCandidate("provider_order_status_observations"),
       ),
     )
     .orderBy(

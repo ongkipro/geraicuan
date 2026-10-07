@@ -3,7 +3,7 @@ import "server-only";
 import { and, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 
 import { loadLatestEstimateSnapshot } from "@/db/estimate-repository";
-import { issuedTodayPredicate } from "@/db/shipment-event-predicates";
+import { issuedTodayPredicate, latestProviderStatusCandidate } from "@/db/shipment-event-predicates";
 import { handoverOverduePredicate } from "@/db/shipment-handover-repository";
 import {
   outlets,
@@ -181,16 +181,19 @@ function stalePredicate(hours: number) {
             WHERE same.tenant_id = latest.tenant_id
               AND same.shipment_id = latest.shipment_id
               AND same.provider_status = latest.provider_status
+              AND ${latestProviderStatusCandidate("same")}
               AND same.observed_at > COALESCE(
                 (SELECT max(other.observed_at)
                   FROM provider_order_status_observations other
                   WHERE other.tenant_id = latest.tenant_id
                     AND other.shipment_id = latest.shipment_id
-                    AND other.provider_status <> latest.provider_status),
+                    AND other.provider_status <> latest.provider_status
+                    AND ${latestProviderStatusCandidate("other")}),
                 '-infinity'::timestamptz)))
         FROM provider_order_status_observations latest
         WHERE latest.tenant_id = ${shipments.tenantId}
           AND latest.shipment_id = ${shipments.id}
+          AND ${latestProviderStatusCandidate("latest")}
         ORDER BY latest.observed_at DESC, latest.id DESC
         LIMIT 1),
       ${providerOrderSnapshots.resolvedAt}

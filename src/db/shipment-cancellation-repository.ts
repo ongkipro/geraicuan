@@ -10,10 +10,12 @@ import {
   providerUnpaidRecoveries,
   shipments,
 } from "@/db/schema";
+import { appendLedgerReversalsForCancelledShipments } from "@/db/ledger-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { mengantarDocumentedOrderCourier } from "@/lib/mengantar-couriers";
 import { ALLOWED_TRANSITIONS } from "@/lib/provider-delivery-status";
 import type { ShipmentCancelFacts } from "@/lib/shipment-cancel-rules";
+import { latestProviderStatusCandidate } from "@/db/shipment-event-predicates";
 
 /** T-281: only a Tenant Admin cancels a shipment on Mengantar. */
 export class ShipmentCancelDeniedError extends Error {
@@ -88,6 +90,7 @@ export async function loadShipmentCancelTarget(
     .where(and(
       eq(providerOrderStatusObservations.tenantId, context.tenantId),
       eq(providerOrderStatusObservations.shipmentId, shipmentId),
+      latestProviderStatusCandidate("provider_order_status_observations"),
     ))
     .orderBy(desc(providerOrderStatusObservations.observedAt), desc(providerOrderStatusObservations.id))
     .limit(1);
@@ -116,9 +119,14 @@ export type ShipmentCancelRecord = "CANCELLED" | "ALREADY_CANCELLED" | "STATE_CH
 /**
  * T-281: Mengantar confirmed the deletion; one transaction locks the shipment, re-reads its
  * status and moves it to CANCELLED (a move `ALLOWED_TRANSITIONS` names) with one
- * SHIPMENT_CANCELLED audit row (no recipient data). Already CANCELLED (a status pull got there
- * first) records nothing. No ledger entry: a pull-observed CANCELLED writes none either, and the
- * order's issuance entries stay as written (append-only).
+ * SHIPMENT_CANCELLED audit row (no recipient data). T-290: the same transaction reverses the
+ * issuance ledger entries (`appendLedgerReversalsForCancelledShipments`, append-only ADJUSTMENTs).
+ *
+ * Already CANCELLED: a status pull or the webhook recorded Mengantar's cancel first. The deletion
+ * is still this Tenant Admin's, so it is audited once here (T-290 round-3 (a)) when the provider
+ * applied the CANCELLED (an APPLIED observation to CANCELLED exists); without one the app itself
+ * recorded it earlier (a retried write), which was already audited. The reversal runs again too:
+ * it appends only what nothing reverses yet (a webhook cancel books none of its own).
  */
 export async function recordShipmentCancelled(
   tx: TenantTransaction,
@@ -133,12 +141,41 @@ export async function recordShipmentCancelled(
     .where(and(eq(shipments.id, shipmentId), eq(shipments.tenantId, context.tenantId)))
     .for("update");
   if (!row) return "STATE_CHANGED";
-  if (row.status === "CANCELLED") return "ALREADY_CANCELLED";
+  if (row.status === "CANCELLED") {
+    const [providerCancel] = await tx
+      .select({ fromStatus: providerOrderStatusObservations.fromStatus })
+      .from(providerOrderStatusObservations)
+      .where(and(
+        eq(providerOrderStatusObservations.tenantId, context.tenantId),
+        eq(providerOrderStatusObservations.shipmentId, shipmentId),
+        eq(providerOrderStatusObservations.mappedStatus, "CANCELLED"),
+        eq(providerOrderStatusObservations.transitionOutcome, "APPLIED"),
+      ))
+      .orderBy(desc(providerOrderStatusObservations.observedAt), desc(providerOrderStatusObservations.id))
+      .limit(1);
+    // lazy: a retry after a commit whose answer was lost, racing a provider cancel, could audit
+    // twice; the runtime role cannot read SHIPMENT_CANCELLED rows to rule it out without a migration.
+    if (providerCancel) await insertCancelAudit(tx, context, shipmentId, input.courier, providerCancel.fromStatus);
+    await appendLedgerReversalsForCancelledShipments(tx, context, [shipmentId]);
+    return "ALREADY_CANCELLED";
+  }
   if (!(ALLOWED_TRANSITIONS[row.status] ?? []).includes("CANCELLED")) return "STATE_CHANGED";
   await tx
     .update(shipments)
     .set({ status: "CANCELLED", updatedAt: sql`now()` })
     .where(and(eq(shipments.id, shipmentId), eq(shipments.tenantId, context.tenantId)));
+  await insertCancelAudit(tx, context, shipmentId, input.courier, row.status);
+  await appendLedgerReversalsForCancelledShipments(tx, context, [shipmentId]);
+  return "CANCELLED";
+}
+
+async function insertCancelAudit(
+  tx: TenantTransaction,
+  context: TenantContext,
+  shipmentId: string,
+  courier: string,
+  fromStatus: string | null,
+) {
   await tx.insert(auditEvents).values({
     actorId: context.userId,
     actorRole: "TENANT_MEMBER",
@@ -147,7 +184,6 @@ export async function recordShipmentCancelled(
     targetType: "SHIPMENT",
     targetId: shipmentId,
     outcome: "SUCCESS",
-    metadata: { courier: input.courier, fromStatus: row.status },
+    metadata: { courier, fromStatus },
   });
-  return "CANCELLED";
 }

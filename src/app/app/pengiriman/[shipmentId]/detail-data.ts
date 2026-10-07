@@ -13,6 +13,7 @@ import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { moneyForRole, shipmentMoney, storedCodCharge, type ShipmentMoneyFacts } from "@/lib/shipment-money";
 
 import type { AttentionEvidence, StatusObservation } from "./detail-model";
+import { latestProviderStatusCandidate } from "@/db/shipment-event-predicates";
 
 /** Enough history for one shipment's journey; repeats collapse in `buildTrackingTimeline`. */
 const OBSERVATION_LIMIT = 60;
@@ -95,6 +96,8 @@ export async function loadShipmentDetailView(tx: TenantTransaction, context: Ten
       .where(and(
         eq(providerOrderStatusObservations.tenantId, context.tenantId),
         eq(providerOrderStatusObservations.shipmentId, shipmentId),
+        // T-290: a refused inferred cancel carries a stale status (and would read "Dibatalkan").
+        latestProviderStatusCandidate("provider_order_status_observations"),
       ))
       .orderBy(desc(providerOrderStatusObservations.observedAt), desc(providerOrderStatusObservations.id))
       .limit(OBSERVATION_LIMIT)

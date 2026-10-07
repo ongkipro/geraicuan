@@ -12,6 +12,7 @@ import {
   providerSettlementPulls,
   shipments,
 } from "@/db/schema";
+import { appendLedgerReversalsForCancelledShipments } from "@/db/ledger-repository";
 import { deriveProviderAccountKey } from "@/db/order-batch-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { BASIS_POINTS, MENGANTAR_COD_FEE_BASIS_POINTS } from "@/lib/mengantar-cod-fee";
@@ -26,6 +27,7 @@ import {
   type ProviderDeliveryDecision,
 } from "@/lib/provider-delivery-status";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
+import { latestProviderStatusCandidate } from "@/db/shipment-event-predicates";
 
 const PULL_WINDOW_MS = 60_000;
 const MATCH_CHUNK = 500;
@@ -170,8 +172,11 @@ export type ProviderDeliveryTransitionResult = {
  * produces a state the provider did not report and never a move the transition
  * graph does not allow. Its outcome is stored on the observation row, so an
  * unrecognised or refused status leaves a record instead of silently doing
- * nothing. COD principal and the ledger are untouched: this writes
- * `shipments.status` and nothing else.
+ * nothing. It writes `shipments.status`; the only ledger write is T-290's: a
+ * shipment this pull moved to CANCELLED, or found already CANCELLED (a webhook
+ * cancel books no ledger of its own), gets its issuance entries reversed by
+ * append-only ADJUSTMENTs in the same transaction
+ * (`appendLedgerReversalsForCancelledShipments`, idempotent).
  */
 /**
  * T-281 review: a record deleted while still pre-pickup reads as a cancel, but Mengantar also
@@ -211,6 +216,7 @@ async function applyProviderDeliveryTransitions(
 
   const applyGroups = new Map<ShipmentStatus, string[]>();
   const unrecognised = new Set<string>();
+  const cancelled: string[] = [];
   let refusedCount = 0;
   for (const observation of observations) {
     const current = currentById.get(observation.shipmentId);
@@ -223,6 +229,9 @@ async function applyProviderDeliveryTransitions(
         returnCnoteNo: observation.returnCnoteNo,
       });
     decisions.set(observation.shipmentId, { ...decision, fromStatus: current.status });
+    if (current.status === "CANCELLED" || (decision.outcome === "APPLIED" && decision.mappedStatus === "CANCELLED")) {
+      cancelled.push(observation.shipmentId);
+    }
     if (decision.outcome === "UNRECOGNISED") unrecognised.add(decision.normalizedStatus);
     if (decision.outcome === "REFUSED") refusedCount += 1;
     if (decision.outcome !== "APPLIED" || decision.mappedStatus === null) continue;
@@ -243,6 +252,7 @@ async function applyProviderDeliveryTransitions(
       .returning({ id: shipments.id });
     appliedCount += updated.length;
   }
+  await appendLedgerReversalsForCancelledShipments(tx, context, cancelled);
 
   return {
     decisions,
@@ -596,6 +606,7 @@ export async function listProviderSettlementReview(
         observation.shipment_id, observation.cnote_no, observation.provider_status, observation.observed_at
       FROM provider_order_status_observations observation
       WHERE observation.tenant_id = ${context.tenantId}
+        AND ${latestProviderStatusCandidate("observation")}
       ORDER BY observation.shipment_id, observation.observed_at DESC, observation.id DESC
     ), ledger_cost AS (
       SELECT entry.shipment_id,

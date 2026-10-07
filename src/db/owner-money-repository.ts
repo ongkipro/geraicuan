@@ -14,6 +14,7 @@ import { IDR_UNITS, parseIdrUnits } from "@/lib/mengantar-settlement";
 import type { PaymentMethod } from "@/lib/payment-method";
 import { codNetAmountIdr } from "@/lib/shipment-money";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
+import { latestProviderStatusCandidate } from "@/db/shipment-event-predicates";
 
 /*
  * T-275 (D-41): the gerai owner's money — what COD is still outside, what Mengantar has paid
@@ -280,6 +281,7 @@ export async function loadOwnerMoney(
       SELECT DISTINCT ON (observation.shipment_id) observation.shipment_id, observation.provider_status
       FROM provider_order_status_observations observation
       WHERE observation.tenant_id = ${context.tenantId} AND observation.shipment_id IN (SELECT id FROM cohort)
+        AND ${latestProviderStatusCandidate("observation")}
       ORDER BY observation.shipment_id, observation.observed_at DESC, observation.id DESC
     ), delivered AS (
       -- The provider's own time first (the pull's last history event, the webhook's event time);

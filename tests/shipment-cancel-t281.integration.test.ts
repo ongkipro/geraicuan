@@ -334,7 +334,7 @@ describe("T-281 cancelShipmentOnMengantar: Mengantar's answer", () => {
       actor_id: tenants.a.admin, actor_role: "TENANT_MEMBER", metadata: { courier: "JNE", fromStatus: "ISSUED" },
       outcome: "SUCCESS", target_id: shipment.shipmentId, target_type: "SHIPMENT", tenant_id: tenants.a.id,
     }]);
-    // No ledger entry: a cancellation books nothing (as a pull-observed CANCELLED).
+    // This fixture has no issuance ledger, so nothing is reversed (T-290 binds the reversal).
     expect((await adminPool.query("SELECT count(*)::int AS n FROM ledger_entries WHERE tenant_id = $1", [tenants.a.id])).rows[0].n).toBe(0);
 
     // A second click finds it cancelled and sends nothing.

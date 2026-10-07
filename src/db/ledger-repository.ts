@@ -631,6 +631,86 @@ export async function appendLedgerAdjustment(
   throw new LedgerUnavailableError();
 }
 
+/**
+ * T-290 (D-42): what a cancelled COD parcel no longer owes or costs — the COD principal and every
+ * provider charge or fee entry its issuance booked. Prepaid (non-COD) orders are not reversed. The
+ * `NON_COD_UPSTREAM_PAYMENT` memo is kept: it records that wallet money was paid, and a refund is
+ * evidence only Mengantar's settlement REFUND line gives, never inferred here.
+ */
+export const CANCELLATION_REVERSED_ENTRY_TYPES = [
+  "COD_PRINCIPAL_COLLECTABLE",
+  "MENGANTAR_SHIPPING_COST",
+  "MENGANTAR_INSURANCE_COST",
+  "MENGANTAR_COD_FEE_COST",
+  "GERAICUAN_COD_SERVICE_FEE_REVENUE",
+  "COD_SERVICE_FEE_VAT_PAYABLE",
+] as const satisfies readonly ReconcilableLedgerEntryType[];
+
+/**
+ * T-290 (D-42): on the authoritative transition to CANCELLED (the app's confirmed deletion or a
+ * status pull), in the caller's transaction, append one ADJUSTMENT per entry of
+ * `CANCELLATION_REVERSED_ENTRY_TYPES` of each given shipment that nothing reverses yet: the
+ * negated amount, the original's class, batch, order and `effective_at` (so the period that
+ * booked the issuance nets to zero, matching the reconciliation source, which leaves cancelled COD
+ * shipments out), `reverses_entry_id` = the original. Only COD shipments of the context tenant that
+ * are CANCELLED now are touched; everything else appends nothing.
+ *
+ * Idempotent: the unique key `(tenant, MANUAL_ADJUSTMENT, original id, ADJUSTMENT)` — every
+ * reversal carries it, a manual `appendLedgerAdjustment` included — admits one reversal per
+ * entry, so a second CANCELLED decision, a racing pull or an earlier manual correction appends
+ * nothing (ON CONFLICT DO NOTHING). `MANUAL_ADJUSTMENT`
+ * is the only source event the `ledger_entries_source_event_valid` CHECK admits for an
+ * ADJUSTMENT. lazy: a dedicated cancellation source event needs a migration; until then a
+ * cancellation reversal is told apart by its shipment being CANCELLED and its `effective_at`
+ * equal to the original's. The runtime role inserts as the Tenant Admin who decided
+ * (`ledger_entries_active_tenant_insert`). Returns how many entries were appended.
+ */
+export async function appendLedgerReversalsForCancelledShipments(
+  tx: TenantTransaction,
+  context: TenantContext,
+  shipmentIds: readonly string[],
+) {
+  requireTenantAdmin(context);
+  if (shipmentIds.length === 0) return 0;
+  for (const shipmentId of shipmentIds) {
+    if (!UUID_PATTERN.test(shipmentId)) throw new LedgerUnavailableError();
+  }
+  const inserted = await tx.execute<{ id: string }>(sql`
+    INSERT INTO ledger_entries (
+      tenant_id, outlet_id, shipment_id, provider_batch_id, provider_order_snapshot_id,
+      entry_type, financial_class, amount_idr, currency, effective_at,
+      source_event, source_event_id, actor_type, actor_user_id, reverses_entry_id
+    )
+    SELECT original.tenant_id, original.outlet_id, original.shipment_id, original.provider_batch_id,
+      original.provider_order_snapshot_id, 'ADJUSTMENT', original.financial_class, -original.amount_idr,
+      'IDR', original.effective_at, 'MANUAL_ADJUSTMENT', original.id::text, 'USER', ${context.userId},
+      original.id
+    FROM ledger_entries original
+    INNER JOIN shipments shipment
+      ON shipment.id = original.shipment_id
+      AND shipment.tenant_id = original.tenant_id
+      AND shipment.outlet_id = original.outlet_id
+    WHERE original.tenant_id = ${context.tenantId}
+      AND shipment.tenant_id = ${context.tenantId}
+      AND shipment.status = 'CANCELLED'
+      AND original.shipment_id IN (${sql.join(shipmentIds.map((id) => sql`${id}::uuid`), sql`, `)})
+      AND original.entry_type IN (${sql.join(CANCELLATION_REVERSED_ENTRY_TYPES.map((type) => sql`${type}`), sql`, `)})
+      -- T-290 review: COD only. Mengantar keeps a COD parcel's charges out of the collected COD,
+      -- so a cancelled one costs nothing; a prepaid (non-COD) order's wallet charge stays booked
+      -- until a settlement REFUND line proves it came back.
+      AND EXISTS (
+        SELECT 1 FROM provider_order_snapshots provider_order
+        WHERE provider_order.id = original.provider_order_snapshot_id
+          AND provider_order.tenant_id = original.tenant_id
+          AND provider_order.is_cod
+      )
+    ORDER BY original.id
+    ON CONFLICT (tenant_id, source_event, source_event_id, entry_type) DO NOTHING
+    RETURNING id
+  `);
+  return inserted.rows.length;
+}
+
 function rangePredicate(context: TenantContext, range: LedgerDateRange) {
   requireDateRange(range.start, range.end);
   return and(
@@ -1149,6 +1229,15 @@ async function captureLedgerReconciliationTotals(
         AND provider_order.status = 'ISSUED'
         AND provider_order.resolved_at >= ${input.periodStart}
         AND provider_order.resolved_at < ${input.periodEnd}
+        -- T-290: a cancelled COD parcel owes and costs nothing; its issuance entries are reversed
+        -- at their own effective_at, so a cancel without that reversal surfaces as variance. A
+        -- cancelled prepaid order stays: its wallet charge is not reversed (review).
+        AND NOT (provider_order.is_cod AND EXISTS (
+          SELECT 1 FROM shipments cancelled
+          WHERE cancelled.id = provider_order.shipment_id
+            AND cancelled.tenant_id = provider_order.tenant_id
+            AND cancelled.status = 'CANCELLED'
+        ))
     ), recovery_source AS (
       SELECT coalesce(sum(
         coalesce(provider_order.provider_charged_shipping_idr, provider_order.shipping_amount_idr)

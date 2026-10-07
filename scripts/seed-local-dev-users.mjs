@@ -1359,6 +1359,7 @@ try {
            AND vat_entry.entry_type = 'COD_SERVICE_FEE_VAT_PAYABLE') AS booked) legacy_vat
          WHERE o.tenant_id = $1 AND b.outlet_id = $2 AND o.status = 'ISSUED'
            AND o.resolved_at >= $3 AND o.resolved_at < $4
+           AND NOT (o.is_cod AND EXISTS (SELECT 1 FROM shipments s WHERE s.id = o.shipment_id AND s.tenant_id = o.tenant_id AND s.status = 'CANCELLED'))
        ), recovery_source AS (
          SELECT coalesce(sum(coalesce(o.provider_charged_shipping_idr, o.shipping_amount_idr) + coalesce(o.insurance_amount_idr, 0)), 0) AS upstream
          FROM provider_unpaid_recoveries r
