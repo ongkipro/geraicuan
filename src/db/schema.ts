@@ -163,6 +163,8 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   status: text("status", { enum: identityStatuses }).notNull().default("ACTIVE"),
+  // T-286: Better Auth `twoFactor` plugin; only a Super Admin can enable it (`src/lib/auth.ts`).
+  twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -170,6 +172,26 @@ export const users = pgTable("users", {
     .notNull()
     .defaultNow(),
 }, () => [check("users_public_number_minimum", sql`public_number >= 10000`)]);
+
+/**
+ * T-286: the Super Admin's TOTP factor (Better Auth `twoFactor` plugin model `twoFactor`).
+ * `secret` and `backup_codes` are encrypted by Better Auth with the auth secret. One row per user.
+ */
+export const twoFactors = pgTable(
+  "two_factors",
+  {
+    id: text("id").primaryKey(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    verified: boolean("verified").notNull().default(true),
+    failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (table) => [uniqueIndex("two_factors_user_id_unique").on(table.userId)],
+);
 
 export const sessions = pgTable(
   "sessions",

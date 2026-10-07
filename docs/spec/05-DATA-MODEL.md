@@ -4,16 +4,17 @@
 - Owner: Engineering owner — no named engineering owner is recorded (the PRD's accountable product owner is Paduka Ongki). The former "before first migration" due point has passed: migrations `drizzle/0000` through `drizzle/0072` exist and define the live schema, mirrored by `src/db/schema.ts`.
 
 ## Entities
-Live set: every table created in `drizzle/0000`–`drizzle/0072` minus `shipment_reference_counters` (created 0038, dropped 0040) — 45 tables, the same set as the `pgTable` definitions in `src/db/schema.ts`. "RLS" is what the migrations state (`ENABLE` and `FORCE ROW LEVEL SECURITY`); grants are those of the runtime role `geraicuan_app`, with the migrations that set them. A table without RLS is either platform/identity data the Better Auth adapter reads, or a counter the runtime role cannot touch at all. No provider location cache exists (DATA-7).
+Live set: every table created in `drizzle/0000`–`drizzle/0073` minus `shipment_reference_counters` (created 0038, dropped 0040) — 46 tables, the same set as the `pgTable` definitions in `src/db/schema.ts`. "RLS" is what the migrations state (`ENABLE` and `FORCE ROW LEVEL SECURITY`); grants are those of the runtime role `geraicuan_app`, with the migrations that set them. A table without RLS is either platform/identity data the Better Auth adapter reads, or a counter the runtime role cannot touch at all. No provider location cache exists (DATA-7).
 
 **Identity and auth**
 
 | Entity | Tenant-scoped | RLS · runtime grants | Purpose |
 |---|---|---|---|
-| `users` | No | None · `SELECT`, `UPDATE (email_verified, updated_at)` (0003, 0051) | Authenticated principal identity. |
+| `users` | No | None · `SELECT`, `UPDATE (email_verified, updated_at)` (0003, 0051), `UPDATE (two_factor_enabled)` (0073) | Authenticated principal identity; `two_factor_enabled` is the Better Auth two-factor flag, only a Super Admin can set it (DATA-25). |
 | `sessions` | No (per user) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth session: token, expiry, IP address and user agent for one signed-in user. |
 | `accounts` | No (per user) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth credential/provider account linked to a user (password hash or provider tokens); server-only. |
 | `verifications` | No (platform) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth short-lived verification values (identifier, value, expiry) such as email verification and password reset. |
+| `two_factors` | No (per user) | None · `SELECT, INSERT, UPDATE, DELETE` (0073) | Better Auth TOTP factor of a Super Admin: encrypted secret and backup codes, verified flag, failure count and lock (DATA-25). |
 | `rate_limits` | No (platform) | None · `SELECT, INSERT, UPDATE, DELETE` (0003) | Better Auth database rate-limit storage (`rateLimit.storage: "database"` in `src/lib/auth.ts`): key, count, last request. |
 | `public_auth_rate_limits` | No (platform) | None · `SELECT, INSERT, UPDATE, DELETE` (0051) | Public sign-up/auth abuse counters keyed `scope:hmac-hex` with a fixed window (DATA-12). |
 
@@ -199,12 +200,13 @@ Store currency as `IDR` and all amounts as whole integer rupiah, except provider
 Persist provider IDs together with their last accepted human-readable label at operational snapshot boundaries. Outlet pickup configuration stores `default_pickup_address_id` with `default_pickup_address_label` and `default_origin_area_id` with `default_origin_area_label`; both labels are null for legacy rows or non-null as one pair. New writes accept only a pickup from the current account-scoped provider response and derive the area ID and both labels from that same response. A cached area row is never sufficient evidence that an ID remains supported; estimate/order behavior remains authoritative. No provider location cache exists. Since D-32 (T-245) a local Kemendagri reference, `wilayah_areas` (DATA-22), suggests areas while typing; it carries no provider ID, no tenant table references it, and only a provider option from a live search is ever stored or verified.
 
 ## ERD
-Relationships are the foreign keys in `drizzle/0000`–`drizzle/0072` (cross-checked against `src/db/schema.ts`; no FK added by a migration is missing from the schema file and none was dropped later). Most tenant-owned FKs are composite — `(parent_id, tenant_id) → parent(id, tenant_id)` — so a child cannot point at another tenant's row (DATA-1); the diagrams draw them as one edge. Tables without a foreign key appear as stand-alone entities. Four diagrams by domain keep each one readable; an entity repeated across diagrams is the same table.
+Relationships are the foreign keys in `drizzle/0000`–`drizzle/0073` (cross-checked against `src/db/schema.ts`; no FK added by a migration is missing from the schema file and none was dropped later). Most tenant-owned FKs are composite — `(parent_id, tenant_id) → parent(id, tenant_id)` — so a child cannot point at another tenant's row (DATA-1); the diagrams draw them as one edge. Tables without a foreign key appear as stand-alone entities. Four diagrams by domain keep each one readable; an entity repeated across diagrams is the same table.
 
 ### ERD 1 — Identity, auth, platform and reference
 ```mermaid
 erDiagram
     USERS ||--o{ SESSIONS : signs_in
+    USERS ||--o| TWO_FACTORS : verifies_with
     USERS ||--o{ ACCOUNTS : authenticates
     USERS ||--o| PLATFORM_ROLES : holds
     USERS ||--o{ MEMBERSHIPS : joins
@@ -664,3 +666,10 @@ Not ported: AdsBookCMS's JSON-flag status parser (contradicts L evidence), `x-cl
 - **Derived metrics (spec 19).** LBL-PRINTED (printed, no current handover), LBL-HANDED-OVER, LBL-HANDED-OVER-TODAY, QUE-HANDOVER-OVERDUE (handed over ≥ 24 h, still `ISSUED`, inside QUE-ATTENTION).
 - **Label.** The 10 × 15 sender stub prints "Diserahkan <WIB time>" only while a handover is recorded (`PrintableLabel.handedOverAt`); none recorded or undone → no row (T-265).
 - **Evidence.** `tests/shipment-handover-t267.integration.test.ts` (grants, FORCE RLS, cross-tenant read/write refused, forged actor/role, order trigger, shape CHECK, unprinted refused at the database, audit guard + one row per event, eligibility matrix, idempotency, concurrency, undo rules, counts, 24 h rule); `tests/handover-render-t267.integration.test.ts`; `scripts/verify-migration-upgrade.mjs` (0070 probes).
+
+## DATA-25 — Super Admin two-factor and session revocation (T-286, migration 0073)
+- **`two_factors`** (Better Auth `twoFactor` plugin, model `twoFactor`): `id` text PK, `secret` and `backup_codes` (text, encrypted by Better Auth with the auth secret), `user_id` → `users.id` ON DELETE CASCADE with UNIQUE `two_factors_user_id_unique` (one factor per user), `verified` (false between enrollment and the first valid code), `failed_verification_count`, `locked_until`. No RLS, runtime SELECT/INSERT/UPDATE/DELETE, like the other Better Auth tables: the adapter reads it before any tenant context exists.
+- **`users.two_factor_enabled`** boolean NOT NULL DEFAULT false; runtime `UPDATE (two_factor_enabled)`. True only after a Super Admin proved one code; `resolvePlatformAccess` requires it (SEC-9).
+- **`revoke_suspended_tenant_sessions(target uuid) → integer`**, SECURITY DEFINER, `search_path` pinned, EXECUTE for `geraicuan_app` only: requires an ACTIVE `SUPER_ADMIN` in `app.user_id` (else 42501) and `tenants.status = 'SUSPENDED'` (else 55000), then deletes the `sessions` of every user with a membership in the store. Owner-bound policy `memberships_session_revocation_read` lets a non-superuser owner read the memberships (same pattern as 0051/0053).
+- **Lock-light (MIG-1).** The column has a constant default (no table rewrite); the table is new, so its index and foreign key need no scan.
+- **Evidence.** `tests/auth-hardening-t286.integration.test.ts`.

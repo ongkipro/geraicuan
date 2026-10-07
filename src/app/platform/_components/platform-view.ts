@@ -2,7 +2,7 @@ import "server-only";
 
 import { notFound, redirect } from "next/navigation";
 
-import { resolvePlatformAccess } from "@/app/platform/platform-access";
+import { platformAccessRedirect, resolvePlatformAccess } from "@/app/platform/platform-access";
 import { db } from "@/db/client";
 import { recordPlatformMonitoringAccess, withPlatformContext } from "@/db/platform-context";
 import {
@@ -46,7 +46,7 @@ async function settle<T>(wanted: boolean, read: () => Promise<T>): Promise<T | n
 export async function requirePlatformPrincipal() {
   const access = await resolvePlatformAccess();
   if (access.status !== "authorized") {
-    redirect(`/login/super-admin?notice=${access.status === "anonymous" ? "session-required" : "access-unavailable"}`);
+    redirect(platformAccessRedirect(access));
   }
   return access.principal;
 }

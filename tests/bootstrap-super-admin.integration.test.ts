@@ -89,9 +89,11 @@ afterAll(async () => {
 });
 
 describe("bootstrap-super-admin refusals", () => {
-  it("uses the same password limits as sign-up and password reset", () => {
+  it("asks a Super Admin for 12 characters, and the same maximum as sign-up and password reset", () => {
+    // T-286 (M2): longer than the app's own minimum, never shorter.
     const source = readFileSync(join(process.cwd(), "src/lib/public-auth-routes.ts"), "utf8");
-    expect(Number(/PASSWORD_MIN_LENGTH = (\d+)/.exec(source)?.[1])).toBe(PASSWORD_MIN_LENGTH);
+    expect(PASSWORD_MIN_LENGTH).toBe(12);
+    expect(Number(/PASSWORD_MIN_LENGTH = (\d+)/.exec(source)?.[1])).toBeLessThan(PASSWORD_MIN_LENGTH);
     expect(Number(/PASSWORD_MAX_LENGTH = (\d+)/.exec(source)?.[1])).toBe(PASSWORD_MAX_LENGTH);
   });
 
@@ -101,7 +103,7 @@ describe("bootstrap-super-admin refusals", () => {
     expect(argument.output).toContain("Unknown argument --password");
     expect(argument.output).not.toContain(password);
 
-    const short = run(["--email", email, "--name", "First Admin"], { input: "short7\n" });
+    const short = run(["--email", email, "--name", "First Admin"], { input: "eleven-char\n" }); // 11: accepted by the old 8-character minimum
     expect(short.status).toBe(1);
     expect(short.output).toContain(`The password must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters.`);
 

@@ -20,9 +20,10 @@ import { pathToFileURL } from "node:url";
 import { hashPassword } from "better-auth/crypto";
 import pg from "pg";
 
-// Same limits as the app's sign-up and password reset (`src/lib/public-auth.ts`);
-// tests/bootstrap-super-admin.integration.test.ts keeps them equal.
-export const PASSWORD_MIN_LENGTH = 8;
+// T-286 (M2): a Super Admin password is at least 12 characters, longer than the
+// app's sign-up and reset minimum (8, `src/lib/public-auth-routes.ts`); the maximum
+// is the same. tests/bootstrap-super-admin.integration.test.ts pins both.
+export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 128;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

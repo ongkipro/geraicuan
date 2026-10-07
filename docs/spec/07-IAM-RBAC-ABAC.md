@@ -5,7 +5,7 @@
 
 | ID | Role | Scope | Permitted actions | Owner |
 |---|---|---|---|---|
-| IAM-1 | `SUPER_ADMIN` | Platform | Sign in through Super Admin Login; provision/suspend/reactivate tenants; monitor aggregate and tenant-filtered operational/financial health, usage, provider queues, reconciliation state, and audit events; never read credentials. | Security owner |
+| IAM-1 | `SUPER_ADMIN` | Platform | Sign in through Super Admin Login with password and TOTP (enrolled at `/verifikasi-dua-langkah` before any platform page opens; session at most 12 hours, T-286, SEC-9); provision/suspend/reactivate tenants; monitor aggregate and tenant-filtered operational/financial health, usage, provider queues, reconciliation state, and audit events; never read credentials. | Security owner |
 | IAM-2 | `TENANT_ADMIN` | One tenant | Sign in through Tenant Login; manage members, outlets, private Mengantar configuration metadata, and reusable contacts; submit/recover own tenant batches only when the separate provider-mutation release gate is open; view tenant shipment/print history, Analitik, Keuangan ledger, and reconciliation reports. | Security owner |
 | IAM-3 | `OPERATOR` | One tenant | Sign in through Tenant Login; create/import drafts, estimate, submit permitted shipments only when the separate provider-mutation release gate is open, save/reuse contacts, and print/reprint; no Analitik, Keuangan, membership, connection, tenant lifecycle, ledger adjustment, or reconciliation-close access. | Security owner |
 
@@ -17,4 +17,4 @@ Role-filtered navigation is presentation of authorization, not its enforcement. 
 Provider mutation has an additional environment release gate. Current fixture evidence does not authorize a real Mengantar order or unpaid-recovery request in production, even for a role permitted by this table. The server and UI fail closed until the explicit TD-14 release decision is recorded.
 
 ## Lifecycle
-Tenant Admin invites/deactivates tenant members. Prevent removal of the final active Tenant Admin. Tenant suspension revokes operational authorization. Changes to roles, outlet connection configuration, and tenant state write audit events.
+Tenant Admin invites/deactivates tenant members. Prevent removal of the final active Tenant Admin. Tenant suspension revokes operational authorization. A role change or deactivation deletes the member's sessions, and a suspension deletes every member's sessions, in the same transaction (T-286, SEC-9). Changes to roles, outlet connection configuration, and tenant state write audit events.

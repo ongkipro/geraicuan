@@ -300,6 +300,12 @@ export async function executeTenantLifecycle(
       return { denied: true } as const;
     }
 
+    if (action === "suspend") {
+      // T-286 (L1): every member of the suspended store signs out with the suspension
+      // (`revoke_suspended_tenant_sessions`, migration 0073).
+      await tx.execute(sql`SELECT public.revoke_suspended_tenant_sessions(${target.id}::uuid)`);
+    }
+
     const tenant = { id: target.id, status: transition.to };
     await appendAudit(
       tx,

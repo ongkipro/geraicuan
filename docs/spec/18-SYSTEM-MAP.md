@@ -37,8 +37,8 @@ Every change touching routes, handlers, actions, data models, or navigation must
 
 ### Current Repository Inventory (2026-09-26)
 
-- **42 `page.tsx` files**:
-  - 8 Public & Authentication pages (`/`, `/login/tenant`, `/login/super-admin`, `/daftar`, `/verifikasi-email`, `/verifikasi-email/konfirmasi`, `/lupa-password`, `/atur-ulang-password`).
+- **43 `page.tsx` files**:
+  - 9 Public & Authentication pages (`/`, `/login/tenant`, `/login/super-admin`, `/verifikasi-dua-langkah`, `/daftar`, `/verifikasi-email`, `/verifikasi-email/konfirmasi`, `/lupa-password`, `/atur-ulang-password`).
   - 28 Authenticated Tenant CMS pages reached from 14 sidebar items in 6 sidebar groups (Utama, Pengiriman, Data, Cek, Laporan, Pengelolaan).
   - 6 Authenticated Platform CMS pages (Ringkasan, Tenant, Detail tenant, Pendaftaran, Audit, Info terbaru).
 - **4 `route.ts` Route Handlers**: Better Auth (`/api/auth/[...all]`), the report CSV export (`/app/laporan/pengiriman/export.csv`), the gerai logo (`/app/brand/logo`, T-243), and the provider webhook (`/api/webhooks/mengantar`, 404 unless `MENGANTAR_WEBHOOK_ENABLED=1` and a secret are set — T-238, D-30).
@@ -148,7 +148,7 @@ flowchart TD
 |---|---|---|
 | **Public landing** | `https://geraicuan.com` (`GERAICUAN_PUBLIC_ORIGIN`) | Astro site `apps/landing`; links to the tenant host's `/daftar` and `/login`. |
 | **Tenant CMS** | `https://app.geraicuan.com` (`GERAICUAN_TENANT_ORIGIN`) | Serves `/app/**`, `/login` (→ `/login/tenant`), `/daftar`, `/verifikasi-email/**`, `/lupa-password`, `/atur-ulang-password`. `/platform/**` answers 404. |
-| **Platform CMS** | `https://bos.geraicuan.com` (`GERAICUAN_PLATFORM_ORIGIN`) | Serves `/platform/**`, `/login` (→ `/login/super-admin`). `/app/**` answers 404. |
+| **Platform CMS** | `https://bos.geraicuan.com` (`GERAICUAN_PLATFORM_ORIGIN`) | Serves `/platform/**`, `/verifikasi-dua-langkah` (T-286), `/login` (→ `/login/super-admin`). `/app/**` answers 404. |
 | **Single-origin dev** | `http://localhost:3000` or Tailscale | No host split; `/` serves `src/app/page.tsx`. |
 
 ### Shell Layouts (spec 10 v3.2 §3)
@@ -158,7 +158,7 @@ flowchart TD
 | Tenant frame | `src/app/app/layout.tsx` → `AppShell` (`src/components/app/app-shell.tsx`) | Guard `requireCmsScope("tenant", { allowPendingApproval: true })`; anyone else → `/login/tenant?notice=session-required\|access-unavailable`. 64px primary top bar (`SiteHeader`), sidebar on the canvas (full ≥ 1024px, icon rail 768–1023px, Sheet < 768px), 1120px content column. A `PROVISIONING` gerai gets the approval notice above every page. |
 | **Focused layout** (D11) | `AppShell` `FOCUSED_ROUTES = {"/app/pengiriman/baru"}` | No sidebar; the top bar holds the brand, the 3-step stepper (`FlowStepper`: Isi data · Cek tarif · Terbitkan resi) and a close ✕ to `/app/pengiriman`; the content column is centred; the summary rail stays sticky (mobile: bottom bar). |
 | Settings frame | `src/app/app/pengaturan/layout.tsx` → `SettingsFrame` | Guard `requireTenantAdmin()` (Operator → `/app`). Page header "Pengaturan" + settings sub-menu (`SETTINGS_NAV_ITEMS`, `src/app/app/pengaturan/_components/settings-nav.tsx`: Profil gerai, Informasi label, Titik pickup, Outlet, Mitra kurir, Koneksi Mengantar, Anggota & akses). `/app/anggota` is outside this directory and renders `SettingsFrame` itself; its guard-only `anggota/layout.tsx` (T-236) redirects an Operator before that frame's skeleton renders. |
-| Platform frame | `src/app/platform/layout.tsx` → `AppShell` scope `platform` | Guard `resolvePlatformAccess()`; anyone else → `/login/super-admin?notice=…`. |
+| Platform frame | `src/app/platform/layout.tsx` → `AppShell` scope `platform` | Guard `resolvePlatformAccess()` (T-286: Super Admin, platform host, session under 12 h, TOTP enrolled); a Super Admin without TOTP → `/verifikasi-dua-langkah`, anyone else → `/login/super-admin?notice=…` (`platformAccessRedirect`). |
 | Root document | `src/app/layout.tsx` | Fonts, tokens (`globals.css`), `TooltipProvider`. Public pages render `AuthShell` (`src/app/login/_components/auth-shell.tsx`). |
 
 The account menu in the sidebar footer (`AppSidebar`) holds "Anggota & akses" (Tenant Admin only) and "Keluar" (`POST /api/auth/sign-out`, then the scope's login page).
@@ -210,7 +210,7 @@ One group, "Platform". `platformCmsNavigation` matches `/platform` exactly and e
 
 ---
 
-## 4. Public and Authentication Pages (8 Routes)
+## 4. Public and Authentication Pages (9 Routes)
 
 All render `AuthShell` (spec 17 UX-v3.10; polish is T-225). No route-level `loading`/`error`/`not-found` files; the root layout and framework defaults apply. Reference HTML: none (spec 17 UX-v3.7 "—").
 
@@ -218,7 +218,8 @@ All render `AuthShell` (spec 17 UX-v3.10; polish is T-225). No route-level `load
 |---|---|---|---|---|---|---|---|---|
 | `/` | `src/app/page.tsx` | Anyone | Single-origin entry: links to tenant login, sign-up, Super Admin login. | None | None | Static | — | COMMITTED |
 | `/login/tenant` | `src/app/login/tenant/page.tsx` | Anonymous (tenant host) | Sign in to the gerai. | `resolveLoginNotice("tenant")`, `resolveHostRouting` | Client `POST /api/auth/sign-in/email` (`x-geraicuan-login-scope: tenant`, `LoginForm`), then `tenantLandingAction` for the role's landing (T-263); `resendVerificationEmail` from the unverified notice | Notice (`notice`, `error` verification codes), pending, invalid credentials, unverified email; ≥ 1024 px split with the visual panel (T-225) | — | COMMITTED |
-| `/login/super-admin` | `src/app/login/super-admin/page.tsx` | Anonymous (platform host) | Sign in as Super Admin. | `resolveLoginNotice("platform")`, `resolveHostRouting` | Client `POST /api/auth/sign-in/email` (`x-geraicuan-login-scope: platform`) | Notice, pending, invalid credentials; dark ground, no sign-up link; ≥ 1024 px split with the dark visual panel (T-225) | — | COMMITTED |
+| `/login/super-admin` | `src/app/login/super-admin/page.tsx` | Anonymous (platform host) | Sign in as Super Admin: password, then the TOTP code when enrolled (T-286). | `resolveLoginNotice("platform")`, `resolveHostRouting` | Client `POST /api/auth/sign-in/email` (`x-geraicuan-login-scope: platform`); on `twoFactorRedirect`, `POST /api/auth/two-factor/verify-totp` (`TotpCodeForm`) | Notice, pending, invalid credentials, rate-limited (per IP and per email), code step (wrong code, challenge expired → back to password with notice); dark ground, no sign-up link; ≥ 1024 px split with the dark visual panel (T-225) | — | COMMITTED |
+| `/verifikasi-dua-langkah` | `src/app/verifikasi-dua-langkah/page.tsx` | Super Admin without TOTP (platform host) | Enroll TOTP before any `/platform` page opens (T-286). | `resolvePlatformAccess` (`authorized` → `/platform`; anonymous/forbidden → login notice) | Client `POST /api/auth/two-factor/enable` (password), then `POST /api/auth/two-factor/verify-totp` (`TwoFactorSetup`) | Password step (wrong password, rate-limited), key step (setup key in groups of four, `otpauth://` link, code field, wrong code) → `/platform` | — | COMMITTED |
 | `/daftar` | `src/app/daftar/page.tsx` | Anonymous (tenant host) | Register a gerai self-service (PR-59) in three client-side steps: Akun, Gerai, Awalan nomor (T-225). | `resolveHostRouting` | `registerStore` (one submission after step 3) | Step 1–3, per-step errors, server field error → step of the first error, pending, submitted ("periksa email"), rate-limited; ≥ 1024 px split | — | COMMITTED |
 | `/verifikasi-email` | `src/app/verifikasi-email/page.tsx` | Anonymous | Ask for a new verification link. | None | `resendVerificationEmail` | Form, pending, sent, rate-limited | — | COMMITTED |
 | `/verifikasi-email/konfirmasi` | `src/app/verifikasi-email/konfirmasi/page.tsx` | Token holder | Confirm the sign-up email with the sign-up password (T-198); opening the page verifies nothing. `referrer: no-referrer`. | `token` checked against `VERIFICATION_TOKEN_PATTERN` | `confirmEmailVerification` | Password form, invalid link, mismatch, rate-limited, done | — | COMMITTED |
@@ -374,7 +375,7 @@ Client-only state (not in the URL): the label size per operator in `localStorage
 
 | Endpoint | Source File | Method & Caller | Auth & Security Contract | Maturity |
 |---|---|---|---|---|
-| `/api/auth/[...all]` | `src/app/api/auth/[...all]/route.ts` | GET, POST, PATCH, PUT, DELETE via `toNextJsHandler(auth)`; auth forms, sign-out, email/reset links | Better Auth (`src/lib/auth.ts`): scope header `x-geraicuan-login-scope`, rate limits, `HttpOnly` session cookies; host routing refuses the other surface. | COMMITTED |
+| `/api/auth/[...all]` | `src/app/api/auth/[...all]/route.ts` | GET, POST, PATCH, PUT, DELETE via `toNextJsHandler(auth)`; auth forms, sign-out, email/reset links | Better Auth (`src/lib/auth.ts`): scope header `x-geraicuan-login-scope`, rate limits (per IP; `/sign-in/email` also per email, T-286), `HttpOnly` session cookies; `twoFactor` plugin serving only `/two-factor/enable` and `/two-factor/verify-totp`, platform scope only; every endpoint the app does not use is in `disabledPaths` and answers 404 (T-286); host routing refuses the other surface. | COMMITTED |
 | `/app/laporan/pengiriman/export.csv` | `src/app/app/laporan/pengiriman/export.csv/route.ts` | GET from the Laporan "Ekspor CSV" link | `requireCmsScope("tenant")` (401 without session), Tenant Admin only (403); invalid or rejected filters → 400; streams the filtered report (recipient phone and street excluded). | COMMITTED |
 | `/app/brand/logo` | `src/app/app/brand/logo/route.ts` | GET from `<img>` on the label sheet, Informasi label preview and Profil gerai (`?v=` = first 16 hex of the SHA-256, cache busting only); T-247: the invoice asks for its issuance version with `?sha=<64 hex>` (`tenant_logo_versions`, `Cache-Control: private, max-age=31536000, immutable`; malformed/unknown/other tenant's sha → 404) | `requireCmsScope("tenant", { allowPendingApproval })` (401 without session); both roles; the tenant comes from the session, never the URL, so another tenant's logo is unreachable (404); 404 without a logo; bytes as stored (type sniffed at upload), `Cache-Control: private, no-cache`, `ETag` = SHA-256 (304 on `If-None-Match`), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` (`tests/gerai-brand-t243.integration.test.ts`). | COMMITTED |
 | `/api/webhooks/mengantar` | `src/app/api/webhooks/mengantar/route.ts` | POST from Mengantar (documented contract: `x-timestamp`, `x-signature` = HMAC-SHA256 hex of `{x-timestamp}.{raw body}`) | Closed by default: empty 404 without `MENGANTAR_WEBHOOK_ENABLED=1` + `MENGANTAR_WEBHOOK_SECRET` (`tests/provider-webhook-boundary.integration.test.ts`). When enabled (T-238): 16 KB body bound, 5-minute window, constant-time compare → 401/400/413; `record_mengantar_webhook_event` (SECURITY DEFINER, 0063) resolves the AWB on the platform account, appends a WEBHOOK observation idempotently and applies the same transition rules; 204, or 500 so Mengantar retries (`tests/mengantar-webhook.integration.test.ts`, `tests/mengantar-tracking-t238.integration.test.ts`). | CLOSED |
@@ -524,7 +525,7 @@ Browser evidence for v3 screens is recorded per task in `TASKS.md` (T-210–T-23
 Run these read-only commands before committing:
 
 ```bash
-# 1. Verify Page Count (Must equal 42)
+# 1. Verify Page Count (Must equal 43)
 find src/app -name 'page.tsx' | wc -l
 
 # 2. Verify Route Handler Count (Must equal 4)

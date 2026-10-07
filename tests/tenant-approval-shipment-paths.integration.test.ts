@@ -177,6 +177,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await admin.query("DELETE FROM rate_limits");
+  // T-286: sign-in is also limited per email (10 per 15 minutes); this file signs in often.
+  await admin.query("DELETE FROM public_auth_rate_limits WHERE key LIKE 'sign-in-email:%'");
   await admin.query("UPDATE tenants SET status = 'PROVISIONING' WHERE id = $1", [tenantId]);
   fetchSpy.mockClear();
 });

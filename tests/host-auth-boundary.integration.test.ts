@@ -90,6 +90,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await admin.query("DELETE FROM rate_limits");
+  await admin.query("UPDATE users SET two_factor_enabled = false WHERE id = $1", [users.platform.id]);
   await admin.query("DELETE FROM sessions WHERE user_id = ANY($1)", [
     [users.tenant.id, users.platform.id],
   ]);
@@ -175,6 +176,9 @@ describe("sessions are bound to their host", () => {
 
   it("denies a Super Admin session presented on the tenant host", async () => {
     const cookie = sessionCookie(await signIn(PLATFORM_ORIGIN, "platform", "platform"));
+    // T-286: the platform scope also needs TOTP enrolled; marked after the password-only sign-in
+    // (auth-hardening-t286 covers enrollment and the code step).
+    await admin.query("UPDATE users SET two_factor_enabled = true WHERE id = $1", [users.platform.id]);
     const { resolvePlatformAccess } = await import("@/app/platform/platform-access");
     const { requireCmsScope } = await import("@/lib/cms-auth");
 

@@ -30,7 +30,8 @@ const SHARED_FILES = ["/favicon.ico", "/icon.svg"] as const;
  * so those pages land on the tenant host without another routing change.
  */
 const SURFACE_PREFIXES: Record<CmsSurface, readonly string[]> = {
-  platform: ["/platform"],
+  // T-286: the Super Admin's TOTP enrollment, outside `/platform`, whose layout requires it.
+  platform: ["/platform", "/verifikasi-dua-langkah"],
   tenant: [
     "/app",
     "/daftar",

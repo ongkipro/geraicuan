@@ -582,6 +582,7 @@ describe("Super Admin review (PR-61)", () => {
       [accountId, userId, await hashPassword(password)],
     );
     const address = (await admin.query("SELECT email FROM users WHERE id = $1", [userId])).rows[0].email;
+    await admin.query("UPDATE users SET two_factor_enabled = false WHERE id = $1", [userId]);
     const response = await auth.handler(new Request(`${origin}/api/auth/sign-in/email`, {
       body: JSON.stringify({ email: address, password }),
       headers: {
@@ -594,6 +595,9 @@ describe("Super Admin review (PR-61)", () => {
     }));
     const cookie = (response.headers.get("set-cookie") ?? "").match(/(better-auth\.session_token=[^;]+)/)?.[1];
     if (!cookie) throw new Error(`No session for ${userId}`);
+    // T-286: the platform opens only to a Super Admin with TOTP enrolled. Marked enrolled after
+    // the password-only sign-in, so the session exists; auth-hardening-t286 covers enrollment.
+    if (userId === superAdminId) await admin.query("UPDATE users SET two_factor_enabled = true WHERE id = $1", [userId]);
     return new Headers({ cookie, host });
   }
 

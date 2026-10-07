@@ -7,6 +7,7 @@ import {
   auditEvents,
   memberships,
   membershipRoles,
+  sessions,
   users,
 } from "@/db/schema";
 
@@ -175,6 +176,15 @@ async function lockGovernanceAttempt(
       hashtextextended(${'member-governance-tenant:' + context.tenantId}, 0)
     )
   `);
+}
+
+/**
+ * T-286 (L1): a deactivated or re-roled member signs in again, in the same transaction as the
+ * change. Better Auth's `sessions` has runtime grants and no row-level security (spec 05), so the
+ * tenant transaction deletes them itself. Sessions are per user, not per store.
+ */
+async function revokeMemberSessions(tx: TenantTransaction, userId: string) {
+  await tx.delete(sessions).where(eq(sessions.userId, userId));
 }
 
 async function lockTargetUser(tx: TenantTransaction, userId: string) {
@@ -604,6 +614,7 @@ export async function changeTenantMemberRole(
     });
   }
 
+  await revokeMemberSessions(tx, member.userId);
   const result = memberView({ ...updated, name: member.name, email: member.email });
   await appendAudit(tx, context, action, "SUCCESS", result.id, {
     attemptId: input.attemptId,
@@ -702,6 +713,7 @@ export async function deactivateTenantMember(
     });
   }
 
+  await revokeMemberSessions(tx, member.userId);
   const result = memberView({ ...updated, name: member.name, email: member.email });
   await appendAudit(tx, context, action, "SUCCESS", result.id, {
     attemptId: input.attemptId,

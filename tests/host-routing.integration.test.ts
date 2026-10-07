@@ -47,6 +47,7 @@ describe("host routing decisions (PR-58)", () => {
     [TENANT, "/api/auth/sign-in/email"],
     [PLATFORM, "/platform"],
     [PLATFORM, "/platform/tenant/abc"],
+    [PLATFORM, "/verifikasi-dua-langkah"],
     [PLATFORM, "/api/auth/sign-in/email"],
     [PLATFORM, "/icon.svg"],
     [TENANT, "/couriers/jne.svg"],
@@ -58,6 +59,7 @@ describe("host routing decisions (PR-58)", () => {
   it.each([
     [TENANT, "/platform"],
     [TENANT, "/platform/audit"],
+    [TENANT, "/verifikasi-dua-langkah"],
     [PLATFORM, "/app"],
     [PLATFORM, "/app/pengiriman/rts"],
     [PLATFORM, "/daftar"],

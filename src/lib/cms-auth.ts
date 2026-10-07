@@ -8,6 +8,7 @@ import {
   resolveCmsPrincipal,
   type CmsPrincipal,
 } from "@/lib/cms-principal";
+import { checkPlatformSession } from "@/lib/platform-session";
 import { TENANT_APPROVAL_REQUIRED_HREF } from "@/lib/tenant-approval";
 
 export { resolveCmsPrincipal, type CmsPrincipal } from "@/lib/cms-principal";
@@ -47,6 +48,12 @@ export async function requireCmsScope(
 
   if (!principal || principal.scope !== scope) {
     throw new CmsAuthorizationDeniedError("forbidden");
+  }
+  // T-286: the platform scope also needs an unexpired session with TOTP enrolled (the same
+  // check as `resolvePlatformAccess`).
+  if (principal.scope === "platform") {
+    const state = await checkPlatformSession(session);
+    if (state !== "ok") throw new CmsAuthorizationDeniedError(state === "expired" ? "anonymous" : "forbidden");
   }
   if (
     principal.scope === "tenant"

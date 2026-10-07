@@ -124,10 +124,13 @@ that also covers migrations `0048`–`0051`).
    docker run --rm -it --network coolify --env-file /root/geraicuan-superuser.env geraicuan-ops:<commit> \
      pnpm ops:bootstrap-super-admin -- --email <owner-email> --name "<owner name>"
    ```
-   Type the password twice at the prompt (not echoed; 8–128 characters). Expect
+   Type the password twice at the prompt (not echoed; 12–128 characters). Expect
    `Created Super Admin user <id> <email>.`; delete the env file. A second run
    refuses (`Refused: A Super Admin already exists.`). Record the date and user id
    (not the email) in `BUILD-LOG.md`.
+   Then sign in on the platform host: the first sign-in opens `/verifikasi-dua-langkah`
+   (T-286), which asks the password again, shows the authenticator setup key and
+   switches TOTP on after one valid code. Platform pages stay closed until then.
 
 ### 1. Before every deploy
 1. Release commit chosen; on it `pnpm tsc --noEmit`, `pnpm lint`,

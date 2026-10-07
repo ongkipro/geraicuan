@@ -512,6 +512,13 @@
       "when": 1790772414541,
       "tag": "0072_handover_audit_guard_tenant_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791307427227,
+      "tag": "0073_t286_auth_hardening",
+      "breakpoints": true
     }
   ]
 }

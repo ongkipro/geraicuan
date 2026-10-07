@@ -6,6 +6,7 @@ import { useRef, useState, useTransition, type FormEvent } from "react";
 import { AUTH_FIELD, AUTH_LABEL } from "@/app/login/_components/auth-shell";
 import { LOGIN_NOTICES, type LoginNotice } from "@/app/login/_components/login-notices";
 import { PasswordInput } from "@/app/login/_components/password-input";
+import { TotpCodeForm } from "@/app/login/_components/totp-code-form";
 import { tenantLandingAction } from "@/app/login/actions";
 import { resendVerificationEmail } from "@/app/verifikasi-email/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,11 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type LoginError = "credentials" | "rate-limited" | "unavailable" | "unverified";
+type LoginError = "credentials" | "rate-limited" | "two-factor-restart" | "unavailable" | "unverified";
 
 const ERRORS: Record<Exclude<LoginError, "unverified">, string> = {
   credentials: "Email atau kata sandi salah. Periksa kembali, lalu coba lagi.",
-  "rate-limited": "Terlalu banyak percobaan. Tunggu satu menit, lalu coba lagi.",
+  // T-286: a per-email limit (15 minutes) sits beside the per-IP one (1 minute).
+  "rate-limited": "Terlalu banyak percobaan. Tunggu beberapa menit, lalu coba lagi.",
+  "two-factor-restart": "Waktu verifikasi habis atau kode salah terlalu sering. Masuk lagi dengan email dan kata sandi.",
   unavailable: "Layanan masuk sedang tidak tersedia. Periksa koneksi internet, lalu coba lagi.",
 };
 
@@ -44,6 +47,8 @@ export function LoginForm({
   const [notice, setNotice] = useState(initialNotice);
   const [resendState, setResendState] = useState<"idle" | "limited" | "sent">("idle");
   const [resending, startResend] = useTransition();
+  // T-286: a Super Admin with TOTP enrolled gets a second step instead of a session.
+  const [step, setStep] = useState<"code" | "password">("password");
 
   function fillDemoCredentials() {
     if (!demoCredentials) return;
@@ -78,7 +83,15 @@ export function LoginForm({
         setPending(false);
         return;
       }
+      const body = (await response.json().catch(() => null)) as { twoFactorRedirect?: boolean } | null;
+      if (!tenant && body?.twoFactorRedirect) {
+        setPassword("");
+        setPending(false);
+        setStep("code");
+        return;
+      }
       // T-263: a tenant sign-in opens the role's landing (Operator: Cetak resi; Tenant Admin: Dasbor).
+      // T-286: a Super Admin without TOTP lands on `/platform`, whose guard opens the enrollment.
       window.location.assign(tenant ? await tenantLandingAction().catch(() => destination) : destination);
     } catch {
       setError("unavailable");
@@ -97,6 +110,21 @@ export function LoginForm({
 
   const currentNotice = notice ? LOGIN_NOTICES[notice] : null;
   const describedBy = [notice ? "login-notice" : "", error ? "login-error" : ""].filter(Boolean).join(" ") || undefined;
+
+  if (step === "code") {
+    return (
+      <TotpCodeForm
+        onExpired={() => {
+          setStep("password");
+          setError("two-factor-restart");
+        }}
+        onVerified={() => window.location.assign(destination)}
+        submitLabel="Verifikasi dan masuk"
+      >
+        <p role="status">Kata sandi benar. Buka aplikasi autentikator Anda, lalu ketik kode untuk <strong>{email}</strong>.</p>
+      </TotpCodeForm>
+    );
+  }
 
   return (
     <form aria-busy={pending} className="flex flex-col gap-5" method="post" onSubmit={signIn}>
