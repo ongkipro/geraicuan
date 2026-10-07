@@ -311,12 +311,19 @@ export function DestinationAreaPicker({
       return (
         <>
           {notice}
-          {provider.searched && provider.items.length === 0 ? (
-            <p className="px-3 py-4 text-sm text-muted-foreground" role="status">Area tidak ditemukan di Mengantar. Coba nama kecamatan lain.</p>
-          ) : (
+          {provider.items.length > 0 ? (
             <CommandGroup heading="Hasil Mengantar">
               {provider.items.map((option) => providerOptionItem(option, provider.query))}
             </CommandGroup>
+          ) : provider.searched ? (
+            <p className="px-3 py-4 text-sm text-muted-foreground" role="status">Area tidak ditemukan di Mengantar. Coba nama kecamatan lain.</p>
+          ) : (
+            // T-289 (QA M2): before the first answer arrives (the debounce) there is nothing to
+            // list; an empty "Hasil Mengantar" heading read as a broken search.
+            <p className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground" role="status">
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              Mencari di Mengantar…
+            </p>
           )}
           <CommandGroup>{backItem}</CommandGroup>
         </>

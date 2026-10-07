@@ -1,7 +1,7 @@
 import "server-only";
 
 import { parseContactCategory, type ContactCategory } from "@/lib/contact-category";
-import { characterClassError, normalizeFieldText, partyNameClass } from "@/lib/field-character-classes";
+import { characterClassError, normalizeFieldText, partyNameClass, requiredTextError } from "@/lib/field-character-classes";
 import { normalizePartyPhone } from "@/lib/shipment-draft";
 
 const MAX_ADDRESS_LABEL_LENGTH = 60;
@@ -48,14 +48,16 @@ function readText(formData: FormData, field: string) {
  */
 export function contactIdentityErrors(name: string, rawPhone: string, roles: { isSender: boolean }) {
   const errors: Partial<Record<"contactName" | "contactPhone", string>> = {};
-  if (!name || name.length > MAX_NAME_LENGTH) {
-    errors.contactName = "Nama wajib diisi dan maksimal 120 karakter.";
+  const nameRequired = requiredTextError("Nama kontak", name, MAX_NAME_LENGTH);
+  if (nameRequired) {
+    errors.contactName = nameRequired;
   } else {
     const message = characterClassError(partyNameClass(roles), "Nama kontak", name);
     if (message) errors.contactName = message;
   }
   const phoneClass = characterClassError("PHONE", "Nomor telepon kontak", rawPhone);
-  if (phoneClass) errors.contactPhone = phoneClass;
+  if (!rawPhone) errors.contactPhone = "Nomor telepon kontak wajib diisi.";
+  else if (phoneClass) errors.contactPhone = phoneClass;
   else if (!normalizePartyPhone(rawPhone)) errors.contactPhone = "Nomor telepon kontak tidak valid.";
   return errors;
 }
@@ -63,14 +65,16 @@ export function contactIdentityErrors(name: string, rawPhone: string, roles: { i
 /** T-196: address label and address text checks shared by contact create and address edits. */
 export function contactAddressErrors(addressLabel: string, address: string) {
   const errors: Partial<Record<"addressLabel" | "addressText", string>> = {};
-  if (!addressLabel || addressLabel.length > MAX_ADDRESS_LABEL_LENGTH) {
-    errors.addressLabel = "Label alamat wajib diisi dan maksimal 60 karakter.";
+  const labelRequired = requiredTextError("Label alamat", addressLabel, MAX_ADDRESS_LABEL_LENGTH);
+  if (labelRequired) {
+    errors.addressLabel = labelRequired;
   } else {
     const message = characterClassError("BUSINESS_NAME", "Label alamat", addressLabel);
     if (message) errors.addressLabel = message;
   }
-  if (!address || address.length > MAX_ADDRESS_LENGTH) {
-    errors.addressText = "Alamat wajib diisi dan maksimal 500 karakter.";
+  const addressRequired = requiredTextError("Alamat", address, MAX_ADDRESS_LENGTH);
+  if (addressRequired) {
+    errors.addressText = addressRequired;
   } else {
     const message = characterClassError("ADDRESS", "Alamat", address);
     if (message) errors.addressText = message;
@@ -99,9 +103,8 @@ export function validateContactDirectory(formData: FormData): ContactDirectoryVa
   if ((areaId && !areaLabel) || (!areaId && areaLabel)) {
     errors.areaLabel = "Cari dan pilih ulang area tujuan, atau kosongkan pilihan area.";
   } else {
-    if (areaId.length > MAX_AREA_LENGTH) errors.areaId = "Pilih area tujuan yang valid.";
-    if (areaLabel.length > MAX_AREA_LENGTH) {
-      errors.areaLabel = "Nama area wajib diisi dan maksimal 160 karakter.";
+    if (areaId.length > MAX_AREA_LENGTH || areaLabel.length > MAX_AREA_LENGTH) {
+      errors.areaLabel = "Cari dan pilih ulang area tujuan, atau kosongkan pilihan area.";
     }
   }
 

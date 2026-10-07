@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
  * T-267 "Batalkan penandaan": both tenant roles, only while Mengantar has not reported the pickup
  * scan (the page renders it only then; the server checks again under a lock). Recorded as an
  * UNDONE event — the handover stays in the history, the parcel returns to Siap diserahkan.
+ * L5: stays mounted after the undo (`canUndo` false) so its outcome line is still shown.
  */
-export function HandoverUndoButton({ publicReference, shipmentId }: { publicReference: string; shipmentId: string }) {
+export function HandoverUndoButton({ canUndo, publicReference, shipmentId }: { canUndo: boolean; publicReference: string; shipmentId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
@@ -36,9 +37,10 @@ export function HandoverUndoButton({ publicReference, shipmentId }: { publicRefe
     }
   });
 
+  if (!canUndo && !message) return null;
   return (
     <span className="flex flex-col items-start gap-1">
-      <Dialog onOpenChange={setOpen} open={open}>
+      {canUndo ? <Dialog onOpenChange={setOpen} open={open}>
         <DialogTrigger asChild>
           <Button className="max-md:h-11" size="sm" type="button" variant="outline">
             <Undo2 aria-hidden="true" />
@@ -59,7 +61,7 @@ export function HandoverUndoButton({ publicReference, shipmentId }: { publicRefe
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> : null}
       {message ? <span className={message.error ? "text-xs text-destructive" : "text-xs text-muted-foreground"} role={message.error ? "alert" : "status"}>{message.text}</span> : null}
     </span>
   );

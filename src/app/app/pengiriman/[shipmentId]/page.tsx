@@ -387,7 +387,6 @@ function packageItems(view: ShipmentDetailView, deliveryEstimate: string | null)
               <span className="font-semibold">{handoverRecordText(record)}</span>
               {record.note ? <span className="text-xs font-normal wrap-anywhere text-muted-foreground">Catatan: {record.note}</span> : null}
               {draft?.handoverType ? <span className="text-xs font-normal text-muted-foreground">Rencana: {handover}</span> : null}
-              {undo ? <HandoverUndoButton publicReference={detail.publicReference} shipmentId={detail.shipmentId} /> : null}
             </span>
           ) : (
             <>
@@ -396,6 +395,8 @@ function packageItems(view: ShipmentDetailView, deliveryEstimate: string | null)
               {provider?.awb ? <span className="text-xs font-normal text-muted-foreground" data-slot="handover-record">Belum ditandai diserahkan ke kurir</span> : null}
             </>
           )}
+          {/* L5: outside the branch above, so its outcome line survives the refresh that removes the record. */}
+          {record || provider?.awb ? <HandoverUndoButton canUndo={undo} publicReference={detail.publicReference} shipmentId={detail.shipmentId} /> : null}
         </span>
       ),
       wide: true,

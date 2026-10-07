@@ -391,6 +391,19 @@ describe("Titik pickup", () => {
     expect(html).toContain("Belum ada titik pickup");
     expect(html).toContain("belum dapat membuat kiriman");
   });
+
+  it("says a platform-default outlet only gets the shared platform pickup, and how to pick up at the outlet (T-289 QA H2)", () => {
+    const shared = renderToStaticMarkup(createElement(PickupPoints, {
+      connectionSource: "platform_default", outletId: outlet.id, outletName: outlet.name, points,
+    }));
+    expect(shared).toContain("hanya alamat pickup platform");
+    expect(shared).toContain("Koneksi Mengantar");
+    const own = renderToStaticMarkup(createElement(PickupPoints, {
+      connectionSource: "private", outletId: outlet.id, outletName: outlet.name, points,
+    }));
+    expect(own).toContain("Daftar diambil dari akun Mengantar milik outlet.");
+    expect(own).not.toContain("alamat pickup platform");
+  });
 });
 
 describe("Anggota & akses", () => {

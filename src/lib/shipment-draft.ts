@@ -1,6 +1,6 @@
 import "server-only";
 
-import { characterClassError, normalizeFieldText, partyNameClass } from "@/lib/field-character-classes";
+import { characterClassError, normalizeFieldText, partyNameClass, requiredTextError } from "@/lib/field-character-classes";
 import { isPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
 import { checkPickupSchedule, isHandoverType, isPickupVehicle, normalizePartyPhone, type HandoverType, type PickupVehicle } from "@/lib/shipment-draft-logic";
 
@@ -191,19 +191,21 @@ export function validateShipmentDraft(formData: FormData, now: Date = new Date()
   if (!raw.outletId || !UUID_PATTERN.test(raw.outletId)) {
     errors.outletId = "Pilih outlet asal.";
   }
-  if (
+  // One picker sets both the id and the label, so a bad pick is one message, not two.
+  if (!raw.destinationAreaId && !raw.destinationAreaLabel) {
+    errors.destinationAreaId = "Area tujuan wajib dipilih.";
+  } else if (
     !raw.destinationAreaId
     || raw.destinationAreaId.length > MAX_AREA_ID_LENGTH
     || !PROVIDER_AREA_ID_PATTERN.test(raw.destinationAreaId)
   ) {
     errors.destinationAreaId = "Pilih area tujuan yang valid.";
-  }
-  if (
+  } else if (
     !raw.destinationAreaLabel
     || raw.destinationAreaLabel.length > MAX_AREA_LABEL_LENGTH
     || !SAFE_AREA_LABEL_PATTERN.test(raw.destinationAreaLabel)
   ) {
-    errors.destinationAreaLabel = "Nama area tujuan wajib diisi dan maksimal 160 karakter.";
+    errors.destinationAreaLabel = "Cari dan pilih ulang area tujuan.";
   }
 
   // T-196: every field also has a character class. The class message wins over
@@ -220,16 +222,18 @@ export function validateShipmentDraft(formData: FormData, now: Date = new Date()
 
   // A sender may be a store ("Gerai 88"); a recipient is a person.
   for (const [field, label, isSender] of [["senderName", "Nama pengirim", true], ["recipientName", "Nama penerima", false]] as const) {
-    if (!raw[field] || raw[field].length > MAX_NAME_LENGTH) {
-      errors[field] = "Nama wajib diisi dan maksimal 120 karakter.";
+    const required = requiredTextError(label, raw[field], MAX_NAME_LENGTH);
+    if (required) {
+      errors[field] = required;
     } else {
       classError(field, partyNameClass({ isSender }), label);
     }
   }
 
   for (const [field, label] of [["senderAddress", "Alamat pengirim"], ["recipientAddress", "Alamat penerima"]] as const) {
-    if (!raw[field] || raw[field].length > MAX_ADDRESS_LENGTH) {
-      errors[field] = "Alamat wajib diisi dan maksimal 500 karakter.";
+    const required = requiredTextError(label, raw[field], MAX_ADDRESS_LENGTH);
+    if (required) {
+      errors[field] = required;
     } else {
       classError(field, "ADDRESS", label);
     }
@@ -237,15 +241,20 @@ export function validateShipmentDraft(formData: FormData, now: Date = new Date()
 
   const senderPhone = normalizePartyPhone(raw.senderPhone);
   const recipientPhone = normalizePartyPhone(raw.recipientPhone);
-  if (!classError("senderPhone", "PHONE", "Nomor telepon pengirim") && !senderPhone) {
+  if (!raw.senderPhone) {
+    errors.senderPhone = "Nomor telepon pengirim wajib diisi.";
+  } else if (!classError("senderPhone", "PHONE", "Nomor telepon pengirim") && !senderPhone) {
     errors.senderPhone = "Nomor telepon pengirim tidak valid.";
   }
-  if (!classError("recipientPhone", "PHONE", "Nomor telepon penerima") && !recipientPhone) {
+  if (!raw.recipientPhone) {
+    errors.recipientPhone = "Nomor telepon penerima wajib diisi.";
+  } else if (!classError("recipientPhone", "PHONE", "Nomor telepon penerima") && !recipientPhone) {
     errors.recipientPhone = "Nomor telepon penerima tidak valid.";
   }
 
-  if (!raw.packageContent || raw.packageContent.length > MAX_CONTENT_LENGTH) {
-    errors.packageContent = "Isi paket wajib diisi dan maksimal 240 karakter.";
+  const contentRequired = requiredTextError("Isi paket", raw.packageContent, MAX_CONTENT_LENGTH);
+  if (contentRequired) {
+    errors.packageContent = contentRequired;
   } else {
     classError("packageContent", "FREE_TEXT", "Isi paket");
   }

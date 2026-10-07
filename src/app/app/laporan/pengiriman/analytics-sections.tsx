@@ -628,7 +628,7 @@ export function CourierIssueRateCard({ points }: { points: CourierPerformancePoi
                 <TableRow>
                   <TableHead>Kurir</TableHead>
                   <TableHead className="w-1/2 text-right" data-metric-id="SHP-ISSUE-RATE">Tingkat penerbitan</TableHead>
-                  <TableHead className={numericColumn} data-metric-id="SHP-ISSUED">Resi diterbitkan</TableHead>
+                  <TableHead className={cn(numeric, "w-36 max-lg:w-32")} data-metric-id="SHP-ISSUED">Resi diterbitkan</TableHead>
                   <TableHead className={numericColumn} data-metric-id="SHP-OUTCOMES">Dijawab</TableHead>
                 </TableRow>
               </TableHeader>

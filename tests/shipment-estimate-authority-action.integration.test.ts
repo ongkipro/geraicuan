@@ -160,3 +160,32 @@ describe("shipment estimate destination authority", () => {
     );
   });
 });
+
+describe("T-289 (QA H1): a platform-default draft whose pickup is not the platform pickup", () => {
+  const platform = {
+    ...currentCredentials,
+    authority: { ...currentCredentials.authority, connectionUpdatedAt: null, source: "platform_default" as const },
+    originAreaId: "platform-origin",
+    source: "platform_default" as const,
+  };
+
+  it("is refused before any request with a message naming what to change", async () => {
+    fixture.resolveCredentials.mockReset().mockResolvedValue(platform);
+    const result = await loadShipmentEstimate({}, estimateForm());
+    expect(result.error).toContain("Titik pickup");
+    expect(fixture.fetchEstimate).not.toHaveBeenCalled();
+    expect(fixture.append).not.toHaveBeenCalled();
+  });
+
+  it("still estimates when the draft leaves from the platform origin", async () => {
+    fixture.resolveCredentials.mockReset().mockResolvedValue({ ...platform, originAreaId: "origin-area" });
+    await loadShipmentEstimate({}, estimateForm());
+    expect(fixture.fetchEstimate).toHaveBeenCalledOnce();
+  });
+
+  it("does not apply to a private account, whose own pickup points imply their own origins", async () => {
+    fixture.resolveCredentials.mockReset().mockResolvedValue({ ...currentCredentials, originAreaId: "another-origin" });
+    await loadShipmentEstimate({}, estimateForm());
+    expect(fixture.fetchEstimate).toHaveBeenCalledOnce();
+  });
+});

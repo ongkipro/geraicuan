@@ -267,7 +267,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
       { label: "Berat & jumlah", value: rail.packageLabel },
     ],
     source: "Estimasi",
-    total: { amountIdr: null, label: "Total", note: "Menunggu tarif Mengantar" },
+    total: { amountIdr: null, label: "Total", note: "Tarif belum tersedia" },
   };
   return (
     <>
@@ -286,7 +286,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
             actions={(
               <>
                 <Button className="w-full" disabled size="lg">Konfirmasi &amp; terbitkan resi</Button>
-                <p className="text-center text-xs text-muted-foreground">Menunggu tarif Mengantar.</p>
+                <p className="text-center text-xs text-muted-foreground">Tarif belum tersedia.</p>
                 <Button asChild className="w-full" variant="outline"><Link href={detailHref}>Simpan draf</Link></Button>
               </>
             )}
@@ -297,7 +297,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
       </div>
       <MobileActionBar
         actions={<Button asChild size="lg" variant="outline"><Link href={detailHref}>Simpan draf</Link></Button>}
-        caption="Menunggu tarif Mengantar"
+        caption="Tarif belum tersedia"
         summary={estimateRail}
         total={null}
       />

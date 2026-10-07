@@ -21,10 +21,30 @@ export type ShipmentReportColumn = {
   value: (row: ShipmentReportRow) => string | number | null;
 };
 
+/**
+ * `*_wib` CSV cells are Asia/Jakarta wall-clock time ("2026-10-07 08:40:00"),
+ * not UTC ISO strings a spreadsheet would show seven hours off. `sv-SE` is the
+ * locale whose date-time format is already `YYYY-MM-DD HH:mm:ss`.
+ */
+const wibCsvFormatter = new Intl.DateTimeFormat("sv-SE", {
+  day: "2-digit",
+  hour: "2-digit",
+  hourCycle: "h23",
+  minute: "2-digit",
+  month: "2-digit",
+  second: "2-digit",
+  timeZone: "Asia/Jakarta",
+  year: "numeric",
+});
+
+export function formatWibCsvTimestamp(instant: Date) {
+  return wibCsvFormatter.format(instant);
+}
+
 export const SHIPMENT_REPORT_COLUMNS = [
   { csvHeader: "nomor_kiriman", label: "Nomor kiriman", metricId: "RPT-SHP-REFERENCE", value: (row) => row.publicReference },
-  { csvHeader: "dibuat_wib", label: "Dibuat", metricId: "RPT-SHP-CREATED-AT", value: (row) => row.createdAt.toISOString() },
-  { csvHeader: "resi_terbit_wib", label: "Resi terbit", metricId: "RPT-SHP-ISSUED-AT", value: (row) => row.issuedAt?.toISOString() ?? null },
+  { csvHeader: "dibuat_wib", label: "Dibuat", metricId: "RPT-SHP-CREATED-AT", value: (row) => formatWibCsvTimestamp(row.createdAt) },
+  { csvHeader: "resi_terbit_wib", label: "Resi terbit", metricId: "RPT-SHP-ISSUED-AT", value: (row) => row.issuedAt ? formatWibCsvTimestamp(row.issuedAt) : null },
   { csvHeader: "area_penerima", label: "Area penerima", metricId: "RPT-SHP-DESTINATION-AREA", value: (row) => row.destinationAreaLabel },
   { csvHeader: "kurir", label: "Kurir", metricId: "RPT-SHP-COURIER", value: (row) => row.courier },
   { csvHeader: "layanan", label: "Layanan", metricId: "RPT-SHP-SERVICE", value: (row) => row.providerService },

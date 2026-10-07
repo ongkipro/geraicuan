@@ -324,7 +324,7 @@ export function PickupPoints({ connectionSource, optionsFixture, outletId, outle
             optionsFixture={optionsFixture}
             outletId={outletId}
             selection={selection}
-            sourceHelp={connectionSource === "private" ? "Daftar diambil dari akun Mengantar milik outlet." : "Daftar diambil dari koneksi bawaan GeraiCUAN."}
+            sourceHelp={connectionSource === "private" ? "Daftar diambil dari akun Mengantar milik outlet." : "Outlet ini memakai koneksi bawaan GeraiCUAN (akun Mengantar bersama), jadi yang tersedia hanya alamat pickup platform: kurir menjemput di alamat itu, bukan di outlet. Agar kurir menjemput di outlet sendiri, hubungkan akun Mengantar gerai di Pengaturan › Koneksi Mengantar."}
           />
           <Field>
             <FieldLabel htmlFor="pickup-origin">Area asal</FieldLabel>

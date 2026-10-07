@@ -4,6 +4,7 @@ import { Lock } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { saveShipmentPrefix, type ShipmentPrefixActionState } from "@/app/app/pengaturan/actions";
+import { useNewestSettingsResult } from "@/app/app/pengaturan/_components/newest-result";
 import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -46,6 +47,8 @@ export function ShipmentPrefixCard({
   const [confirming, setConfirming] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
   const [seenToken, setSeenToken] = useState(state.resultToken);
+  // L6: its answer also retires an older success alert on the other Pengaturan cards.
+  useNewestSettingsResult("prefix", state.resultToken);
   const normalized = normalizeShipmentPrefixInput(value);
 
   // The confirmation stays open (showing progress) until the server answers, then closes.

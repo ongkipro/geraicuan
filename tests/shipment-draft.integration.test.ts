@@ -634,6 +634,31 @@ describe("tenant shipment drafts", () => {
     expect(indonesian.ok).toBe(true);
   });
 
+  it("gives an empty field one 'wajib diisi' message and names the limit only when too long (L2)", () => {
+    const empty = validateShipmentDraft(submission({
+      destinationAreaId: "",
+      destinationAreaLabel: "",
+      packageContent: "",
+      recipientAddress: "",
+      recipientName: "",
+      recipientPhone: "",
+    }));
+    expect(empty.ok).toBe(false);
+    const errors = empty.ok ? {} : empty.errors;
+    // One area picker, one message; no second line for the label it fills at the same time.
+    expect(errors).toMatchObject({
+      destinationAreaId: "Area tujuan wajib dipilih.",
+      packageContent: "Isi paket wajib diisi.",
+      recipientAddress: "Alamat penerima wajib diisi.",
+      recipientName: "Nama penerima wajib diisi.",
+      recipientPhone: "Nomor telepon penerima wajib diisi.",
+    });
+    expect(errors).not.toHaveProperty("destinationAreaLabel");
+    expect(Object.values(errors).join(" ")).not.toMatch(/maksimal/);
+    const long = validateShipmentDraft(submission({ recipientName: "A".repeat(121) }));
+    expect(long.ok ? {} : long.errors).toMatchObject({ recipientName: "Nama penerima maksimal 120 karakter." });
+  });
+
   it("flags a recipient phone reused within the duplicate window until confirmed", async () => {
     const recipientPhone = "+62 813-0000-0001";
     const priorSubmissionId = randomUUID();

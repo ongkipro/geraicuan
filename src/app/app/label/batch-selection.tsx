@@ -326,7 +326,7 @@ export function BatchPrintDialog({ defaultSize = DEFAULT_LABEL_SIZE }: { default
         <DialogTrigger asChild>
           <Button className="max-lg:h-11" disabled={count === 0 || overCap} type="button" variant={count > 0 ? "default" : "outline"}>
             <Printer aria-hidden="true" className="max-[379px]:hidden" />
-            <span>Cetak terpilih{count > 0 ? <span className="tabular-nums max-lg:hidden"> ({count})</span> : null}</span>
+            <span>Cetak terpilih{count > 0 ? <span className="tabular-nums"> ({count})</span> : null}</span>
           </Button>
         </DialogTrigger>
         <DialogContent className="gap-6 p-6 sm:max-w-lg">

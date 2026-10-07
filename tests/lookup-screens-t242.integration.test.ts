@@ -162,11 +162,16 @@ describe("Cek resi (T-242)", () => {
     expect(nonCod).not.toContain("Salin nomor resi");
   });
 
-  it("shows the idle placeholder, and keeps it for an invalid key with the inline error", () => {
+  it("shows the idle placeholder; an invalid key replaces it with its own state and the inline error (L3)", () => {
     expect(render(createElement(TrackingLookup, {}))).toContain("Perjalanan paket muncul di sini");
-    const invalid = render(createElement(TrackingLookup, { initialState: { kind: "invalid", query: "??" } }));
+    const invalid = render(createElement(TrackingLookup, { initialState: { kind: "invalid", query: "@@@" } }));
     expect(invalid).toContain('aria-invalid="true"');
-    expect(invalid).toContain("Masukkan nomor kiriman (contoh GC-10013)");
+    expect(invalid).toContain("Format nomor tidak dikenali.");
+    expect(invalid).toContain("Nomor tidak dikenali");
+    expect(invalid).not.toContain("Perjalanan paket muncul di sini");
     expect(filledPrimaries(invalid)).toBe(1);
+    const empty = render(createElement(TrackingLookup, { initialState: { kind: "invalid", query: "" } }));
+    expect(empty).toContain("wajib diisi");
+    expect(empty).toContain("Perjalanan paket muncul di sini");
   });
 });

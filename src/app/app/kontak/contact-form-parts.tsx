@@ -15,12 +15,12 @@ export function FieldMessage({ error, id }: { error?: string; id: string }) {
 }
 
 /** Spec 10 §4.11: an error summary at the top links to each invalid field. */
-export const ErrorSummary = forwardRef<HTMLDivElement, { errors: Record<string, string | undefined>; targets?: Record<string, string>; title: string }>(
-  function ErrorSummary({ errors, targets = {}, title }, ref) {
+export const ErrorSummary = forwardRef<HTMLDivElement, { errors: Record<string, string | undefined>; id?: string; targets?: Record<string, string>; title: string }>(
+  function ErrorSummary({ errors, id, targets = {}, title }, ref) {
     const entries = Object.entries(errors).filter((entry): entry is [string, string] => Boolean(entry[1]));
     if (entries.length === 0) return null;
     return (
-      <Alert ref={ref} role="alert" tabIndex={-1} variant="destructive">
+      <Alert id={id} ref={ref} role="alert" tabIndex={-1} variant="destructive">
         <CircleAlert aria-hidden="true" />
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription>

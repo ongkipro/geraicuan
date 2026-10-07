@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { AuthLink, AuthShell } from "@/app/login/_components/auth-shell";
 import { LoginForm } from "@/app/login/_components/login-form";
 import { demoPassword, resolveLoginNotice } from "@/app/login/_components/login-notices";
+import { signedInDestination } from "@/app/login/_components/signed-in-destination";
 import { resolveHostRouting } from "@/lib/auth-config";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Masuk" };
@@ -13,6 +15,8 @@ const demo = demoPassword(process.env);
 const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
 
 export default async function TenantLoginPage({ searchParams }: PageProps<"/login/tenant">) {
+  const signedIn = await signedInDestination("tenant");
+  if (signedIn) redirect(signedIn);
   const initialNotice = resolveLoginNotice("tenant", await searchParams);
   return (
     <AuthShell

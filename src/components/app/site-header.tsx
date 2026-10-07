@@ -3,7 +3,7 @@
 import { Menu, PanelLeft, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent, type RefObject } from "react";
 
 import { NAV_ICONS } from "@/components/app/nav-icons";
 import { useShellNavigation, type ShellScope } from "@/components/app/app-sidebar";
@@ -85,6 +85,12 @@ export function SiteHeader({
   title: string;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  // M8: the dialog has no Radix trigger, so remember what opened it and give focus back on close.
+  const searchReturn = useRef<HTMLElement | null>(null);
+  const openSearch = (event: MouseEvent<HTMLElement>) => {
+    searchReturn.current = event.currentTarget;
+    setSearchOpen(true);
+  };
   const stamp = useWibStamp();
   const { toggleSidebar } = useSidebar();
   const home = scope.kind === "tenant" ? "/app" : "/platform";
@@ -94,7 +100,10 @@ export function SiteHeader({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        setSearchOpen((open) => !open);
+        setSearchOpen((open) => {
+          if (!open) searchReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          return !open;
+        });
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -149,7 +158,7 @@ export function SiteHeader({
       <Button
         aria-keyshortcuts="Meta+K Control+K"
         className="w-64 justify-start border-transparent bg-card px-3 font-normal text-muted-foreground hover:bg-accent hover:text-foreground max-sm:hidden"
-        onClick={() => setSearchOpen(true)}
+        onClick={openSearch}
         type="button"
         variant="outline"
       >
@@ -158,13 +167,13 @@ export function SiteHeader({
         {/* R6-X (critique #12, WCAG 2.5.3): no aria-label, so the name is the visible text and shortcut. */}
         <kbd className="ml-auto rounded border border-border px-1.5 font-mono text-xs text-muted-foreground">⌘K</kbd>
       </Button>
-      <Button aria-label="Cari halaman" className={`sm:hidden ${onPrimary}`} onClick={() => setSearchOpen(true)} size="icon" type="button" variant="ghost">
+      <Button aria-label="Cari halaman" className={`sm:hidden ${onPrimary}`} onClick={openSearch} size="icon" type="button" variant="ghost">
         <Search aria-hidden="true" className="size-5" />
       </Button>
       <time className="shrink-0 text-xs whitespace-nowrap text-primary-foreground/85 max-md:hidden" suppressHydrationWarning>
         {stamp}
       </time>
-      <PageSearch onOpenChange={setSearchOpen} open={searchOpen} scope={scope} />
+      <PageSearch onOpenChange={setSearchOpen} open={searchOpen} returnFocus={searchReturn} scope={scope} />
     </header>
   );
 }
@@ -172,10 +181,12 @@ export function SiteHeader({
 function PageSearch({
   onOpenChange,
   open,
+  returnFocus,
   scope,
 }: {
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  returnFocus: RefObject<HTMLElement | null>;
   scope: ShellScope;
 }) {
   const router = useRouter();
@@ -192,6 +203,12 @@ function PageSearch({
   return (
     <CommandDialog
       description="Ketik nama halaman lalu tekan Enter."
+      onCloseAutoFocus={(event) => {
+        const trigger = returnFocus.current;
+        if (!trigger?.isConnected) return;
+        event.preventDefault();
+        trigger.focus();
+      }}
       onOpenChange={onOpenChange}
       open={open}
       title="Cari halaman"

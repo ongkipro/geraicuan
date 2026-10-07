@@ -152,8 +152,8 @@ Two read-only Tenant Admin records. Both are tenant- and outlet-scoped in SQL (t
 | ID | Column | Definition (raw field unless stated) |
 |---|---|---|
 | RPT-SHP-REFERENCE | Nomor kiriman | `shipments.public_reference`, with `outlets.name` below it |
-| RPT-SHP-CREATED-AT | Dibuat | `shipments.created_at`; the report's own period basis |
-| RPT-SHP-ISSUED-AT | Resi terbit | `provider_order_snapshots.resolved_at`; empty until the provider settles the order |
+| RPT-SHP-CREATED-AT | Dibuat | `shipments.created_at`; the report's own period basis. CSV `dibuat_wib` is Asia/Jakarta wall-clock time `YYYY-MM-DD HH:mm:ss` |
+| RPT-SHP-ISSUED-AT | Resi terbit | `provider_order_snapshots.resolved_at`; empty until the provider settles the order. CSV `resi_terbit_wib` is Asia/Jakarta wall-clock time `YYYY-MM-DD HH:mm:ss` |
 | RPT-SHP-DESTINATION-AREA | Area penerima | `shipment_drafts.destination_area_label` — area only; no recipient name, phone or street address reaches the page or the export |
 | RPT-SHP-COURIER | Kurir | `provider_batches.courier`; "—" for a shipment that never reached a batch |
 | RPT-SHP-SERVICE | Layanan | `provider_order_snapshots.provider_service` |

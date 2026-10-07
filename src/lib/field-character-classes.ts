@@ -138,6 +138,12 @@ export function characterClassError(kind: CharacterClass, label: string, value: 
   return validate(kind, value) ? null : `${label} ${ERROR_SUFFIX[kind]}`;
 }
 
+/** `null` when `value` is present and within `max`; otherwise one message: empty says "wajib diisi", only a too-long value names the limit. */
+export function requiredTextError(label: string, value: string, max: number) {
+  if (!value) return `${label} wajib diisi.`;
+  return value.length > max ? `${label} maksimal ${max} karakter.` : null;
+}
+
 /** Text classes turn line breaks and tabs, and every other space separator, into a plain space. */
 function normalizeInsertedText(kind: CharacterClass, inserted: string) {
   return TEXT_CLASSES.has(kind) ? normalizeSpaceSeparators(inserted.replace(LINE_BREAKS, " ")) : inserted;

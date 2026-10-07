@@ -43,7 +43,7 @@ export function ContactCreateForm({ canManageSettings, outlets, role }: {
   return (
     <form action={action} aria-busy={pending} className="flex flex-col gap-6" noValidate>
       <input name="peran" type="hidden" value={role} />
-      <ErrorSummary errors={errors} ref={summaryRef} targets={{ roles: "roles" }} title="Periksa isian kontak" />
+      <ErrorSummary errors={errors} id="contact-create-errors" ref={summaryRef} targets={{ roles: "roles" }} title="Periksa isian kontak" />
 
       <DataCard title="Kontak">
         <div className="grid gap-x-4 md:grid-cols-2">

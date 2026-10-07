@@ -110,7 +110,7 @@ export function AuthShell({
     <div className={cn("flex w-full flex-col gap-6", wide ? "max-w-2xl" : "max-w-md")}>
       <div className={cn("flex items-center justify-between gap-3", visual && "lg:justify-end")}>
         <Link
-          className={cn("flex items-center gap-3 rounded-lg", platform ? "text-background" : "text-foreground", visual && "lg:hidden")}
+          className={cn("flex min-h-11 items-center gap-3 rounded-lg", platform ? "text-background" : "text-foreground", visual && "lg:hidden")}
           href={homeHref ?? "/"}
         >
           {/* The owner's logo: white on the dark platform ground, full colour on the light gerai ground. */}

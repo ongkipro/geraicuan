@@ -239,6 +239,9 @@ describe("T-257 platform alignment", () => {
 
   it("says how long ago on the page's clock, then leaves it to the date", () => {
     expect(formatAgo(new Date(now.getTime() - 30_000), now)).toBe("baru saja");
+    // T-289 (QA L13): seconds of skew still read as just now; a future time falls back to the date.
+    expect(formatAgo(new Date(now.getTime() + 30_000), now)).toBe("baru saja");
+    expect(formatAgo(new Date(now.getTime() + 2 * 60 * 60_000), now)).toBeNull();
     expect(formatAgo(new Date(now.getTime() - 59 * 60_000), now)).toBe("59 menit lalu");
     expect(formatAgo(new Date(now.getTime() - 60 * 60_000), now)).toBe("1 jam lalu");
     // One wording app-wide: past 24 hours the WIB calendar day decides, as on Info terbaru.

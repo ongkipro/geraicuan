@@ -41,6 +41,17 @@ export function AppShell({
   const [open, setOpen] = useState(true);
   const focused = FOCUSED_ROUTES.has(usePathname());
 
+  // M9: a page restored from the back/forward cache after Keluar would show the previous user's
+  // gerai data without asking the server. `no-store` (next.config.ts) keeps most browsers from
+  // caching it; for one that restores it anyway, reload so the layout re-checks the session.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   useEffect(() => {
     const query = window.matchMedia(FULL_SIDEBAR_QUERY);
     const sync = () => setOpen(query.matches);

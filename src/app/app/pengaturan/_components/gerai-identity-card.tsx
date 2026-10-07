@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { saveTenantContact, type TenantContactActionState } from "@/app/app/pengaturan/actions";
+import { useNewestSettingsResult } from "@/app/app/pengaturan/_components/newest-result";
 import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export function GeraiIdentityCard({ name, whatsapp }: { name: string; whatsapp: 
   const resultRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState(whatsapp ?? "");
   const [seenToken, setSeenToken] = useState(state.resultToken);
+  const newest = useNewestSettingsResult("identity", state.resultToken);
 
   // A saved number comes back normalised (0812…); show that form in the field.
   if (state.resultToken !== seenToken) {
@@ -48,7 +50,7 @@ export function GeraiIdentityCard({ name, whatsapp }: { name: string; whatsapp: 
             <AlertTitle>WhatsApp gerai belum tersimpan</AlertTitle>
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
-        ) : state.savedWhatsapp ? (
+        ) : state.savedWhatsapp && newest ? (
           <Alert className="outline-none" ref={resultRef} role="status" tabIndex={-1}>
             <AlertTitle>WhatsApp gerai disimpan</AlertTitle>
             <AlertDescription>Dipakai di invoice dan kiriman berikutnya.</AlertDescription>

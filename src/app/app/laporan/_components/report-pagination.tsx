@@ -14,7 +14,7 @@ export function pageWindow(page: number, pageSize: number, total: number) {
 
 /**
  * The card footer of a report list (spec 10 §4.4): "Menampilkan 1–50 dari 134 kiriman" and
- * Sebelumnya / Selanjutnya as outline links. An edge that does not exist is a disabled button,
+ * Sebelumnya / Berikutnya as outline links. An edge that does not exist is a disabled button,
  * never a dead link.
  */
 export function ReportPagination({
@@ -55,10 +55,10 @@ export function ReportPagination({
           </span>
           {page < totalPages ? (
             <Button asChild variant="outline">
-              <Link href={hrefForPage(page + 1)} rel="next">Selanjutnya<ChevronRight aria-hidden="true" /></Link>
+              <Link href={hrefForPage(page + 1)} rel="next">Berikutnya<ChevronRight aria-hidden="true" /></Link>
             </Button>
           ) : (
-            <Button disabled type="button" variant="outline">Selanjutnya<ChevronRight aria-hidden="true" /></Button>
+            <Button disabled type="button" variant="outline">Berikutnya<ChevronRight aria-hidden="true" /></Button>
           )}
         </div>
       ) : null}

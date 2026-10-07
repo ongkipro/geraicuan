@@ -239,7 +239,8 @@ export function HandoverNotice() {
   );
 }
 
-type ScanMessage = { id: number; text: string; tone: "success" | "info" | "danger" };
+/** `number`: the parcel an "added" outcome put in the selection; the line goes once it leaves it (L4). */
+type ScanMessage = { id: number; number?: number; text: string; tone: "success" | "info" | "danger" };
 
 const SCAN_TONE = {
   danger: { className: "text-destructive", icon: CircleAlert },
@@ -309,7 +310,7 @@ export function HandoverScanField() {
           chosen.current.add(outcome.number);
           add(outcome.number, result.awb, result.handoverType);
           const onPage = revealRow(outcome.number);
-          setMessage({ text: `${outcome.text}${onPage ? "" : " (dari halaman lain)"}`, tone: "success" });
+          setMessage({ number: outcome.number, text: `${outcome.text}${onPage ? "" : " (dari halaman lain)"}`, tone: "success" });
         } else if (outcome.kind === "duplicate") {
           revealRow(outcome.number);
           setMessage({ text: outcome.text, tone: "info" });
@@ -335,7 +336,9 @@ export function HandoverScanField() {
     void drain();
   };
 
-  const tone = message ? SCAN_TONE[message.tone] : null;
+  // After "Tandai" or "Batal pilih" clears the selection, "… ditambahkan · N dipilih" is no longer true.
+  const shown = message && (message.number === undefined || selected.has(message.number)) ? message : null;
+  const tone = shown ? SCAN_TONE[shown.tone] : null;
   return (
     <div className="grid gap-1.5 border-b p-4 print:hidden" data-slot="handover-scan">
       <label className="text-sm font-semibold" htmlFor="scan-resi">Scan resi</label>
@@ -362,7 +365,7 @@ export function HandoverScanField() {
         Arahkan scanner ke barcode resi, atau ketik nomor kiriman lalu Enter. Paket masuk ke pilihan; dicatat saat Anda menekan Tandai diserahkan.
       </p>
       <p aria-live="polite" className={cn("flex min-h-5 items-start gap-1.5 text-sm font-medium", tone?.className)} id="scan-resi-hasil" role="status">
-        {message && tone ? <span className="flex items-start gap-1.5" key={message.id}><tone.icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{message.text}</span> : null}
+        {shown && tone ? <span className="flex items-start gap-1.5" key={shown.id}><tone.icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{shown.text}</span> : null}
       </p>
     </div>
   );

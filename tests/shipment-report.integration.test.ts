@@ -427,6 +427,9 @@ describe("shipment report export", () => {
       SHIPMENT_REPORT_COLUMNS.map((column) => `"${column.csvHeader}"`).join(","),
     );
     expect(lines).toHaveLength(5);
+    // M6: `*_wib` columns hold Asia/Jakarta wall-clock time, not UTC ISO strings.
+    expect(csv).toContain('"2026-09-02 10:00:00"');
+    expect(csv).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
     // The export must not widen what the page shows: no recipient name,
     // phone or street address reaches the file.
     expect(csv).not.toContain("Penerima");

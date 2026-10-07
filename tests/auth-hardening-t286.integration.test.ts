@@ -159,6 +159,16 @@ describe("M1: security headers on every path", () => {
     expect(nextConfig.poweredByHeader).toBe(false);
   });
 
+  it("never stores an authenticated /app or /platform page (M9: Back after Keluar)", async () => {
+    const rules = await nextConfig.headers!();
+    for (const source of ["/app/:path*", "/platform/:path*"]) {
+      const rule = rules.find((candidate) => candidate.source === source);
+      expect(rule?.headers).toContainEqual({ key: "Cache-Control", value: "private, no-store" });
+    }
+    // The public sales page and login stay cacheable by the normal rules.
+    expect(rules.find((rule) => rule.source === "/:path*")?.headers.some((header) => header.key === "Cache-Control")).toBe(false);
+  });
+
   it("does not pin a development server on http to HTTPS", async () => {
     const headers = await headersFor("development");
     expect(headers.has("Strict-Transport-Security")).toBe(false);
@@ -318,6 +328,36 @@ describe("M2: Super Admin TOTP and session lifetime", () => {
     const { requireCmsScope } = await import("@/lib/cms-auth");
     await expect(requireCmsScope("tenant")).resolves.toMatchObject({ scope: "tenant", tenantId: tenantB });
     await admin.query("DELETE FROM sessions WHERE user_id = $1", [ids.adminB]);
+  });
+
+  it("L8: a login page sends only a valid session of its own surface onward", async () => {
+    const { signedInDestination } = await import("@/app/login/_components/signed-in-destination");
+    const as = (cookie: string) => { requestHeaders = new Headers({ cookie, host: "127.0.0.1:3110" }); };
+
+    as("");
+    await expect(signedInDestination("tenant")).resolves.toBeNull();
+    await expect(signedInDestination("platform")).resolves.toBeNull();
+    as("better-auth.session_token=forged.value");
+    await expect(signedInDestination("tenant")).resolves.toBeNull();
+
+    // Tenant: the role's landing, as after a sign-in; never onward to the platform.
+    as(cookiesOf(await signIn(ids.adminB, "tenant")));
+    await expect(signedInDestination("tenant")).resolves.toBe("/app");
+    await expect(signedInDestination("platform")).resolves.toBeNull();
+    as(cookiesOf(await signIn(ids.operatorA, "tenant")));
+    await expect(signedInDestination("tenant")).resolves.toBe("/app/label");
+    // An expired session keeps the form.
+    await admin.query("UPDATE sessions SET expires_at = now() - interval '1 minute' WHERE user_id = $1", [ids.operatorA]);
+    await expect(signedInDestination("tenant")).resolves.toBeNull();
+
+    // Platform: a Super Admin without TOTP keeps the form; an enrolled one goes to /platform.
+    as(cookiesOf(await signIn(ids.platform, "platform")));
+    await expect(signedInDestination("platform")).resolves.toBeNull();
+    const { cookie } = await enroll();
+    as(cookie);
+    await expect(signedInDestination("platform")).resolves.toBe("/platform");
+    await expect(signedInDestination("tenant")).resolves.toBeNull();
+    await admin.query("DELETE FROM sessions WHERE user_id = ANY($1)", [[ids.adminB, ids.operatorA]]);
   });
 });
 

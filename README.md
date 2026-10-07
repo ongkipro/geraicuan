@@ -32,6 +32,7 @@ export DEV_LOCAL_PASSWORD='admin123'
 export GERAICUAN_ENABLE_DEMO_LOGIN_HINT='1'
 
 pnpm db:migrate
+pnpm wilayah:import   # local area suggestions (offline, vendored data); without it every area search says "Wilayah tidak ditemukan"
 pnpm db:seed-local
 pnpm dev
 ```

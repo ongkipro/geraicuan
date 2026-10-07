@@ -102,6 +102,8 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
       : "Status Mengantar belum pernah diperbarui"
     : `Diperbarui ${formatWibDateTime(data.generatedAt)}`;
   const { periodLabel, presetLabel } = formatRangeLabel(range);
+  // QUE-ALL counts the search across every status, so a match elsewhere is known without another query.
+  const searchOutsideStatus = Boolean(query.search && statusParam && data.summary["QUE-ALL"] > 0);
   const tileValues = new Set<string>(SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => entry.value));
   const searchForm = (id: string, placeholder: string) => (
     <form action="/app/pengiriman" className="flex gap-2 max-md:w-full" method="get" role="search">
@@ -110,7 +112,8 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
       <label className="sr-only" htmlFor={id}>Nomor kiriman atau resi</label>
       <div className="relative min-w-0 flex-1 md:w-64 md:flex-none">
         <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" defaultValue={query.search} id={id} maxLength={40} name="cari" placeholder={placeholder} type="search" />
+        {/* M5: keyed to the URL term, so Back/Forward shows the term the list was searched with. */}
+        <Input className="pl-9" defaultValue={query.search} id={id} key={query.search ?? ""} maxLength={40} name="cari" placeholder={placeholder} type="search" />
       </div>
       <Button type="submit" variant="outline">Cari</Button>
     </form>
@@ -144,7 +147,7 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
         moreOptions={statusOptions.filter((option) => !tileValues.has(option.value))}
         options={SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => ({ count: data.summary[entry.metricId], label: entry.label, value: entry.value }))}
         range={{ endDate: range.lastIncludedDate, presetId: range.presetId, startDate: range.startDate }}
-        search={searchForm("cari-kiriman-ponsel", "No. kiriman / resi")}
+        search={searchForm("cari-kiriman-ponsel", "Nomor / resi")}
         statusLegend="Status kiriman"
         statusName="status"
         summary={`${selectedLabel ?? "Semua status"} · ${range.presetId === "kustom" ? periodLabel : presetLabel}`}
@@ -205,7 +208,19 @@ export default async function ShipmentHistoryPage({ searchParams }: { searchPara
           </div>
         </div>
 
-        {data.rows.length === 0 ? (
+        {data.rows.length === 0 && searchOutsideStatus ? (
+          // M4: the search matches, only not in the chosen status — say so instead of "tidak ada".
+          <EmptyState
+            action={
+              <Button asChild variant="outline">
+                <Link href={shipmentQueueHref("ALL", 1, carry)}>Cari di semua status</Link>
+              </Button>
+            }
+            description={`${data.summary["QUE-ALL"]} kiriman cocok di status lain.`}
+            icon={PackageSearch}
+            title={`"${query.search}" tidak ada di status ${selectedLabel}.`}
+          />
+        ) : data.rows.length === 0 ? (
           <EmptyState
             action={
               <Button asChild variant="outline">

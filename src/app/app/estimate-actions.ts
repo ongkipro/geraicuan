@@ -27,6 +27,14 @@ import {
   emitShipmentLifecycleEvent,
 } from "@/lib/shipment-telemetry";
 
+/**
+ * T-289 (QA H1): every platform-default gerai shares one Mengantar account, whose orders may only
+ * leave from the platform pickup (T-280). A draft whose pickup point implies another origin can
+ * never be ordered there, and Mengantar answers its estimate with `success: false` — so it is
+ * refused before the request with a message that says what to change.
+ */
+class PlatformPickupMismatchError extends Error {}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type ShipmentEstimateActionState = {
@@ -117,6 +125,12 @@ export async function loadShipmentEstimate(
         };
       },
     );
+    if (
+      prepared.resolved.source === "platform_default"
+      && prepared.draft.originAreaId !== prepared.resolved.originAreaId
+    ) {
+      throw new PlatformPickupMismatchError();
+    }
     estimateScope = {
       ...verifiedContext,
       outletId: prepared.draft.outletId,
@@ -191,6 +205,11 @@ export async function loadShipmentEstimate(
     }
     if (error instanceof EstimateRateLimitedError) {
       return { error: "Terlalu banyak permintaan estimasi. Coba lagi beberapa menit lagi." };
+    }
+    if (error instanceof PlatformPickupMismatchError) {
+      return {
+        error: "Titik pickup kiriman ini tidak bisa dipakai dengan akun Mengantar platform, jadi tarif tidak dapat dihitung. Pilih titik pickup akun platform di Pengaturan › Titik pickup, atau hubungkan akun Mengantar gerai sendiri.",
+      };
     }
     if (
       error instanceof CmsAuthorizationDeniedError ||

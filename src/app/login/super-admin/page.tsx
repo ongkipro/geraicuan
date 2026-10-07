@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { AuthShell } from "@/app/login/_components/auth-shell";
 import { LoginForm } from "@/app/login/_components/login-form";
 import { demoPassword, resolveLoginNotice } from "@/app/login/_components/login-notices";
+import { signedInDestination } from "@/app/login/_components/signed-in-destination";
 import { resolveHostRouting } from "@/lib/auth-config";
 
 export const metadata: Metadata = { robots: { index: false }, title: "Masuk Admin Platform" };
@@ -15,6 +17,8 @@ const homeHref = resolveHostRouting(process.env)?.publicOrigin ?? "/";
  * is provisioned and recovered by the platform operator.
  */
 export default async function SuperAdminLoginPage({ searchParams }: PageProps<"/login/super-admin">) {
+  const signedIn = await signedInDestination("platform");
+  if (signedIn) redirect(signedIn);
   const initialNotice = resolveLoginNotice("platform", await searchParams);
   return (
     <AuthShell

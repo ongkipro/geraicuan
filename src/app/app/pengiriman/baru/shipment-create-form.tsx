@@ -186,8 +186,14 @@ export function ShipmentCreateForm({
   submissionId: string;
 }) {
   const [state, formAction, pending] = useActionState<ShipmentDraftActionState, FormData>(saveShipmentDraft, {});
-  const errors = state.errors ?? {};
-  const errorEntries = Object.entries(errors);
+  // M3: a field the user edits after a failed save drops its error until the next save. Keyed to
+  // the state object, so a new server answer starts with every error showing again.
+  const [edited, setEdited] = useState<{ ids: ReadonlySet<string>; state: ShipmentDraftActionState }>({ ids: new Set(), state });
+  const editedIds = edited.state === state ? edited.ids : null;
+  const markEdited = (...ids: string[]) => {
+    if (!state.errors || ids.every((id) => editedIds?.has(id))) return;
+    setEdited({ ids: new Set([...(editedIds ?? []), ...ids]), state });
+  };
   const summaryRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (state.errors) summaryRef.current?.focus();
@@ -227,6 +233,19 @@ export function ShipmentCreateForm({
     senderOpenedByUser.current = false;
     document.getElementById("sender-masking")?.focus();
   }, [senderOpen]);
+  const fieldAnchor = (field: string) =>
+    field === "form" ? "shipment-draft-errors"
+      : field.startsWith("destinationArea") || field === "recipientContactSelection" ? "destination-search"
+        : field === "packageContent" ? "product-0-name"
+          : field === "packageQuantity" ? "product-0-quantity"
+            : field === "packageWeightGrams" ? "product-0-weight"
+              : field === "paymentType" ? "payment-method"
+                : field.startsWith("sender") && !masking ? "sender-block"
+                  : field;
+  const errors = Object.fromEntries(
+    Object.entries(state.errors ?? {}).filter(([field]) => !editedIds?.has(fieldAnchor(field))),
+  ) as NonNullable<ShipmentDraftActionState["errors"]>;
+  const errorEntries = Object.entries(errors);
   const [recipient, setRecipient] = useState({ address: "", name: "", phone: "" });
   const [recipientContact, setRecipientContact] = useState<ShipmentContactSelection | null>(null);
   const [destination, setDestination] = useState<Destination>(
@@ -258,22 +277,13 @@ export function ShipmentCreateForm({
   const destinationError = errors.destinationAreaLabel ?? errors.destinationAreaId ?? errors.recipientContactSelection;
 
   function applyRecipientContact(selection: ShipmentContactSelection) {
+    markEdited("recipientName", "recipientPhone", "recipientAddress", "destination-search");
     setRecipientContact(selection);
     setRecipient({ address: selection.address, name: selection.name, phone: selection.phone });
     setDestination(selection.destinationAreaId && selection.destinationAreaLabel
       ? { areaId: selection.destinationAreaId, areaLabel: selection.destinationAreaLabel, mode: "contact" }
       : { mode: "empty" });
   }
-
-  const fieldAnchor = (field: string) =>
-    field === "form" ? "shipment-draft-errors"
-      : field.startsWith("destinationArea") || field === "recipientContactSelection" ? "destination-search"
-        : field === "packageContent" ? "product-0-name"
-          : field === "packageQuantity" ? "product-0-quantity"
-            : field === "packageWeightGrams" ? "product-0-weight"
-              : field === "paymentType" ? "payment-method"
-                : field.startsWith("sender") && !masking ? "sender-block"
-                  : field;
 
   // T-249: section progress from the same required fields the form marks with *, nothing new.
   const missing = requiredFieldsMissing({
@@ -374,6 +384,10 @@ export function ShipmentCreateForm({
       className="flex flex-col gap-6 pb-32 lg:pb-0"
       id="form-kiriman"
       noValidate
+      onInput={(event) => {
+        const id = (event.target as HTMLElement).id;
+        if (id) markEdited(id);
+      }}
       onBlur={(event) => {
         // Focus left the form — unless it moved into a portalled Select/Popover of one of its sections.
         const next = event.relatedTarget as HTMLElement | null;
@@ -820,7 +834,11 @@ export function ShipmentCreateForm({
                 id="destination-search"
                 // Remount on a new outlet or a new recipient contact: both replace the destination.
                 key={`${outletId}:${recipientContact?.addressId ?? ""}`}
-                onSelectionChange={(selection) => setDestination(selection ? { ...selection, mode: "manual" } : { mode: "empty" })}
+                onSelectionChange={(selection) => {
+                  // The search box sits in a portalled popover with its own id; a pick clears the field error.
+                  if (selection) markEdited("destination-search");
+                  setDestination(selection ? { ...selection, mode: "manual" } : { mode: "empty" });
+                }}
                 outlets={outlets.map((outlet) => ({ id: outlet.id, name: outlet.name }))}
                 required
               />

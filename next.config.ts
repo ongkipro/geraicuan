@@ -33,6 +33,12 @@ function securityHeaders() {
       ],
       source: "/:path*",
     },
+    // M9: authenticated CMS pages are never stored, so browser Back after Keluar asks the server
+    // again (and lands on the login page) instead of showing the previous user's gerai data.
+    ...["/app/:path*", "/platform/:path*"].map((source) => ({
+      headers: [{ key: "Cache-Control", value: "private, no-store" }],
+      source,
+    })),
   ];
 }
 

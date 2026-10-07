@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -22,7 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { PanelLeftIcon } from "lucide-react"
+import { PanelLeftIcon, XIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -163,6 +164,10 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  // M7: the sheet is opened from the top bar's button, not a Radix Dialog.Trigger, so Radix has
+  // no trigger to return focus to and dropped it on <body>. Remember what opened it instead.
+  const returnFocusRef = React.useRef<HTMLElement | null>(null)
+  const closeRef = React.useRef<HTMLButtonElement>(null)
 
   if (collapsible === "none") {
     return (
@@ -187,7 +192,18 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className="w-(--sidebar-width) gap-0 bg-sidebar p-0 text-sidebar-foreground"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            returnFocusRef.current?.focus()
+          }}
+          onOpenAutoFocus={(event) => {
+            // Start on the visible close button, never on the account row at the bottom.
+            event.preventDefault()
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+            closeRef.current?.focus()
+          }}
+          showCloseButton={false}
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -195,11 +211,17 @@ function Sidebar({
           }
           side={side}
         >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+          <SheetHeader className="flex-row items-center justify-between gap-2 border-b py-1.5 pr-2 pl-4">
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription className="sr-only">Daftar halaman dan akun Anda.</SheetDescription>
+            <SheetClose asChild>
+              <Button ref={closeRef} size="icon" type="button" variant="ghost">
+                <XIcon aria-hidden="true" />
+                <span className="sr-only">Tutup menu</span>
+              </Button>
+            </SheetClose>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
         </SheetContent>
       </Sheet>
     )
@@ -515,7 +537,9 @@ function SidebarMenuButton({
     />
   )
 
-  if (!tooltip) {
+  // M7: on the phone sheet the tooltip is never shown, yet an open (hidden) tooltip still took the
+  // first Escape, so the sheet needed two presses to close. Render the bare button there.
+  if (!tooltip || isMobile) {
     return button
   }
 

@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { saveGeraiProfile, type GeraiProfileActionState } from "@/app/app/pengaturan/actions";
+import { useNewestSettingsResult } from "@/app/app/pengaturan/_components/newest-result";
 import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
   const [website, setWebsite] = useState(initial.website ?? "");
   const resultRef = useRef<HTMLDivElement>(null);
   const errors = state.fieldErrors ?? {};
+  const newest = useNewestSettingsResult("brand", state.resultToken);
 
   useEffect(() => {
     if (state.resultToken) resultRef.current?.focus();
@@ -57,7 +59,7 @@ export function GeraiProfileCard({ initial }: { initial: GeraiProfileValues }) {
             <AlertTitle>Brand gerai belum tersimpan</AlertTitle>
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
-        ) : state.saved ? (
+        ) : state.saved && newest ? (
           <Alert className="outline-none" ref={resultRef} role="status" tabIndex={-1}>
             <AlertTitle>Brand gerai disimpan</AlertTitle>
             <AlertDescription>Label yang dicetak berikutnya memakai catatan resi ini.</AlertDescription>

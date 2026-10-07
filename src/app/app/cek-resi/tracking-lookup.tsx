@@ -24,7 +24,8 @@ import { presentShipmentPayment } from "@/lib/payment-method";
 import { shipmentDetailHref } from "@/lib/shipment-number";
 import { cn } from "@/lib/utils";
 
-const INVALID_MESSAGE = "Masukkan nomor kiriman (contoh GC-10013) atau nomor resi kurir.";
+const EMPTY_MESSAGE = "Nomor kiriman atau nomor resi wajib diisi.";
+const INVALID_MESSAGE = "Format nomor tidak dikenali. Contoh: GC-10013 atau 11LP1700187536.";
 
 /**
  * Spec 17 `/app/cek-resi` (ref cek-resi.html): one card with the field and the one primary
@@ -76,7 +77,7 @@ export function TrackingLookup({ initialState = { kind: "idle" } }: { initialSta
               </Button>
             </div>
             <FieldDescription className="text-xs" id="tracking-key-help">Hanya kiriman milik gerai ini. Nomor tidak disimpan di alamat halaman.</FieldDescription>
-            <div className="min-h-5"><FieldError id="tracking-key-error">{invalid ? INVALID_MESSAGE : null}</FieldError></div>
+            <div className="min-h-5"><FieldError id="tracking-key-error">{invalid ? (state.query ? INVALID_MESSAGE : EMPTY_MESSAGE) : null}</FieldError></div>
           </Field>
         </form>
       </Card>
@@ -108,12 +109,22 @@ export function TrackingLookup({ initialState = { kind: "idle" } }: { initialSta
             <AlertDescription>Akses gerai tidak tersedia. Muat ulang halaman, lalu coba lagi.</AlertDescription>
           </Alert>
         ) : null}
-        {!pending && (state.kind === "idle" || state.kind === "invalid") ? (
+        {!pending && (state.kind === "idle" || (state.kind === "invalid" && !state.query)) ? (
           <Card className="border border-dashed border-input py-0 shadow-none">
             <EmptyState
               description="Masukkan nomor kiriman GeraiCUAN atau nomor resi kurir, lalu tekan Cek resi."
               icon={Route}
               title="Perjalanan paket muncul di sini"
+            />
+          </Card>
+        ) : null}
+        {/* L3: an invalid key is its own state, not the idle prompt again (spec 17). */}
+        {!pending && state.kind === "invalid" && state.query ? (
+          <Card className="border border-dashed border-destructive py-0 shadow-none">
+            <EmptyState
+              description={<>Periksa <span className="font-mono break-all">{state.query}</span>, lalu tekan Cek resi lagi.</>}
+              icon={CircleAlert}
+              title="Nomor tidak dikenali"
             />
           </Card>
         ) : null}

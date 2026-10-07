@@ -20,6 +20,7 @@ import {
   updateContactAddress,
 } from "@/db/contact-repository";
 import { createShipmentDraft } from "@/db/shipment-draft-repository";
+import { validateContactDirectory } from "@/lib/contact-directory";
 import { validateShipmentDraft } from "@/lib/shipment-draft";
 import { withTenantContext } from "@/db/tenant-context";
 import * as schema from "@/db/schema";
@@ -87,6 +88,22 @@ afterAll(async () => {
 });
 
 describe("tenant contact directory", () => {
+  it("says 'wajib diisi' for an empty required field and names the limit only when too long (L2)", () => {
+    const formData = new FormData();
+    formData.set("roleRecipient", "on");
+    const empty = validateContactDirectory(formData);
+    expect(empty.ok).toBe(false);
+    expect(empty.ok ? {} : empty.errors).toEqual({
+      addressLabel: "Label alamat wajib diisi.",
+      addressText: "Alamat wajib diisi.",
+      contactName: "Nama kontak wajib diisi.",
+      contactPhone: "Nomor telepon kontak wajib diisi.",
+    });
+    formData.set("contactName", "A".repeat(121));
+    const long = validateContactDirectory(formData);
+    expect(long.ok ? {} : long.errors).toMatchObject({ contactName: "Nama kontak maksimal 120 karakter." });
+  });
+
   it("creates searchable multi-role contacts and preserves independent snapshots", async () => {
     const contactId = await withTenantContext(appDb, userAdmin, tenantA, (tx, context) =>
       createContact(tx, context, input),

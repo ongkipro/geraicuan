@@ -125,7 +125,7 @@ export function MemberAccessDialog({
             type="submit"
             value="CONFIRM_ROLE_CHANGE"
           >
-            {rolePending ? "Menyimpan…" : `Ubah peran ke ${ROLE_LABEL[selectedRole]}`}
+            {rolePending ? "Menyimpan…" : changed ? `Ubah peran ke ${ROLE_LABEL[selectedRole]}` : "Ubah peran"}
           </Button>
         </div>
 

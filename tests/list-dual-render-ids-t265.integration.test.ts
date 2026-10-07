@@ -65,6 +65,8 @@ vi.mock("@/app/app/label/label-day-summary", () => ({ loadLabelDaySummary: async
 vi.mock("@/db/label-print-repository", () => ({
   loadLabelIndexPage: async () => ({ rows, summary: { "LBL-ALL": 3, "LBL-CANCELLED": 0, "LBL-PRINTED": 2, "LBL-UNPRINTED": 1 } }),
 }));
+// M4: a test may swap the page the queue returns (an empty status with matches elsewhere).
+const queuePage = vi.hoisted(() => ({ override: null as null | Record<string, unknown> }));
 vi.mock("@/db/shipment-queue-repository", async () => {
   const { SHIPMENT_QUEUE_SUMMARY_ENTRIES } = await import("@/lib/shipment-queue");
   return {
@@ -77,6 +79,7 @@ vi.mock("@/db/shipment-queue-repository", async () => {
       summary: Object.fromEntries(SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => [entry.metricId, 3])),
       totalCount: 3,
       totalPages: 1,
+      ...queuePage.override,
     }),
   };
 });
@@ -141,5 +144,31 @@ describe("dual-rendered lists (table + phone cards) carry unique ids", () => {
   it("Histori kiriman and Retur: no duplicate id", async () => {
     expect(duplicateIds(await render(ShipmentHistoryPage))).toEqual([]);
     expect(duplicateIds(await render(RtsPage))).toEqual([]);
+  });
+});
+
+describe("Histori search inside a status tile (M4)", () => {
+  it("says a match is outside the chosen status and links to the same search across all statuses", async () => {
+    const { SHIPMENT_QUEUE_SUMMARY_ENTRIES } = await import("@/lib/shipment-queue");
+    queuePage.override = {
+      rows: [],
+      summary: Object.fromEntries(SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => [entry.metricId, entry.metricId === "QUE-ALL" || entry.metricId === "QUE-AWAITING-PICKUP" ? 1 : 0])),
+      totalCount: 0,
+      totalPages: 0,
+    };
+    try {
+      const html = await render(ShipmentHistoryPage, { cari: "10170", status: "DELIVERED" });
+      expect(html).not.toContain("Tidak ada kiriman dengan nomor atau resi");
+      expect(html).toContain("tidak ada di status");
+      expect(html).toContain("1 kiriman cocok di status lain.");
+      const link = /<a[^>]*href="([^"]+)"[^>]*>Cari di semua status<\/a>/.exec(html)?.[1] ?? "";
+      expect(link).toContain("cari=10170");
+      expect(link).not.toContain("status=");
+      // No match anywhere keeps the plain "tidak ada" wording.
+      queuePage.override = { ...queuePage.override, summary: Object.fromEntries(SHIPMENT_QUEUE_SUMMARY_ENTRIES.map((entry) => [entry.metricId, 0])) };
+      expect(await render(ShipmentHistoryPage, { cari: "10170", status: "DELIVERED" })).toContain("Tidak ada kiriman dengan nomor atau resi");
+    } finally {
+      queuePage.override = null;
+    }
   });
 });

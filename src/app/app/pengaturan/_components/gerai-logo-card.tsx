@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { removeGeraiLogo, uploadGeraiLogo, type GeraiLogoActionState } from "@/app/app/pengaturan/actions";
+import { useNewestSettingsResult } from "@/app/app/pengaturan/_components/newest-result";
 import { DataCard } from "@/components/app/data-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -57,6 +58,7 @@ export function GeraiLogoCard({ geraiName, logoSrc, updatedAtLabel }: {
   const latest = seen.last === "upload" ? uploadState : seen.last === "remove" ? removeState : null;
   const error = clientError ?? latest?.error ?? null;
   const busy = uploading || removing;
+  const newest = useNewestSettingsResult("logo", uploadState.resultToken || removeState.resultToken ? `${uploadState.resultToken}:${removeState.resultToken}` : undefined);
 
   useEffect(() => {
     if (uploadState.resultToken || removeState.resultToken) resultRef.current?.focus();
@@ -73,7 +75,7 @@ export function GeraiLogoCard({ geraiName, logoSrc, updatedAtLabel }: {
             <AlertTitle>Logo belum tersimpan</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
-        ) : latest?.saved ? (
+        ) : latest?.saved && newest ? (
           <Alert role="status">
             <AlertTitle>{latest.saved === "uploaded" ? "Logo disimpan" : "Logo dihapus"}</AlertTitle>
             <AlertDescription>

@@ -361,7 +361,7 @@ export function ContactAddressesCard({
                   {address.isPrimary ? <Badge variant="outline">Utama</Badge> : null}
                 </span>
                 {archived ? null : (
-                  <span className="-mr-2 flex items-center gap-1">
+                  <span className="flex items-center gap-1">
                   {address.isPrimary ? null : <MakePrimaryButton address={address} contactId={contact.id} />}
                   <AddressDialog
                     address={address}
