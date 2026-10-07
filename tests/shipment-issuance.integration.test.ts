@@ -204,13 +204,17 @@ describe("T22 guarded queue-detail issuance", () => {
     });
 
     let submissions = 0;
+    let fixtureSubmit: ((body: Parameters<MengantarOrderTransportBinding["transport"]["submit"]>[0]) => Promise<unknown>) | null = null;
+    let submittedBody: Parameters<MengantarOrderTransportBinding["transport"]["submit"]>[0] | null = null;
     const countingResolver: MengantarOrderTransportLookup = async (...args) => {
       const binding = await resolveSanctionedOrderFixtureTransport(...args);
+      fixtureSubmit = (body) => binding.transport.submit(body);
       const counted: MengantarOrderTransportBinding = {
         ...binding,
         transport: {
           async submit(orders) {
             submissions += 1;
+            submittedBody = orders;
             return binding.transport.submit(orders);
           },
         },
@@ -255,6 +259,11 @@ describe("T22 guarded queue-detail issuance", () => {
       status: "ISSUED",
     });
     expect(submissions).toBe(1);
+    // T-292: the fixture answers each submission with its own order id, as Mengantar does, so a
+    // second fixture order in this gerai is not refused by the per-gerai unique index.
+    const orderIdOf = (answer: unknown) => (answer as { data: Array<{ _id: string }> }).data[0]!._id;
+    const [againA, againB] = [await fixtureSubmit!(submittedBody!), await fixtureSubmit!(submittedBody!)];
+    expect(orderIdOf(againA)).not.toBe(orderIdOf(againB));
 
     const totals = await adminDb
       .select()

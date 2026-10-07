@@ -874,7 +874,9 @@ describe("fixture-backed Mengantar order orchestration", () => {
     const platformTransport: MengantarOrderTransport = {
       async submit(payload) {
         payloads.push([...payload.orders]);
-        return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+        // T-292: Mengantar gives every order its own `_id`; one gerai cannot hold a repeated id.
+        const [item] = fixture.paid.response.data;
+        return { success: true, data: [{ ...(item as object), _id: `SANITIZED-ORDER-T292-${payloads.length}` }] };
       },
     };
     const privateTransport: MengantarOrderTransport = {
@@ -1112,7 +1114,8 @@ describe("fixture-backed Mengantar order orchestration", () => {
           await gate;
         }
         active -= 1;
-        return { success: true, data: fixture.paid.response.data.slice(0, 1) };
+        // T-292: a distinct order per submission, so the second does not end SUBMISSION_UNKNOWN.
+        return { success: true, data: fixture.paid.response.data.slice(calls - 1, calls) };
       },
     };
 
@@ -1120,10 +1123,11 @@ describe("fixture-backed Mengantar order orchestration", () => {
     await started;
     const second = orchestrateFixtureBackedMengantarOrders(input([secondConfirmation], transport));
     releaseFirst();
-    await Promise.all([first, second]);
+    const outcomes = await Promise.all([first, second]);
 
     expect(calls).toBe(2);
     expect(maxActive).toBe(1);
+    expect(outcomes.flatMap((outcome) => outcome.batches.map((batch) => batch.status))).toEqual(["COMPLETED", "COMPLETED"]);
   });
 
   it("T-223: serializes a JNE submission under the same account lock as dynamic couriers", async () => {

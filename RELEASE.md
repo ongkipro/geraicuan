@@ -151,6 +151,11 @@ that also covers migrations `0048`–`0051`).
    must return a row, and the migration role must be allowed to create it (or the
    superuser runs `CREATE EXTENSION pg_trgm;` first). No row: do not migrate
    `0067`; it needs a variant without the trigram index first (spec 15 DEP-3).
+7. **Duplicate order-id gate (T-292, migration 0076).** Only when the database
+   already holds shipments (a database deployed before 0076, or a populated dev
+   database): `SELECT tenant_id, provider_order_id, count(*) FROM provider_order_snapshots WHERE provider_order_id IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;`
+   must return no rows. A duplicate group fails 0076 and rolls back the whole
+   migration batch; resolve it as a forward fix before migrating.
 
 ### 2. Backup, migrate, deploy
 1. **Backup** the database (Coolify "backup now", or

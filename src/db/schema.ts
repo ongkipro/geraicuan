@@ -1507,6 +1507,11 @@ export const providerOrderSnapshots = pgTable(
       table.position,
     ),
     unique("provider_order_snapshots_shipment_key").on(table.shipmentId),
+    // T-292: one snapshot per Mengantar order id inside a gerai, so reconciliation and
+    // cancellation never resolve one provider order to two shipments.
+    uniqueIndex("provider_order_snapshots_tenant_provider_order_key")
+      .on(table.tenantId, table.providerOrderId)
+      .where(sql`provider_order_id IS NOT NULL`),
     unique("provider_order_snapshots_id_tenant_key").on(table.id, table.tenantId),
     unique("provider_order_snapshots_id_batch_tenant_key").on(
       table.id,

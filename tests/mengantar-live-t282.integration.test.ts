@@ -423,6 +423,13 @@ describe("T-282 live reconciliation of SUBMISSION_UNKNOWN (D-43)", () => {
     const states = [await shipmentState(first.shipmentId), await shipmentState(second.shipmentId)];
     expect(states.filter((state) => state?.providerOrderId === ORDER_OBJECT_ID)).toHaveLength(1);
     expect(states.map((state) => state?.shipmentStatus).sort()).toEqual(["ISSUED", "SUBMISSION_UNKNOWN"]);
+
+    // T-292: the database itself refuses a second snapshot carrying the same order id in the gerai.
+    const loser = states[0]?.providerOrderId === ORDER_OBJECT_ID ? second : first;
+    await expect(adminPool.query(
+      "UPDATE provider_order_snapshots SET provider_order_id = $1 WHERE shipment_id = $2",
+      [ORDER_OBJECT_ID, loser.shipmentId],
+    )).rejects.toMatchObject({ code: "23505", constraint: "provider_order_snapshots_tenant_provider_order_key" });
   });
 
   it("lands an unpaid match in AWAITING_UPSTREAM_PAYMENT with the batch _id, so pay-unpaid can then run (T-227 #3)", async () => {

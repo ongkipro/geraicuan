@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import type {
@@ -104,9 +105,11 @@ export const resolveSanctionedOrderFixtureTransport: MengantarOrderTransportLook
           if (body.orders.length !== 1 || body.pickup.address_id !== scope.pickupAddressId) {
             throw new SanctionedOrderFixtureUnavailableError();
           }
+          // T-292: one order id per submission, like Mengantar; a fixed `_id` would hit the
+          // per-gerai unique index on the second fixture order and leave it SUBMISSION_UNKNOWN.
           return {
             success: true,
-            data: [{ ...item }],
+            data: [{ ...item, _id: randomBytes(12).toString("hex") }],
             batch: item.batch,
             batch_id: item.batch_id,
             courier: body.courier,

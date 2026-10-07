@@ -1,0 +1,12 @@
+-- T-292 (T-282 review residual): one Mengantar order id per gerai. Reconciliation (advisory
+-- lock + re-read, T-282 review F2) and completeProviderOrder (same-batch check) already keep an
+-- order on one shipment; this index makes the database refuse a second snapshot with the same
+-- provider_order_id even when a code path forgets. NULL stays allowed (queued or unknown orders).
+--
+-- MIG-1 exception (spec 15): a plain CREATE UNIQUE INDEX inside the migration transaction, not
+-- CONCURRENTLY. No production database exists yet (spec 15 DEP-1: no deployment performed), so
+-- the table is empty when this first runs there. The SHARE lock it takes (reads continue,
+-- snapshot writes wait) lasts until the whole drizzle-kit batch commits. If a database is
+-- deployed before 0076, run the duplicate order-id gate (RELEASE.md, "Before every deploy"
+-- step 7) first: a duplicate group fails this migration and rolls back the whole batch.
+CREATE UNIQUE INDEX "provider_order_snapshots_tenant_provider_order_key" ON "provider_order_snapshots" USING btree ("tenant_id","provider_order_id") WHERE provider_order_id IS NOT NULL;
