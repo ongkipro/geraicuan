@@ -14,6 +14,7 @@ import {
   ShipmentCancelDeniedError,
   ShipmentCancelUnavailableError,
 } from "@/lib/shipment-cancellation";
+import { DEMO_TENANT_MESSAGE, MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -104,6 +105,7 @@ export async function cancelShipmentOnMengantar(
         return { error: `Mengantar sudah menghapus pesanan, tetapi GeraiCUAN belum dapat mencatatnya. ${PULL_HINT} Jika kiriman belum punya resi, jangan bayar kiriman ini dan hubungi admin GeraiCUAN.` };
     }
   } catch (error) {
+    if (error instanceof MengantarDemoTenantError) return { error: DEMO_TENANT_MESSAGE };
     if (error instanceof LiveMengantarOrdersDisabledError) return { error: NOT_ENABLED };
     if (error instanceof OrderRateLimitedError) return { error: "Terlalu banyak permintaan ke Mengantar. Tunggu beberapa menit lalu coba lagi." };
     if (

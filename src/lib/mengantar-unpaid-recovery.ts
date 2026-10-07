@@ -17,6 +17,7 @@ import {
   releaseUnpaidRecoveryClaim,
   UnpaidRecoveryDeniedError,
 } from "@/db/unpaid-recovery-repository";
+import { MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 import { mengantarAnswerMessage } from "@/lib/mengantar-http";
 import {
   normalizeMengantarProviderIdentifier,
@@ -276,7 +277,8 @@ export async function orchestrateFixtureBackedMengantarUnpaidRecovery(
       let resolved: unknown;
       try {
         resolved = await input.resolveTransport(immutableScope, tx, context);
-      } catch {
+      } catch (error) {
+        if (error instanceof MengantarDemoTenantError) throw error;
         throw new MengantarUnpaidRecoveryTransportUnavailableError();
       }
       const binding = validateRecoveryTransportBinding(immutableScope, resolved);

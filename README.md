@@ -63,7 +63,8 @@ demo dataset, without calling Mengantar or sending mail. It imports
 
 | What | Seeded |
 | --- | --- |
-| Store | **Sekar Batik Nusantara** (ACTIVE, id `70000000-0000-4000-8000-000000000001`), outlet *Gudang Jakarta Barat* with 3 labelled pickup points (default Kebon Jeruk, Tanah Abang, Bekasi) |
+| Store | **Sekar Batik Nusantara** (ACTIVE, id `70000000-0000-4000-8000-000000000001`), outlet *Gudang Jakarta Barat* with 3 labelled pickup points (default Kebon Jeruk, Tanah Abang, Bekasi). A **demo** (`tenants.is_demo`, T-293): it never sends an order, cancel, pay-unpaid, reconciliation or status pull to Mengantar, even with the live switch on; estimates and area lookups still work |
+| Live-proof store | **Gerai Uji Live** (ACTIVE, `PLATFORM_DEFAULT_ALLOWED`, not a demo; id `70000000-0000-4000-8000-000000000101`), outlet *Gudang Uji Live*, owner `live@geraicuan.com` (same password). Live Mengantar proofs (T-285 style) run here. The seed only ensures this shell (and resets the owner's password like the other fixtures); it never deletes the gerai's rows or members, `--reset` included, because its shipments are real Mengantar orders (every run still clears the global `rate_limits` and `public_auth_rate_limits`, and `--reset` the `verifications`). Add the platform pickup once through Pengaturan › Titik pickup |
 | Approval queue (`/platform/pendaftaran`) | *Kopi Senja Nusantara* (PROVISIONING, email verified), *Dapur Sambal Bu Tini* (PROVISIONING, email not verified), *Grosir Aksesoris HP 99* (rejected → ARCHIVED); all `PRIVATE_ONLY`, written by `register_tenant_self_service` and `review_tenant_registration`; owners sign in with the same password |
 | Contacts | 23 across Jabodetabek, Bandung, Surabaya, Yogyakarta, Semarang, Malang, Medan, Makassar, Denpasar, Palembang: 5 active + 1 archived senders, 18 active + 2 archived recipients, 3 dual-role; synthetic phones `0812-9000-xxxx` |
 | Shipments | 60 over the last ~60 days (Asia/Jakarta), `GC-10000`–`GC-10059` in creation order: 28 delivered, 10 issued (6 printed — one paid through unpaid recovery — and 4 not yet printed), 2 problem, 7 returns, 1 awaiting upstream payment, 2 failed, 1 queued, 1 unknown submission, 4 estimated, 4 drafts; Non-COD 22 / COD 27 / COD Ongkir 11; JNE, SiCepat, J&T, Shopee Express, SAP, AnterAja, ID Express, Lion Parcel, POS |
@@ -77,12 +78,16 @@ pnpm db:seed-local -- --reset   # also delete every tenant and user the seed doe
 ```
 
 A plain run deletes and rewrites only the seed's own rows (fixed ids), so it
-is idempotent and moves the demo dates forward when re-run on a later day.
-`--reset` additionally deletes every other tenant with all its rows (for
-example leftover `Rate Limit Tenant` and `T24 Tenant` fixtures), every user
-except the three accounts above, every operational row of the demo store
-(including shipments you created there), sessions, verifications and rate
-limits, then reseeds in the same transaction and prints row counts per tenant
+is idempotent and moves the demo dates forward when re-run on a later day;
+every run, plain or `--reset`, also clears the global `rate_limits` and
+`public_auth_rate_limits`.
+`--reset` additionally deletes every other tenant except *Gerai Uji Live* with
+all its rows (for example leftover `Rate Limit Tenant` and `T24 Tenant`
+fixtures), every user except the three accounts above and the members of Gerai
+Uji Live (and anyone its audit history names), every operational row of the demo store
+(including shipments you created there), the deleted users' sessions, all
+verifications, and the shipment and credential rate-limit rows of the demo
+store, the deleted gerai and the deleted users, then reseeds in the same transaction and prints row counts per tenant
 before and after. The demo store's Mengantar connection, if you configured
 one, is kept. Back up the database first.
 

@@ -11,6 +11,7 @@ import {
 import * as schema from "@/db/schema";
 import { withTenantContext } from "@/db/tenant-context";
 import { normalizeMengantarProviderIdentifier } from "@/lib/mengantar-order";
+import { MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 import { isLiveMengantarOrdersEnabled } from "@/lib/mengantar-live-transport";
 import { isSanctionedReconciliationFixtureEnabled } from "@/lib/sanctioned-reconciliation-fixture";
 
@@ -201,7 +202,7 @@ export async function reconcileFixtureBackedShipment(
   try {
     raw = await input.resolveAuthoritativeResult(key);
   } catch (error) {
-    if (error instanceof ShipmentReconciliationUndeterminedError) throw error;
+    if (error instanceof ShipmentReconciliationUndeterminedError || error instanceof MengantarDemoTenantError) throw error;
     throw new ShipmentReconciliationResultUnavailableError();
   }
   const result = normalizeResult(target, key, raw);

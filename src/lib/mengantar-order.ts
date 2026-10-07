@@ -41,6 +41,7 @@ import {
   emitShipmentLifecycleEvent,
   type ShipmentTelemetrySink,
 } from "@/lib/shipment-telemetry";
+import { MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 
 /**
  * D-26 (T-237): the documented `POST {BASE_URL}/api/public/{API_KEY}/order` body
@@ -893,7 +894,8 @@ export async function orchestrateFixtureBackedMengantarOrders(
                 tx,
                 context,
               );
-            } catch {
+            } catch (error) {
+              if (error instanceof MengantarDemoTenantError) throw error;
               throw new MengantarOrderTransportUnavailableError();
             }
             const binding = validateTransportBinding(immutableScope, resolved);

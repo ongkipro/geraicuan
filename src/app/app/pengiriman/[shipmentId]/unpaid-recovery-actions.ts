@@ -28,6 +28,7 @@ import {
   recoverFixtureBackedShipmentPayment,
   ShipmentUnpaidRecoveryReconciliationRequiredError,
 } from "@/lib/shipment-unpaid-recovery";
+import { DEMO_TENANT_MESSAGE, MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -103,6 +104,7 @@ export async function recoverShipmentUnpaidPayment(
     revalidatePath("/app/pengiriman");
     return { recovered: result };
   } catch (error) {
+    if (error instanceof MengantarDemoTenantError) return { error: DEMO_TENANT_MESSAGE };
     if (error instanceof MengantarPayUnpaidRefusedError) {
       revalidatePath("/app/pengiriman/[shipmentId]", "page");
       if (error.safeCode === "PAY_UNPAID_NOT_SENT") {

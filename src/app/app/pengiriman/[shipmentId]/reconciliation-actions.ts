@@ -22,6 +22,7 @@ import {
   ShipmentReconciliationResultUnavailableError,
   ShipmentReconciliationUndeterminedError,
 } from "@/lib/shipment-reconciliation";
+import { DEMO_TENANT_MESSAGE, MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -92,6 +93,7 @@ export async function reconcileShipmentUnknownSubmission(
       },
     };
   } catch (error) {
+    if (error instanceof MengantarDemoTenantError) return { error: DEMO_TENANT_MESSAGE };
     if (error instanceof ShipmentReconciliationUndeterminedError) {
       return {
         error:

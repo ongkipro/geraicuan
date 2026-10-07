@@ -11,6 +11,7 @@ import {
   type ShipmentCancelTarget,
 } from "@/db/shipment-cancellation-repository";
 import { withTenantContext, type TenantContext, type TenantTransaction } from "@/db/tenant-context";
+import { MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 import {
   LiveMengantarOrdersDisabledError,
   resolveLiveMengantarCancelTransport,
@@ -81,7 +82,7 @@ export async function cancelShipmentAtMengantar(input: ShipmentCancelInput): Pro
     try {
       transport = await resolveLiveMengantarCancelTransport(target.scope, tx, context);
     } catch (error) {
-      if (error instanceof LiveMengantarOrdersDisabledError) throw error;
+      if (error instanceof LiveMengantarOrdersDisabledError || error instanceof MengantarDemoTenantError) throw error;
       throw new ShipmentCancelUnavailableError();
     }
     // The order was placed on this account; credentials now addressing another one send nothing.

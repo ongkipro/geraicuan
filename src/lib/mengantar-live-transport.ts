@@ -3,6 +3,7 @@ import "server-only";
 import { deriveProviderAccountKey, type ProviderBatchScope } from "@/db/order-batch-repository";
 import type { TenantContext, TenantTransaction } from "@/db/tenant-context";
 import { resolveMengantarAccountCredentials, type MengantarAccountCredentials } from "@/lib/mengantar-credentials";
+import { assertNotDemoTenant } from "@/lib/mengantar-demo-tenant";
 import { assertMengantarCredentialsUsable, mengantarAnswerMessage, requestMengantar } from "@/lib/mengantar-http";
 import {
   MengantarOrderRefusedError,
@@ -51,6 +52,7 @@ export async function resolveLiveMengantarAccount(
   context: TenantContext,
 ): Promise<Pick<MengantarAccountCredentials, "apiKey" | "baseUrl">> {
   if (!isLiveMengantarOrdersEnabled()) throw new LiveMengantarOrdersDisabledError();
+  await assertNotDemoTenant(tx, context);
   const resolved = await resolveMengantarAccountCredentials(tx, context, scope.outletId);
   if (resolved.source !== scope.credentialSource) throw new MengantarOrderTransportUnavailableError();
   // Review F3: every gerai on the platform default shares one Mengantar account, which would

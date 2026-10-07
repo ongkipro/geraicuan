@@ -294,6 +294,12 @@ export const tenants = pgTable(
       .default("PLATFORM_DEFAULT_ALLOWED"),
     /** The store's WhatsApp number from sign-up, canonical `0` + Indonesian NSN. */
     contactWhatsapp: text("contact_whatsapp"),
+    /**
+     * T-293: a demo gerai (the local seed's Sekar Batik) never makes a mutating or account-wide
+     * Mengantar call — order, cancel, pay-unpaid, reconciliation, status pull. No app path
+     * sets it; the seed does (migration role). The runtime role has no UPDATE on it.
+     */
+    isDemo: boolean("is_demo").notNull().default(false),
   },
   () => [
     check("tenants_name_not_blank", sql`char_length(btrim(name)) > 0`),

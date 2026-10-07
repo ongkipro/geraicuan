@@ -18,6 +18,7 @@ import {
   MengantarSettlementTooLargeError,
 } from "@/lib/mengantar-settlement";
 import { runMengantarStatusPull } from "@/lib/mengantar-status-pull";
+import { DEMO_TENANT_STATUS_PULL_MESSAGE, MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 
 /*
  * T-204: the read-only Mengantar pull that moves shipments to DELIVERED,
@@ -129,6 +130,7 @@ export async function pullMengantarStatus(
       nextAttemptId: randomUUID(),
     };
   } catch (error) {
+    if (error instanceof MengantarDemoTenantError) return failed(DEMO_TENANT_STATUS_PULL_MESSAGE, attemptId);
     if (error instanceof ProviderSettlementThrottledError) {
       return failed("Status Mengantar baru saja diperbarui. Tunggu satu menit lalu coba lagi.", attemptId);
     }

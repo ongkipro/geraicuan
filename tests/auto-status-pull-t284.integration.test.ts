@@ -108,6 +108,17 @@ describe("autoPullMengantarStatus (T-284)", () => {
     expect(fetchCalls.periods).toHaveLength(2);
   });
 
+  it("never pulls for a demo gerai (T-293): no provider call, no claim, a name-only log line", async () => {
+    await adminPool.query("UPDATE tenants SET is_demo = true WHERE id = $1", [TENANT]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await autoPullMengantarStatus(admin, new Date())).toBeNull();
+    expect(fetchCalls.periods).toHaveLength(0);
+    expect(await pulls()).toEqual([]);
+    expect((await adminPool.query("SELECT count(*)::int AS n FROM shipment_rate_limits WHERE tenant_id = $1", [TENANT])).rows[0].n).toBe(0);
+    expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).toContain('"reason":"MengantarDemoTenantError"');
+    warn.mockRestore();
+  });
+
   it("swallows a provider failure into a name-only log line", async () => {
     fetchCalls.fail = true;
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);

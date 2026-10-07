@@ -18,6 +18,7 @@ import {
   resolveMengantarAccountCredentials,
   sameMengantarAccountAuthority,
 } from "@/lib/mengantar-credentials";
+import { assertNotDemoTenant } from "@/lib/mengantar-demo-tenant";
 import { fetchMengantarSettlement } from "@/lib/mengantar-settlement";
 
 type Principal = { userId: string; tenantId: string };
@@ -33,8 +34,11 @@ export async function runMengantarStatusPull(
   outletId: string,
   period: { start: Date; end: Date },
 ) {
-  await withTenantContext(db, principal.userId, principal.tenantId, (tx, context) =>
-    claimProviderSettlementPull(tx, context, outletId));
+  await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
+    // T-293: on the shared platform account a pull reads every gerai's orders; a demo never pulls.
+    await assertNotDemoTenant(tx, context);
+    return claimProviderSettlementPull(tx, context, outletId);
+  });
   const prepared = await withTenantContext(db, principal.userId, principal.tenantId, async (tx, context) => {
     await lockMengantarAccountAuthority(tx, context, outletId);
     return resolveMengantarAccountCredentials(tx, context, outletId);

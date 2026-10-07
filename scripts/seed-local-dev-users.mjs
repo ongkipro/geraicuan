@@ -75,6 +75,19 @@ const TENANT_NAME = "Sekar Batik Nusantara";
 const TENANT_WHATSAPP = "081290000100";
 const OUTLET_NAME = "Gudang Jakarta Barat";
 const issuer = "local:credential";
+// T-293: the live-proof gerai. Sekar Batik is a demo (is_demo) and never reaches Mengantar; live
+// orders run here instead, on the platform default account. The seed only ensures this shell
+// (tenant, outlet, owner; it resets the owner's password like the other fixture accounts) and
+// never deletes its gerai's rows or members, --reset included: its shipments are real Mengantar
+// orders. (Every run clears rate_limits and public_auth_rate_limits; --reset also verifications.) Its pickup
+// point is added once through Pengaturan › Titik pickup.
+const LIVE_TENANT = {
+  id: "70000000-0000-4000-8000-000000000101",
+  name: "Gerai Uji Live",
+  outletId: "70000000-0000-4000-8000-000000000102",
+  outletName: "Gudang Uji Live",
+  owner: { email: "live@geraicuan.com", name: "Pemilik Uji Live" },
+};
 
 const fixedUuid = (prefix, index) =>
   `${prefix}000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
@@ -623,6 +636,38 @@ async function tenantTableCounts() {
   return { users: users[0].total, tenants: result };
 }
 
+/** T-293: insert-only, so a re-seed never changes the live gerai's own configuration or orders. */
+async function ensureLiveTenantShell() {
+  await query(
+    `INSERT INTO tenants (id, name, status, mengantar_credential_policy, is_demo)
+       VALUES ($1, $2, 'ACTIVE', 'PLATFORM_DEFAULT_ALLOWED', false)
+       ON CONFLICT (id) DO NOTHING`,
+    [LIVE_TENANT.id, LIVE_TENANT.name],
+  );
+  await query(
+    "INSERT INTO outlets (id, tenant_id, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
+    [LIVE_TENANT.outletId, LIVE_TENANT.id, LIVE_TENANT.outletName],
+  );
+  const owner = await query(
+    `INSERT INTO users (id, name, email, email_verified, status)
+       VALUES ($1, $2, $3, true, 'ACTIVE')
+       ON CONFLICT (email) DO UPDATE SET email_verified = true, updated_at = now()
+       RETURNING id`,
+    [randomUUID(), LIVE_TENANT.owner.name, LIVE_TENANT.owner.email],
+  );
+  const ownerId = owner.rows[0].id;
+  await query(
+    `INSERT INTO accounts (id, account_id, provider_id, issuer, user_id, password)
+       VALUES ($1, $2, 'credential', $3, $2, $4)
+       ON CONFLICT (issuer, account_id) DO UPDATE SET password = EXCLUDED.password, updated_at = now()`,
+    [randomUUID(), ownerId, issuer, passwordHash],
+  );
+  await query(
+    "INSERT INTO memberships (tenant_id, user_id, role, status) VALUES ($1, $2, 'TENANT_ADMIN', 'ACTIVE') ON CONFLICT (tenant_id, user_id) DO NOTHING",
+    [LIVE_TENANT.id, ownerId],
+  );
+}
+
 // The two append-only tables refuse DELETE by trigger. Disabling the trigger is
 // transactional, so a failed seed rolls it back enabled.
 async function withImmutableTriggersDisabled(work) {
@@ -731,11 +776,15 @@ try {
     if (reset) {
       // Everything the seed does not own: other tenants, other users, and every
       // operational row of the demo tenant (the seed rewrites its own below).
-      const { rows: foreign } = await query("SELECT id FROM tenants WHERE id <> $1", [tenantId]);
+      const { rows: foreign } = await query("SELECT id FROM tenants WHERE id <> ALL($1::uuid[])", [[tenantId, LIVE_TENANT.id]]);
       const foreignTenantIds = foreign.map(({ id }) => id);
       const { rows: foreignUsers } = await query(
-        "SELECT id FROM users WHERE email <> ALL($1::text[])",
-        [accounts.map(({ email }) => email)],
+        // T-293: every member of the live-proof gerai is kept, not only its seeded owner, and so is
+        // anyone its audit history names (audit_events.actor_id is ON DELETE RESTRICT).
+        `SELECT id FROM users WHERE email <> ALL($1::text[])
+           AND id NOT IN (SELECT user_id FROM memberships WHERE tenant_id = $2)
+           AND id NOT IN (SELECT actor_id FROM audit_events WHERE tenant_id = $2 AND actor_id IS NOT NULL)`,
+        [[...accounts.map(({ email }) => email), LIVE_TENANT.owner.email], LIVE_TENANT.id],
       );
       const foreignUserIds = foreignUsers.map(({ id }) => id);
       await purgeOperationalRows([tenantId, ...foreignTenantIds], { all: true });
@@ -801,10 +850,12 @@ try {
   );
 
   await query(
-    `INSERT INTO tenants (id, name, status, contact_whatsapp, created_at)
-       VALUES ($1, $2, 'ACTIVE', $3, $4)
+    // T-293: the demo gerai never sends anything to Mengantar (src/lib/mengantar-demo-tenant.ts),
+    // even with the live switch on; live proofs use a separate gerai.
+    `INSERT INTO tenants (id, name, status, contact_whatsapp, is_demo, created_at)
+       VALUES ($1, $2, 'ACTIVE', $3, true, $4)
        ON CONFLICT (id) DO UPDATE SET
-         name = EXCLUDED.name, status = 'ACTIVE', contact_whatsapp = EXCLUDED.contact_whatsapp, updated_at = now()`,
+         name = EXCLUDED.name, status = 'ACTIVE', contact_whatsapp = EXCLUDED.contact_whatsapp, is_demo = true, updated_at = now()`,
     [tenantId, TENANT_NAME, TENANT_WHATSAPP, at(90, 9)],
   );
   await query(
@@ -867,6 +918,7 @@ try {
       await query("INSERT INTO platform_roles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [userId]);
     }
   }
+  await ensureLiveTenantShell();
   const adminUserId = userIds.get("TENANT_ADMIN");
   const superUserId = userIds.get("SUPER_ADMIN");
   const userFor = (role) => userIds.get(role);
@@ -1034,8 +1086,8 @@ try {
          id, tenant_id, batch_id, shipment_id, estimate_snapshot_id, estimate_service_id, position,
          provider_service, destination_area_id, destination_area_label, currency, shipping_amount_idr,
          insurance_amount_idr, is_cod, provider_cod_amount_idr, status, provider_order_id, is_paid,
-         cnote_no, safe_response_code, resolved_at, created_at, provider_charged_shipping_idr
-       ) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, 'IDR', $10, NULL, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+         cnote_no, safe_response_code, resolved_at, created_at, provider_charged_shipping_idr, provider_batch_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, 'IDR', $10, NULL, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
       [
         shipment.providerOrderSnapshotId, tenantId, shipment.batchId, shipment.id, shipment.estimateSnapshotId,
         estimateServiceId, shipment.selected.providerService, shipment.recipientAddress.area.id,
@@ -1051,6 +1103,8 @@ try {
         shipment.status === "SUBMISSION_QUEUED" ? null : shipment.issuedAt,
         shipment.submittedAt,
         shippingMengantarDeductsIdr(shipment.selected),
+        // T-293: an accepted order carries Mengantar's batch `_id`, which pay-unpaid needs (T-282).
+        accepted ? providerId(`batch:${shipment.id}`) : null,
       ],
     );
     if (!shipment.issued) continue;

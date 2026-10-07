@@ -25,6 +25,7 @@ const errors = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   authorityChanged: false,
+  demo: false,
   calls: [] as string[],
   contextCalls: 0,
   fetchPeriods: [] as Array<{ end: Date; start: Date }>,
@@ -58,6 +59,17 @@ vi.mock("@/db/tenant-context", () => ({
     return callback({}, { role: mocks.principal.role, tenantId, userId });
   }),
 }));
+// T-293: the demo check reads `tenants`, which this mocked transaction cannot; its refusal is
+// asserted below and against a real database in mengantar-live-t282 / auto-status-pull-t284.
+vi.mock("@/lib/mengantar-demo-tenant", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/mengantar-demo-tenant")>();
+  return {
+    ...original,
+    assertNotDemoTenant: vi.fn(async () => {
+      if (mocks.demo) throw new original.MengantarDemoTenantError();
+    }),
+  };
+});
 vi.mock("@/lib/cms-auth", () => ({
   CmsAuthorizationDeniedError: errors.CmsAuthorizationDeniedError,
   requireCmsScope: vi.fn(async () => mocks.principal),
@@ -124,6 +136,7 @@ function form(overrides: Record<string, string> = {}) {
 
 beforeEach(() => {
   mocks.authorityChanged = false;
+  mocks.demo = false;
   mocks.calls.length = 0;
   mocks.contextCalls = 0;
   mocks.fetchPeriods.length = 0;
@@ -182,6 +195,15 @@ describe("Perbarui status dari Mengantar (T-204)", () => {
     await pullMengantarStatus({}, form());
     // T-275: the recorded payouts also move Pencairan COD and the Dasbor's Uang gerai.
     expect(mocks.revalidated).toEqual(["/app/pengiriman", "/app/pengiriman/rts", "/app/laporan/pencairan", "/app"]);
+  });
+
+  it("tells a demo gerai that nothing is pulled, before the claim (T-293)", async () => {
+    mocks.demo = true;
+    const { pullMengantarStatus } = await import("@/app/app/pengiriman/status-sync-actions");
+    const result = await pullMengantarStatus({}, form());
+    const { DEMO_TENANT_STATUS_PULL_MESSAGE } = await import("@/lib/mengantar-demo-tenant");
+    expect(result).toMatchObject({ status: "error", message: DEMO_TENANT_STATUS_PULL_MESSAGE });
+    expect(mocks.calls).toEqual([]);
   });
 
   it("keeps the one-minute throttle and refuses a changed account authority without writing", async () => {

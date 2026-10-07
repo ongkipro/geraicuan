@@ -36,6 +36,7 @@ import {
   confirmFixtureBackedShipmentIssuance,
   ShipmentIssuanceUnavailableError,
 } from "@/lib/shipment-issuance";
+import { DEMO_TENANT_MESSAGE, MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -199,6 +200,7 @@ export async function confirmShipmentIssuance(
       },
     };
   } catch (error) {
+    if (error instanceof MengantarDemoTenantError) return { error: DEMO_TENANT_MESSAGE };
     if (error instanceof MengantarOrderRefusedError) {
       const known = PAYLOAD_ERROR_MESSAGES[error.safeCode] ?? PAYLOAD_ERROR_FALLBACK_MESSAGE;
       return {

@@ -17,6 +17,7 @@ import {
   resolveLiveMengantarOrderTransport,
   resolveLiveMengantarPayUnpaidTransport,
 } from "@/lib/mengantar-live-transport";
+import { MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
 import { orchestrateFixtureBackedMengantarOrders } from "@/lib/mengantar-order";
 import { MengantarPayUnpaidRefusedError } from "@/lib/mengantar-unpaid-recovery";
 import {
@@ -27,6 +28,7 @@ import {
   recoverFixtureBackedShipmentPayment,
   ShipmentUnpaidRecoveryReconciliationRequiredError,
 } from "@/lib/shipment-unpaid-recovery";
+import { cancelShipmentAtMengantar } from "@/lib/shipment-cancellation";
 import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 const adminDatabaseUrl = process.env.DATABASE_URL;
@@ -559,5 +561,35 @@ describe("T-282 live reconciliation of SUBMISSION_UNKNOWN (D-43)", () => {
     expect(error).toBeInstanceOf(ShipmentReconciliationUndeterminedError);
     expect(JSON.stringify(error) + String(error)).not.toContain(PRIVATE_KEY);
     expect(await shipmentState(shipmentId)).toMatchObject({ shipmentStatus: "SUBMISSION_UNKNOWN" });
+  });
+});
+
+describe("T-293 demo gerai: no order-side Mengantar call even with the live switch on", () => {
+  const markDemo = () => adminPool.query("UPDATE tenants SET is_demo = true WHERE id = $1", [tenantA]);
+  const batchCount = async (shipmentId: string) => (await adminPool.query(
+    "SELECT count(*)::int AS n FROM provider_order_snapshots WHERE shipment_id = $1", [shipmentId])).rows[0].n;
+
+  it("refuses issuing before anything is claimed", async () => {
+    const confirmation = await seedEstimatedShipment(60);
+    await markDemo();
+    await expect(order(confirmation)).rejects.toBeInstanceOf(MengantarDemoTenantError);
+    expect(calls).toEqual([]);
+    expect(await batchCount(confirmation.shipmentId)).toBe(0);
+  });
+
+  it("refuses pay-unpaid, cancel and reconciliation without a request or a state change", async () => {
+    const awaiting = await seedAwaitingPayment(61);
+    const unknown = await seedUnknown(62, 5);
+    await markDemo();
+
+    await expect(recover(awaiting)).rejects.toBeInstanceOf(MengantarDemoTenantError);
+    await expect(cancelShipmentAtMengantar({ db: appDb, lockPool: appPool, principalId: adminA, shipmentId: awaiting, tenantId: tenantA }))
+      .rejects.toBeInstanceOf(MengantarDemoTenantError);
+    await expect(reconcile(unknown.shipmentId)).rejects.toBeInstanceOf(MengantarDemoTenantError);
+
+    expect(calls).toEqual([]);
+    expect(await recoveryState()).toEqual([]);
+    expect(await shipmentState(awaiting)).toMatchObject({ shipmentStatus: "AWAITING_UPSTREAM_PAYMENT" });
+    expect(await shipmentState(unknown.shipmentId)).toMatchObject({ orderStatus: "SUBMISSION_UNKNOWN", shipmentStatus: "SUBMISSION_UNKNOWN" });
   });
 });
