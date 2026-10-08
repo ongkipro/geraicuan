@@ -42,3 +42,6 @@ next-env.d.ts
 
 # ui-audit run artifacts (screenshots, sweep JSON) - not source
 /scripts/ui-audit/.output/
+
+# impeccable skill output (skill removed)
+.impeccable/
