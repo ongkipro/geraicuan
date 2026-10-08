@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-10-07
+Updated: 2026-10-08
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -31,7 +31,11 @@ security audit; each ledger run carries its own declared risk, so a lower value
 in `.delivery/current.json` describes that run rather than this tree.
 
 
-## Current — 2026-10-07 (branch `feat/phase14-completion`, pushed; not merged to `main`)
+## Current — 2026-10-08 (`main` = `feat/phase14-completion`; first Coolify deploy next)
+
+- **Merged to `main` (owner approval 2026-10-08)** and the release manifest re-cut as `RC-2` (T-294), still `BLOCKED` only on owner infrastructure (DNS, Resend, PostgreSQL and both apps in Coolify), `pg_trgm` on the production database and the platform-default credential decision. Release checks rerun on a clean checkout of `0f1b800`: suite 149 files / 1,938 tests, migration upgrade through 0077, lint, production build and tsc all pass. CI's `verify` job was red on `main` because its auth origin disagreed with the suite's; fixed in T-294.
+
+## Previous — 2026-10-07 (branch `feat/phase14-completion`)
 
 - **Phase 20 complete.** Committed and pushed per task, each with an independent review PASS: T-276 (documents, diagrams, system map), T-277, T-280 (live order transport), T-283, T-278, T-287, T-284 (automatic status pull), T-282 (live reconciliation, pay-unpaid), T-286 (security headers, per-email sign-in limit, Super Admin TOTP, session revocation; migration 0073), T-281 (cancel on Mengantar; 0074), T-289 (UI/UX and function QA sweep: 2 High, 12 Medium, 17 Low fixed), T-291 (platform-pickup estimate guard), T-279 (archive a gerai; 0075), T-290 (cancelled COD parcel's ledger reversed), T-285 (live proofs), T-288 (integration), T-292 (unique provider order id per gerai; 0076), T-293 (demo gerai never reaches Mengantar; live proofs on *Gerai Uji Live*; 0077).
 - **Mengantar live, proven on dev (D-42; switch `MENGANTAR_LIVE_ORDERS_ENABLED=1`, production also needs `MENGANTAR_LIVE_ORDERS_PRODUCTION_APPROVED=1`, D-5):** estimate, area search, automatic status pull; a COD scheduled-pickup JNE order issued through the app (`POST /time` + `POST /order`, resi issued) and cancelled through the app (`DELETE /order` confirmed, CANCELLED, audited, ledger reversed to zero); the T-237a probe order cancelled. Not yet proven live: pay-unpaid, a courier refusal's HTTP status, the stored-phone comparison for reconciliation (D-43).

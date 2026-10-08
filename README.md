@@ -106,6 +106,7 @@ export BETTER_AUTH_TRUSTED_ORIGINS='http://127.0.0.1:3110'
 export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
 unset GERAICUAN_ENABLE_DEMO_LOGIN_HINT
 
+pnpm exec next typegen   # fresh checkout: generates PageProps/LayoutProps
 pnpm tsc --noEmit
 pnpm lint
 pnpm test:integration

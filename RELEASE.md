@@ -1,57 +1,26 @@
 # Release Manifest — geraicuan
 
-Release-ID: RC-1
-Base: 67beb92e4135da15afc7357d905a4473f7e17020
+Release-ID: RC-2
+Base: 223beda6
 Environment: production
 Declared-Risk: R4
-Rollback-Ref: 2b3bd18121325ac70d153dd2bb38809cc8612e65
-Rollback-Command: git checkout 2b3bd18121325ac70d153dd2bb38809cc8612e65
-Backup-Proof: REQUIRED — migrations 0032 through 0036 change row-level
-  security, table grants and column privileges. Capture a database backup
-  before applying them and record its reference here.
+Rollback-Ref: 223beda6
+Rollback-Command: first deploy — stop `geraicuan-app` in Coolify; no earlier release exists to restore, so fix forward (section 4)
+Backup-Proof: NOT_REQUIRED — the first deploy migrates an empty database (0000–0077); every later migration needs a backup reference here
 Status: BLOCKED
 
 ## Why this manifest is BLOCKED
 
-**Update 2026-09-29 (head `ce03512`, branch `feat/phase14-completion`).** Still BLOCKED. Since the notes below, migrations `0038`–`0069` landed (latest: `0067` wilayah + `pg_trgm`, `0068` unpaid cancel + invoice logo versions, `0069` audit tenant guard), the documented Mengantar order was proven live once (T-237a), and T-248–T-260 changed UI, label and audit code. Open before any release: (1) independent review of `ff005a2..ce03512`; (2) `pg_trgm` confirmed on the production Postgres (step 6); (3) `Backup-Proof` covering `0032`–`0069`; (4) the T-237a test order cancelled by the owner; (5) a fresh `pnpm build` with the production env block. `STATUS.md` → "Current — 2026-09-29" holds the evidence.
+**RC-2 (2026-10-08).** The release is `main` at the commit carrying this manifest (Phase 20 complete, migrations `0000`–`0077`). `Base` is the previous `main` (`223beda`); nothing has ever been deployed to production, so this is the first deploy onto an empty database and `RC-1`'s rollback and backup fields no longer apply. Every Phase 20 task (T-276–T-293) passed its own independent review on its delivery-ledger run.
 
-**Update 2026-09-30.** Migrations `0070`–`0072` (T-267 handover events, T-268 tenant-scoped audit guard) are added. Deploy gate: after `0072`, every role that inserts `audit_events` needs EXECUTE on `shipment_handover_audit_event_matches` (the restrictive audit policy calls it for every audit write). `0072` grants it to `geraicuan_app`; the migration owner has it by ownership. If production runs any SECURITY DEFINER audit writer under a different owner, grant that owner EXECUTE before migrating, or audit writes fail. Independent review of `ff005a2..` T-248–T-268 is done (no Critical/High; findings fixed in T-268).
+Release checks rerun on a clean checkout of `0f1b800`: see `BUILD-LOG.md` → "2026-10-08 — RC-2 release checks".
 
-`RC-1` was prepared against `2b3bd18` and marked READY by T-62. That boundary no
-longer describes this repository. Commit `67beb92` then shipped the Phase 9
-market features without independent review or a passing test suite, and the
-Phase 10 screening that followed has now finished.
+Open before `Status: READY` (owner actions, section 0 and "Owner decisions"):
+1. Production infrastructure: DNS, Resend sending domain, the PostgreSQL resource, `geraicuan-app` and `geraicuan-landing` in Coolify.
+2. `pg_trgm` available on the production PostgreSQL (section 1, step 6).
+3. Platform-default Mengantar credentials: set or left unset (DEP-6).
 
-What has changed since the READY declaration:
-
-- Migrations `0032` through `0036` alter row-level security, table grants and
-  column privileges; `0037` is an additive, independently-verified no-op
-  (drizzle-kit metadata normalization — a stale CHECK-constraint snapshot
-  representation, not a schema change; `pnpm db:generate` now reports "No
-  schema changes"). `Backup-Proof` is therefore still required for `0032`
-  through `0036`, unaffected by `0037`.
-- `Declared-Risk` rose to `R4` when T-79's security audit closed a provider
-  ingestion endpoint that implemented an unverified contract, and found the
-  only tenant-owned table shipped without row-level security. Both are fixed.
-- `Base` moved to `67beb92`, the commit this work sits on top of. The rollback
-  reference deliberately stays at `2b3bd18`, the last boundary that passed a
-  release gate.
-- Phase 10 (`T-76` through `T-82`) is now complete: every task passed
-  independent review where required (T-77 after twenty-three rounds; T-81 at
-  R3), `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test:integration` (591/591),
-  `pnpm test:migration-upgrade` (through `0037`), and `pnpm build` (zero
-  errors or warnings, using the documented production env block) all pass
-  against the current working tree. Every change since `67beb92` remains
-  uncommitted at the time of writing, per this repository's own standing
-  instruction to commit once, at the end, after the full Phase 10 queue is
-  verified — not incrementally per task.
-
-Do not gate or deploy from this file. `STATUS.md` is the runtime authority and
-`TASKS.md` is the execution queue; both describe what remains. Phase 10
-verification passing does not by itself return `Status` to `READY`: this
-manifest's own contract requires T-62's verification to be rerun from a clean,
-committed tree first, which has not happened. `Status` stays `BLOCKED` until
-that rerun occurs after this segment's work is committed.
+Production issuance stays off after the deploy (D-5): `MENGANTAR_LIVE_ORDERS_ENABLED` and `MENGANTAR_LIVE_ORDERS_PRODUCTION_APPROVED` unset until the owner approves it separately. Not yet proven live (T-285): pay-unpaid, a courier refusal's HTTP status, the stored-phone comparison for reconciliation.
 
 ## Contract
 
@@ -74,10 +43,9 @@ migrations and the full environment table — is in
 order. Placeholders in `<angle brackets>` are never real values; never paste a
 secret into this file, a ticket, or a shell history.
 
-The `Status`, `Base` and `Backup-Proof` fields above still describe `RC-1` and stay
-BLOCKED. A deploy of the Phase 14–15 work needs this manifest re-cut for that
-release first (new `Base`, `Rollback-Ref`, `Declared-Risk`, and a `Backup-Proof`
-that also covers migrations `0048`–`0051`).
+The fields above describe `RC-2`, the first deploy: migrations `0000`–`0077` run
+on an empty database before `geraicuan-app` exists, so no stop-the-app window or
+backup applies to it. Both apply to every later release.
 
 ### 0. One-time setup (first deploy only)
 1. **DNS** (DEP-2): `A` records for `geraicuan.com`, `app.geraicuan.com`,
@@ -101,7 +69,14 @@ that also covers migrations `0048`–`0051`).
    marked secret where applicable, `APP_DATABASE_URL`, `BETTER_AUTH_SECRET`,
    `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `MENGANTAR_CREDENTIAL_ENCRYPTION_KEY`,
    and the four platform-default `MENGANTAR_*` values only if the owner decides to
-   offer them to existing tenants. No secret is a build variable. Do **not** set
+   offer them to existing tenants. `BETTER_AUTH_SECRET` also encrypts the Super
+   Admin TOTP secrets (T-286): rotating it signs everyone out and breaks every
+   TOTP enrollment. Optional, only once the Mengantar account's webhook is enabled
+   (D-30): `MENGANTAR_WEBHOOK_ENABLED=1` and the secret `MENGANTAR_WEBHOOK_SECRET`.
+   Leave `MENGANTAR_LIVE_ORDERS_ENABLED` and `MENGANTAR_LIVE_ORDERS_PRODUCTION_APPROVED`
+   unset until D-5 approval (T-280). No scheduled task is needed: Mengantar status
+   follows on Tenant Admin visits (T-284) and, once enabled, the webhook. No
+   secret is a build variable. Do **not** set
    `DATABASE_URL`, `NEXT_ALLOWED_DEV_ORIGINS`, `GERAICUAN_ENABLE_DEMO_LOGIN_HINT`,
    `DEV_LOCAL_PASSWORD` or any `GERAICUAN_ENABLE_SANCTIONED_*` flag. Health
    check: the image's `HEALTHCHECK` sends the `GERAICUAN_TENANT_ORIGIN` host to
@@ -134,7 +109,9 @@ that also covers migrations `0048`–`0051`).
 
 ### 1. Before every deploy
 1. Release commit chosen; on it `pnpm tsc --noEmit`, `pnpm lint`,
-   `pnpm test:integration` and `pnpm test:migration-upgrade` pass (DEL-1).
+   `pnpm test:integration` and `pnpm test:migration-upgrade` pass (DEL-1). On a
+   fresh checkout run `pnpm exec next typegen` first: `PageProps`/`LayoutProps` are
+   generated types, and without `.next/types` `tsc` reports them missing.
 2. List pending migrations: compare `drizzle/meta/_journal.json` with the
    production journal (`SELECT count(*) FROM drizzle.__drizzle_migrations;` as the
    superuser; the count is the number of migrations already applied).
@@ -142,8 +119,8 @@ that also covers migrations `0048`–`0051`).
    as the superuser. Zero rows, or every listed store told that those shipments
    must be re-created and re-estimated after the deploy, before continuing.
 4. Announce a short window. If any pending migration moves grants, policies or
-   money constraints (`0048`–`0052` all do), **stop `geraicuan-app` for the
-   window** (recommended, T-194; DEP-3 "Migration order for this release").
+   money constraints (`0048`–`0052` all do; on the first deploy the app does not
+   exist yet), **stop `geraicuan-app` for the window** (recommended, T-194; DEP-3 "Migration order for this release").
 5. Build the ops image for the release commit on the server
    (`docker build --target ops -t geraicuan-ops:<commit> .`).
 6. **`pg_trgm` gate (T-245, D-32; open — not confirmed by the owner).** As the

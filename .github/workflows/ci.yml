@@ -29,9 +29,11 @@ jobs:
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/geraicuan_test
       APP_DATABASE_URL: postgresql://geraicuan_test_runtime@127.0.0.1:5432/geraicuan_test
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-at-least-32
-      BETTER_AUTH_TRUSTED_ORIGINS: https://app.example.test,https://cuan.example.test
+      # The integration suite's origin (README "Test environment"); several auth
+      # tests send requests to exactly this origin.
+      BETTER_AUTH_TRUSTED_ORIGINS: http://127.0.0.1:3110
       BETTER_AUTH_TRUSTED_PROXY_CIDRS: 127.0.0.1/32
-      BETTER_AUTH_URL: https://app.example.test
+      BETTER_AUTH_URL: http://127.0.0.1:3110
       MIGRATION_CHECK_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/geraicuan_migration_check
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -56,6 +58,7 @@ jobs:
         # A production build resolves host routing (DEP-1): three distinct exact
         # HTTPS origins, with the trusted origins equal to the tenant and platform ones.
         env:
+          BETTER_AUTH_URL: https://app.example.test
           BETTER_AUTH_TRUSTED_ORIGINS: https://app.example.test,https://bos.example.test
           GERAICUAN_TENANT_ORIGIN: https://app.example.test
           GERAICUAN_PLATFORM_ORIGIN: https://bos.example.test
