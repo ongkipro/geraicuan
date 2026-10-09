@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simulasi Keuntungan &amp; Komisi Loket Kasir | GeraiCuan</title>
+  <title>Simulasi Keuntungan &amp; Komisi Loket Multi-Kurir - GeraiCuan</title>
   <meta name="description" content="Hitung estimasi keuntungan bersih loket toko Anda dengan simulator komisi GeraiCuan. 100% laba milik toko tanpa biaya franchise atau potongan royalti.">
   <meta name="theme-color" content="#0B2D5B">
   
@@ -27,7 +27,7 @@
       
       <!-- Brand Logo -->
       <a href="index.html" class="flex items-center py-1 group">
-        <img src="./logos/logo-geraicuan-mengantar-dark.png" alt="GeraiCuan powered by mengantar" class="h-9 sm:h-11 w-auto object-contain">
+        <img src="./logos/logo-geraicuan-mengantar-dark.svg" alt="GeraiCuan powered by mengantar" class="h-9 sm:h-11 w-auto object-contain">
       </a>
 
       <!-- Nav Links -->
@@ -72,24 +72,29 @@
     <section class="py-14 sm:py-20 bg-gradient-to-b from-white via-slate-50/50 to-slate-50/80 border-b border-slate-100">
       <div class="max-w-4xl mx-auto px-4 sm:px-6 text-center">
         <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-[1.15] mb-5">
-          Hitung Estimasi Cuan Bersih Toko Anda per Bulan
+          Hitung Potensi Tambahan Keuntungan Toko Anda
         </h1>
-        <p class="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed mb-4">
-          Tanpa biaya franchise dan tanpa potongan royalti. Seluruh selisih diskon resmi ekspedisi 20% – 25% dan fee COD menjadi keuntungan bersih toko Anda.
+        <p class="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed mb-8">
+          Modal Rp 0 tanpa biaya franchise dan tanpa potongan royalti. Geser slider untuk melihat estimasi keuntungan bersih dari komisi 20% – 25% dan layanan COD:
         </p>
+        <div>
+          <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan,%20saya%20ingin%20aktivasi%20loket%20toko" target="_blank" rel="noopener noreferrer" class="h-12 rounded-full px-9 inline-flex items-center justify-center bg-[#1A73E8] hover:bg-[#1557B0] text-white font-bold text-sm shadow-xl shadow-[#1A73E8]/30 hover:-translate-y-0.5 transition-all">
+            <span>Daftar Gratis via WhatsApp · Langsung Aktif</span>
+          </a>
+        </div>
       </div>
     </section>
 
     <!-- 3. Interactive Profit Simulator -->
     <section class="py-16 bg-white border-b border-slate-100">
       <div class="max-w-4xl mx-auto px-4 sm:px-6">
-        <div class="p-6 sm:p-10 rounded-3xl bg-slate-50 border border-slate-200 shadow-xs">
+        <div class="p-6 sm:p-10 rounded-3xl bg-slate-50 border border-slate-200/80 shadow-2xs">
           
           <!-- Slider Control -->
           <div class="mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <label for="dailyParcelsSlider" class="font-bold text-slate-800 text-base">
-                Target Kiriman per Hari:
+                Target Kiriman per Hari
               </label>
               <span id="dailyParcelsText" class="text-lg sm:text-xl font-extrabold text-[#1A73E8]">
                 40 paket / hari
@@ -116,19 +121,19 @@
 
           <!-- Summary Metric Cards -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div class="p-4 rounded-xl bg-white border border-slate-200 text-center">
+            <div class="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs text-center">
               <span class="text-xs text-slate-500 font-medium block mb-1">Total Kiriman per Bulan</span>
               <strong id="monthlyParcelsText" class="text-xl sm:text-2xl font-black text-slate-900 font-mono">
                 1.200 paket
               </strong>
             </div>
-            <div class="p-4 rounded-xl bg-white border border-slate-200 text-center">
-              <span class="text-xs text-slate-500 font-medium block mb-1">Rata-rata Laba (Diskon 20–25%)</span>
+            <div class="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs text-center">
+              <span class="text-xs text-slate-500 font-medium block mb-1">Rata-rata Laba (Komisi 20–25%)</span>
               <strong class="text-xl sm:text-2xl font-black text-slate-900 font-mono">
                 Rp 3.500 <span class="text-xs font-normal text-slate-500">/ pkt</span>
               </strong>
             </div>
-            <div class="p-4 rounded-xl bg-white border border-slate-200 text-center">
+            <div class="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs text-center">
               <span class="text-xs text-slate-500 font-medium block mb-1">Biaya Royalti Franchise</span>
               <strong class="text-xl sm:text-2xl font-black text-[#1A73E8] font-mono">
                 Rp 0 (Gratis)
@@ -137,8 +142,8 @@
           </div>
 
           <!-- Grand Total Output -->
-          <div class="p-6 rounded-2xl bg-white border-2 border-[#1A73E8]/30 text-center">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
+          <div class="p-6 sm:p-8 rounded-2xl bg-white border border-slate-200/80 shadow-2xs text-center">
+            <span class="text-xs font-bold text-slate-500 block mb-1">
               Estimasi Keuntungan Bersih Toko Anda
             </span>
             <div class="text-3xl sm:text-5xl font-black text-[#1A73E8] font-mono my-2.5">
@@ -148,7 +153,7 @@
               Proyeksi Tahunan: <span id="yearlyProfitValue" class="text-[#0B2D5B]">Rp 50.400.000 / tahun</span>
             </div>
             <p id="monthlyDetailText" class="text-xs text-slate-500 max-w-xl mx-auto leading-relaxed">
-              *Dihitung dari 1.200 paket/bulan dengan rata-rata keuntungan diskon ongkir 20% – 25% (sekitar Rp 3.500 per paket) + fee COD. 100% hak milik toko Anda tanpa potongan setoran.
+              *Berdasarkan estimasi 1.200 paket/bulan dengan rata-rata laba diskon ongkir 20% – 25% (sekitar Rp 3.500 per paket) + fee COD. 100% hak milik toko tanpa potongan royalti franchise.
             </p>
           </div>
         </div>
@@ -160,57 +165,57 @@
       <div class="max-w-5xl mx-auto px-4 sm:px-6">
         <div class="text-center max-w-2xl mx-auto mb-10">
           <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Bandingkan Biaya &amp; Syarat Kemitraan
+            Perbandingan Kemitraan: GeraiCuan vs Franchise Biasa
           </h2>
-          <p class="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
-            Lihat jelas perbandingan membuka loket di GeraiCuan vs franchise kurir konvensional berbayar:
+          <p class="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
+            Bandingkan syarat dan keuntungan membuka loket kasir GeraiCuan dengan franchise kurir konvensional:
           </p>
         </div>
 
-        <div class="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
+        <div class="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-2xs">
           <div class="overflow-x-auto">
             <table class="w-full text-xs text-left border-collapse">
               <thead>
-                <tr class="bg-slate-50/80 border-b border-slate-200">
+                <tr class="bg-slate-50 border-b border-slate-200">
                   <th class="p-4 sm:p-5 font-bold text-slate-900 w-1/4">Kriteria Kemitraan</th>
-                  <th class="p-4 sm:p-5 font-extrabold text-[#0B2D5B] bg-[#E3F2FF]/70 border-x border-[#93C5FD]/60 w-2/5">Loket GeraiCuan</th>
+                  <th class="p-4 sm:p-5 font-extrabold text-[#0B2D5B] bg-[#E3F2FF]/70 w-2/5">Loket GeraiCuan (Rekomendasi)</th>
                   <th class="p-4 sm:p-5 font-bold text-slate-500 w-1/3">Franchise Kurir Konvensional</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Biaya Kemitraan Awal</td>
-                  <td class="p-4 sm:p-5 font-black text-[#1A73E8] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40 font-mono text-sm">Rp 0 (Gratis)</td>
-                  <td class="p-4 sm:p-5 text-slate-600 font-mono">Rp 5.000.000 s/d Rp 25.000.000</td>
+                  <td class="p-4 sm:p-5 font-black text-[#1A73E8] bg-[#E3F2FF]/25 font-mono text-sm">Rp 0 (Gratis Selamanya)</td>
+                  <td class="p-4 sm:p-5 text-slate-600 font-mono">Wajib bayar Rp 5 jt s/d Rp 25 jt</td>
                 </tr>
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Keuntungan Diskon Ongkir</td>
-                  <td class="p-4 sm:p-5 font-black text-[#1A73E8] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40 font-mono text-sm">Diskon 20% – 25% Jadi Laba</td>
+                  <td class="p-4 sm:p-5 font-black text-[#1A73E8] bg-[#E3F2FF]/25 font-mono text-sm">Komisi 20% – 25% Jadi Laba Langsung</td>
                   <td class="p-4 sm:p-5 text-slate-600 font-mono">Komisi kecil 5%–10% (ada target)</td>
                 </tr>
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Pilihan Ekspedisi</td>
-                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40">12+ Kurir Resmi Lengkap</td>
+                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25">12+ Kurir Resmi di 1 Layar</td>
                   <td class="p-4 sm:p-5 text-slate-600">Cuma 1 Kurir Tunggal</td>
                 </tr>
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Bagi Hasil / Royalti Bulanan</td>
-                  <td class="p-4 sm:p-5 font-black text-[#1A73E8] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40">100% Hak Toko Anda</td>
+                  <td class="p-4 sm:p-5 font-black text-[#1A73E8] bg-[#E3F2FF]/25 font-mono text-sm">100% Milik Toko (Bebas Royalti)</td>
                   <td class="p-4 sm:p-5 text-slate-600">Dipotong Biaya Royalti / Lisensi</td>
                 </tr>
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Syarat Tempat &amp; Renovasi</td>
-                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40">Meja kasir toko yang sudah ada</td>
-                  <td class="p-4 sm:p-5 text-slate-600">Wajib sewa ruko &amp; cat ruko khusus</td>
+                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25">Meja kasir toko yang sudah ada</td>
+                  <td class="p-4 sm:p-5 text-slate-600">Wajib sewa ruko &amp; cat khusus</td>
                 </tr>
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Target Minimum Paket</td>
-                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40">Bebas Target (Tanpa Tekanan)</td>
+                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25">Bebas Target (Tanpa Pinalti)</td>
                   <td class="p-4 sm:p-5 text-slate-600">Wajib capai target (risiko dicabut)</td>
                 </tr>
                 <tr>
                   <td class="p-4 sm:p-5 font-bold text-slate-800">Penjemputan Paket Kurir</td>
-                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25 border-x border-[#93C5FD]/40">Dijemput tiap sore ke toko</td>
+                  <td class="p-4 sm:p-5 font-bold text-[#0B2D5B] bg-[#E3F2FF]/25">Kurir resmi jemput tiap sore ke toko</td>
                   <td class="p-4 sm:p-5 text-slate-600">Sebagian wajib antar sendiri ke hub</td>
                 </tr>
               </tbody>
@@ -227,30 +232,30 @@
           <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Pertanyaan Seputar Komisi Loket
           </h2>
-          <p class="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
-            Hal-hal mendasar tentang skema komisi dan pencairan saldo loket GeraiCuan:
+          <p class="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
+            Jawaban seputar skema komisi dan pencairan saldo loket toko.
           </p>
         </div>
 
         <div class="space-y-4">
-          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200">
+          <div class="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
             <h3 class="font-bold text-slate-900 text-sm mb-1.5">Dari mana asal keuntungan toko saya?</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Keuntungan utama toko berasal dari <strong>diskon resmi ongkir 20% s/d 25%</strong> dari 12+ ekspedisi rekanan GeraiCuan. Konsumen membayar tarif normal standar kurir ke kasir Anda, dan selisih diskon 20%–25% tersebut otomatis menjadi laba bersih toko tanpa potongan royalti, ditambah fee penanganan COD dan selisih berat kargo.
+              Keuntungan utama berasal dari komisi diskon resmi ongkir 20% – 25% dari 12+ ekspedisi rekanan GeraiCuan. Konsumen membayar tarif normal standar kurir, dan selisih diskon 20%–25% tersebut 100% langsung menjadi laba bersih kasir toko Anda tanpa potongan royalti, ditambah fee penanganan COD.
             </p>
           </div>
 
-          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200">
-            <h3 class="font-bold text-slate-900 text-sm mb-1.5">Kapan dan bagaimana cara menarik komisi ke rekening?</h3>
+          <div class="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+            <h3 class="font-bold text-slate-900 text-sm mb-1.5">Kapan dan bagaimana cara menarik komisi ke rekening bank toko?</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Komisi dan dana COD yang sudah cair bisa ditarik langsung (withdrawal) ke rekening bank lokal Anda (BCA, Mandiri, BRI, BNI, dll.) kapan saja tanpa harus menunggu periode bulanan.
+              Komisi dan dana COD yang terkumpul bisa ditarik langsung ke rekening bank lokal toko Anda (BCA, Mandiri, BRI, BNI, BSI, dan bank lainnya) kapan saja tanpa harus menunggu periode bulanan.
             </p>
           </div>
 
-          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200">
-            <h3 class="font-bold text-slate-900 text-sm mb-1.5">Apakah benar tidak ada biaya bulanan atau tahunan?</h3>
+          <div class="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+            <h3 class="font-bold text-slate-900 text-sm mb-1.5">Apakah benar tidak ada biaya tersembunyi selamanya?</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Benar 100%. GeraiCuan tidak membebankan biaya pendaftaran awal, iuran bulanan, maupun biaya lisensi tahunan. Platform ini murni sistem kasir loket pengiriman bagi toko ritel.
+              Benar. GeraiCuan tidak membebankan biaya pendaftaran awal, iuran bulanan, maupun biaya lisensi tahunan. Platform ini 100% gratis untuk memberdayakan pemilik toko dan usaha ritel di Indonesia.
             </p>
           </div>
         </div>
@@ -258,17 +263,17 @@
     </section>
 
     <!-- 6. Call To Action Banner -->
-    <section class="py-16 bg-[#0B2D5B] text-white text-center">
+    <section class="py-16 sm:py-20 bg-[#0B2D5B] text-white text-center">
       <div class="max-w-3xl mx-auto px-4 sm:px-6">
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2.5">
-          Aktivasi Loket Kasir Toko Anda Sekarang
+        <h2 class="text-2xl sm:text-4xl font-black text-white tracking-tight mb-3">
+          Buka Loket Ekspedisi di Toko Anda Sekarang
         </h2>
-        <p class="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed mb-6">
-          Aktivasi gratis akun loket kasir GeraiCuan hari ini. Konsultasikan langsung kebutuhan toko Anda dengan tim kami.
+        <p class="text-xs sm:text-base text-slate-200 max-w-lg mx-auto leading-relaxed mb-8">
+          Aktivasi gratis akun loket kasir GeraiCuan sekarang juga. Modal Rp 0 tanpa biaya franchise, dan kurir resmi jemput gratis tiap sore ke toko Anda.
         </p>
         <div>
-          <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan,%20saya%20ingin%20aktivasi%20loket%20toko" target="_blank" rel="noopener noreferrer" class="h-12 px-8 rounded-full bg-[#1A73E8] hover:bg-[#1557B0] text-white font-extrabold text-sm shadow-lg shadow-black/20 inline-flex items-center justify-center transition-all">
-            <span>Aktivasi via WhatsApp</span>
+          <a href="https://wa.me/6283193144001?text=Halo%20Admin%20GeraiCuan,%20saya%20ingin%20aktivasi%20loket%20toko" target="_blank" rel="noopener noreferrer" class="px-9 py-4 rounded-full bg-[#1A73E8] hover:bg-[#1557B0] text-white font-extrabold text-sm sm:text-base shadow-xl shadow-black/30 hover:-translate-y-0.5 inline-flex items-center justify-center transition-all">
+            <span>Daftar Gratis via WhatsApp · Langsung Aktif</span>
           </a>
         </div>
       </div>
@@ -282,7 +287,7 @@
         <!-- Brand & Brief -->
         <div class="max-w-md">
           <div class="flex items-center mb-3">
-            <img src="./logos/logo-geraicuan-mengantar-dark.png" alt="GeraiCuan powered by mengantar" class="h-9 sm:h-10.5 w-auto object-contain">
+            <img src="./logos/logo-geraicuan-mengantar-dark.svg" alt="GeraiCuan powered by mengantar" class="h-9 sm:h-10.5 w-auto object-contain">
           </div>
           <p class="text-slate-500 text-xs leading-relaxed">
             Aplikasi kasir loket pengiriman multi-kurir untuk toko, konter, dan agen ritel di Indonesia. Layani semua kurir dari 1 layar kasir praktis tanpa biaya franchise.
