@@ -1,10 +1,10 @@
 # Release Manifest — geraicuan
 
 Release-ID: RC-2
-Base: 223beda6
+Base: 223beda8db3fd5fbe0903515a025f128bd4e6128
 Environment: production
 Declared-Risk: R4
-Rollback-Ref: 223beda6
+Rollback-Ref: 223beda8db3fd5fbe0903515a025f128bd4e6128
 Rollback-Command: first deploy — stop `geraicuan-app` in Coolify; no earlier release exists to restore, so fix forward (section 4)
 Backup-Proof: NOT_REQUIRED — the first deploy migrates an empty database (0000–0077); every later migration needs a backup reference here
 Status: BLOCKED
@@ -19,6 +19,11 @@ Open before `Status: READY` (owner actions, section 0 and "Owner decisions"):
 1. Production infrastructure: DNS, Resend sending domain, the PostgreSQL resource, `geraicuan-app` and `geraicuan-landing` in Coolify.
 2. `pg_trgm` available on the production PostgreSQL (section 1, step 6).
 3. Platform-default Mengantar credentials: set or left unset (DEP-6).
+4. `Backup-Proof`: `migration-risk` against `Base` is `M3` (the migrations since `Base`, 0020–0077, include destructive or compatibility-sensitive statements), and `rollback-check` refuses `NOT_REQUIRED` at M3 even on an empty database. After creating the production PostgreSQL (section 0, step 2) and before the first migration, take one backup of the empty database and record its structured reference here (`backup://…` / `snapshot://…`).
+5. `Rollback-Command`: `rollback-check` accepts only an executable command (`git`, `docker`, `bash`, `./…`, …). Coolify's stop is a UI action today, so the field stays prose until the owner names an executable stop/rollback for `geraicuan-app`.
+6. Open tasks: T-105, T-153, T-179, T-219, T-227, T-226 and T-245 are still unchecked in TASKS.md, and several checked tasks carry open sub-items (e.g. the `pg_trgm` gate under T-245, the "Open" notes under T-247–T-274); each needs a disposition (in this release, deferred, or dropped).
+
+`production-gate` preflight on `7d6e346` (2026-10-09, T-295): see `BUILD-LOG.md` → "2026-10-09 — RC-2 production-gate preflight" for every gate and its disposition.
 
 Production issuance stays off after the deploy (D-5): `MENGANTAR_LIVE_ORDERS_ENABLED` and `MENGANTAR_LIVE_ORDERS_PRODUCTION_APPROVED` unset until the owner approves it separately. Not yet proven live (T-285): pay-unpaid, a courier refusal's HTTP status, the stored-phone comparison for reconciliation.
 
