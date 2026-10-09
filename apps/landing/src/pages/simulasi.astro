@@ -21,7 +21,7 @@ const comparison = [
 ];
 
 const faq = [
-  ["Dari mana asal keuntungan toko saya?", "Dari diskon ongkir Mengantar. Setiap kiriman otomatis mendapat diskon 20%, dan diskonnya naik sesuai jumlah kiriman per bulan (lihat tabel di atas). Pelanggan membayar tarif normal kurir, dan selisih diskonnya menjadi laba toko tanpa potongan royalti."],
+  ["Dari mana asal keuntungan toko saya?", "Dari diskon ongkir Mengantar. Setiap kiriman otomatis mendapat diskon 20%, dan diskonnya naik sampai 25% sesuai jumlah kiriman per bulan (lihat tabel di atas). Pelanggan membayar tarif normal kurir, dan selisih diskonnya menjadi laba toko tanpa potongan royalti."],
   ["Siapa di balik GeraiCuan?", "GeraiCuan dikembangkan bersama tim Mengantar, agregator pengiriman yang menghubungkan gerai Anda ke ekspedisi resmi. Kiriman, resi, dan pencairan COD berjalan lewat akun Mengantar milik gerai Anda."],
   ["Bagaimana dana COD sampai ke rekening toko?", "Mengantar mencairkan dana COD setiap hari, termasuk akhir pekan dan hari libur: kiriman yang terkirim sebelum 19.45 WIB dicairkan pukul 20.00 WIB hari itu, ke akun Mengantar gerai Anda. Di GeraiCuan, pemilik gerai memantau estimasi dana cair di menu Pencairan COD."],
   ["Bagaimana kalau paket COD retur?", "Ongkir pulang paket retur digratiskan Mengantar. Gerai hanya membayar ongkir pergi, yang sudah dipotong diskon."],
@@ -47,13 +47,13 @@ const faq = [
       <div>
         <h2 id="judul-diskon" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Diskon ongkir naik mengikuti volume</h2>
         <p class="mt-3 text-base leading-relaxed text-slate-600">
-          Komisi toko berasal dari diskon ongkir Mengantar. Setiap kiriman otomatis mendapat diskon 20%, dan diskonnya naik sesuai jumlah kiriman per bulan.
-          Diskon berlaku untuk kiriman COD maupun Non-COD. Komisi 20%–25% yang kami sebut adalah rentang untuk gerai dengan sampai 7.500 kiriman sebulan.
+          Komisi toko berasal dari diskon ongkir Mengantar. Setiap kiriman otomatis mendapat diskon 20%, dan diskonnya naik sampai 25% sesuai jumlah kiriman per bulan.
+          Diskon berlaku untuk kiriman COD maupun Non-COD.
         </p>
-        <p class="mt-4 text-sm text-slate-500">Sumber: ketentuan diskon di <a href={MENGANTAR_URL} class="font-semibold text-brand-blue underline-offset-4 hover:underline" rel="noopener">mengantar.com</a>, dibaca 10 Oktober 2026. Ketentuan bisa berubah mengikuti Mengantar.</p>
+        <p class="mt-4 text-sm text-slate-500">Sumber: tingkat diskon 20%–25% dari ketentuan diskon di <a href={MENGANTAR_URL} class="font-semibold text-brand-blue underline-offset-4 hover:underline" rel="noopener">mengantar.com</a>, dibaca 10 Oktober 2026. Ketentuan bisa berubah mengikuti Mengantar.</p>
       </div>
       <table class="w-full border-collapse overflow-hidden rounded-2xl bg-white text-left text-base tabular-nums ring-1 ring-slate-200">
-        <caption class="sr-only">Diskon ongkir Mengantar per jumlah kiriman sebulan</caption>
+        <caption class="sr-only">Diskon ongkir Mengantar per jumlah kiriman sebulan, 20% sampai 25%</caption>
         <thead>
           <tr class="border-b border-slate-200 text-sm text-slate-600">
             <th scope="col" class="p-4 font-semibold">Kiriman per bulan</th>

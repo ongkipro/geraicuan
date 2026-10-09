@@ -49,11 +49,10 @@ export const QUOTE_ONLY_COURIERS = [{ name: "Paxel", logo: "/logos/kurir/paxel.p
 
 // Mengantar's published terms (https://mengantar.com/, read 2026-10-10). GeraiCuan is built by
 // the Mengantar team (owner 2026-10-10), so these are the terms a gerai ships under.
+// Owner 2026-10-10: show only the 20%–25% tiers (Mengantar also lists 27,5% and 30% above 7.500).
 export const MENGANTAR_URL = "https://mengantar.com/";
 export const MENGANTAR_DISCOUNT_TIERS = [
   { volume: "0–2.500", discount: "20%" },
   { volume: "2.501–5.000", discount: "22,5%" },
   { volume: "5.001–7.500", discount: "25%" },
-  { volume: "7.501–10.000", discount: "27,5%" },
-  { volume: "Lebih dari 10.000", discount: "30%" },
 ];
