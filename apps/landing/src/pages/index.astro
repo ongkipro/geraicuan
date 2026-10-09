@@ -4,6 +4,7 @@
 import Site from "../layouts/Site.astro";
 import ClosingCta from "../components/ClosingCta.astro";
 import ProfitSimulator from "../components/ProfitSimulator.astro";
+import TariffExample from "../components/TariffExample.astro";
 import { ORDERABLE_COURIERS, QUOTE_ONLY_COURIERS, SIGN_UP_URL } from "../lib/site.mjs";
 import { SAMPLE_LABEL as label, encodeCode128B, formatIdr } from "../lib/sample.mjs";
 
@@ -23,14 +24,14 @@ const businesses = [
 ];
 
 const problems = [
-  ["Franchise mahal & cuma 1 kurir", "Bayar 5–25 juta hanya dapat 1 ekspedisi. Pelanggan pindah ke toko lain kalau kurir yang dicari tidak ada."],
+  ["Franchise mahal & cuma 1 kurir", "Ada biaya kemitraan jutaan rupiah, tapi hanya dapat 1 ekspedisi. Pelanggan pindah ke toko lain kalau kurir yang dicari tidak ada."],
   ["Uang kasir rawan bocor", "Catatan manual sulit dipantau. Transaksi bisa dibatalkan diam-diam tanpa diketahui pemilik toko."],
   ["Tekor denda salah timbang", "Salah ukur kardus, selisih ongkir dipotong dari kantong toko. Hasil kerja seharian habis untuk denda."],
 ];
 
 const comparison = [
-  ["Modal awal kemitraan", "Rp 5 jt–Rp 25 jt", "Gratis, tapi tanpa sistem kasir", "Gratis, tanpa biaya kemitraan"],
-  ["Keuntungan per paket", "Komisi 5%–10%, ada target", "Tarif normal kurir, tanpa margin", "Komisi 20%–25% jadi laba toko"],
+  ["Modal awal kemitraan", "Ada biaya kemitraan", "Gratis, tapi tanpa sistem kasir", "Gratis, tanpa biaya kemitraan"],
+  ["Keuntungan per paket", "Komisi lebih kecil, sering ada target", "Tarif normal kurir, tanpa margin", "Komisi 20%–25% jadi laba toko"],
   ["Pilihan ekspedisi", "Cuma 1 kurir", "Buka banyak tab, kasir pusing", "Banyak kurir resmi di 1 layar"],
   ["Kewajiban beli alat", "Wajib beli paket alat", "Alat seadanya tanpa printer resi", "Pakai HP, laptop & printer toko"],
   ["Bagi hasil / royalti", "Dipotong royalti bulanan", "Tidak ada bagi hasil", "100% milik toko, bebas royalti"],
@@ -46,17 +47,9 @@ const advantages = [
   ["Drop point multi-ekspedisi", "Warga dan seller online sekitar bisa titip kirim lewat banyak ekspedisi di toko Anda."],
   ["Cek ongkir banyak kurir sekaligus", "Bandingkan tarif ekspedisi di satu layar. Pelanggan langsung pilih yang termurah atau tercepat."],
   ["Anti-nombok selisih berat", "Masukkan berat dan ukuran kardus, ongkir dihitung sebelum resi terbit, jadi toko tidak menanggung selisih."],
-  ["COD dengan nilai presisi", "Nilai COD dihitung otomatis supaya setelah potongan biaya COD Mengantar harga barang tetap tertutup. Dana cair dan paket retur terpantau di aplikasi."],
+  ["COD presisi, cair setiap hari", "Nilai COD dihitung otomatis supaya setelah fee COD Mengantar harga barang tetap tertutup. Mengantar mencairkan dana COD setiap hari; kalau paket retur, ongkir pulangnya gratis."],
   ["Cetak resi & kirim via WhatsApp", "Cetak label thermal 10 × 15 cm sekali klik, lalu kirim nomor resi ke WhatsApp penerima dari halaman kiriman."],
   ["Kasir aman, pantau dari HP", "Operator bekerja dari antrean cetak resi. Pemilik gerai memantau kiriman dan uang gerai dari HP."],
-];
-
-// Illustrative quotes (data rekaan) for the flow example; the chosen one matches the sample label.
-const quotes = [
-  { logo: "/logos/kurir/jnt.svg", service: "EZ", eta: "2–3 hari", price: label.cod.shippingIdr, chosen: true },
-  { logo: "/logos/kurir/sicepat.svg", service: "REG", eta: "2–3 hari", price: 15_500, chosen: false },
-  { logo: "/logos/kurir/jne.svg", service: "REG", eta: "2–3 hari", price: 16_000, chosen: false },
-  { logo: "/logos/kurir/idx.svg", service: "STD", eta: "3–4 hari", price: 15_000, chosen: false },
 ];
 
 const steps = [
@@ -68,7 +61,7 @@ const steps = [
 ---
 <Site title={title} description={description} path="/">
   <section class="relative isolate overflow-hidden bg-brand-navy-dark text-white" aria-labelledby="judul">
-    <img src="/images/mitra-gerai-ekspedisi.webp" alt="" width="1200" height="896" fetchpriority="high" class="absolute inset-0 -z-10 h-full w-full object-cover" />
+    <img src="/images/mitra-gerai-ekspedisi.webp" alt="" width="1200" height="896" fetchpriority="high" class="absolute inset-0 -z-10 h-full w-full object-cover object-[72%_center]" />
     <div class="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy-dark/95 via-brand-navy-dark/85 to-brand-navy-dark/50"></div>
     <div class="mx-auto max-w-7xl px-4 pb-10 pt-16 sm:px-6 sm:pt-24 lg:px-8 lg:pt-28">
       <div class="max-w-3xl">
@@ -89,7 +82,7 @@ const steps = [
         <div class="flex flex-col"><dt class="text-sm text-slate-300">Biaya franchise</dt><dd class="order-first text-2xl font-extrabold sm:text-3xl">Gratis</dd></div>
         <div class="flex flex-col"><dt class="text-sm text-slate-300">Penjemputan</dt><dd class="order-first text-2xl font-extrabold sm:text-3xl">Ke toko</dd></div>
       </dl>
-      <p class="mt-4 text-sm text-slate-300"><a href="/simulasi/#faq" class="underline underline-offset-4 hover:text-white">Dari mana komisi 20%–25% berasal?</a></p>
+      <p class="mt-4 text-sm text-slate-300">Dikembangkan bersama tim Mengantar · <a href="/simulasi/#diskon" class="underline underline-offset-4 hover:text-white">Dari mana komisi 20%–25% berasal?</a></p>
     </div>
   </section>
 
@@ -98,7 +91,7 @@ const steps = [
       <div class="mx-auto max-w-2xl text-center">
         <h2 id="judul-kurir" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Ekspedisi resmi lewat Mengantar</h2>
         <p class="mt-2 text-base leading-relaxed text-slate-600">
-          Resi resmi dari kurir, bisa dilacak di aplikasi masing-masing. 12+ layanan: delapan kurir di bawah ditambah layanan kargo JNE, SAP, SiCepat, dan ID Express.
+          GeraiCuan dikembangkan bersama tim Mengantar. Resi resmi dari kurir, bisa dilacak di aplikasi masing-masing. 12+ layanan: delapan kurir di bawah ditambah layanan kargo JNE, SAP, SiCepat, dan ID Express.
         </p>
       </div>
       <p class="mt-10 text-center text-sm font-semibold text-slate-700">Bisa langsung dipesan</p>
@@ -230,6 +223,7 @@ const steps = [
                 <h3 class="text-lg font-bold text-slate-900">{heading}</h3>
                 <p class="mt-1 text-base leading-relaxed text-slate-600">{text}</p>
                 <p class="mt-2 text-sm font-semibold text-brand-navy">{example}</p>
+                {index === 1 && <div class="mt-4 lg:hidden"><TariffExample /></div>}
               </div>
             </li>
           ))}
@@ -237,24 +231,9 @@ const steps = [
         <p class="mt-8"><a href="/cara-kerja/" class="font-semibold text-brand-blue underline-offset-4 hover:underline">Lihat alur kasir selengkapnya</a></p>
       </div>
 
-      <figure class="grid gap-3 lg:sticky lg:top-24">
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-hidden="true">
-          <p class="text-sm font-semibold text-slate-500">Cek tarif · 1 kg · Kota Bandung</p>
-          <ul class="mt-3 divide-y divide-slate-100">
-            {quotes.map((quote) => (
-              <li class:list={["flex items-center justify-between gap-3 px-2 py-3", quote.chosen && "rounded-lg bg-brand-blue-pale outline outline-2 outline-brand-blue"]}>
-                <span class="flex items-center gap-3">
-                  <img src={quote.logo} alt="" width="64" height="24" class="h-6 w-16 object-contain" loading="lazy" />
-                  <span class="text-sm text-slate-600">{quote.service} · {quote.eta}</span>
-                </span>
-                <span class="text-base font-bold tabular-nums text-slate-900">{formatIdr(quote.price)}</span>
-              </li>
-            ))}
-          </ul>
-          <p class="mt-3 text-sm font-semibold text-brand-navy">Dipilih: {label.courier} {formatIdr(cod.shippingIdr)} → resi {label.awb}</p>
-        </div>
-        <figcaption class="text-sm text-slate-500">Contoh tampilan cek tarif dengan data rekaan; tarif nyata datang dari Mengantar saat Anda mengecek. Resinya tercetak di bawah.</figcaption>
-      </figure>
+      <div class="hidden lg:sticky lg:top-24 lg:block">
+        <TariffExample />
+      </div>
     </div>
   </section>
 
@@ -263,7 +242,7 @@ const steps = [
       <div class="lg:col-start-1 lg:row-start-1">
         <h2 id="judul-bukti" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Resi thermal yang jelas, nilai COD yang presisi</h2>
         <p class="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
-          Mengantar memotong biaya COD 3,33% (termasuk PPN) dari nilai yang ditagih ke penerima. GeraiCuan menghitung nilai COD terkecil,
+          Mengantar memotong fee COD 3% ditambah PPN (3,33%) dari nilai yang ditagih ke penerima. GeraiCuan menghitung nilai COD terkecil,
           dibulatkan ke rupiah penuh, yang setelah dipotong biaya itu tetap menutup harga barang dan ongkir. Kasir tidak perlu menghitung manual.
         </p>
         <table class="mt-8 w-full max-w-xl border-collapse text-base tabular-nums">

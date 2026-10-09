@@ -1,16 +1,18 @@
 ---
-// Commission estimate and FAQ (T-296). The figures are the owner's commercial terms.
+// Commission estimate, Mengantar discount tiers and FAQ (T-296, T-297). The commission is the
+// owner's term; the tiers, COD fee, return and payout rules are Mengantar's published terms.
 import Site from "../layouts/Site.astro";
 import PageHero from "../components/PageHero.astro";
 import ClosingCta from "../components/ClosingCta.astro";
 import ProfitSimulator from "../components/ProfitSimulator.astro";
+import { MENGANTAR_DISCOUNT_TIERS, MENGANTAR_URL } from "../lib/site.mjs";
 
 const title = "Simulasi Komisi dan Keuntungan Loket Ekspedisi Toko - GeraiCuan";
 const description = "Hitung estimasi keuntungan loket ekspedisi di toko Anda dengan simulator komisi GeraiCuan. Komisi 20%-25% per paket, tanpa franchise atau royalti.";
 
 const comparison = [
-  ["Biaya kemitraan awal", "Gratis", "Rp 5 jt–Rp 25 jt"],
-  ["Keuntungan diskon ongkir", "Komisi 20%–25% jadi laba", "Komisi 5%–10%, ada target"],
+  ["Biaya kemitraan awal", "Gratis", "Ada biaya kemitraan"],
+  ["Keuntungan diskon ongkir", "Komisi 20%–25% jadi laba", "Komisi lebih kecil, sering ada target"],
   ["Pilihan ekspedisi", "Banyak kurir resmi di 1 layar", "Cuma 1 kurir"],
   ["Royalti bulanan", "Tidak ada, 100% milik toko", "Dipotong royalti atau lisensi"],
   ["Syarat tempat", "Meja kasir yang sudah ada", "Wajib sewa ruko dan cat khusus"],
@@ -19,9 +21,11 @@ const comparison = [
 ];
 
 const faq = [
-  ["Dari mana asal keuntungan toko saya?", "Dari diskon ongkir resmi 20%–25% ekspedisi lewat Mengantar. Pelanggan membayar tarif normal kurir, dan selisih diskonnya menjadi laba toko tanpa potongan royalti."],
-  ["Bagaimana dana COD dan komisi sampai ke rekening toko?", "Gerai memakai akun Mengantar miliknya sendiri. Dana COD dicairkan Mengantar ke akun itu, dan saldonya ditarik ke rekening bank toko dari akun Mengantar. Di GeraiCuan, pemilik gerai memantau estimasi dana cair di menu Pencairan COD."],
-  ["Apakah benar tidak ada biaya tersembunyi?", "Benar. GeraiCuan tidak memungut biaya pendaftaran, iuran bulanan, maupun lisensi. Biaya yang ada hanyalah tarif kurir, biaya COD, dan asuransi bila dipilih, semuanya dari Mengantar dan tampil sebelum resi terbit."],
+  ["Dari mana asal keuntungan toko saya?", "Dari diskon ongkir Mengantar. Setiap kiriman otomatis mendapat diskon 20%, dan diskonnya naik sesuai jumlah kiriman per bulan (lihat tabel di atas). Pelanggan membayar tarif normal kurir, dan selisih diskonnya menjadi laba toko tanpa potongan royalti."],
+  ["Siapa di balik GeraiCuan?", "GeraiCuan dikembangkan bersama tim Mengantar, agregator pengiriman yang menghubungkan gerai Anda ke ekspedisi resmi. Kiriman, resi, dan pencairan COD berjalan lewat akun Mengantar milik gerai Anda."],
+  ["Bagaimana dana COD sampai ke rekening toko?", "Mengantar mencairkan dana COD setiap hari, termasuk akhir pekan dan hari libur: kiriman yang terkirim sebelum 19.45 WIB dicairkan pukul 20.00 WIB hari itu, ke akun Mengantar gerai Anda. Di GeraiCuan, pemilik gerai memantau estimasi dana cair di menu Pencairan COD."],
+  ["Bagaimana kalau paket COD retur?", "Ongkir pulang paket retur digratiskan Mengantar. Gerai hanya membayar ongkir pergi, yang sudah dipotong diskon."],
+  ["Apakah benar tidak ada biaya tersembunyi?", "Benar. GeraiCuan tidak memungut biaya pendaftaran, iuran bulanan, maupun lisensi. Tarif kurir dan fee COD (3% ditambah PPN) tampil sebelum resi terbit. Mengantar mengasuransikan paket di bawah Rp 500 ribu secara gratis; di atasnya biayanya Rp 1 ribu per paket."],
   ["Apakah gerai langsung aktif setelah daftar?", "Daftar dengan email dan nomor WhatsApp gerai, lalu verifikasi email. Setelah masuk, lengkapi profil dan hubungkan akun Mengantar gerai di Pengaturan. Gerai mulai mengirim setelah pendaftaran disetujui admin GeraiCuan."],
 ];
 ---
@@ -38,7 +42,37 @@ const faq = [
     </div>
   </section>
 
-  <section class="py-14 sm:py-20" aria-labelledby="judul-banding">
+  <section id="diskon" class="py-14 sm:py-20" aria-labelledby="judul-diskon">
+    <div class="mx-auto grid max-w-6xl items-start gap-10 px-4 sm:px-6 lg:grid-cols-[1fr_1fr]">
+      <div>
+        <h2 id="judul-diskon" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Diskon ongkir naik mengikuti volume</h2>
+        <p class="mt-3 text-base leading-relaxed text-slate-600">
+          Komisi toko berasal dari diskon ongkir Mengantar. Setiap kiriman otomatis mendapat diskon 20%, dan diskonnya naik sesuai jumlah kiriman per bulan.
+          Diskon berlaku untuk kiriman COD maupun Non-COD. Komisi 20%–25% yang kami sebut adalah rentang untuk gerai dengan sampai 7.500 kiriman sebulan.
+        </p>
+        <p class="mt-4 text-sm text-slate-500">Sumber: ketentuan diskon di <a href={MENGANTAR_URL} class="font-semibold text-brand-blue underline-offset-4 hover:underline" rel="noopener">mengantar.com</a>, dibaca 10 Oktober 2026. Ketentuan bisa berubah mengikuti Mengantar.</p>
+      </div>
+      <table class="w-full border-collapse overflow-hidden rounded-2xl bg-white text-left text-base tabular-nums ring-1 ring-slate-200">
+        <caption class="sr-only">Diskon ongkir Mengantar per jumlah kiriman sebulan</caption>
+        <thead>
+          <tr class="border-b border-slate-200 text-sm text-slate-600">
+            <th scope="col" class="p-4 font-semibold">Kiriman per bulan</th>
+            <th scope="col" class="p-4 text-right font-semibold">Diskon ongkir</th>
+          </tr>
+        </thead>
+        <tbody>
+          {MENGANTAR_DISCOUNT_TIERS.map((tier) => (
+            <tr class="border-b border-slate-100 last:border-0">
+              <th scope="row" class="p-4 font-medium text-slate-800">{tier.volume}</th>
+              <td class="p-4 text-right font-bold text-brand-navy">{tier.discount}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-banding">
     <div class="mx-auto max-w-4xl px-4 sm:px-6">
       <h2 id="judul-banding" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">GeraiCuan dibanding franchise biasa</h2>
       <p class="mt-2 text-base leading-relaxed text-slate-600">Syarat dan keuntungan membuka loket di toko Anda.</p>
@@ -74,7 +108,7 @@ const faq = [
     </div>
   </section>
 
-  <section id="faq" class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-faq">
+  <section id="faq" class="py-14 sm:py-20" aria-labelledby="judul-faq">
     <div class="mx-auto max-w-3xl px-4 sm:px-6">
       <h2 id="judul-faq" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Pertanyaan seputar komisi loket</h2>
       <div class="mt-8 divide-y divide-slate-200 border-y border-slate-200">

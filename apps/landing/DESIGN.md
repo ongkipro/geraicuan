@@ -40,12 +40,18 @@ Scope: the public Astro site in `apps/landing` (geraicuan.com, PR-63, D-11). The
 - The three named testimonials were removed: nothing has been deployed, so no real customer exists yet.
 - Added shipped capabilities: masking/gerai name on the label (PR-71), invoice on 80 mm or A4 (PR-76–PR-80), retur, cancel (owner only), cek resi, handover queue (T-263).
 
+## T-297 (2026-10-10): sources, brand, refinements
+
+- GeraiCuan is built by the Mengantar team with the owner; "Dikembangkan bersama tim Mengantar" appears in the hero, the couriers lead, the FAQ and the footer. No company name until the legal entity exists.
+- Mengantar's published terms (mengantar.com, read 2026-10-10) now back the money copy: discount 20% rising by monthly volume to 30% (`/simulasi/#diskon` table with the source), fee COD 3% + PPN (= the CMS 3.33%), free return leg with only the outbound fare paid (= the CMS return charge), daily COD payout at 20.00 WIB, free insurance under Rp 500 rb (Rp 1 rb above; the CMS does not quote insurance before issuance, so the page does not say it shows beforehand). Competitor figures without a source became qualitative.
+- Brand: the landing keeps the 2026 guideline (D-11 amended); the CMS follows in T-298.
+- Visual: the closing activation is a plain numbered line (no tinted boxes, no sky badge); slider labels sit at their track positions (100 at 47.4%, within a few pixels of the thumb centre); on a phone the tariff example sits inside step 2; the hero photo is cropped to keep the cashier in view; the phone header shows Masuk + Menu (the menu includes "Daftar gratis"), so the home first screen has one sign-up action (the hero's); `/kontak/` gives WhatsApp the widest column.
+- The visual review cap (5 rounds) was spent in T-296; no new round was run. The gate stays FAIL until the owner's photos replace the illustrations.
+
 ## Owner content still needed
 
 - Real testimonials or partner logos once gerai are live.
-- Confirmation that "powered by mengantar" in the logo is permitted by Mengantar.
-- A source or terms link for the 20%–25% commission, the "ekspedisi resmi" wording, and the competitor figures (Rp 5–25 jt franchise, 5%–10% commission).
-- The operator's legal identity (company name, address) for the footer.
+- The legal entity name for the footer, once registered.
 - Photos: the shop illustrations are generated (garbled sign text, third-party brand signs); real photos would replace them.
 
 ## Render critique

@@ -20,10 +20,10 @@ const activation = ["Daftar dan verifikasi email", "Hubungkan akun Mengantar ger
     <p class="mx-auto mt-3 max-w-xl text-base leading-relaxed text-slate-200">
       {text}
     </p>
-    <ol class="mx-auto mt-6 grid max-w-2xl gap-3 text-left sm:grid-cols-3">
+    <ol role="list" class="mx-auto mt-6 flex max-w-2xl flex-col items-center gap-x-6 gap-y-2 text-base font-semibold sm:flex-row sm:justify-center">
       {activation.map((step, index) => (
-        <li class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold">
-          <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-sky text-sm font-bold text-brand-navy-dark" aria-hidden="true">{index + 1}</span>
+        <li class="flex items-center gap-2">
+          <span class="font-extrabold text-white/60" aria-hidden="true">{index + 1}.</span>
           {step}
         </li>
       ))}

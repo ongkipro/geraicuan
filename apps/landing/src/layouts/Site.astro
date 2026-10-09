@@ -77,8 +77,8 @@ const isCurrent = (href: string) => href === path;
           </ul>
         </nav>
         <div class="flex items-center gap-2">
-          <a href={SIGN_IN_URL} data-cta="masuk" class="hidden min-h-11 items-center px-3 text-sm font-semibold text-slate-700 hover:text-brand-blue sm:inline-flex">Masuk</a>
-          <a href={SIGN_UP_URL} data-cta="daftar" class="inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-brand-blue px-4 text-sm font-bold text-white transition-colors hover:bg-brand-blue-hover sm:px-5">Daftar gratis</a>
+          <a href={SIGN_IN_URL} data-cta="masuk" class="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-slate-700 hover:text-brand-blue sm:px-3">Masuk</a>
+          <a href={SIGN_UP_URL} data-cta="daftar" class="hidden min-h-11 items-center whitespace-nowrap rounded-full bg-brand-blue px-5 text-sm font-bold text-white transition-colors hover:bg-brand-blue-hover sm:inline-flex">Daftar gratis</a>
           <details class="group relative md:hidden">
             <summary class="flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
               Menu
@@ -91,7 +91,10 @@ const isCurrent = (href: string) => href === path;
                   </li>
                 ))}
                 <li class="mt-1 border-t border-slate-100 pt-1">
-                  <a href={SIGN_IN_URL} data-cta="masuk" class="flex min-h-11 items-center rounded-lg px-3 font-bold text-brand-blue hover:bg-brand-blue-pale">Masuk ke aplikasi</a>
+                  <a href={SIGN_UP_URL} data-cta="daftar" class="flex min-h-11 items-center rounded-lg px-3 font-bold text-brand-blue hover:bg-brand-blue-pale">Daftar gratis</a>
+                </li>
+                <li>
+                  <a href={SIGN_IN_URL} data-cta="masuk" class="flex min-h-11 items-center rounded-lg px-3 font-semibold text-slate-700 hover:bg-slate-50">Masuk ke aplikasi</a>
                 </li>
               </ul>
             </nav>
@@ -109,6 +112,7 @@ const isCurrent = (href: string) => href === path;
         <div class="max-w-md space-y-3">
           <img src="/logos/logo-geraicuan-mengantar-dark.svg" alt={`${BRAND} powered by Mengantar`} width="320" height="80" class="h-10 w-auto" loading="lazy" />
           <p>Aplikasi kasir loket pengiriman multi-kurir untuk toko, konter, dan agen ritel di Indonesia. Gratis, tanpa biaya franchise.</p>
+          <p>Dikembangkan bersama tim <a href="https://mengantar.com/" class="font-semibold text-slate-800 underline-offset-4 hover:underline" rel="noopener">Mengantar</a>.</p>
           <p>WhatsApp onboarding: {WHATSAPP_DISPLAY}</p>
         </div>
         <div class="grid grid-cols-2 gap-x-6">

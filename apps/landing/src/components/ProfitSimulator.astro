@@ -16,7 +16,12 @@ const monthly = DEFAULT_DAILY * 30 * PER_PARCEL_IDR;
     <output for={`${id}-slider`} class="whitespace-nowrap text-lg font-extrabold tabular-nums text-brand-blue" data-daily>{DEFAULT_DAILY} paket / hari</output>
   </div>
   <input id={`${id}-slider`} type="range" min="10" max="200" step="5" value={DEFAULT_DAILY} class="mt-4 h-11 w-full cursor-pointer accent-brand-blue" />
-  <div class="flex justify-between text-sm text-slate-500" aria-hidden="true"><span>10 paket</span><span>100 paket</span><span>200 paket</span></div>
+  <!-- Scale labels at their track positions: (value − 10) / 190. -->
+  <div class="relative h-5 text-sm text-slate-500" aria-hidden="true">
+    <span class="absolute left-0">10</span>
+    <span class="absolute left-[47.4%] -translate-x-1/2">100</span>
+    <span class="absolute right-0">200 paket</span>
+  </div>
   <p class="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-600">
     <strong class="text-slate-800">Asumsi:</strong> rata-rata komisi Rp 3.500 per paket dari diskon ongkir 20%–25%, 30 hari sebulan. Belum dikurangi biaya operasional toko.
   </p>
