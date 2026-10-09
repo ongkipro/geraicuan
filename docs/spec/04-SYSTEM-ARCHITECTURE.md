@@ -35,7 +35,7 @@ flowchart LR
   App -->|"SQL as geraicuan_app, forced RLS"| PG
 ```
 
-The landing site is static and has no server or database access; its Daftar and Masuk links point at `PUBLIC_APP_ORIGIN` (`apps/landing/src/pages/index.astro`, default `https://app.geraicuan.com`).
+The landing site is static and has no server or database access; its Daftar and Masuk links point at `PUBLIC_APP_ORIGIN` (`apps/landing/src/lib/site.mjs`, default `https://app.geraicuan.com`).
 
 ## Containers
 

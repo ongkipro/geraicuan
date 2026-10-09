@@ -40,7 +40,7 @@ flowchart LR
 
 ## Surfaces
 
-- **Public (Astro):** `geraicuan.com` sales page whose Daftar/Masuk links point at `app.geraicuan.com` (`apps/landing/src/pages/index.astro`, `PUBLIC_APP_ORIGIN`).
+- **Public (Astro):** `geraicuan.com` sales site (five static pages, T-296) whose Daftar/Masuk links point at `app.geraicuan.com` (`apps/landing/src/lib/site.mjs`, `PUBLIC_APP_ORIGIN`).
 - **Tenant host** `app.geraicuan.com`: `/login` (rewritten to `/login/tenant`), `/daftar`, `/verifikasi-email`, `/lupa-password`, `/atur-ulang-password`, `/api/webhooks`, and the CMS `/app/**`. Menu (`src/lib/cms-shell-navigation.ts`): Info terbaru, Dasbor; Buat kiriman, Histori kiriman, Retur (RTS), Cetak resi (label + nota/invoice); Pengirim, Penerima; Cek resi, Cek tarif; Laporan pengiriman, Pencairan COD (T-275), Riwayat cetak resi; Pengaturan (outlet, pickup, kurir, label, koneksi) with Anggota under it. Laporan, Pencairan, Riwayat cetak resi, Pengaturan and Anggota are Tenant Admin only.
 - **Platform host** `bos.geraicuan.com` (Super Admin): `/login` (rewritten to `/login/super-admin`) and `/platform/**` — Ringkasan, Gerai (`/platform/tenant`), Pendaftaran, Audit, Info terbaru (`/platform/info`).
 - `/api/auth/**` is served on both hosts. Without host routing (development) one origin serves everything and `src/app/page.tsx` is the single-origin entry.

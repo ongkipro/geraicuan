@@ -1,0 +1,48 @@
+---
+// Commission estimate (owner's figures, T-296): parcels per day × 30 days × Rp 3.500
+// average commission per parcel. An estimate only; the page says so next to the number.
+interface Props {
+  id: string;
+}
+const { id } = Astro.props;
+const PER_PARCEL_IDR = 3500;
+const DEFAULT_DAILY = 40;
+const rupiah = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
+const monthly = DEFAULT_DAILY * 30 * PER_PARCEL_IDR;
+---
+<div class="profit-simulator mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10" data-per-parcel={PER_PARCEL_IDR}>
+  <div class="flex items-baseline justify-between gap-4">
+    <label for={`${id}-slider`} class="text-base font-semibold text-slate-800">Target kiriman per hari</label>
+    <output for={`${id}-slider`} class="whitespace-nowrap text-lg font-extrabold tabular-nums text-brand-blue" data-daily>{DEFAULT_DAILY} paket / hari</output>
+  </div>
+  <input id={`${id}-slider`} type="range" min="10" max="200" step="5" value={DEFAULT_DAILY} class="mt-4 h-11 w-full cursor-pointer accent-brand-blue" />
+  <div class="flex justify-between text-sm text-slate-500" aria-hidden="true"><span>10 paket</span><span>100 paket</span><span>200 paket</span></div>
+  <p class="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-600">
+    <strong class="text-slate-800">Asumsi:</strong> rata-rata komisi Rp 3.500 per paket dari diskon ongkir 20%–25%, 30 hari sebulan. Belum dikurangi biaya operasional toko.
+  </p>
+
+  <div class="mt-8 border-t border-slate-200 pt-8 text-center">
+    <p class="text-base font-semibold text-slate-600">Estimasi komisi toko Anda</p>
+    <p class="mt-2"><span class="text-4xl font-black tabular-nums text-slate-900 sm:text-5xl" aria-live="polite" data-monthly>{rupiah(monthly)}</span> <span class="text-base font-semibold text-slate-500">/ bulan</span></p>
+    <p class="mt-2 text-base text-slate-600">Proyeksi setahun: <span class="font-bold tabular-nums text-slate-800" data-yearly>{rupiah(monthly * 12)}</span></p>
+    <p class="mt-3 text-base font-semibold tabular-nums text-slate-700" data-formula>{DEFAULT_DAILY} paket × 30 hari × Rp 3.500</p>
+    <p class="mt-2 text-sm text-slate-500">Hasil nyata mengikuti jumlah dan jenis kiriman toko Anda.</p>
+  </div>
+</div>
+
+<script>
+  for (const root of document.querySelectorAll<HTMLElement>(".profit-simulator")) {
+    const slider = root.querySelector<HTMLInputElement>("input[type=range]")!;
+    const perParcel = Number(root.dataset.perParcel);
+    const rupiah = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
+    const set = (selector: string, text: string) => { root.querySelector(selector)!.textContent = text; };
+    slider.addEventListener("input", () => {
+      const daily = Number(slider.value);
+      const monthly = daily * 30 * perParcel;
+      set("[data-daily]", `${daily} paket / hari`);
+      set("[data-monthly]", rupiah(monthly));
+      set("[data-yearly]", rupiah(monthly * 12));
+      set("[data-formula]", `${daily} paket × 30 hari × Rp 3.500`);
+    });
+  }
+</script>

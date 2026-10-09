@@ -1,0 +1,22 @@
+---
+// Header band of the landing subpages (T-296).
+import { SIGN_UP_URL } from "../lib/site.mjs";
+
+interface Props {
+  title: string;
+  lead: string;
+  /** The sign-up button; off where the page's own task comes first. */
+  showSignUp?: boolean;
+}
+const { title, lead, showSignUp = true } = Astro.props;
+---
+<section class="bg-slate-50 pb-10 pt-12 sm:pb-14 sm:pt-16">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6">
+    <h1 class="max-w-3xl text-3xl font-black leading-[1.15] tracking-tight text-slate-900 sm:text-5xl">{title}</h1>
+    <p class="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">{lead}</p>
+    {showSignUp && (
+      <a href={SIGN_UP_URL} data-cta="daftar" class="mt-7 inline-flex min-h-12 items-center justify-center rounded-full bg-brand-blue px-9 text-base font-bold text-white transition-colors hover:bg-brand-blue-hover">Daftar gratis</a>
+    )}
+    <slot />
+  </div>
+</section>

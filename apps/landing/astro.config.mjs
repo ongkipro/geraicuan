@@ -1,19 +1,22 @@
-// GeraiCUAN public landing page (T-184, PR-63, D-11). Static output only.
+// GeraiCuan public landing site (T-184, PR-63, D-11; loket redesign T-296). Static output only.
 import { defineConfig, fontProviders } from "astro/config";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   site: "https://geraicuan.com",
   output: "static",
   trailingSlash: "ignore",
   devToolbar: { enabled: false },
-  // Inter, as the CMS loads it (src/app/layout.tsx: next/font Inter, latin, --font-inter).
-  // Files are downloaded at build time and self-hosted under dist/_astro/fonts.
+  // Inline (empty) PostCSS config stops Vite from picking up the Next.js app's
+  // postcss.config.mjs at the repository root; Tailwind runs as a Vite plugin.
+  vite: { plugins: [tailwindcss()], css: { postcss: {} } },
+  // Inter, self-hosted: downloaded at build time into dist/_astro/fonts.
   fonts: [
     {
       provider: fontProviders.fontsource(),
       name: "Inter",
       cssVariable: "--font-inter",
-      weights: [400, 500, 600, 700],
+      weights: [400, 500, 600, 700, 800],
       styles: ["normal"],
       subsets: ["latin"],
     },

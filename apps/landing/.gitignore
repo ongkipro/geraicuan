@@ -3,3 +3,7 @@ dist/
 .astro/
 .env
 .env.*
+# Local render and reference captures (T-296); the text record is DESIGN.md and design/review.md.
+design/renders/
+design/refs/
+design/review-slices/

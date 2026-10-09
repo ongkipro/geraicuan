@@ -1,0 +1,56 @@
+---
+// Contact (T-296). The page's one WhatsApp call to action (owner rule: at most one,
+// never in the header or hero, secondary style with a monochrome icon).
+import Site from "../layouts/Site.astro";
+import PageHero from "../components/PageHero.astro";
+import { SIGN_UP_URL, WHATSAPP_DISPLAY, WHATSAPP_URL } from "../lib/site.mjs";
+
+const title = "Kontak Tim Onboarding dan Bantuan Loket Multi-Kurir - GeraiCuan";
+const description = "Hubungi tim GeraiCuan untuk panduan daftar loket kasir multi-kurir gratis, koneksi akun Mengantar, dan cetak resi thermal pertama lewat WhatsApp.";
+---
+<Site title={title} description={description} path="/kontak/">
+  <PageHero
+    title="Aktifkan loket di toko Anda, gratis"
+    lead="Tim onboarding GeraiCuan memandu pendaftaran, koneksi akun Mengantar gerai, dan cetak resi thermal pertama Anda."
+    showSignUp={false}
+  />
+
+  <section class="bg-slate-50 pb-14 sm:pb-20" aria-label="Cara menghubungi kami">
+    <div class="mx-auto grid max-w-6xl gap-x-10 gap-y-10 px-4 sm:px-6 md:grid-cols-3">
+      <div class="border-t-4 border-brand-blue pt-4">
+        <h2 class="text-lg font-bold text-slate-900">WhatsApp onboarding</h2>
+        <p class="mt-1.5 text-base leading-relaxed text-slate-600">Tanya langsung ke admin GeraiCuan soal pendaftaran, persetujuan gerai, atau koneksi Mengantar.</p>
+        <p class="mt-3 text-xl font-extrabold tabular-nums text-slate-900">{WHATSAPP_DISPLAY}</p>
+        <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" class="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-300 px-5 text-base font-semibold text-slate-800 transition-colors hover:border-brand-blue hover:text-brand-blue">
+          <svg aria-hidden="true" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" /></svg>
+          Chat lewat WhatsApp
+        </a>
+      </div>
+      <div class="border-t-2 border-brand-blue pt-4">
+        <h2 class="text-lg font-bold text-slate-900">Jam dukungan</h2>
+        <p class="mt-1.5 text-base leading-relaxed text-slate-600">Kami membantu koneksi printer thermal dan transaksi pertama sampai lancar.</p>
+        <dl class="mt-3 space-y-1 text-base text-slate-700">
+          <div class="flex justify-between gap-4"><dt>Senin–Sabtu</dt><dd class="font-semibold tabular-nums">08.00–21.00 WIB</dd></div>
+          <div class="flex justify-between gap-4"><dt>Minggu & libur</dt><dd class="font-semibold tabular-nums">09.00–17.00 WIB</dd></div>
+        </dl>
+      </div>
+      <div class="border-t-2 border-brand-blue pt-4">
+        <h2 class="text-lg font-bold text-slate-900">Jangkauan</h2>
+        <p class="mt-1.5 text-base leading-relaxed text-slate-600">Untuk konter pulsa, toko fotokopi, sembako, dan minimarket di Indonesia. Penjemputan mengikuti jangkauan pickup kurir lewat Mengantar di area toko Anda.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-14 sm:py-16" aria-labelledby="judul-daftar">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6">
+      <h2 id="judul-daftar" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Mendaftar sendiri</h2>
+      <ol class="mt-6 list-decimal space-y-3 pl-5 text-base leading-relaxed text-slate-700 marker:font-bold marker:text-brand-blue">
+        <li>Daftar dengan email dan nomor WhatsApp gerai, lalu pilih awalan nomor kiriman.</li>
+        <li>Verifikasi email dari tautan yang kami kirim.</li>
+        <li>Masuk, lalu hubungkan akun Mengantar gerai Anda di Pengaturan.</li>
+        <li><strong>Tunggu persetujuan admin GeraiCuan.</strong> Setelah disetujui, gerai bisa membuat kiriman.</li>
+      </ol>
+      <a href={SIGN_UP_URL} data-cta="daftar" class="mt-8 inline-flex min-h-12 items-center rounded-full bg-brand-blue px-8 text-base font-bold text-white transition-colors hover:bg-brand-blue-hover">Daftar gratis</a>
+    </div>
+  </section>
+</Site>

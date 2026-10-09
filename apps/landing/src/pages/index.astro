@@ -1,350 +1,333 @@
 ---
-// GeraiCUAN public landing page (T-184, PR-63, D-11). Static; no client JavaScript.
-import { Font } from "astro:assets";
-import "../styles/landing.css";
-import { COD_ONGKIR_SAMPLE as codOngkir, SAMPLE_LABEL as label, encodeCode128B, formatIdr } from "../lib/sample.mjs";
+// GeraiCuan home (PR-63, T-296): the loket positioning from the owner's redesign
+// (origin/landing-page a2f7a7e), with product facts checked against the CMS.
+import Site from "../layouts/Site.astro";
+import ClosingCta from "../components/ClosingCta.astro";
+import ProfitSimulator from "../components/ProfitSimulator.astro";
+import { ORDERABLE_COURIERS, QUOTE_ONLY_COURIERS, SIGN_UP_URL } from "../lib/site.mjs";
+import { SAMPLE_LABEL as label, encodeCode128B, formatIdr } from "../lib/sample.mjs";
 
-// The one build-time configuration value: where the tenant CMS lives. A bare
-// http(s) origin only, so a mistyped value fails the build instead of shipping a
-// CTA that points somewhere else.
-const configuredOrigin = import.meta.env.PUBLIC_APP_ORIGIN || "https://app.geraicuan.com";
-const parsedOrigin = new URL(configuredOrigin);
-if (
-  !["http:", "https:"].includes(parsedOrigin.protocol) ||
-  parsedOrigin.username || parsedOrigin.password ||
-  parsedOrigin.pathname !== "/" || parsedOrigin.search || parsedOrigin.hash
-) {
-  throw new Error(`PUBLIC_APP_ORIGIN must be a bare http(s) origin, got ${JSON.stringify(configuredOrigin)}`);
-}
-const appOrigin = parsedOrigin.origin;
-const signUpUrl = `${appOrigin}/daftar`;
-const signInUrl = `${appOrigin}/login`;
+const title = "Buka Loket 12+ Layanan Ekspedisi Resmi di Toko Anda - GeraiCuan";
+const description = "Buka loket ekspedisi resmi di toko Anda, gratis tanpa franchise. Komisi 20%-25% per paket, cek ongkir banyak kurir, cetak resi, kurir jemput ke toko.";
 
-const canonical = "https://geraicuan.com/";
-const title = "GeraiCUAN — Order Mengantar, label thermal, laporan kirim";
-const description =
-  "Buat order kirim lewat Mengantar dengan Non-COD, COD, atau COD Ongkir, cetak label thermal 10 × 15 cm, dan pantau biaya kirim, biaya COD, serta dana cair dalam satu laporan.";
-
-const packageBars = encodeCode128B(label.awb);
+const bars = encodeCode128B(label.awb);
 const cod = label.cod;
 
+const businesses = [
+  { image: "mitra-brilink-gerai", alt: "Ilustrasi konter pulsa dan PPOB yang juga melayani titip kirim paket", title: "Konter pulsa & PPOB", text: "Terima kiriman paket dengan komisi bersih Rp 3.000–Rp 15.000 per paket. Kirim 40 paket sehari, tambahan laba sekitar Rp 4 juta per bulan." },
+  { image: "mitra-fotocopy-atk", alt: "Ilustrasi toko fotokopi dan ATK yang menerima kiriman paket pelanggan", title: "Toko fotokopi & ATK", text: "Warga, pelajar, dan olshop sekitar bisa langsung titip kirim paket. Pengunjung bertambah, omzet fotokopi ikut naik." },
+  { image: "mitra-sembako-ruko", alt: "Ilustrasi toko sembako dengan meja kasir untuk loket kirim paket", title: "Toko sembako & kelontong", text: "Pakai sudut meja kasir yang sudah ada. Pembeli sembako sekalian kirim paket, kasir jadi lebih produktif." },
+  { image: "mitra-kelontong-mart", alt: "Ilustrasi minimarket lokal sebagai titik drop paket warga sekitar", title: "Minimarket & swalayan lokal", text: "Layanan toko makin lengkap. Jadi titik drop paket warga sekitar dengan komisi harian." },
+  { image: "mitra-gerai-ekspedisi", alt: "Ilustrasi gerai ekspedisi multi-kurir dengan tumpukan paket siap kirim", title: "Agen pengiriman baru", text: "Buka loket multi-kurir resmi tanpa modal franchise puluhan juta. Semua pilihan ekspedisi ada di satu sistem." },
+  { image: "mitra-frozen-food", alt: "Ilustrasi toko makanan yang melayani kiriman hampers dan oleh-oleh", title: "Toko makanan & oleh-oleh", text: "Layani kiriman hampers, kue kering, dan oleh-oleh pelanggan langsung dari toko Anda." },
+];
+
+const problems = [
+  ["Franchise mahal & cuma 1 kurir", "Bayar 5–25 juta hanya dapat 1 ekspedisi. Pelanggan pindah ke toko lain kalau kurir yang dicari tidak ada."],
+  ["Uang kasir rawan bocor", "Catatan manual sulit dipantau. Transaksi bisa dibatalkan diam-diam tanpa diketahui pemilik toko."],
+  ["Tekor denda salah timbang", "Salah ukur kardus, selisih ongkir dipotong dari kantong toko. Hasil kerja seharian habis untuk denda."],
+];
+
+const comparison = [
+  ["Modal awal kemitraan", "Rp 5 jt–Rp 25 jt", "Gratis, tapi tanpa sistem kasir", "Gratis, tanpa biaya kemitraan"],
+  ["Keuntungan per paket", "Komisi 5%–10%, ada target", "Tarif normal kurir, tanpa margin", "Komisi 20%–25% jadi laba toko"],
+  ["Pilihan ekspedisi", "Cuma 1 kurir", "Buka banyak tab, kasir pusing", "Banyak kurir resmi di 1 layar"],
+  ["Kewajiban beli alat", "Wajib beli paket alat", "Alat seadanya tanpa printer resi", "Pakai HP, laptop & printer toko"],
+  ["Bagi hasil / royalti", "Dipotong royalti bulanan", "Tidak ada bagi hasil", "100% milik toko, bebas royalti"],
+  ["Penjemputan paket", "Sering antar sendiri ke hub", "Telepon agen kurir manual", "Jadwalkan jemput kurir dari aplikasi"],
+  ["Selisih berat & ukuran", "Sering nombok denda selisih", "Rawan salah timbang", "Ongkir dihitung dari berat dan ukuran sebelum resi terbit"],
+  ["Keamanan uang kasir", "Rawan kecurangan kasir", "Rawan selisih saat tutup toko", "Peran kasir dibatasi, pemilik pantau dari HP"],
+];
+
+const advantages = [
+  ["Gratis tanpa biaya franchise", "Tanpa biaya pendaftaran dan tanpa iuran bulanan. Cukup pakai laptop, HP, dan printer yang sudah ada di toko."],
+  ["Komisi bersih 20%–25%", "Pelanggan bayar tarif resmi kurir, komisi 20%–25% jadi laba toko tanpa potongan royalti."],
+  ["Kurir resmi jemput ke toko", "Jadwalkan penjemputan dari aplikasi, kurir resmi datang mengambil paket di toko Anda."],
+  ["Drop point multi-ekspedisi", "Warga dan seller online sekitar bisa titip kirim lewat banyak ekspedisi di toko Anda."],
+  ["Cek ongkir banyak kurir sekaligus", "Bandingkan tarif ekspedisi di satu layar. Pelanggan langsung pilih yang termurah atau tercepat."],
+  ["Anti-nombok selisih berat", "Masukkan berat dan ukuran kardus, ongkir dihitung sebelum resi terbit, jadi toko tidak menanggung selisih."],
+  ["COD dengan nilai presisi", "Nilai COD dihitung otomatis supaya setelah potongan biaya COD Mengantar harga barang tetap tertutup. Dana cair dan paket retur terpantau di aplikasi."],
+  ["Cetak resi & kirim via WhatsApp", "Cetak label thermal 10 × 15 cm sekali klik, lalu kirim nomor resi ke WhatsApp penerima dari halaman kiriman."],
+  ["Kasir aman, pantau dari HP", "Operator bekerja dari antrean cetak resi. Pemilik gerai memantau kiriman dan uang gerai dari HP."],
+];
+
+// Illustrative quotes (data rekaan) for the flow example; the chosen one matches the sample label.
+const quotes = [
+  { logo: "/logos/kurir/jnt.svg", service: "EZ", eta: "2–3 hari", price: label.cod.shippingIdr, chosen: true },
+  { logo: "/logos/kurir/sicepat.svg", service: "REG", eta: "2–3 hari", price: 15_500, chosen: false },
+  { logo: "/logos/kurir/jne.svg", service: "REG", eta: "2–3 hari", price: 16_000, chosen: false },
+  { logo: "/logos/kurir/idx.svg", service: "STD", eta: "3–4 hari", price: 15_000, chosen: false },
+];
+
 const steps = [
-  ["Daftar dan hubungkan Mengantar", "Verifikasi email, simpan API key akun Mengantar milik gerai Anda, dan atur titik pickup. Gerai mulai mengirim setelah disetujui Super Admin GeraiCUAN."],
-  ["Buat order", "Masukkan kiriman satu per satu atau impor dari file CSV. Pilih Non-COD, COD, atau COD Ongkir, lalu cek tarif kurir sebelum memilih."],
-  ["Cetak label thermal", "Resi dari Mengantar langsung menjadi label 10 × 15 cm yang siap dicetak dan ditempel."],
-  ["Pantau kiriman dan laporan", "Lihat status setiap kiriman, cek resi, dan baca laporan ongkir serta COD per periode."],
-];
-
-// T-186 / PR-64: the three payment methods, named as the CMS names them (src/lib/payment-method.ts).
-const paymentMethods = [
-  {
-    key: "NON_COD",
-    name: "Non-COD",
-    when: "Pembeli sudah membayar lunas",
-    text: "Kurir hanya mengantar dan tidak menagih apa pun. Isi nilai barang untuk asuransi; nilainya dikirim ke Mengantar sebagai nilai barang.",
-    collects: "Tidak ada",
-    input: "Nilai barang untuk asuransi",
-  },
-  {
-    key: "COD",
-    name: "COD",
-    when: "Pembeli membayar saat paket tiba",
-    text: "Total COD dihitung otomatis, bukan diketik: harga barang, ongkir, dan biaya COD Mengantar 3,33%. Dana yang cair tetap menutup harga barang, jadi gerai tidak nombok.",
-    collects: "Harga barang + ongkir + biaya COD",
-    input: "Nilai barang; totalnya dihitung sistem",
-  },
-  {
-    key: "COD_ONGKIR",
-    name: "COD Ongkir",
-    when: "Barang sudah dibayar, ongkir dibayar saat paket tiba",
-    text: "Kurir hanya menagih ongkir. Nilainya dimulai dari titik impas dan boleh Anda naikkan; selisihnya untuk gerai. Nilai di bawah titik impas ditolak.",
-    collects: "Ongkir saja",
-    input: "Ongkir yang ditagih, minimal titik impas",
-  },
-];
-
-const reports = [
-  ["Biaya kirim, biaya COD, dan dana cair", "Setiap periode menunjukkan biaya kirim Mengantar, biaya COD yang dipotong Mengantar, dan estimasi dana yang dicairkan, beserta metode pembayaran tiap kiriman. Laporannya bisa diunduh sebagai CSV."],
-  ["Satu filter tanggal", "Hari ini, kemarin, minggu ini, bulan ini, bulan lalu, 7 atau 30 hari terakhir, atau rentang sendiri, dalam WIB. Kontrolnya sama di dasbor, analitik, laporan, dan keuangan."],
-  ["Panel status kiriman", "Langsung terlihat berapa kiriman yang siap dilanjutkan, sudah terbit resinya, dalam perjalanan, terkirim, atau perlu perhatian. Klik untuk menyaring daftarnya."],
-  ["Cek resi dan cek tarif", "Cari kiriman dari nomor resi atau nomor kiriman, dan bandingkan tarif kurir sebelum membuat order."],
-  ["Rekap per kurir", "Dasbor merangkum jumlah kiriman, yang terkirim, retur, dan biaya kirim untuk setiap kurir."],
-  ["Data gerai terpisah", "Setiap gerai hanya melihat datanya sendiri. Undang anggota tim sebagai admin gerai atau operator, dan aksesnya mengikuti peran itu."],
+  ["Ketik data pengirim & penerima", "Kontak pelanggan tersimpan, jadi pelanggan langganan tidak perlu ketik ulang dari awal.", "Contoh: penerima Ibu Contoh, Coblong, Kota Bandung."],
+  ["Timbang & cek ongkir", "Masukkan berat dan ukuran, lalu pilih kurir termurah atau tercepat.", "Contoh: 1 kg, J&T Rp 15.000 dipilih dari daftar tarif."],
+  ["Terima pembayaran", "Pelanggan bayar di kasir, tunai atau QRIS milik toko. Komisi jadi laba toko.", "Contoh: pelanggan bayar ongkir tunai di kasir."],
+  ["Cetak resi & serahkan", "Resi thermal keluar sekali klik, lalu paket diserahkan ke kurir yang menjemput.", "Contoh: resi JP0000000000001 tercetak 10 × 15 cm."],
 ];
 ---
-<!doctype html>
-<html lang="id">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
-    <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#2e47ba" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta property="og:type" content="website" />
-    <meta property="og:locale" content="id_ID" />
-    <meta property="og:site_name" content="GeraiCUAN" />
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
-    <Font cssVariable="--font-inter" preload />
-  </head>
-  <body>
-    <a class="skip-link" href="#utama">Lompat ke konten utama</a>
-
-    <header class="site-header">
-      <div class="container">
-        <a class="brand" href="/">
-          <svg aria-hidden="true" width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2e47ba" /><path fill="#fff" d="M8 9h2v14H8zm4 0h1v14h-1zm3 0h3v14h-3zm5 0h1v14h-1zm3 0h2v14h-2z" /></svg>
-          GeraiCUAN
-        </a>
-        <nav class="site-nav" aria-label="Navigasi utama">
-          <ul>
-            <li><a class="text-link" href="#cara-kerja">Cara kerja</a></li>
-            <li><a class="text-link" href="#pembayaran">Metode bayar</a></li>
-            <li><a class="text-link" href="#label-thermal">Label thermal</a></li>
-            <li><a class="text-link" href="#laporan">Laporan</a></li>
-          </ul>
-        </nav>
-        <div class="header-actions">
-          <a class="btn btn-outline" href={signInUrl} data-cta="masuk">Masuk</a>
-          <a class="btn btn-primary" href={signUpUrl} data-cta="daftar">Daftar</a>
+<Site title={title} description={description} path="/">
+  <section class="relative isolate overflow-hidden bg-brand-navy-dark text-white" aria-labelledby="judul">
+    <img src="/images/mitra-gerai-ekspedisi.webp" alt="" width="1200" height="896" fetchpriority="high" class="absolute inset-0 -z-10 h-full w-full object-cover" />
+    <div class="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy-dark/95 via-brand-navy-dark/85 to-brand-navy-dark/50"></div>
+    <div class="mx-auto max-w-7xl px-4 pb-10 pt-16 sm:px-6 sm:pt-24 lg:px-8 lg:pt-28">
+      <div class="max-w-3xl">
+        <h1 id="judul" class="text-4xl font-black leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">Buka loket 12+ layanan ekspedisi di toko Anda. Gratis.</h1>
+        <p class="mt-3 text-xl font-extrabold tracking-tight text-brand-sky sm:text-3xl">Komisi 20%–25% per paket, kurir jemput ke toko</p>
+        <p class="mt-5 max-w-xl text-base leading-relaxed text-slate-200 sm:text-lg">
+          Konter pulsa, toko kelontong, dan fotokopi bisa langsung terima kiriman J&amp;T, JNE, SiCepat, dan kurir lainnya lewat Mengantar.
+          Komisi bersih Rp 3.000–Rp 15.000 per paket, tanpa biaya franchise.
+        </p>
+        <div class="mt-8 flex flex-wrap items-center gap-3">
+          <a href={SIGN_UP_URL} data-cta="daftar" class="inline-flex min-h-12 items-center rounded-full bg-brand-blue px-8 text-base font-bold text-white shadow-lg shadow-brand-blue/30 transition-colors hover:bg-brand-blue-hover">Daftar gratis</a>
+          <a href="#simulasi" class="inline-flex min-h-12 items-center rounded-full border border-white/40 px-7 text-base font-semibold text-white transition-colors hover:bg-white/10">Hitung komisi</a>
         </div>
       </div>
-    </header>
+      <dl class="mt-14 grid max-w-3xl grid-cols-2 gap-x-8 gap-y-5 border-t border-white/15 pt-6 sm:grid-cols-4">
+        <div class="flex flex-col"><dt class="text-sm text-slate-300">Layanan ekspedisi</dt><dd class="order-first text-2xl font-extrabold sm:text-3xl">12+</dd></div>
+        <div class="flex flex-col"><dt class="text-sm text-slate-300">Komisi per paket</dt><dd class="order-first text-2xl font-extrabold text-brand-sky sm:text-3xl">20%–25%</dd></div>
+        <div class="flex flex-col"><dt class="text-sm text-slate-300">Biaya franchise</dt><dd class="order-first text-2xl font-extrabold sm:text-3xl">Gratis</dd></div>
+        <div class="flex flex-col"><dt class="text-sm text-slate-300">Penjemputan</dt><dd class="order-first text-2xl font-extrabold sm:text-3xl">Ke toko</dd></div>
+      </dl>
+      <p class="mt-4 text-sm text-slate-300"><a href="/simulasi/#faq" class="underline underline-offset-4 hover:text-white">Dari mana komisi 20%–25% berasal?</a></p>
+    </div>
+  </section>
 
-    <main id="utama">
-      <section class="hero" aria-labelledby="judul">
-        <div class="container">
-          <div>
-            <p class="eyebrow">Untuk penjual online dan outlet pengiriman</p>
-            <h1 id="judul">Buat order kirim, cetak label thermal, dan pantau laporannya di satu tempat.</h1>
-            <p class="lead">
-              GeraiCUAN terhubung ke Mengantar. Pilih kurir yang tersedia, termasuk Shopee Express, terbitkan resi,
-              cetak di printer thermal, lalu lihat ongkir, biaya COD, dan estimasi dana cair tanpa hitung manual.
-            </p>
-            <div class="cta-row">
-              <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan gerai</a>
-              <a class="btn btn-outline btn-lg" href={signInUrl} data-cta="masuk">Masuk</a>
-            </div>
-            <p class="fine-print">
-              Setelah mendaftar, verifikasi email Anda. Hubungkan akun Mengantar milik gerai Anda; gerai bisa mulai mengirim setelah pendaftaran disetujui Super Admin GeraiCUAN.
-            </p>
-          </div>
+  <section class="py-14 sm:py-16" aria-labelledby="judul-kurir">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 id="judul-kurir" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Ekspedisi resmi lewat Mengantar</h2>
+        <p class="mt-2 text-base leading-relaxed text-slate-600">
+          Resi resmi dari kurir, bisa dilacak di aplikasi masing-masing. 12+ layanan: delapan kurir di bawah ditambah layanan kargo JNE, SAP, SiCepat, dan ID Express.
+        </p>
+      </div>
+      <p class="mt-10 text-center text-sm font-semibold text-slate-700">Bisa langsung dipesan</p>
+      <ul class="mx-auto mt-4 grid max-w-5xl grid-cols-3 items-center justify-items-center gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-8">
+        {ORDERABLE_COURIERS.map((courier) => (
+          <li class="flex h-12 items-center"><img src={courier.logo} alt={courier.name} width="110" height="36" class="h-9 w-[110px] object-contain" loading="lazy" /></li>
+        ))}
+      </ul>
+      <p class="mt-8 text-center text-sm text-slate-500">
+        Tarif sudah tampil di cek ongkir, pemesanan menyusul:
+        {QUOTE_ONLY_COURIERS.map((courier) => <img src={courier.logo} alt={courier.name} width="72" height="24" class="ml-2 inline h-6 w-[72px] object-contain align-middle" loading="lazy" />)}
+        <span class="ml-2 font-semibold">SPX</span>
+      </p>
+    </div>
+  </section>
 
-          <figure class="label-figure">
-            <div class="thermal" aria-hidden="true">
-              <div class="thermal-row thermal-head">
-                <span class="thermal-courier">{label.courier}</span>
-                <span class="thermal-tag">GeraiCUAN</span>
-              </div>
-              <div class="thermal-row">
-                <svg class="thermal-barcode" viewBox={`0 0 ${packageBars.modules} 1`} preserveAspectRatio="none" shape-rendering="crispEdges">
-                  {packageBars.bars.map(([x, width]) => <rect x={x} y="0" width={width} height="1" fill="#000" />)}
-                </svg>
-                <p class="thermal-awb">{label.awb}</p>
-              </div>
-              <div class="thermal-row">
-                <p><span class="thermal-tag">Penerima</span> <span class="thermal-name">{label.recipientName}</span> {label.recipientPhone}</p>
-                <p>{label.recipientArea}</p>
-                <p>{label.recipientAddress}</p>
-              </div>
-              <div class="thermal-row">
-                <p><span class="thermal-tag">Pengirim</span> {label.senderName} · {label.content} · {label.weight}</p>
-              </div>
-              <div class="thermal-row">
-                <p class="thermal-cod"><span>COD — tagih ke penerima</span> <b>{formatIdr(cod.codIdr)}</b></p>
-                <div class="thermal-money">
-                  <div><span>Nilai barang</span><span>{formatIdr(cod.goodsIdr)}</span></div>
-                  <div><span>Ongkir Mengantar</span><span>{formatIdr(cod.shippingIdr)}</span></div>
-                  <div><span>Biaya COD (termasuk PPN)</span><span>{formatIdr(cod.mengantarFeeIdr)}</span></div>
-                  {cod.roundingIdr > 0 ? <div><span>Pembulatan</span><span>{formatIdr(cod.roundingIdr)}</span></div> : null}
-                </div>
-              </div>
-              <p class="thermal-cut">✂ potong di sini</p>
-              <div class="thermal-stub">
-                <p class="thermal-stub-title">Bukti serah terima · untuk pengirim</p>
-                <div class="thermal-head">
-                  <span class="thermal-courier">{label.courier}</span>
-                  <span>COD <b>{formatIdr(cod.codIdr)}</b></span>
-                </div>
-                <svg class="thermal-barcode" viewBox={`0 0 ${packageBars.modules} 1`} preserveAspectRatio="none" shape-rendering="crispEdges">
-                  {packageBars.bars.map(([x, width]) => <rect x={x} y="0" width={width} height="1" fill="#000" />)}
-                </svg>
-                <p class="thermal-awb">{label.awb}</p>
-              </div>
-            </div>
-            <figcaption>
-              Contoh label 10 × 15 cm dengan data rekaan: label paket di atas, bukti serah terima untuk pengirim di bawah garis potong.
-            </figcaption>
-          </figure>
-        </div>
-      </section>
+  <section class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-usaha">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
+        <h2 id="judul-usaha" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Cocok untuk berbagai jenis usaha</h2>
+        <p class="mt-2 text-base leading-relaxed text-slate-600">Pakai meja kasir dan perangkat yang sudah ada di toko. Tanpa sewa tempat baru, tanpa biaya franchise.</p>
+      </div>
+      <ul class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        {businesses.map((item) => (
+          <li>
+            <img src={`/images/${item.image}.webp`} alt={item.alt} width="1200" height="896" loading="lazy" class="mb-4 aspect-[4/3] w-full rounded-2xl bg-slate-200 object-cover" />
+            <h3 class="text-lg font-bold leading-snug text-slate-900">{item.title}</h3>
+            <p class="mt-1.5 text-base leading-relaxed text-slate-600">{item.text}</p>
+          </li>
+        ))}
+      </ul>
+      <p class="mt-8 text-center text-sm text-slate-500">Foto adalah ilustrasi jenis usaha, bukan mitra tertentu.</p>
+    </div>
+  </section>
 
-      <section class="section section-muted" id="cara-kerja" aria-labelledby="judul-cara-kerja">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Cara kerja</p>
-            <h2 id="judul-cara-kerja">Empat langkah dari pesanan sampai laporan</h2>
-            <p>
-              Kurir yang ditawarkan Mengantar: JNE, J&amp;T, SiCepat, Ninja, SAP, ID Express, AnterAja, Lion Parcel,
-              SPX Shopee Express, Paxel, dan POS Indonesia. Pilihan yang muncul mengikuti rute dan akun Mengantar Anda.
-            </p>
-          </div>
-          <ol class="steps">
-            {steps.map(([heading, text]) => (
-              <li><h3>{heading}</h3><p>{text}</p></li>
+  <section class="py-14 sm:py-20" aria-labelledby="judul-masalah">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6">
+      <h2 id="judul-masalah" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Masalah agen kurir konvensional</h2>
+      <p class="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">Franchise kurir biasa umumnya mahal dan penuh syarat yang membebani pemilik toko.</p>
+      <ul class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-3">
+        {problems.map(([heading, text]) => (
+          <li class="border-l-4 border-red-500 pl-5">
+            <h3 class="text-lg font-bold text-slate-900">{heading}</h3>
+            <p class="mt-1.5 text-base leading-relaxed text-slate-600">{text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-banding">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto mb-10 max-w-2xl text-center">
+        <h2 id="judul-banding" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">GeraiCuan dibanding agen biasa</h2>
+        <p class="mt-2 text-base leading-relaxed text-slate-600">Bandingkan membuka loket GeraiCuan dengan franchise kurir konvensional.</p>
+      </div>
+      <ul class="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white md:hidden">
+        {comparison.map(([need, franchise, manual, ours]) => (
+          <li class="p-4">
+            <p class="text-sm font-semibold text-slate-500">{need}</p>
+            <p class="mt-1 rounded-lg bg-brand-blue-pale px-2 py-1 text-base font-bold text-brand-navy">GeraiCuan: {ours}</p>
+            <p class="mt-1 text-sm text-slate-600">Franchise: {franchise}. Tab manual: {manual}.</p>
+          </li>
+        ))}
+      </ul>
+      <div class="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
+        <table class="w-full border-collapse text-left text-sm sm:text-base">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-700">
+              <th scope="col" class="p-4 font-semibold">Kebutuhan loket</th>
+              <th scope="col" class="bg-brand-blue-pale p-4 font-bold text-brand-navy">GeraiCuan</th>
+              <th scope="col" class="p-4 font-semibold">Franchise konvensional</th>
+              <th scope="col" class="p-4 font-semibold">Buka tab web manual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.map(([need, franchise, manual, ours]) => (
+              <tr class="border-b border-slate-100 last:border-0">
+                <th scope="row" class="p-4 font-semibold text-slate-900">{need}</th>
+                <td class="bg-brand-blue-pale/60 p-4 font-semibold text-brand-navy">{ours}</td>
+                <td class="p-4 text-slate-500">{franchise}</td>
+                <td class="p-4 text-slate-500">{manual}</td>
+              </tr>
             ))}
-          </ol>
-        </div>
-      </section>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
-      <section class="section" id="pembayaran" aria-labelledby="judul-pembayaran">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Metode pembayaran</p>
-            <h2 id="judul-pembayaran">Tiga metode pembayaran, dihitung sesuai potongan Mengantar</h2>
-            <p>Pilih metodenya di setiap kiriman. Kolom yang muncul menyesuaikan metode itu, dan label thermal mencetak apa yang harus ditagih kurir.</p>
-          </div>
-          <ul class="methods">
-            {paymentMethods.map((method) => (
-              <li class="method" data-payment-method={method.key}>
-                <div>
-                  <h3>{method.name}</h3>
-                  <p class="method-when">{method.when}</p>
-                </div>
-                <p>{method.text}</p>
-                <dl class="method-facts">
-                  <div><dt>Kurir menagih pembeli</dt><dd>{method.collects}</dd></div>
-                  <div><dt>Yang Anda isi</dt><dd>{method.input}</dd></div>
-                </dl>
+  <section class="py-14 sm:py-20" aria-labelledby="judul-keunggulan">
+    <div class="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[1fr_2fr]">
+      <div>
+        <h2 id="judul-keunggulan" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Keunggulan loket GeraiCuan di toko Anda</h2>
+        <p class="mt-3 text-base leading-relaxed text-slate-600">Kemudahan operasional dan keuntungan dalam satu sistem kasir loket.</p>
+        <p class="mt-4"><a href="/fitur/" class="font-semibold text-brand-blue underline-offset-4 hover:underline">Lihat semua fitur</a></p>
+      </div>
+      <ul class="grid gap-x-10 gap-y-9 sm:grid-cols-2">
+        {advantages.map(([heading, text]) => (
+          <li class="border-t-2 border-brand-blue pt-4">
+            <h3 class="text-lg font-bold text-slate-900">{heading}</h3>
+            <p class="mt-1.5 text-base leading-relaxed text-slate-600">{text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section id="simulasi" class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-simulasi">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto mb-10 max-w-2xl text-center">
+        <h2 id="judul-simulasi" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Hitung tambahan keuntungan toko Anda</h2>
+        <p class="mt-2 text-base leading-relaxed text-slate-600">Geser target kiriman untuk melihat estimasi laba dari komisi 20%–25%.</p>
+      </div>
+      <ProfitSimulator id="sim-beranda" />
+    </div>
+  </section>
+
+  <section id="alur" class="py-14 sm:py-20" aria-labelledby="judul-alur">
+    <div class="mx-auto grid max-w-6xl items-start gap-x-12 gap-y-10 px-4 sm:px-6 lg:grid-cols-[1fr_26rem]">
+      <div>
+        <h2 id="judul-alur" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Satu kiriman, dari meja kasir sampai resi</h2>
+        <p class="mt-3 max-w-xl text-base leading-relaxed text-slate-600">Melayani kiriman semudah mengisi satu formulir. Ikuti satu contoh paket ke Bandung.</p>
+        <ol class="mt-8 space-y-6">
+          {steps.map(([heading, text, example], index) => (
+            <li class="grid grid-cols-[2rem_1fr] gap-x-4">
+              <span class="flex size-8 items-center justify-center rounded-full bg-brand-blue text-sm font-bold text-white" aria-hidden="true">{index + 1}</span>
+              <div>
+                <h3 class="text-lg font-bold text-slate-900">{heading}</h3>
+                <p class="mt-1 text-base leading-relaxed text-slate-600">{text}</p>
+                <p class="mt-2 text-sm font-semibold text-brand-navy">{example}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p class="mt-8"><a href="/cara-kerja/" class="font-semibold text-brand-blue underline-offset-4 hover:underline">Lihat alur kasir selengkapnya</a></p>
+      </div>
+
+      <figure class="grid gap-3 lg:sticky lg:top-24">
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-hidden="true">
+          <p class="text-sm font-semibold text-slate-500">Cek tarif · 1 kg · Kota Bandung</p>
+          <ul class="mt-3 divide-y divide-slate-100">
+            {quotes.map((quote) => (
+              <li class:list={["flex items-center justify-between gap-3 px-2 py-3", quote.chosen && "rounded-lg bg-brand-blue-pale outline outline-2 outline-brand-blue"]}>
+                <span class="flex items-center gap-3">
+                  <img src={quote.logo} alt="" width="64" height="24" class="h-6 w-16 object-contain" loading="lazy" />
+                  <span class="text-sm text-slate-600">{quote.service} · {quote.eta}</span>
+                </span>
+                <span class="text-base font-bold tabular-nums text-slate-900">{formatIdr(quote.price)}</span>
               </li>
             ))}
           </ul>
+          <p class="mt-3 text-sm font-semibold text-brand-navy">Dipilih: {label.courier} {formatIdr(cod.shippingIdr)} → resi {label.awb}</p>
         </div>
-      </section>
+        <figcaption class="text-sm text-slate-500">Contoh tampilan cek tarif dengan data rekaan; tarif nyata datang dari Mengantar saat Anda mengecek. Resinya tercetak di bawah.</figcaption>
+      </figure>
+    </div>
+  </section>
 
-      <section class="section section-muted" id="cod" aria-labelledby="judul-cod">
-        <div class="container split">
-          <div class="section-head">
-            <p class="eyebrow">COD dan COD Ongkir presisi</p>
-            <h2 id="judul-cod">Nilai COD dihitung supaya gerai tidak nombok</h2>
-            <p>
-              Mengantar memotong biaya COD sebesar 3,33% dari nilai yang ditagih ke pembeli. GeraiCUAN menghitung nilai COD
-              terkecil, dibulatkan ke rupiah penuh, yang setelah dipotong biaya itu tetap menutup harga barang dan ongkir.
-            </p>
-            <p>
-              Untuk COD Ongkir, titik impas adalah ongkir terkecil yang setelah dipotong 3,33% tetap menutup ongkir Mengantar.
-              Anda boleh menagih lebih tinggi, dan GeraiCUAN menampilkan selisih untuk gerai saat Anda mengetik.
-            </p>
-            <p>Biaya COD adalah potongan Mengantar, bukan biaya dari GeraiCUAN.</p>
-          </div>
-          <div class="cod-tables">
-            <table class="cod-table">
-              <caption>Contoh perhitungan satu order COD</caption>
-              <tbody>
-                <tr><th scope="row">Harga barang</th><td data-cod="goods">{formatIdr(cod.goodsIdr)}</td></tr>
-                <tr><th scope="row">Ongkir Mengantar</th><td data-cod="shipping">{formatIdr(cod.shippingIdr)}</td></tr>
-                <tr><th scope="row">Nilai COD ditagih ke pembeli</th><td data-cod="cod">{formatIdr(cod.codIdr)}</td></tr>
-                <tr><th scope="row">Biaya COD Mengantar (3,33%)<span class="note">termasuk PPN</span></th><td data-cod="fee">− {formatIdr(cod.mengantarFeeIdr)}</td></tr>
-                <tr><th scope="row">Ongkir dibayar dari dana COD</th><td>− {formatIdr(cod.shippingIdr)}</td></tr>
-                <tr class="is-total"><th scope="row">Estimasi dana dicairkan Mengantar<span class="note">tidak kurang dari harga barang</span></th><td data-cod="disbursement">{formatIdr(cod.disbursementIdr)}</td></tr>
-              </tbody>
-            </table>
-            <table class="cod-table">
-              <caption>Contoh perhitungan satu order COD Ongkir</caption>
-              <tbody>
-                <tr><th scope="row">Ongkir Mengantar</th><td data-cod-ongkir="shipping">{formatIdr(codOngkir.shippingIdr)}</td></tr>
-                <tr><th scope="row">Titik impas<span class="note">batas terendah yang bisa ditagih</span></th><td data-cod-ongkir="break-even">{formatIdr(codOngkir.breakEvenIdr)}</td></tr>
-                <tr><th scope="row">Ongkir ditagih ke pembeli<span class="note">dinaikkan oleh gerai</span></th><td data-cod-ongkir="charge">{formatIdr(codOngkir.chargeIdr)}</td></tr>
-                <tr><th scope="row">Biaya COD Mengantar (3,33%)</th><td data-cod-ongkir="fee">− {formatIdr(codOngkir.mengantarFeeIdr)}</td></tr>
-                <tr><th scope="row">Ongkir dibayar dari dana COD</th><td>− {formatIdr(codOngkir.shippingIdr)}</td></tr>
-                <tr class="is-total"><th scope="row">Selisih untuk gerai<span class="note">barang tidak ditagih kurir</span></th><td data-cod-ongkir="difference">{formatIdr(codOngkir.sellerDifferenceIdr)}</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="label-thermal" aria-labelledby="judul-label">
-        <div class="container split">
-          <div>
-            <div class="section-head">
-              <p class="eyebrow">Label thermal</p>
-              <h2 id="judul-label">Label yang jelas dibaca kurir, dan bukti untuk pengirim</h2>
-            </div>
-            <ul class="checklist">
-              <li><strong>10 × 15 cm sebagai bawaan:</strong> label paket 10 × 10 cm ditambah bukti serah terima 10 × 5 cm untuk pengirim. Tinggal potong di garis putus-putus.</li>
-              <li><strong>Atau 10 × 10 cm saja</strong> bila tidak perlu bukti serah terima.</li>
-              <li><strong>Barcode resi Code 128</strong> hitam pekat dengan zona kosong di kiri dan kanan, diukur untuk kepala printer thermal 203 dpi.</li>
-              <li><strong>Jelas apa yang ditagih:</strong> label COD mencetak nilai COD beserta rinciannya, label COD Ongkir menulis "tagih ongkir saja" karena barang sudah dibayar, dan label Non-COD menulis "jangan tagih penerima".</li>
-              <li><strong>Mudah dibaca:</strong> nama penerima dan nomor resi dicetak tebal.</li>
-              <li><strong>Bukti pengirim tidak memuat nama, alamat, atau nomor telepon penerima.</strong></li>
-              <li><strong>Riwayat cetak tercatat,</strong> termasuk cetak ulang.</li>
-            </ul>
-          </div>
-          <div class="sizes">
-            <figure class="size">
-              <div class="size-sheet" aria-hidden="true">
-                <div class="size-part is-package">Label paket<br />10 × 10 cm</div>
-                <div class="size-part is-stub">Bukti pengirim<br />10 × 5 cm</div>
-              </div>
-              <figcaption><strong>10 × 15 cm</strong>Bawaan</figcaption>
-            </figure>
-            <figure class="size">
-              <div class="size-sheet" aria-hidden="true">
-                <div class="size-part is-package">Label paket<br />10 × 10 cm</div>
-              </div>
-              <figcaption><strong>10 × 10 cm</strong>Tanpa bukti pengirim</figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <section class="section section-muted" id="laporan" aria-labelledby="judul-laporan">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Laporan</p>
-            <h2 id="judul-laporan">Laporan pengiriman yang langsung bisa dibaca</h2>
-            <p>Tidak perlu menyusun rekap sendiri di spreadsheet. Laporan disusun dari kiriman gerai Anda di GeraiCUAN.</p>
-          </div>
-          <ul class="cards">
-            {reports.map(([heading, text]) => (
-              <li><h3>{heading}</h3><p>{text}</p></li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <section class="cta-band" aria-labelledby="judul-mulai">
-        <div class="container">
-          <div>
-            <h2 id="judul-mulai">Mulai kirim dari gerai Anda</h2>
-            <p>Daftar dengan email dan nomor WhatsApp gerai, lalu hubungkan akun Mengantar milik gerai Anda. Setelah email terverifikasi dan pendaftaran disetujui Super Admin, gerai Anda siap membuat order.</p>
-          </div>
-          <div class="cta-row">
-            <a class="btn btn-primary btn-lg" href={signUpUrl} data-cta="daftar">Daftarkan gerai</a>
-            <a class="btn btn-outline btn-lg" href={signInUrl} data-cta="masuk">Sudah punya akun? Masuk</a>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <div class="container">
-        <p><strong>GeraiCUAN</strong> · Pengiriman lewat Mengantar · Bahasa Indonesia · Rupiah · WIB · © 2026</p>
-        <nav aria-label="Akun">
-          <ul>
-            <li><a class="text-link" href={signInUrl} data-cta="masuk">Masuk</a></li>
-            <li><a class="text-link" href={signUpUrl} data-cta="daftar">Daftar</a></li>
-          </ul>
-        </nav>
+  <section class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-bukti">
+    <div class="mx-auto grid max-w-6xl items-start gap-x-12 gap-y-10 px-4 sm:px-6 lg:grid-cols-[1fr_22rem]">
+      <div class="lg:col-start-1 lg:row-start-1">
+        <h2 id="judul-bukti" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Resi thermal yang jelas, nilai COD yang presisi</h2>
+        <p class="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
+          Mengantar memotong biaya COD 3,33% (termasuk PPN) dari nilai yang ditagih ke penerima. GeraiCuan menghitung nilai COD terkecil,
+          dibulatkan ke rupiah penuh, yang setelah dipotong biaya itu tetap menutup harga barang dan ongkir. Kasir tidak perlu menghitung manual.
+        </p>
+        <table class="mt-8 w-full max-w-xl border-collapse text-base tabular-nums">
+          <caption class="pb-3 text-left text-sm text-slate-500">Contoh satu kiriman COD (data rekaan)</caption>
+          <tbody class="divide-y divide-slate-200 border-y border-slate-200">
+            <tr><th scope="row" class="py-3 text-left font-medium">Harga barang</th><td class="py-3 text-right font-semibold" data-cod="goods">{formatIdr(cod.goodsIdr)}</td></tr>
+            <tr><th scope="row" class="py-3 text-left font-medium">Ongkir Mengantar</th><td class="py-3 text-right font-semibold" data-cod="shipping">{formatIdr(cod.shippingIdr)}</td></tr>
+            <tr class="outline outline-2 -outline-offset-2 outline-slate-900"><th scope="row" class="px-2 py-3 text-left font-bold">Nilai COD ditagih ke penerima<span class="block text-sm font-normal text-slate-500">angka yang sama tercetak di label</span></th><td class="px-2 py-3 text-right font-bold" data-cod="cod">{formatIdr(cod.codIdr)}</td></tr>
+            <tr><th scope="row" class="py-3 text-left font-medium">Biaya COD Mengantar (3,33%)</th><td class="py-3 text-right font-semibold" data-cod="fee">− {formatIdr(cod.mengantarFeeIdr)}</td></tr>
+            <tr><th scope="row" class="py-3 text-left font-medium">Ongkir dibayar dari dana COD</th><td class="py-3 text-right font-semibold">− {formatIdr(cod.shippingIdr)}</td></tr>
+            <tr class="bg-emerald-50 text-emerald-800"><th scope="row" class="px-2 py-3 text-left font-bold">Estimasi dana dicairkan Mengantar</th><td class="px-2 py-3 text-right font-bold" data-cod="disbursement">{formatIdr(cod.disbursementIdr)}</td></tr>
+          </tbody>
+        </table>
       </div>
-    </footer>
-  </body>
-</html>
+      <ul class="grid max-w-2xl gap-2 text-base text-slate-700 lg:col-start-1 lg:row-start-2">
+          <li><strong>10 × 15 cm bawaan:</strong> label paket ditambah bukti serah terima untuk pengirim, atau 10 × 10 cm saja.</li>
+          <li><strong>Barcode Code 128</strong> diukur untuk printer thermal 203 dpi.</li>
+          <li><strong>Jelas apa yang ditagih:</strong> COD, COD Ongkir ("tagih ongkir saja"), atau Non-COD ("jangan tagih penerima").</li>
+        <li><strong>Bukti pengirim</strong> tidak memuat nama, alamat, atau nomor telepon penerima.</li>
+      </ul>
+
+      <figure class="row-start-2 grid justify-items-center gap-3 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <div class="thermal" aria-hidden="true">
+          <div class="thermal-row thermal-head">
+            <span class="thermal-courier">{label.courier}</span>
+            <span class="thermal-tag">{label.senderName}</span>
+          </div>
+          <div class="thermal-row">
+            <svg class="thermal-barcode" viewBox={`0 0 ${bars.modules} 1`} preserveAspectRatio="none" shape-rendering="crispEdges">
+              {bars.bars.map(([x, width]) => <rect x={x} y="0" width={width} height="1" fill="#000" />)}
+            </svg>
+            <p class="thermal-awb">{label.awb}</p>
+          </div>
+          <div class="thermal-row">
+            <p><span class="thermal-tag">Penerima</span> <span class="thermal-name">{label.recipientName}</span> {label.recipientPhone}</p>
+            <p>{label.recipientArea}</p>
+            <p>{label.recipientAddress}</p>
+          </div>
+          <div class="thermal-row">
+            <p class="thermal-cod"><span>COD — tagih ke penerima</span> <b>{formatIdr(cod.codIdr)}</b></p>
+            <div class="thermal-money">
+              <div><span>Nilai barang</span><span>{formatIdr(cod.goodsIdr)}</span></div>
+              <div><span>Ongkir</span><span>{formatIdr(cod.labelOngkirIdr)}</span></div>
+            </div>
+          </div>
+          <div class="thermal-row"><p><b>Isi</b> {label.content} · {label.weight} · 1 koli</p></div>
+          <p class="thermal-cut">✂ potong di sini</p>
+          <div class="thermal-stub">
+            <p class="thermal-stub-title">Bukti serah terima · untuk pengirim</p>
+            <div class="thermal-head">
+              <span class="thermal-courier">{label.courier}</span>
+              <span>COD <b>{formatIdr(cod.codIdr)}</b></span>
+            </div>
+            <svg class="thermal-barcode" viewBox={`0 0 ${bars.modules} 1`} preserveAspectRatio="none" shape-rendering="crispEdges">
+              {bars.bars.map(([x, width]) => <rect x={x} y="0" width={width} height="1" fill="#000" />)}
+            </svg>
+            <p class="thermal-awb">{label.awb}</p>
+          </div>
+        </div>
+        <figcaption class="max-w-[22rem] text-center text-sm text-slate-500">Contoh label 10 × 15 cm dengan data rekaan. Nama pengirim di label memakai nama gerai Anda.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+
+  <ClosingCta heading="Buka loket ekspedisi di toko Anda sekarang" />
+</Site>

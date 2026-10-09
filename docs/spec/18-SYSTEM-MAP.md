@@ -46,7 +46,7 @@ Every change touching routes, handlers, actions, data models, or navigation must
 - **6 `layout.tsx` files**, **33 `loading.tsx`** (28 tenant, 5 platform), **24 `error.tsx`** (23 tenant, 1 platform), **8 `not-found.tsx`** (Section 10).
 - **44 repository and data-layer modules** in `src/db/` (T-275 added `owner-money-repository.ts`; T-238 added `mengantar-webhook-repository.ts` and `provider-tracking-repository.ts`; T-241 added `contact-shipment-repository.ts`; T-244 added `announcement-repository.ts`; T-245 added `wilayah-repository.ts`; T-267 added `shipment-handover-repository.ts`; T-281 added `shipment-cancellation-repository.ts`).
 - These counts are checked against the filesystem by `tests/system-map-inventory.integration.test.ts` (T-199, re-enabled by T-224); a drifted number fails the suite.
-- **Apex landing site**: standalone Astro static site in `apps/landing` for `https://geraicuan.com` (not part of the Next.js route tree).
+- **Apex landing site**: standalone Astro static site in `apps/landing` for `https://geraicuan.com` (not part of the Next.js route tree): five static pages since T-296 — `/`, `/fitur/`, `/simulasi/`, `/cara-kerja/`, `/kontak/` (`apps/landing/src/pages/*.astro`, shared frame `src/layouts/Site.astro`); the only client script is the commission estimate (`src/components/ProfitSimulator.astro`). Design record: `apps/landing/DESIGN.md`.
 
 ---
 
@@ -146,7 +146,7 @@ flowchart TD
 
 | Surface | Host / Origin | Routing & Access Invariant |
 |---|---|---|
-| **Public landing** | `https://geraicuan.com` (`GERAICUAN_PUBLIC_ORIGIN`) | Astro site `apps/landing`; links to the tenant host's `/daftar` and `/login`. |
+| **Public landing** | `https://geraicuan.com` (`GERAICUAN_PUBLIC_ORIGIN`) | Astro site `apps/landing` (five pages, T-296); links to the tenant host's `/daftar` and `/login`, and one WhatsApp contact on `/kontak/`. nginx serves directory pages with relative redirects (`apps/landing/nginx/redirects.conf`). |
 | **Tenant CMS** | `https://app.geraicuan.com` (`GERAICUAN_TENANT_ORIGIN`) | Serves `/app/**`, `/login` (→ `/login/tenant`), `/daftar`, `/verifikasi-email/**`, `/lupa-password`, `/atur-ulang-password`. `/platform/**` answers 404. |
 | **Platform CMS** | `https://bos.geraicuan.com` (`GERAICUAN_PLATFORM_ORIGIN`) | Serves `/platform/**`, `/verifikasi-dua-langkah` (T-286), `/login` (→ `/login/super-admin`). `/app/**` answers 404. |
 | **Single-origin dev** | `http://localhost:3000` or Tailscale | No host split; `/` serves `src/app/page.tsx`. |

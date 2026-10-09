@@ -1,0 +1,36 @@
+---
+// Closing call to action shared by every landing page (T-296).
+import { SIGN_IN_URL, SIGN_UP_URL } from "../lib/site.mjs";
+
+interface Props {
+  heading?: string;
+  text?: string;
+}
+const {
+  heading = "Buka loket ekspedisi di toko Anda sekarang",
+  text = "Gratis, tanpa biaya franchise. Gerai aktif dalam tiga tahap:",
+} = Astro.props;
+// D-10, D-9, D-8: what stands between sign-up and the first shipment. The store may sign in and
+// connect Mengantar before approval; only shipping waits for it.
+const activation = ["Daftar dan verifikasi email", "Hubungkan akun Mengantar gerai", "Disetujui admin, mulai kirim"];
+---
+<section class="bg-brand-navy py-16 text-white sm:py-20" aria-labelledby="judul-mulai">
+  <div class="mx-auto max-w-3xl px-4 text-center sm:px-6">
+    <h2 id="judul-mulai" class="text-2xl font-extrabold tracking-tight sm:text-3xl">{heading}</h2>
+    <p class="mx-auto mt-3 max-w-xl text-base leading-relaxed text-slate-200">
+      {text}
+    </p>
+    <ol class="mx-auto mt-6 grid max-w-2xl gap-3 text-left sm:grid-cols-3">
+      {activation.map((step, index) => (
+        <li class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold">
+          <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-sky text-sm font-bold text-brand-navy-dark" aria-hidden="true">{index + 1}</span>
+          {step}
+        </li>
+      ))}
+    </ol>
+    <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <a href={SIGN_UP_URL} data-cta="daftar" class="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-brand-blue px-9 text-base font-bold text-white transition-colors hover:bg-brand-blue-hover sm:w-auto">Daftar gratis</a>
+      <a href={SIGN_IN_URL} data-cta="masuk" class="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-white/40 px-8 text-base font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto">Sudah punya akun? Masuk</a>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,95 @@
+---
+// Commission estimate and FAQ (T-296). The figures are the owner's commercial terms.
+import Site from "../layouts/Site.astro";
+import PageHero from "../components/PageHero.astro";
+import ClosingCta from "../components/ClosingCta.astro";
+import ProfitSimulator from "../components/ProfitSimulator.astro";
+
+const title = "Simulasi Komisi dan Keuntungan Loket Ekspedisi Toko - GeraiCuan";
+const description = "Hitung estimasi keuntungan loket ekspedisi di toko Anda dengan simulator komisi GeraiCuan. Komisi 20%-25% per paket, tanpa franchise atau royalti.";
+
+const comparison = [
+  ["Biaya kemitraan awal", "Gratis", "Rp 5 jt–Rp 25 jt"],
+  ["Keuntungan diskon ongkir", "Komisi 20%–25% jadi laba", "Komisi 5%–10%, ada target"],
+  ["Pilihan ekspedisi", "Banyak kurir resmi di 1 layar", "Cuma 1 kurir"],
+  ["Royalti bulanan", "Tidak ada, 100% milik toko", "Dipotong royalti atau lisensi"],
+  ["Syarat tempat", "Meja kasir yang sudah ada", "Wajib sewa ruko dan cat khusus"],
+  ["Target minimum paket", "Tanpa target, tanpa penalti", "Wajib capai target"],
+  ["Penjemputan paket", "Kurir resmi jemput ke toko", "Sebagian wajib antar ke hub"],
+];
+
+const faq = [
+  ["Dari mana asal keuntungan toko saya?", "Dari diskon ongkir resmi 20%–25% ekspedisi lewat Mengantar. Pelanggan membayar tarif normal kurir, dan selisih diskonnya menjadi laba toko tanpa potongan royalti."],
+  ["Bagaimana dana COD dan komisi sampai ke rekening toko?", "Gerai memakai akun Mengantar miliknya sendiri. Dana COD dicairkan Mengantar ke akun itu, dan saldonya ditarik ke rekening bank toko dari akun Mengantar. Di GeraiCuan, pemilik gerai memantau estimasi dana cair di menu Pencairan COD."],
+  ["Apakah benar tidak ada biaya tersembunyi?", "Benar. GeraiCuan tidak memungut biaya pendaftaran, iuran bulanan, maupun lisensi. Biaya yang ada hanyalah tarif kurir, biaya COD, dan asuransi bila dipilih, semuanya dari Mengantar dan tampil sebelum resi terbit."],
+  ["Apakah gerai langsung aktif setelah daftar?", "Daftar dengan email dan nomor WhatsApp gerai, lalu verifikasi email. Setelah masuk, lengkapi profil dan hubungkan akun Mengantar gerai di Pengaturan. Gerai mulai mengirim setelah pendaftaran disetujui admin GeraiCuan."],
+];
+---
+<Site title={title} description={description} path="/simulasi/">
+  <PageHero
+    title="Hitung potensi tambahan keuntungan toko Anda"
+    lead="Geser target kiriman per hari. Estimasi komisi bulanan dan tahunan langsung dihitung."
+    showSignUp={false}
+  />
+
+  <section class="bg-slate-50 pb-14 sm:pb-20" aria-label="Simulator komisi">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <ProfitSimulator id="sim-simulasi" />
+    </div>
+  </section>
+
+  <section class="py-14 sm:py-20" aria-labelledby="judul-banding">
+    <div class="mx-auto max-w-4xl px-4 sm:px-6">
+      <h2 id="judul-banding" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">GeraiCuan dibanding franchise biasa</h2>
+      <p class="mt-2 text-base leading-relaxed text-slate-600">Syarat dan keuntungan membuka loket di toko Anda.</p>
+      <ul class="mt-8 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white md:hidden">
+        {comparison.map(([criterion, ours, franchise]) => (
+          <li class="p-4">
+            <p class="text-sm font-semibold text-slate-500">{criterion}</p>
+            <p class="mt-1 rounded-lg bg-brand-blue-pale px-2 py-1 text-base font-bold text-brand-navy">GeraiCuan: {ours}</p>
+            <p class="mt-1 text-sm text-slate-600">Franchise: {franchise}</p>
+          </li>
+        ))}
+      </ul>
+      <div class="mt-8 hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
+        <table class="w-full border-collapse text-left text-sm sm:text-base">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-700">
+              <th scope="col" class="p-4 font-semibold">Kriteria</th>
+              <th scope="col" class="bg-brand-blue-pale p-4 font-bold text-brand-navy">Loket GeraiCuan</th>
+              <th scope="col" class="p-4 font-semibold">Franchise kurir konvensional</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.map(([criterion, ours, franchise]) => (
+              <tr class="border-b border-slate-100 last:border-0">
+                <th scope="row" class="p-4 font-semibold text-slate-900">{criterion}</th>
+                <td class="bg-brand-blue-pale/60 p-4 font-semibold text-brand-navy">{ours}</td>
+                <td class="p-4 text-slate-500">{franchise}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="bg-slate-50 py-14 sm:py-20" aria-labelledby="judul-faq">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6">
+      <h2 id="judul-faq" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Pertanyaan seputar komisi loket</h2>
+      <div class="mt-8 divide-y divide-slate-200 border-y border-slate-200">
+        {faq.map(([question, answer], index) => (
+          <details class="group py-2" open={index === 0}>
+            <summary class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 text-left text-base font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
+              {question}
+              <svg aria-hidden="true" class="size-5 shrink-0 text-slate-500 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+            </summary>
+            <p class="pb-4 pr-9 text-base leading-relaxed text-slate-600">{answer}</p>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <ClosingCta heading="Mulai kumpulkan komisi dari toko Anda" />
+</Site>

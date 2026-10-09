@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://geraicuan.com/</loc>
-  </url>
+  <url><loc>https://geraicuan.com/</loc></url>
+  <url><loc>https://geraicuan.com/fitur/</loc></url>
+  <url><loc>https://geraicuan.com/simulasi/</loc></url>
+  <url><loc>https://geraicuan.com/cara-kerja/</loc></url>
+  <url><loc>https://geraicuan.com/kontak/</loc></url>
 </urlset>

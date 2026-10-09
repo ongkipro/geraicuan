@@ -1,0 +1,89 @@
+---
+// How it works (T-296): the counter flow, pickup, and the equipment a shop needs.
+import Site from "../layouts/Site.astro";
+import PageHero from "../components/PageHero.astro";
+import ClosingCta from "../components/ClosingCta.astro";
+
+const title = "Alur 4 Langkah Kasir Loket Pengiriman Multi-Kurir - GeraiCuan";
+const description = "Alur kasir loket GeraiCuan: isi data pengirim, timbang paket dan cek ongkir, terima pembayaran, lalu cetak resi thermal 100 x 150 mm untuk kurir.";
+
+const steps = [
+  ["Isi data pengirim dan penerima", "Pilih dari kontak tersimpan atau ketik baru. Pelanggan langganan tidak perlu mengetik ulang dari awal.", "Contoh: penerima Ibu Contoh, Coblong, Kota Bandung."],
+  ["Timbang paket dan cek ongkir", "Masukkan berat dan, bila perlu, ukuran kardus. Tarif ekspedisi tampil berdampingan untuk dipilih pelanggan.", "Contoh: 1 kg, J&T Rp 15.000 dipilih dari daftar tarif."],
+  ["Terima pembayaran", "Pelanggan membayar ongkir di kasir, tunai atau lewat QRIS milik toko. Komisi 20%–25% menjadi laba toko.", "Contoh: pelanggan bayar ongkir tunai di kasir."],
+  ["Cetak resi thermal", "Tekan Cetak resi, atau Cetak resi + invoice untuk sekalian memberi nota. Label 100 × 150 mm siap ditempel di kardus.", "Contoh: resi JP0000000000001 tercetak 10 × 15 cm."],
+];
+
+const pickup = [
+  ["Jadwalkan jemput", "Saat membuat kiriman, pilih penjemputan dan jamnya. Jadwal diteruskan ke kurir lewat Mengantar."],
+  ["Kurir datang ke toko", "Kurir resmi datang mengambil paket di toko Anda tanpa biaya jemput."],
+  ["Tandai serah terima", "Kasir menandai paket yang sudah diserahkan, jadi antrean selalu jelas: belum dicetak, siap diserahkan, atau sudah diserahkan."],
+];
+
+const equipment = [
+  ["Laptop, komputer, atau HP", "Buka GeraiCuan lewat browser di perangkat kasir yang sudah ada."],
+  ["Timbangan meja digital", "Timbangan digital biasa yang sudah dipakai toko sudah cukup."],
+  ["Printer thermal", "Printer label 100 × 150 mm untuk resi; printer struk 80 mm bisa dipakai untuk nota."],
+  ["Koneksi internet", "WiFi toko atau hotspot HP sudah cukup untuk melayani transaksi."],
+];
+---
+<Site title={title} description={description} path="/cara-kerja/">
+  <PageHero
+    title="Alur 4 langkah kasir: cepat, praktis, gratis"
+    lead="Staf kasir baru langsung bisa melayani. Isi data pengirim, timbang paket, terima pembayaran, lalu cetak resi thermal."
+  />
+
+  <section class="py-14 sm:py-20" aria-labelledby="judul-langkah">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <h2 id="judul-langkah" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">4 langkah melayani kiriman di meja kasir</h2>
+      <p class="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">Semua tahap dilakukan di depan pelanggan dari satu layar.</p>
+      <ol class="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        {steps.map(([heading, text, example], index) => (
+          <li>
+            <span class="flex size-10 items-center justify-center rounded-full bg-brand-blue text-base font-bold text-white" aria-hidden="true">{index + 1}</span>
+            <h3 class="mt-4 text-lg font-bold text-slate-900">{heading}</h3>
+            <p class="mt-1.5 text-base leading-relaxed text-slate-600">{text}</p>
+            <p class="mt-3 border-l-2 border-brand-blue pl-3 text-sm font-medium text-slate-700">{example}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="bg-brand-navy py-14 text-white sm:py-20" aria-labelledby="judul-jemput">
+    <div class="mx-auto grid max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-2">
+      <div>
+        <h2 id="judul-jemput" class="text-2xl font-extrabold tracking-tight sm:text-3xl">Kurir resmi menjemput paket ke toko</h2>
+        <p class="mt-3 text-base leading-relaxed text-slate-200">Tidak perlu mengantar paket ke kantor cabang. Kurir yang datang ke toko Anda.</p>
+        <ol class="mt-8 space-y-6">
+          {pickup.map(([heading, text]) => (
+            <li class="border-l-2 border-brand-sky pl-5">
+              <h3 class="text-lg font-bold">{heading}</h3>
+              <p class="mt-1 text-base leading-relaxed text-slate-200">{text}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <img src="/images/mitra-pickup-armada.webp" alt="Ilustrasi kurir ekspedisi menjemput paket di depan toko sembako" width="1200" height="896" loading="lazy" class="aspect-[4/3] w-full rounded-2xl object-cover" />
+    </div>
+  </section>
+
+  <section class="py-14 sm:py-20" aria-labelledby="judul-perangkat">
+    <div class="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[1fr_2fr]">
+      <div>
+        <h2 id="judul-perangkat" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Pakai perangkat toko yang sudah ada</h2>
+        <p class="mt-3 text-base leading-relaxed text-slate-600">Tidak perlu membeli paket alat khusus. Ini yang dibutuhkan di meja kasir.</p>
+      </div>
+      <ul class="grid gap-x-10 gap-y-8 sm:grid-cols-2">
+        {equipment.map(([heading, text]) => (
+          <li class="border-t-2 border-brand-blue pt-4">
+            <h3 class="text-lg font-bold text-slate-900">{heading}</h3>
+            <p class="mt-1.5 text-base leading-relaxed text-slate-600">{text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <ClosingCta heading="Siap melayani kiriman pertama?" text="Siapkan printer thermal dan akun Mengantar gerai, lalu ikuti tiga tahap ini:" />
+</Site>

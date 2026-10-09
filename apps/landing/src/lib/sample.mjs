@@ -1,7 +1,6 @@
 // Sanitized sample data and the two pieces of CMS arithmetic the page illustrates.
 // This site builds on its own (D-11), so it copies rather than imports; each copy
-// names its source, and scripts/ui-audit/landing-page.mjs checks the rendered
-// numbers against the formula independently.
+// names its source.
 
 /** Code 128 B symbol table, copied from src/lib/code128.ts (T-176). */
 const CODE128_PATTERNS = [
@@ -53,32 +52,13 @@ export function codSample(goodsIdr, shippingIdr) {
     goodsIdr,
     shippingIdr,
     codIdr: cod,
-    // T-193 codChargeBreakdown: one Biaya COD (VAT inside) plus the round-up to a rupiah.
     mengantarFeeIdr: mengantarFee,
-    roundingIdr: cod - goodsIdr - shippingIdr - mengantarFee,
+    // T-270: the label prints the customer's view only, Nilai barang + Ongkir (the amount less
+    // Nilai barang); Biaya COD and the round-up stay inside Ongkir.
+    labelOngkirIdr: cod - goodsIdr,
     disbursementIdr: cod - shippingIdr - mengantarFee,
   };
 }
-
-/**
- * T-186 / D-12 COD Ongkir, as src/lib/mengantar-cod-fee.ts computes it: break-even is the
- * smallest whole-rupiah charge that covers the shipping Mengantar deducts plus 3.33% of the
- * charge; the seller keeps `charge − shipping − round_half_up(3.33% × charge)`.
- */
-export function codOngkirSample(shippingIdr, chargeIdr) {
-  const breakEven = Math.max(1, Number((BigInt(shippingIdr) * 10000n + 9666n) / 9667n));
-  if (chargeIdr < breakEven) throw new Error(`COD Ongkir sample charge ${chargeIdr} is below break-even ${breakEven}`);
-  const feeOf = (charge) => Number((BigInt(charge) * 333n + 5000n) / 10000n);
-  return {
-    shippingIdr,
-    breakEvenIdr: breakEven,
-    chargeIdr,
-    mengantarFeeIdr: feeOf(chargeIdr),
-    sellerDifferenceIdr: chargeIdr - shippingIdr - feeOf(chargeIdr),
-  };
-}
-
-export const COD_ONGKIR_SAMPLE = codOngkirSample(15_000, 20_000);
 
 const idr = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 /** Same formatter as src/lib/label-format.ts formatIdr. */
@@ -86,8 +66,8 @@ export const formatIdr = (value) => idr.format(value);
 
 /** Obviously fictional label content: no real person, phone, address or AWB. */
 export const SAMPLE_LABEL = {
-  courier: "Shopee Express",
-  awb: "SPXID0000000001",
+  courier: "J&T Express",
+  awb: "JP0000000000001",
   publicReference: "GC-CONTOH01",
   recipientName: "Ibu Contoh",
   recipientPhone: "0812-0000-0000",
