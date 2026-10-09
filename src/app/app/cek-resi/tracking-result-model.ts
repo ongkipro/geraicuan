@@ -6,8 +6,8 @@ export type TrackingResult = Extract<TrackingLookupState, { kind: "found" }>["re
 
 export type TrackingTimelineEntry = {
   at: string;
-  /** "Mengantar" marks a provider-authoritative fact (spec 10 §4.11), "Kurir" the courier's own history line; "GeraiCUAN" our own record. */
-  source: "GeraiCUAN" | "Mengantar" | "Kurir";
+  /** "Mengantar" marks a provider-authoritative fact (spec 10 §4.11), "Kurir" the courier's own history line; "GeraiCuan" our own record. */
+  source: "GeraiCuan" | "Mengantar" | "Kurir";
   title: string;
   detail?: string;
 };
@@ -20,7 +20,7 @@ export function trackingTimeline(result: TrackingResult): TrackingTimelineEntry[
   const entries: TrackingTimelineEntry[] = [{
     at: result.updatedAtIso,
     detail: SHIPMENT_STATUS_PRESENTATION[result.status].guidance,
-    source: "GeraiCUAN",
+    source: "GeraiCuan",
     title: SHIPMENT_STATUS_PRESENTATION[result.status].label,
   }];
   for (const event of result.historyEvents) {

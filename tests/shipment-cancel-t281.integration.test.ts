@@ -275,7 +275,7 @@ describe("T-281 cancelShipmentOnMengantar: gates before any call", () => {
     expect(await cancel(shipment.shipmentId, false)).toEqual({ error: "Centang konfirmasi bahwa pembatalan tidak dapat diurungkan." });
     vi.stubEnv("MENGANTAR_LIVE_ORDERS_ENABLED", "0");
     expect(await cancel(shipment.shipmentId)).toEqual({
-      error: "Pembatalan di Mengantar belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+      error: "Pembatalan di Mengantar belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     });
     expect(calls).toEqual([]);
     expect(await shipmentStatus(shipment.shipmentId)).toBe("ISSUED");
@@ -287,7 +287,7 @@ describe("T-281 cancelShipmentOnMengantar: gates before any call", () => {
     const issued = await seedShipment("a");
     vi.stubEnv("MENGANTAR_LIVE_ORDERS_ENABLED", "0");
     expect(await cancel(moving.shipmentId)).toEqual({
-      error: "Pembatalan di Mengantar belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+      error: "Pembatalan di Mengantar belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     });
     const { db } = await import("@/db/client");
     const { cancelShipmentAtMengantar } = await import("@/lib/shipment-cancellation");
@@ -313,7 +313,7 @@ describe("T-281 cancelShipmentOnMengantar: gates before any call", () => {
     ["an unrecognised provider status", { providerStatus: "ON DELIVERY" }, /sudah mencatat paket dijemput/],
     ["Anteraja accepted 4 minutes ago", { courier: "anteraja", acceptedSecondsAgo: 240 }, /AnterAja baru bisa dibatalkan 5 menit/],
     ["an uncertain payment", { status: "AWAITING_UPSTREAM_PAYMENT" as const, recoveryStatus: "PAYMENT_UNKNOWN" as const }, /Pembayaran pesanan ini belum pasti/],
-    ["a courier the docs give no value for", { courier: "spx" }, /tidak bisa dibatalkan dari GeraiCUAN/],
+    ["a courier the docs give no value for", { courier: "spx" }, /tidak bisa dibatalkan dari GeraiCuan/],
   ])("refuses %s before sending anything", async (_name, options, message) => {
     const shipment = await seedShipment("a", options);
     expect(await cancel(shipment.shipmentId)).toEqual({ error: expect.stringMatching(message) });

@@ -136,7 +136,7 @@ export async function checkShippingRates(
         if (!outlet) throw new MengantarConfigurationError();
         const originAreaLabel = outlet.originAreaId === resolved.originAreaId && outlet.originAreaLabel
           ? outlet.originAreaLabel
-          : resolved.source === "platform_default" ? "Pickup platform GeraiCUAN" : "Asal outlet";
+          : resolved.source === "platform_default" ? "Pickup platform GeraiCuan" : "Asal outlet";
         // T-243: Mitra kurir — the gerai's switched-off couriers are not quoted back.
         const disabledCouriers = await loadTenantDisabledCouriers(tx, context);
         return { disabledCouriers, resolved, originAreaLabel };

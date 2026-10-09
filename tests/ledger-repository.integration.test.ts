@@ -232,7 +232,7 @@ describe("immutable tenant operational ledger", () => {
     expect(entries).toHaveLength(4);
     expect(entries.filter((entry) => entry.entryType === "COD_SERVICE_FEE_VAT_PAYABLE")).toEqual([]);
     // T-178: Mengantar keeps the fee at settlement, so no issuance after the
-    // change books it — or anything else — as GeraiCUAN revenue.
+    // change books it — or anything else — as GeraiCuan revenue.
     expect(entries.filter((entry) =>
       entry.entryType === "GERAICUAN_COD_SERVICE_FEE_REVENUE" || entry.financialClass === "REVENUE")).toEqual([]);
 

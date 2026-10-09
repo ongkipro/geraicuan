@@ -104,7 +104,7 @@ beforeAll(async () => {
   vi.stubEnv("GERAICUAN_PLATFORM_ORIGIN", PLATFORM_ORIGIN);
   vi.stubEnv("GERAICUAN_PUBLIC_ORIGIN", "https://geraicuan.test");
   vi.stubEnv("RESEND_API_KEY", "re_test_stub_key_not_real");
-  vi.stubEnv("RESEND_FROM_EMAIL", "GeraiCUAN <no-reply@geraicuan.test>");
+  vi.stubEnv("RESEND_FROM_EMAIL", "GeraiCuan <no-reply@geraicuan.test>");
   vi.stubGlobal("fetch", fetchStub);
   for (const method of ["log", "info", "warn", "error", "debug"] as const) {
     vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
@@ -225,12 +225,12 @@ describe("no token in production logs (D-10)", () => {
       })
       .filter((value) => value.length >= 16);
     expect(deliveries.map((delivery) => delivery.subject)).toEqual([
-      "Verifikasi email GeraiCUAN Anda",
-      "Email Anda sudah terdaftar di GeraiCUAN",
+      "Verifikasi email GeraiCuan Anda",
+      "Email Anda sudah terdaftar di GeraiCuan",
       // H1: the resend for an unverified account is a set-password link.
-      "Buat kata sandi untuk memverifikasi email GeraiCUAN",
-      "Atur ulang kata sandi GeraiCUAN",
-      "Atur ulang kata sandi GeraiCUAN",
+      "Buat kata sandi untuk memverifikasi email GeraiCuan",
+      "Atur ulang kata sandi GeraiCuan",
+      "Atur ulang kata sandi GeraiCuan",
     ]);
     expect(secrets.length).toBeGreaterThanOrEqual(8);
 

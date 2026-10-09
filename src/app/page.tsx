@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
   description: "CMS operasional pengiriman gerai: buat kiriman, terbitkan resi, cetak label bermasking.",
-  title: { absolute: "GeraiCUAN — CMS operasional pengiriman gerai" },
+  title: { absolute: "GeraiCuan — CMS operasional pengiriman gerai" },
 };
 
 /** Public entry (single-origin mode): the two ways in, and sign-up. */

@@ -202,7 +202,7 @@ describe("D-27 POST /time request", () => {
 });
 
 describe("D-26 documented POST /order response", () => {
-  // The documented example, trimmed to the keys GeraiCUAN reads.
+  // The documented example, trimmed to the keys GeraiCuan reads.
   const documented = {
     success: true,
     data: [{

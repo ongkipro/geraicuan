@@ -166,7 +166,7 @@ export async function confirmShipmentIssuance(
   if (!resolveTransport) {
     return {
       error:
-        "Penerbitan resi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+        "Penerbitan resi belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     };
   }
 

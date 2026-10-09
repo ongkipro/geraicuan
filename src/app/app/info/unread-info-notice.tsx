@@ -21,7 +21,7 @@ export function UnreadInfoNotice({ count }: { count: number }) {
           </span>{" "}
           info baru
         </span>
-        <span className="text-muted-foreground max-sm:hidden">dari tim GeraiCUAN</span>
+        <span className="text-muted-foreground max-sm:hidden">dari tim GeraiCuan</span>
       </span>
       <Link
         className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-primary underline-offset-4 hover:underline md:min-h-8 [&_svg]:size-4"

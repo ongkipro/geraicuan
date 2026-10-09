@@ -34,8 +34,8 @@ const KEY_FORM_ID = "mengantar-key-form";
 /** "Digunakan" follows the persisted source, never the draft choice. */
 const MODES: { description: string; title: string; value: Mode }[] = [
   {
-    description: "Dikelola GeraiCUAN, tanpa API key. Tarif dan pencairan COD mengikuti akun GeraiCUAN.",
-    title: "Koneksi bawaan GeraiCUAN",
+    description: "Dikelola GeraiCuan, tanpa API key. Tarif dan pencairan COD mengikuti akun GeraiCuan.",
+    title: "Koneksi bawaan GeraiCuan",
     value: "platform_default",
   },
   {
@@ -208,7 +208,7 @@ export function ConnectionForm({ outlet }: { outlet: SafeOutletReadiness }) {
           {mode === "platform_default" && outlet.connectionSource === "private" ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
-                API key outlet dihapus setelah koneksi bawaan GeraiCUAN dipastikan siap.
+                API key outlet dihapus setelah koneksi bawaan GeraiCuan dipastikan siap.
               </p>
               <AlertDialog onOpenChange={setConfirming} open={confirming}>
                 <AlertDialogTrigger asChild>
@@ -218,9 +218,9 @@ export function ConnectionForm({ outlet }: { outlet: SafeOutletReadiness }) {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Alihkan {outlet.name} ke koneksi bawaan GeraiCUAN?</AlertDialogTitle>
+                    <AlertDialogTitle>Alihkan {outlet.name} ke koneksi bawaan GeraiCuan?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      API key Mengantar milik outlet ini dihapus. Kiriman baru memakai akun GeraiCUAN; untuk kembali ke akun sendiri, API key harus dimasukkan lagi.
+                      API key Mengantar milik outlet ini dihapus. Kiriman baru memakai akun GeraiCuan; untuk kembali ke akun sendiri, API key harus dimasukkan lagi.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <form action={switchAction}>

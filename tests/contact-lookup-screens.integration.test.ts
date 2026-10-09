@@ -273,7 +273,7 @@ describe("Cek resi", () => {
 
   it("builds a newest-first timeline with its source", () => {
     const timeline = trackingTimeline(result);
-    expect(timeline.map((entry) => entry.source)).toEqual(["Mengantar", "GeraiCUAN"]);
+    expect(timeline.map((entry) => entry.source)).toEqual(["Mengantar", "GeraiCuan"]);
     expect(timeline[1].title).toBe("Dalam perjalanan");
     expect(trackingTimeline({ ...result, observation: null })).toHaveLength(1);
   });

@@ -126,7 +126,7 @@ export const SHIPMENT_STATUS_PRESENTATION: Record<
     label: "Gagal",
     tone: "danger",
   },
-  // T-238 (owner 2026-09-26): only Mengantar sets it; GeraiCUAN has no cancel action yet (D-30).
+  // T-238 (owner 2026-09-26): only Mengantar sets it; GeraiCuan has no cancel action yet (D-30).
   CANCELLED: {
     guidance: "Mengantar melaporkan pesanan ini dibatalkan. Label tidak dapat dicetak; buat kiriman baru bila paket tetap dikirim.",
     label: "Dibatalkan",

@@ -160,7 +160,7 @@ export function RegistrationForm() {
           </AlertDescription>
         </Alert>
         <ol className="flex list-decimal flex-col gap-2 pl-5">
-          <li>Tekan tombol <strong>Verifikasi email</strong> di email dari GeraiCUAN. Tautan berlaku 24 jam.</li>
+          <li>Tekan tombol <strong>Verifikasi email</strong> di email dari GeraiCuan. Tautan berlaku 24 jam.</li>
           <li>Masuk, lalu hubungkan akun Mengantar milik gerai dan pilih titik pickup.</li>
           <li>Tunggu persetujuan admin platform; setelah itu Anda bisa membuat kiriman.</li>
         </ol>

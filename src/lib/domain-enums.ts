@@ -25,7 +25,7 @@ export const shipmentStatuses = [
   "IN_TRANSIT",
   "DELIVERED",
   "PROBLEM",
-  // T-238 (owner 2026-09-26): Mengantar reported the order cancelled. Terminal; no GeraiCUAN action sets it.
+  // T-238 (owner 2026-09-26): Mengantar reported the order cancelled. Terminal; no GeraiCuan action sets it.
   "CANCELLED",
 ] as const;
 

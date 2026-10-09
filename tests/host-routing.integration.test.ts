@@ -239,7 +239,7 @@ describe("startup validation in src/instrumentation.ts", () => {
     NODE_ENV: "production",
     // D-10 (T-181): production mail. A placeholder: nothing is sent here.
     RESEND_API_KEY: "re_startup_placeholder_not_real",
-    RESEND_FROM_EMAIL: "GeraiCUAN <no-reply@geraicuan.test>",
+    RESEND_FROM_EMAIL: "GeraiCuan <no-reply@geraicuan.test>",
   };
 
   async function register(environment: Record<string, string | undefined>) {
@@ -257,7 +257,7 @@ describe("startup validation in src/instrumentation.ts", () => {
     ["a malformed tenant origin", { GERAICUAN_TENANT_ORIGIN: "app.geraicuan.com" }, "GERAICUAN_TENANT_ORIGIN must contain valid absolute origins."],
     ["no Resend API key", { RESEND_API_KEY: undefined }, "RESEND_API_KEY is required in production."],
     ["a Resend key without a sender", { RESEND_FROM_EMAIL: undefined }, "RESEND_FROM_EMAIL is required when RESEND_API_KEY is set."],
-    ["a malformed sender", { RESEND_FROM_EMAIL: "GeraiCUAN no-reply" }, "RESEND_FROM_EMAIL must be an email address or \"Name <email>\"."],
+    ["a malformed sender", { RESEND_FROM_EMAIL: "GeraiCuan no-reply" }, "RESEND_FROM_EMAIL must be an email address or \"Name <email>\"."],
     ["no auth secret", { BETTER_AUTH_SECRET: undefined }, "BETTER_AUTH_SECRET is required in production."],
     ["a short auth secret", { BETTER_AUTH_SECRET: "x".repeat(31) }, "BETTER_AUTH_SECRET must be at least 32 characters."],
     ["no runtime database login", { APP_DATABASE_URL: undefined }, "APP_DATABASE_URL is required in production."],

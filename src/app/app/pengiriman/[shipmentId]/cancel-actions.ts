@@ -24,18 +24,18 @@ export type ShipmentCancelActionState = {
   cancelled?: { already: boolean };
 };
 
-const NOT_ENABLED = "Pembatalan di Mengantar belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.";
+const NOT_ENABLED = "Pembatalan di Mengantar belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.";
 const UNCHANGED = "Status kiriman tidak diubah.";
 const PULL_HINT = "Jalankan “Perbarui status dari Mengantar” di Histori kiriman, atau cek pesanan di aplikasi Mengantar.";
 
 const REFUSAL_MESSAGES: Record<ShipmentCancelRefusal, string> = {
   NOT_FOUND: "Kiriman tidak ditemukan.",
   STATUS: "Kiriman ini tidak dapat dibatalkan: hanya kiriman Resi terbit atau Menunggu pembayaran yang bisa dibatalkan. Muat ulang halaman untuk melihat status terbarunya.",
-  NO_ORDER_ID: "Kiriman ini belum punya nomor pesanan Mengantar, jadi tidak bisa dibatalkan dari GeraiCUAN. Batalkan lewat aplikasi Mengantar.",
+  NO_ORDER_ID: "Kiriman ini belum punya nomor pesanan Mengantar, jadi tidak bisa dibatalkan dari GeraiCuan. Batalkan lewat aplikasi Mengantar.",
   PAST_PICKUP: "Tidak dapat dibatalkan: Mengantar sudah mencatat paket dijemput atau dalam perjalanan.",
   ANTERAJA_WAIT: "Pesanan AnterAja baru bisa dibatalkan 5 menit setelah dibuat. Coba lagi sebentar lagi.",
   PAYMENT_UNCERTAIN: "Pembayaran pesanan ini belum pasti. Selesaikan pemeriksaan pembayaran dulu sebelum membatalkan.",
-  COURIER_UNSUPPORTED: "Pesanan kurir ini tidak bisa dibatalkan dari GeraiCUAN. Batalkan lewat aplikasi Mengantar.",
+  COURIER_UNSUPPORTED: "Pesanan kurir ini tidak bisa dibatalkan dari GeraiCuan. Batalkan lewat aplikasi Mengantar.",
 };
 
 function withProviderMessage(text: string, providerMessage: string | null) {
@@ -102,7 +102,7 @@ export async function cancelShipmentOnMengantar(
         return { error: `Hasil pembatalan di Mengantar belum pasti. ${UNCHANGED} ${PULL_HINT}` };
       case "NOT_RECORDED":
         // T-281 review round 3: a pull cannot settle an unpaid order (no AWB), so say what to do.
-        return { error: `Mengantar sudah menghapus pesanan, tetapi GeraiCUAN belum dapat mencatatnya. ${PULL_HINT} Jika kiriman belum punya resi, jangan bayar kiriman ini dan hubungi admin GeraiCUAN.` };
+        return { error: `Mengantar sudah menghapus pesanan, tetapi GeraiCuan belum dapat mencatatnya. ${PULL_HINT} Jika kiriman belum punya resi, jangan bayar kiriman ini dan hubungi admin GeraiCuan.` };
     }
   } catch (error) {
     if (error instanceof MengantarDemoTenantError) return { error: DEMO_TENANT_MESSAGE };

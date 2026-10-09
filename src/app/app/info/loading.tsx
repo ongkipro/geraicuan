@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function AnnouncementsLoading() {
   return (
     <div aria-busy="true" aria-label="Memuat info terbaru" className="flex flex-col gap-6" role="status">
-      <PageHeader description="Kabar dari tim GeraiCUAN: fitur baru, info kurir, jadwal pickup dan pemeliharaan." title="Info terbaru" />
+      <PageHeader description="Kabar dari tim GeraiCuan: fitur baru, info kurir, jadwal pickup dan pemeliharaan." title="Info terbaru" />
       <div className="flex flex-col gap-4">
         <div className="flex w-full gap-1 rounded-2xl bg-card p-1.5 shadow-card md:w-fit">
           {[20, 28, 24, 28].map((width, index) => <Skeleton className="h-11 shrink-0 rounded-lg md:h-9" key={index} style={{ width: `${width * 4}px` }} />)}

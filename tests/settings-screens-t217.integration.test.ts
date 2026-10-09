@@ -108,7 +108,7 @@ describe("settings rules", () => {
   });
 
   it("names the connection in one sentence", () => {
-    expect(logic.connectionSentence(outlet)).toBe("Koneksi bawaan GeraiCUAN");
+    expect(logic.connectionSentence(outlet)).toBe("Koneksi bawaan GeraiCuan");
     expect(logic.connectionSentence({ ...outlet, privateConnectionRequired: true })).toBe("Belum terhubung ke akun Mengantar gerai");
     expect(logic.connectionSentence({ ...outlet, connectionSource: "private", connectionStatus: "private_attention" }))
       .toContain("perlu diperiksa");
@@ -436,7 +436,7 @@ describe("Anggota & akses", () => {
     // A refused invite shows its reason inside the dialog; a success does not repeat there.
     const refused = renderToStaticMarkup(createElement(InviteMemberForm, {
       attemptId: "00000000-0000-4000-8000-000000000005", formAction: () => undefined, pending: false,
-      state: { errors: { email: "Masukkan email akun GeraiCUAN yang valid." }, message: "Periksa kembali undangan yang ditandai.", resultToken: "t1", status: "error" },
+      state: { errors: { email: "Masukkan email akun GeraiCuan yang valid." }, message: "Periksa kembali undangan yang ditandai.", resultToken: "t1", status: "error" },
     }));
     expect(refused).toContain('aria-invalid="true"');
     expect(refused).toContain("Periksa kembali undangan yang ditandai.");

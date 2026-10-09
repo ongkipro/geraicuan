@@ -175,7 +175,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
   it("keeps issuance production-gated, then permits an Operator only through the sanctioned fixture", async () => {
     fixture.role = "OPERATOR";
     await expect(confirmShipmentIssuance({}, issuanceForm())).resolves.toEqual({
-      error: "Penerbitan resi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+      error: "Penerbitan resi belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     });
     expect(confirmFixtureBackedShipmentIssuance).not.toHaveBeenCalled();
 
@@ -278,7 +278,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     const { resolveLiveMengantarPayUnpaidTransport } = await import("@/lib/mengantar-live-transport");
     const { MengantarPayUnpaidRefusedError } = await import("@/lib/mengantar-unpaid-recovery");
     await expect(recoverShipmentUnpaidPayment({}, confirmationForm())).resolves.toEqual({
-      error: "Pemulihan pembayaran belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+      error: "Pemulihan pembayaran belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     });
     expect(recoverFixtureBackedShipmentPayment).not.toHaveBeenCalled();
 
@@ -301,7 +301,7 @@ describe("T-39 exported shipment Server Action boundaries", () => {
     const { createLiveMengantarReconciliationLookup } = await import("@/lib/mengantar-live-reconciliation");
     const { ShipmentReconciliationUndeterminedError } = await import("@/lib/shipment-reconciliation");
     await expect(reconcileShipmentUnknownSubmission({}, confirmationForm())).resolves.toEqual({
-      error: "Rekonsiliasi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+      error: "Rekonsiliasi belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     });
     fixture.liveEnabled = true;
     vi.mocked(reconcileFixtureBackedShipment).mockRejectedValueOnce(new ShipmentReconciliationUndeterminedError());

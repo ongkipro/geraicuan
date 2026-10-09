@@ -67,7 +67,7 @@ describe("AppSidebar", () => {
     expect(html).toContain("Wulan Sekarsari");
     expect(html).toContain("wulan@example.test");
     // v3.2 (D-18): brand and role moved to the primary top bar; the sidebar holds only the menu.
-    expect(html).not.toContain(">GeraiCUAN<");
+    expect(html).not.toContain(">GeraiCuan<");
   });
 
   it("gives a Tenant Admin the reports and settings, and marks Pengaturan current on member management", () => {

@@ -254,7 +254,7 @@ describe("Rincian uang render (T-261)", () => {
 
   it("inconsistent COD Ongkir names its own charge; the alert alone omits the link when there is nowhere else to go", () => {
     const html = renderToStaticMarkup(createElement(MoneyInconsistentAlert, { amountIdr: 7_000, method: "COD_ONGKIR" }));
-    expect(rp(text(html))).toContain("Nilai COD Ongkir di pesanan Mengantar (Rp 7.000) tidak sama dengan yang tercatat di GeraiCUAN.");
+    expect(rp(text(html))).toContain("Nilai COD Ongkir di pesanan Mengantar (Rp 7.000) tidak sama dengan yang tercatat di GeraiCuan.");
     expect(html).not.toContain("Periksa kiriman");
   });
 

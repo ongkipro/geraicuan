@@ -381,7 +381,7 @@ describe("T-238 tracking history", () => {
       observation: null, paymentMethod: "NON_COD", providerCodAmountIdr: null, providerService: "JNE REG",
       publicReference: "GC-1", returnAwb: null, status: "DELIVERED", updatedAtIso: "2026-09-27T09:00:00Z",
     });
-    expect(cekResi.map((entry) => `${entry.source}:${entry.title}`)).toEqual(["GeraiCUAN:Terkirim", "Kurir:Delivered", "Kurir:Order Created"]);
+    expect(cekResi.map((entry) => `${entry.source}:${entry.title}`)).toEqual(["GeraiCuan:Terkirim", "Kurir:Delivered", "Kurir:Order Created"]);
 
     const card = renderToStaticMarkup(createElement(TrackingResultCard, { result: {
       awb: "AWB-1", courier: "JNE", declaredValueIdr: 0, destinationAreaLabel: "X",

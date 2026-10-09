@@ -61,7 +61,7 @@ function ContactStatus({ contact }: { contact: ContactSearchRow }) {
   return contact.archived ? <StatusBadge label="Diarsipkan" tone="neutral" /> : <StatusBadge label="Aktif" tone="success" />;
 }
 
-/** CON-SHP-COUNT with CON-SHP-DELIVERED-SHARE, or "—" when GeraiCUAN has no shipment for the contact. */
+/** CON-SHP-COUNT with CON-SHP-DELIVERED-SHARE, or "—" when GeraiCuan has no shipment for the contact. */
 function ShipmentCell({ contact }: { contact: ContactSearchRow }) {
   if (contact.shipmentCount === 0) return <span className="text-muted-foreground">—</span>;
   return (

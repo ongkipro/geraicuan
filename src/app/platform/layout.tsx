@@ -16,7 +16,7 @@ export default async function PlatformLayout({ children }: { children: ReactNode
       account={{ email: "Akses platform", name: "Admin platform" }}
       scope={{ kind: "platform" }}
       subtitle="Data seluruh gerai"
-      title="Platform GeraiCUAN"
+      title="Platform GeraiCuan"
     >
       {children}
     </AppShell>

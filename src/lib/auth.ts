@@ -152,7 +152,7 @@ export const auth = betterAuth({
     // T-286 (M2): TOTP for the Super Admin. Enrollment is refused to every other principal (the
     // `before` hook below), so only a Super Admin ever gets a challenge at sign-in. The plugin
     // limits a challenge to 5 codes and an account to 10 consecutive failures (15-minute lock).
-    twoFactor({ issuer: "GeraiCUAN" }),
+    twoFactor({ issuer: "GeraiCuan" }),
   ],
   hooks: {
     before: createAuthMiddleware(async (ctx) => {

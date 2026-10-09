@@ -20,7 +20,7 @@ const CORES = [
 function AuthVisualPanel({ platform }: { platform: boolean }) {
   return (
     <aside
-      aria-label="GeraiCUAN"
+      aria-label="GeraiCuan"
       className={cn(
         "sticky top-0 hidden h-svh shrink-0 flex-col gap-10 p-12 text-primary-foreground lg:flex lg:w-[44%] lg:max-w-[40rem] xl:p-16",
         platform ? "border-r border-background/15 bg-foreground" : "bg-primary",
@@ -29,7 +29,7 @@ function AuthVisualPanel({ platform }: { platform: boolean }) {
     >
       <div className="flex items-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt="GeraiCUAN" className="h-11 w-auto" height={44} src="/brand/geraicuan-logo-white.svg" width={172} />
+        <img alt="GeraiCuan" className="h-11 w-auto" height={44} src="/brand/geraicuan-logo-white.svg" width={172} />
       </div>
       <div className="flex flex-1 flex-col justify-center gap-8">
         <div className="flex flex-col gap-4">
@@ -116,7 +116,7 @@ export function AuthShell({
           {/* The owner's logo: white on the dark platform ground, full colour on the light gerai ground. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            alt="GeraiCUAN"
+            alt="GeraiCuan"
             className="h-10 w-auto"
             height={40}
             src={platform ? "/brand/geraicuan-logo-white.svg" : "/brand/geraicuan-logo-color.svg"}
@@ -131,7 +131,7 @@ export function AuthShell({
           data-slot="surface-badge"
         >
           {platform ? <ShieldCheck aria-hidden="true" className="size-4" /> : <Store aria-hidden="true" className="size-4" />}
-          {platform ? "Khusus tim GeraiCUAN" : "Untuk gerai"}
+          {platform ? "Khusus tim GeraiCuan" : "Untuk gerai"}
         </span>
       </div>
       <section

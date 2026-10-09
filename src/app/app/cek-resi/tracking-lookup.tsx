@@ -112,7 +112,7 @@ export function TrackingLookup({ initialState = { kind: "idle" } }: { initialSta
         {!pending && (state.kind === "idle" || (state.kind === "invalid" && !state.query)) ? (
           <Card className="border border-dashed border-input py-0 shadow-none">
             <EmptyState
-              description="Masukkan nomor kiriman GeraiCUAN atau nomor resi kurir, lalu tekan Cek resi."
+              description="Masukkan nomor kiriman GeraiCuan atau nomor resi kurir, lalu tekan Cek resi."
               icon={Route}
               title="Perjalanan paket muncul di sini"
             />

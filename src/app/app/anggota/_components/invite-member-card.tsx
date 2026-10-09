@@ -59,7 +59,7 @@ export function InviteMemberForm({
     <form action={formAction} aria-busy={pending} className="flex flex-col gap-4" id={INVITE_FORM_ID} noValidate>
       <input name="attemptId" type="hidden" value={state.nextAttemptId ?? attemptId} />
       <Field data-invalid={Boolean(emailError)}>
-        <FieldLabel htmlFor="member-invite-email">Email akun GeraiCUAN</FieldLabel>
+        <FieldLabel htmlFor="member-invite-email">Email akun GeraiCuan</FieldLabel>
         <Input
           aria-describedby={emailError ? "member-invite-email-error" : "member-invite-email-help"}
           aria-invalid={Boolean(emailError)}
@@ -120,7 +120,7 @@ export function InviteMemberDialog({ attemptId, children }: { attemptId: string;
           <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-xl" onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }}>
             <DialogHeader>
               <DialogTitle>Undang anggota</DialogTitle>
-              <DialogDescription>Beri akses gerai ini ke akun GeraiCUAN yang sudah aktif. Peran bisa diubah nanti.</DialogDescription>
+              <DialogDescription>Beri akses gerai ini ke akun GeraiCuan yang sudah aktif. Peran bisa diubah nanti.</DialogDescription>
             </DialogHeader>
             <InviteMemberForm attemptId={attemptId} formAction={formAction} pending={pending} state={state} />
             <DialogFooter className="gap-2">

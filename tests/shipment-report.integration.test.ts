@@ -339,7 +339,7 @@ describe("shipment report rows", () => {
 
     // COD 222_160: Mengantar's settlement basis (13_000); the fee Mengantar
     // keeps, round(222_160 × 333 / 10_000) = round(7_397.93) = 7_398 — not the
-    // 7_160 (6_450 + 710) GeraiCUAN stored under the old additive formula; and
+    // 7_160 (6_450 + 710) GeraiCuan stored under the old additive formula; and
     // 222_160 − 13_000 − 7_398 = 201_762. The three columns add up to the COD
     // amount on the row, to the rupiah, which the old pair did not (202_000).
     const cod = report.rows.find((row) => row.isCod);

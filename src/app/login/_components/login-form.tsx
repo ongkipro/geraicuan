@@ -180,7 +180,7 @@ export function LoginForm({
           <AlertDescription className="grid gap-3">
             {tenant ? (
               <>
-                <span>Kata sandi Anda benar. Buka email &ldquo;Verifikasi email GeraiCUAN Anda&rdquo;, atau kirim ulang.</span>
+                <span>Kata sandi Anda benar. Buka email &ldquo;Verifikasi email GeraiCuan Anda&rdquo;, atau kirim ulang.</span>
                 {resendState === "sent" ? (
                   <span role="status">Jika email ini belum terverifikasi, tautan baru sudah dikirim. Tautan berlaku 1 jam.</span>
                 ) : resendState === "limited" ? (
@@ -191,7 +191,7 @@ export function LoginForm({
                 </Button>
               </>
             ) : (
-              <span>Hubungi pengelola platform GeraiCUAN.</span>
+              <span>Hubungi pengelola platform GeraiCuan.</span>
             )}
           </AlertDescription>
         </Alert>

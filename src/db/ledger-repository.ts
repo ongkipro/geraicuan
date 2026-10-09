@@ -38,7 +38,7 @@ export type LedgerSummary = {
   /**
    * T-193: historical COD_SERVICE_FEE_VAT_PAYABLE rows. The 11% VAT is inside
    * Mengantar's 3.33% fee and Mengantar keeps it, so this is part of the COD fee
-   * Mengantar withheld — informational, never GeraiCUAN's payable. No issuance
+   * Mengantar withheld — informational, never GeraiCuan's payable. No issuance
    * books the type from T-193 on.
    */
   legacyCodFeeVatIdr: number;
@@ -331,7 +331,7 @@ export async function appendLedgerForIssuedProviderOrder(
     }
     // COD principal is the goods money the courier collects for the seller.
     // T-186 COD Ongkir (formula version 3) collects a shipping charge only —
-    // the goods were paid outside GeraiCUAN — so its principal is exactly zero.
+    // the goods were paid outside GeraiCuan — so its principal is exactly zero.
     // The entry is still appended, at 0, so every COD issuance carries the same
     // entry set and "no goods principal" is a recorded fact, not an absence.
     // The shipping charge is not principal: Mengantar keeps the shipping and
@@ -345,7 +345,7 @@ export async function appendLedgerForIssuedProviderOrder(
         : requireWholeIdr(source.codGoodsValueIdr),
     });
     // T-178: the COD fee is Mengantar's — it deducts it at settlement and
-    // GeraiCUAN never receives it — so it is a provider cost, not revenue.
+    // GeraiCuan never receives it — so it is a provider cost, not revenue.
     // T-193: the amount is the fee Mengantar actually keeps,
     // round_half_up(COD × 333 / 10000) (`mengantarCodFeeIdr`), not the stored
     // service fee; the 11% VAT is inside that fee and Mengantar keeps it, so no

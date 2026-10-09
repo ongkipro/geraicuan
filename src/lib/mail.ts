@@ -144,16 +144,16 @@ export function composeMail(input: {
   const text = [
     ...input.paragraphs,
     ...(input.action ? [`${input.action.label}: ${input.action.url}`] : []),
-    "Email ini dikirim otomatis oleh GeraiCUAN. Abaikan jika Anda tidak merasa melakukan permintaan ini.",
+    "Email ini dikirim otomatis oleh GeraiCuan. Abaikan jika Anda tidak merasa melakukan permintaan ini.",
   ].join("\n\n");
   const html = [
     '<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#111827;max-width:560px">',
-    '<p style="font-size:20px;font-weight:700;margin:0 0 16px">GeraiCUAN</p>',
+    '<p style="font-size:20px;font-weight:700;margin:0 0 16px">GeraiCuan</p>',
     ...input.paragraphs.map((paragraph) => `<p style="margin:0 0 16px">${escapeHtml(paragraph)}</p>`),
     input.action
-      ? `<p style="margin:24px 0"><a href="${escapeHtml(input.action.url)}" style="display:inline-block;background:#2e47ba;color:#ffffff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700">${escapeHtml(input.action.label)}</a></p><p style="margin:0 0 16px;font-size:14px;color:#4b5563">Jika tombol tidak berfungsi, salin tautan ini ke browser: ${escapeHtml(input.action.url)}</p>`
+      ? `<p style="margin:24px 0"><a href="${escapeHtml(input.action.url)}" style="display:inline-block;background:#1557B0;color:#ffffff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700">${escapeHtml(input.action.label)}</a></p><p style="margin:0 0 16px;font-size:14px;color:#4b5563">Jika tombol tidak berfungsi, salin tautan ini ke browser: ${escapeHtml(input.action.url)}</p>`
       : "",
-    '<p style="margin:24px 0 0;font-size:14px;color:#4b5563">Email ini dikirim otomatis oleh GeraiCUAN. Abaikan jika Anda tidak merasa melakukan permintaan ini.</p>',
+    '<p style="margin:24px 0 0;font-size:14px;color:#4b5563">Email ini dikirim otomatis oleh GeraiCuan. Abaikan jika Anda tidak merasa melakukan permintaan ini.</p>',
     "</div>",
   ].join("");
   return {

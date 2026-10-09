@@ -4,7 +4,7 @@
  * - `NON_COD`: the buyer already paid; the courier collects nothing.
  * - `COD`: the courier collects goods plus shipping, grossed up for Mengantar's
  *   fee (formula version 2), computed and never typed.
- * - `COD_ONGKIR`: the goods were paid outside GeraiCUAN; the courier collects
+ * - `COD_ONGKIR`: the goods were paid outside GeraiCuan; the courier collects
  *   ongkir + biaya COD (formula version 3), computed and never typed since
  *   D-28 (T-237). Rows recorded earlier may hold a charge raised above it.
  *
@@ -40,7 +40,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
  * T-190: the money figure each method is read by, named once. Non-COD shows
  * the declared value the draft form collects for insurance; COD the total the
  * courier collects; COD Ongkir the shipping charge the courier collects —
- * never the goods, which were paid outside GeraiCUAN.
+ * never the goods, which were paid outside GeraiCuan.
  */
 export const PAYMENT_AMOUNT_LABELS: Record<PaymentMethod, string> = {
   // T-269: the Rincian uang words — the collected amount is "Ditagih ke penerima" for both COD

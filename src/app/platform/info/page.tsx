@@ -110,7 +110,7 @@ export default async function PlatformAnnouncementsPage({
     <AnnouncementFeedbackProvider>
       <PageHeader
         actions={<AnnouncementEditor />}
-        description="Kabar dari tim GeraiCUAN untuk semua gerai. Gerai hanya melihat info yang tayang."
+        description="Kabar dari tim GeraiCuan untuk semua gerai. Gerai hanya melihat info yang tayang."
         title="Info terbaru"
       />
       <AnnouncementFeedbackLine />

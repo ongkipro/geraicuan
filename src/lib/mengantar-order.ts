@@ -51,7 +51,7 @@ import { MengantarDemoTenantError } from "@/lib/mengantar-demo-tenant";
  * order has been accepted live (T-153; `scripts/probe-mengantar-order-documented.mjs`
  * is the one owner-approved probe, not yet run).
  *
- * Deliberately not sent: `assignee` (optional, no GeraiCUAN concept), `dropShipper`
+ * Deliberately not sent: `assignee` (optional, no GeraiCuan concept), `dropShipper`
  * (needs a saved Mengantar dropshipper; D-30 keeps masking on our label only),
  * `customProducts`, `dontIncludeSubdistrict`, and insurance and a service code,
  * which the documented body has no key for.

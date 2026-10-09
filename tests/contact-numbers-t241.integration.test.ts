@@ -10,7 +10,7 @@ import { ensureIntegrationRuntimeRole } from "./integration-runtime-role";
 
 /**
  * T-241: per-tenant contact numbers (`/app/kontak/<peran>/<n>`), the legacy UUID redirect, the
- * kategori CHECK and the attribution of GeraiCUAN shipments to a contact (spec 05 DATA contact
+ * kategori CHECK and the attribution of GeraiCuan shipments to a contact (spec 05 DATA contact
  * attribution; spec 19 CON-SHP-*). Isolated database only; no Mengantar call.
  */
 const adminDatabaseUrl = process.env.DATABASE_URL;
@@ -354,7 +354,7 @@ describe("shipment attribution (T-241, CON-SHP-*)", () => {
     expect(noncod.rows.map((row) => row.shipmentId)).toEqual([2, 3].map(shipmentId));
   });
 
-  it("renders the detail with GeraiCUAN-only KPIs, the history and no PII or provider score in URLs", async () => {
+  it("renders the detail with GeraiCuan-only KPIs, the history and no PII or provider score in URLs", async () => {
     state.principal = { role: "OPERATOR", scope: "tenant", tenantId: tenantA, userId: operatorA };
     const element = await ContactDetail({ params: Promise.resolve({ nomor: "1" }), role: "pengirim", searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(element as ReactElement);

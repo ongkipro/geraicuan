@@ -1,6 +1,6 @@
 import type { ShipmentTrackingLookupKey } from "@/db/shipment-tracking-lookup-repository";
 
-// PR-51: the operator types either a GeraiCUAN shipment number (`10013` / `GC-10013`) or an AWB.
+// PR-51: the operator types either a GeraiCuan shipment number (`10013` / `GC-10013`) or an AWB.
 // Format validation is tenant-independent, so rejecting a malformed key leaks nothing about which
 // tenant owns what; every well-formed key goes through the same tenant-scoped lookup.
 const NUMBER_PATTERN = /^(?:([A-Z0-9]{2,5})-)?([1-9][0-9]{4,9})$/;

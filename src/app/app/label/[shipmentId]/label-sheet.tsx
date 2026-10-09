@@ -176,12 +176,12 @@ function LabelPackage({ label, logoSrc, note, shown }: {
         )}
         {logoSrc ? (
           <div className="label-brand" style={BRAND_STYLE}>
-            <p className="label-mark">GeraiCUAN</p>
+            <p className="label-mark">GeraiCuan</p>
             {/* eslint-disable-next-line @next/next/no-img-element -- authenticated same-origin bytes; must print as-is */}
             <img alt="Logo gerai" className="label-logo" src={logoSrc} style={LOGO_STYLE} />
           </div>
         ) : (
-          <p className="label-mark">GeraiCUAN</p>
+          <p className="label-mark">GeraiCuan</p>
         )}
       </div>
 

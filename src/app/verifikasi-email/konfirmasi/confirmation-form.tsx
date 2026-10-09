@@ -42,7 +42,7 @@ export function EmailConfirmationForm({ token }: { token: string | null }) {
           <AlertDescription>Silakan masuk dengan email dan kata sandi pendaftaran Anda.</AlertDescription>
         </Alert>
         <Button asChild className="w-full text-[length:inherit]" size="lg">
-          <Link href={VERIFIED_EMAIL_CALLBACK}>Masuk ke GeraiCUAN</Link>
+          <Link href={VERIFIED_EMAIL_CALLBACK}>Masuk ke GeraiCuan</Link>
         </Button>
       </div>
     );

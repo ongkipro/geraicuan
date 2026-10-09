@@ -152,7 +152,7 @@ function resolvedSubmissionRangePredicate(
  * less **the fee Mengantar actually keeps** — `COD × 333 / 10000`, the rate
  * proven on 2,866 real settlement lines (`MENGANTAR_COD_FEE_BASIS_POINTS`).
  *
- * It used to subtract the service fee and VAT GeraiCUAN *stored*. Those equal
+ * It used to subtract the service fee and VAT GeraiCuan *stored*. Those equal
  * Mengantar's fee only for rows written under the T-175 gross-up; a row written
  * under the old additive formula stored 3.33% of (goods + shipping), not of the
  * COD amount, so the same shipment's expected disbursement read differently
@@ -165,7 +165,7 @@ function resolvedSubmissionRangePredicate(
 /**
  * Spec 19 RPT-SHP-COD-FEE-IDR: the COD fee **Mengantar keeps** on a shipment,
  * `round(COD × 333 / 10000)` half-up to a whole rupiah — the same rate and the
- * same rounding as `mengantarCodFeeIdr`. Not the fee GeraiCUAN stored: a row
+ * same rounding as `mengantarCodFeeIdr`. Not the fee GeraiCuan stored: a row
  * written under the old additive formula stored 3.33% of goods plus shipping,
  * which is smaller than what Mengantar actually takes.
  */

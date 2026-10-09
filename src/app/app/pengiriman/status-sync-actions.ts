@@ -107,7 +107,7 @@ export async function pullMengantarStatus(
     if (result.appliedTransitionCount > 0) {
       revalidatePath("/app/pengiriman/[shipmentId]", "page");
     }
-    const found = `${result.matchedStatusCount} status cocok dengan kiriman GeraiCUAN`;
+    const found = `${result.matchedStatusCount} status cocok dengan kiriman GeraiCuan`;
     const scanned = result.invoiceCount === null || result.orderCount === null
       ? "akun platform bersama, total akun tidak ditampilkan"
       : `${result.invoiceCount} invoice dan ${result.orderCount} order diperiksa`;

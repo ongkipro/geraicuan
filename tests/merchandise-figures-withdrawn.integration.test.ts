@@ -1,5 +1,5 @@
 /**
- * T-177 (owner decision 2026-09-17, "Laporan saja"): GeraiCUAN reports shipping
+ * T-177 (owner decision 2026-09-17, "Laporan saja"): GeraiCuan reports shipping
  * and the COD fee, never merchandise revenue, goods value, COGS or margin.
  * D-3b is withdrawn and T-91 resolves as a withdrawal; this file proves the
  * removal on the read-model types, the draft input type and the exports.

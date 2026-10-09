@@ -12,7 +12,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   description: "CMS operasional pengiriman gerai",
-  title: { default: "GeraiCUAN", template: "%s · GeraiCUAN" },
+  title: { default: "GeraiCuan", template: "%s · GeraiCuan" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

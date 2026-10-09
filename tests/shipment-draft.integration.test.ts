@@ -105,7 +105,7 @@ afterAll(async () => {
 });
 
 describe("tenant shipment drafts", () => {
-  it("neither accepts nor stores a COGS amount now that GeraiCUAN reports no merchandise margin (T-177)", async () => {
+  it("neither accepts nor stores a COGS amount now that GeraiCuan reports no merchandise margin (T-177)", async () => {
     // A form that still posts the withdrawn field must not smuggle a goods
     // cost back into the draft: the parser ignores it and nothing is written.
     const validated = validateShipmentDraft(submission({ cogsAmount: "75.000" }));

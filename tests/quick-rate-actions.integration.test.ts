@@ -181,6 +181,6 @@ describe("ephemeral tenant shipping-rate checks", () => {
       option: { areaId: "canonical-area", areaLabel: "Dago, Bandung, 40135" } });
     fixture.resolve.mockResolvedValue({ ...resolved, source: "platform_default", authority: platformAuthority,
       originAreaId: "platform-origin" });
-    expect((await checkShippingRates({}, form())).quote?.originAreaLabel).toBe("Pickup platform GeraiCUAN");
+    expect((await checkShippingRates({}, form())).quote?.originAreaLabel).toBe("Pickup platform GeraiCuan");
   });
 });

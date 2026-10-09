@@ -46,12 +46,12 @@ function useWibStamp() {
   return useSyncExternalStore(subscribeMinute, () => formatWibStamp(new Date()), () => "");
 }
 
-/** The owner's GeraiCUAN logo, all-white on the primary bar (its blue half would be 1.82:1 on #2E47BA). */
+/** The owner's GeraiCuan logo, all-white on the primary bar (its #0075FD half would be 1.64:1 on the #1557B0 bar). */
 function Brand({ compact = false, home }: { compact?: boolean; home: string }) {
   // R6-X (critique #12): a 44px (phone) / 40px (desktop) target around the unchanged logo; the
   // 32px G mark gets its width back from a negative margin, so nothing moves.
   return (
-    <Link aria-label="GeraiCUAN, ke beranda" className={cn("flex min-h-11 shrink-0 items-center rounded-lg outline-offset-2 focus-visible:outline-primary-foreground md:min-h-10", compact && "max-md:-mx-1.5 max-md:min-w-11 max-md:justify-center")} href={home}>
+    <Link aria-label="GeraiCuan, ke beranda" className={cn("flex min-h-11 shrink-0 items-center rounded-lg outline-offset-2 focus-visible:outline-primary-foreground md:min-h-10", compact && "max-md:-mx-1.5 max-md:min-w-11 max-md:justify-center")} href={home}>
       {/* Static brand SVGs: next/image adds nothing for a vector. The focused bar on a phone keeps
           only the G mark so the stepper has room. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -50,7 +50,7 @@ export type StoredCodTotals = {
  *
  * - COD: the breakdown exists only when the order's amount equals the stored total and the lines
  *   add up (`codChargeBreakdown`, null for a version 1 amount); otherwise inconsistent.
- * - COD Ongkir: never a goods breakdown (the goods were paid outside GeraiCUAN); inconsistent only
+ * - COD Ongkir: never a goods breakdown (the goods were paid outside GeraiCuan); inconsistent only
  *   when the order's amount differs from the stored charge.
  * - Non-COD, or no order yet: nothing to be inconsistent about.
  */

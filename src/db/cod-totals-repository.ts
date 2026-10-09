@@ -188,7 +188,7 @@ export function calculateCodAmounts(goodsValueIdr: number, shippingAmountIdr: nu
 
 /**
  * COD formula version 3 (T-186, COD Ongkir). The goods were paid for outside
- * GeraiCUAN, so the COD amount is the operator's shipping charge alone. It must
+ * GeraiCuan, so the COD amount is the operator's shipping charge alone. It must
  * be at least `codOngkirBreakEvenIdr(shippingDeducted)` — the smallest whole
  * rupiah whose net of Mengantar's 3.33% still covers the shipping Mengantar
  * deducts — and may be raised above it; the seller keeps the difference.

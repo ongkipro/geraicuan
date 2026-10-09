@@ -72,7 +72,7 @@ describe("focus, names and targets (R6-X #8, #12)", () => {
     const search = html.match(/<button[^>]*aria-keyshortcuts="Meta\+K Control\+K"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
     expect(search).not.toContain("aria-label=");
     expect(search.replace(/<[^>]+>/g, "")).toBe("Cari halaman…⌘K");
-    const home = html.match(/<a[^>]*aria-label="GeraiCUAN, ke beranda"[^>]*>/)?.[0] ?? "";
+    const home = html.match(/<a[^>]*aria-label="GeraiCuan, ke beranda"[^>]*>/)?.[0] ?? "";
     expect(home).toMatch(/\bmin-h-11\b/);
     expect(home).toMatch(/\bmd:min-h-10\b/);
   });

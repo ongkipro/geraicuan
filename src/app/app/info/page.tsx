@@ -40,7 +40,7 @@ export default async function AnnouncementsPage({ searchParams }: { searchParams
 
   return (
     <>
-      <PageHeader description="Kabar dari tim GeraiCUAN: fitur baru, info kurir, jadwal pickup dan pemeliharaan." title="Info terbaru" />
+      <PageHeader description="Kabar dari tim GeraiCuan: fitur baru, info kurir, jadwal pickup dan pemeliharaan." title="Info terbaru" />
       <AnnouncementFeed
         counts={countAnnouncementsByCategory(rows)}
         now={new Date()}

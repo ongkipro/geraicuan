@@ -99,8 +99,8 @@ export function MoneyInconsistentAlert({ amountIdr, checkHref, className, method
       <AlertDescription className="grid gap-3 text-foreground [&_a]:no-underline [&_p:not(:last-child)]:mb-0">
         <p>
           {method === "COD"
-            ? `Total COD di pesanan Mengantar (${amount}) tidak sama dengan nilai barang + ongkir + biaya COD yang tercatat di GeraiCUAN, jadi rinciannya tidak ditampilkan.`
-            : `Nilai COD Ongkir di pesanan Mengantar (${amount}) tidak sama dengan yang tercatat di GeraiCUAN.`}
+            ? `Total COD di pesanan Mengantar (${amount}) tidak sama dengan nilai barang + ongkir + biaya COD yang tercatat di GeraiCuan, jadi rinciannya tidak ditampilkan.`
+            : `Nilai COD Ongkir di pesanan Mengantar (${amount}) tidak sama dengan yang tercatat di GeraiCuan.`}
           {" "}Kurir tetap menagih total dari Mengantar. Cocokkan dengan pesanan di Mengantar sebelum menyerahkan paket.
         </p>
         {checkHref ? (

@@ -94,7 +94,7 @@ function denialMessage(reason: MemberGovernanceReason) {
     case "ALREADY_ACTIVE":
       return "Akun tersebut sudah menjadi anggota aktif gerai ini.";
     case "INVITATION_NOT_ALLOWED":
-      return "Undangan tidak dapat diproses. Pastikan email adalah akun GeraiCUAN aktif yang belum terikat ke gerai lain.";
+      return "Undangan tidak dapat diproses. Pastikan email adalah akun GeraiCuan aktif yang belum terikat ke gerai lain.";
     case "MEMBER_NOT_FOUND":
     case "NOT_AUTHORIZED":
     case "ATTEMPT_CONFLICT":
@@ -116,7 +116,7 @@ export async function inviteMemberAction(
     errors.confirmation = "Permintaan undangan tidak valid. Coba lagi.";
   }
   if (email.length === 0 || email.length > 254 || !EMAIL_PATTERN.test(email)) {
-    errors.email = "Masukkan email akun GeraiCUAN yang valid.";
+    errors.email = "Masukkan email akun GeraiCuan yang valid.";
   }
   if (!isMemberRole(role)) {
     errors.role = "Pilih peran anggota yang valid.";

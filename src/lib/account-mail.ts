@@ -19,7 +19,7 @@ export function tenantLoginUrl() {
 /*
  * Verification, recovery and account-exists mail goes to whatever address was
  * typed into a public form, so it never repeats a name typed there (L5): an
- * attacker-chosen name would otherwise ride inside a genuine GeraiCUAN message.
+ * attacker-chosen name would otherwise ride inside a genuine GeraiCuan message.
  */
 
 export function sendVerificationMail(to: string, url: string) {
@@ -28,11 +28,11 @@ export function sendVerificationMail(to: string, url: string) {
     kind: "verify-email",
     paragraphs: [
       "Halo,",
-      "Email ini baru saja dipakai untuk mendaftarkan gerai di GeraiCUAN. Jika itu Anda, tekan tombol di bawah, lalu masukkan kata sandi yang Anda buat saat mendaftar. Tautan berlaku 24 jam.",
+      "Email ini baru saja dipakai untuk mendaftarkan gerai di GeraiCuan. Jika itu Anda, tekan tombol di bawah, lalu masukkan kata sandi yang Anda buat saat mendaftar. Tautan berlaku 24 jam.",
       "Setelah email terverifikasi, Anda sudah bisa masuk dan menyiapkan gerai sambil menunggu persetujuan admin platform.",
       "Jika Anda tidak mendaftar, abaikan email ini. Email ini hanya terverifikasi dengan kata sandi pendaftarnya, jadi tidak ada yang bisa masuk dengan email Anda.",
     ],
-    subject: "Verifikasi email GeraiCUAN Anda",
+    subject: "Verifikasi email GeraiCuan Anda",
     to,
   }));
 }
@@ -49,15 +49,15 @@ export function sendResetPasswordMail(to: string, url: string, unverified: boole
     paragraphs: unverified
       ? [
           "Halo,",
-          "Email ini sudah terdaftar di GeraiCUAN tetapi belum diverifikasi. Untuk memverifikasinya, buat kata sandi baru lewat tombol di bawah. Kata sandi lama tidak berlaku lagi setelahnya. Tautan berlaku 1 jam dan hanya bisa dipakai sekali.",
+          "Email ini sudah terdaftar di GeraiCuan tetapi belum diverifikasi. Untuk memverifikasinya, buat kata sandi baru lewat tombol di bawah. Kata sandi lama tidak berlaku lagi setelahnya. Tautan berlaku 1 jam dan hanya bisa dipakai sekali.",
           "Jika Anda tidak meminta ini, abaikan email ini.",
         ]
       : [
           "Halo,",
-          "Kami menerima permintaan untuk mengatur ulang kata sandi akun GeraiCUAN Anda. Tekan tombol di bawah untuk membuat kata sandi baru. Tautan berlaku 1 jam dan hanya bisa dipakai sekali.",
+          "Kami menerima permintaan untuk mengatur ulang kata sandi akun GeraiCuan Anda. Tekan tombol di bawah untuk membuat kata sandi baru. Tautan berlaku 1 jam dan hanya bisa dipakai sekali.",
           "Jika Anda tidak meminta ini, abaikan email ini. Kata sandi Anda tidak berubah.",
         ],
-    subject: unverified ? "Buat kata sandi untuk memverifikasi email GeraiCUAN" : "Atur ulang kata sandi GeraiCUAN",
+    subject: unverified ? "Buat kata sandi untuk memverifikasi email GeraiCuan" : "Atur ulang kata sandi GeraiCuan",
     to,
   }));
 }
@@ -65,21 +65,21 @@ export function sendResetPasswordMail(to: string, url: string, unverified: boole
 /** Sent instead of a second account when someone registers an email that already exists. */
 export function sendAccountExistsMail(to: string) {
   return sendMail(composeMail({
-    action: { label: "Masuk ke GeraiCUAN", url: tenantLoginUrl() },
+    action: { label: "Masuk ke GeraiCuan", url: tenantLoginUrl() },
     kind: "account-exists",
     paragraphs: [
       "Halo,",
-      "Seseorang mencoba mendaftarkan gerai baru dengan email ini, tetapi email ini sudah memiliki akun GeraiCUAN. Tidak ada akun baru yang dibuat.",
+      "Seseorang mencoba mendaftarkan gerai baru dengan email ini, tetapi email ini sudah memiliki akun GeraiCuan. Tidak ada akun baru yang dibuat.",
       "Jika itu Anda, silakan masuk. Lupa kata sandi? Pilih \"Lupa kata sandi\" di halaman masuk.",
     ],
-    subject: "Email Anda sudah terdaftar di GeraiCUAN",
+    subject: "Email Anda sudah terdaftar di GeraiCuan",
     to,
   }));
 }
 
 export function sendRegistrationApprovedMail(to: string, name: string, storeName: string) {
   return sendMail(composeMail({
-    action: { label: "Masuk ke GeraiCUAN", url: tenantLoginUrl() },
+    action: { label: "Masuk ke GeraiCuan", url: tenantLoginUrl() },
     kind: "registration-approved",
     paragraphs: [
       `Halo ${name},`,
@@ -100,9 +100,9 @@ export function sendRegistrationRejectedMail(to: string, reason: string) {
     kind: "registration-rejected",
     paragraphs: [
       "Halo,",
-      "Pendaftaran gerai dengan email ini di GeraiCUAN belum dapat disetujui.",
+      "Pendaftaran gerai dengan email ini di GeraiCuan belum dapat disetujui.",
       `Alasan: ${reason}`,
-      "Jika menurut Anda ada kekeliruan, hubungi tim GeraiCUAN.",
+      "Jika menurut Anda ada kekeliruan, hubungi tim GeraiCuan.",
     ],
     subject: "Pendaftaran gerai Anda belum dapat disetujui",
     to,

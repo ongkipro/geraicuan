@@ -17,7 +17,7 @@ import { paymentMethodOf, type PaymentMethod } from "@/lib/payment-method";
 import type { ShipmentStatus } from "@/lib/shipment-queue";
 
 /**
- * T-241 (spec 05 DATA contact attribution, spec 19 CON-SHP-*): what GeraiCUAN's own shipments say
+ * T-241 (spec 05 DATA contact attribution, spec 19 CON-SHP-*): what GeraiCuan's own shipments say
  * about one contact. `shipment_parties` stores an immutable name/phone/address snapshot and no
  * contact id, so a shipment belongs to a contact when, **in the same tenant**, its party row of the
  * contact's list role (`SENDER` on Pengirim, `RECIPIENT` on Penerima) has the same national phone

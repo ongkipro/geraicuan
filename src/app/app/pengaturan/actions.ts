@@ -321,12 +321,12 @@ export async function switchMengantarToPlatformDefault(
     }
     if (error instanceof MengantarPlatformCredentialsRefusedError) {
       return credentialFailureState(
-        "Gerai ini wajib memakai akun Mengantar sendiri, jadi koneksi bawaan GeraiCUAN tidak tersedia. API key outlet tetap dipakai.",
+        "Gerai ini wajib memakai akun Mengantar sendiri, jadi koneksi bawaan GeraiCuan tidak tersedia. API key outlet tetap dipakai.",
       );
     }
     if (error instanceof MengantarConfigurationError) {
       return credentialFailureState(
-        "Koneksi bawaan GeraiCUAN belum siap. Outlet tetap memakai akun Mengantar sendiri.",
+        "Koneksi bawaan GeraiCuan belum siap. Outlet tetap memakai akun Mengantar sendiri.",
       );
     }
     if (
@@ -341,7 +341,7 @@ export async function switchMengantarToPlatformDefault(
 
   revalidateOutletConfigurationPaths();
   return {
-    message: "Outlet ini sekarang memakai koneksi bawaan GeraiCUAN.",
+    message: "Outlet ini sekarang memakai koneksi bawaan GeraiCuan.",
     resultToken: randomUUID(),
     success: true,
   };

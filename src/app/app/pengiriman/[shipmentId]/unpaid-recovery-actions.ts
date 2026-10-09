@@ -86,7 +86,7 @@ export async function recoverShipmentUnpaidPayment(
       : null;
   if (!resolveTransport) {
     return {
-      error: "Pemulihan pembayaran belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN.",
+      error: "Pemulihan pembayaran belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan.",
     };
   }
 

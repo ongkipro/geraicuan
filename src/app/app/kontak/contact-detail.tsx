@@ -72,7 +72,7 @@ export type ContactDetailProps = {
  * T-241 `/app/kontak/pengirim/<n>` and `/app/kontak/penerima/<n>` (ref pengirim-detail.html,
  * penerima-detail.html): back link → header (name, kategori, status, "N alamat terdaftar";
  * WhatsApp line and wilayah of the primary address; WhatsApp, Salin nomor and the one primary
- * "Buat kiriman dari kontak ini") → four KPI cards from GeraiCUAN's own shipments (spec 19 CON-SHP-*;
+ * "Buat kiriman dari kontak ini") → four KPI cards from GeraiCuan's own shipments (spec 19 CON-SHP-*;
  * no Mengantar score, D-30) → T-250 two columns: Riwayat kiriman (Semua/COD/Non-COD, 10 per page)
  * and Alamat | Data kontak and the danger zone (Tenant Admin; `archiveContact` refuses anyone else).
  * `<n>` is the per-tenant contact number; name and phone never enter the URL (spec 10 §11).
@@ -281,7 +281,7 @@ function cityText(areaLabel: string) {
   return areaDisplayCase(formatDistrictCity(areaLabel));
 }
 
-/** Ref "Histori paket": the contact's shipments in GeraiCUAN, newest first; tabs are links (URL state, no PII). */
+/** Ref "Histori paket": the contact's shipments in GeraiCuan, newest first; tabs are links (URL state, no PII). */
 function ContactHistoryCard({ contactNumber, history, payment, role }: {
   contactNumber: number;
   history: ContactHistoryPage;

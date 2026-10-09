@@ -61,7 +61,7 @@ const AUDIT_STATES: Partial<Record<string, TrackingLookupState>> = {
 
 /** The rail (ref "Tips Pencarian"), without the reference's unverified update-latency claim. */
 const TIPS = [
-  <><strong className="font-semibold text-foreground">Nomor kiriman GeraiCUAN</strong> (awalan <span className="font-mono">GC-</span>) paling cepat ditemukan.</>,
+  <><strong className="font-semibold text-foreground">Nomor kiriman GeraiCuan</strong> (awalan <span className="font-mono">GC-</span>) paling cepat ditemukan.</>,
   <><strong className="font-semibold text-foreground">Nomor resi kurir</strong> (AWB) juga bisa, misalnya <span className="font-mono break-all">11LP1700187536</span>.</>,
   <>Perjalanan paket memuat riwayat kurir dan status terakhir dari <strong className="font-semibold text-foreground">Mengantar</strong>; sumber tiap baris tertulis di sampingnya.</>,
   <>Hanya kiriman milik gerai ini yang dapat dilacak.</>,

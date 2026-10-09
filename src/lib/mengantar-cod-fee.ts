@@ -29,7 +29,7 @@ export function mengantarCodFeeIdr(codAmountIdr: number) {
  * T-193: the VAT already inside Mengantar's fee. 3.33% is a 3% fee plus 11% VAT
  * on that fee, so the VAT share of a whole-rupiah fee is `fee × 11 / 111`,
  * half-up. Informational only ("termasuk PPN"): it is part of the fee Mengantar
- * keeps, never added on top of it and never GeraiCUAN's liability. `fee × 22`
+ * keeps, never added on top of it and never GeraiCuan's liability. `fee × 22`
  * is even and an odd multiple of 111 is odd, so the rounding has no tie.
  */
 export function vatIncludedInMengantarCodFeeIdr(feeIdr: number) {
@@ -68,7 +68,7 @@ export function codChargeBreakdown(input: {
 
 /**
  * T-193: how a historical COD_SERVICE_FEE_VAT_PAYABLE row is presented. Those
- * rows were booked as GeraiCUAN's VAT liability until T-193, but the VAT is
+ * rows were booked as GeraiCuan's VAT liability until T-193, but the VAT is
  * inside the fee Mengantar keeps; they stay in the ledger (append-only) and are
  * shown as part of that fee, outside any payable total.
  */
@@ -83,7 +83,7 @@ export const COD_FORMULA_RETIRED_MESSAGE =
 
 export const LEGACY_COD_FEE_VAT_LABEL = "PPN dalam biaya COD (dipotong Mengantar)";
 export const LEGACY_COD_FEE_VAT_NOTE =
-  "Entri lama. PPN ini sudah termasuk dalam biaya COD 3,33% yang dipotong Mengantar, bukan kewajiban GeraiCUAN, dan tidak dihitung sebagai utang.";
+  "Entri lama. PPN ini sudah termasuk dalam biaya COD 3,33% yang dipotong Mengantar, bukan kewajiban GeraiCuan, dan tidak dihitung sebagai utang.";
 
 export type CodChargeBreakdown = NonNullable<ReturnType<typeof codChargeBreakdown>>;
 

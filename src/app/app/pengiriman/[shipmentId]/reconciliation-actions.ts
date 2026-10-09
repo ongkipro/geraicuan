@@ -70,7 +70,7 @@ export async function reconcileShipmentUnknownSubmission(
       ? resolveSanctionedReconciliationFixture
       : null;
   if (!resolveAuthoritativeResult) {
-    return { error: "Rekonsiliasi belum diaktifkan di GeraiCUAN. Hubungi admin GeraiCUAN." };
+    return { error: "Rekonsiliasi belum diaktifkan di GeraiCuan. Hubungi admin GeraiCuan." };
   }
 
   try {

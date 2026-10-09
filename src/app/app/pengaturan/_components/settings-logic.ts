@@ -26,7 +26,7 @@ export function connectionSentence(outlet: SafeOutletReadiness) {
   if (outlet.connectionStatus === "private_attention") return "Akun Mengantar sendiri — perlu diperiksa";
   if (outlet.connectionSource === "private") return "Akun Mengantar sendiri";
   if (outlet.privateConnectionRequired) return "Belum terhubung ke akun Mengantar gerai";
-  return "Koneksi bawaan GeraiCUAN";
+  return "Koneksi bawaan GeraiCuan";
 }
 
 export type MemberLike = {

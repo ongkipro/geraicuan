@@ -529,7 +529,8 @@ describe("design token contrast", () => {
   });
 
   it("shares the accepted blue accent between actions and sidebar navigation", () => {
-    expect(token("--primary")).toEqual(parse("#2e47ba"));
+    // T-298 (D-11 amended 2026-10-10): the 2026 brand guideline's dark blue; white on it 6.95:1.
+    expect(token("--primary")).toEqual(parse("#1557b0"));
     for (const [sidebar, shared] of [
       ["--sidebar-primary", "--primary"],
       ["--sidebar-primary-foreground", "--primary-foreground"],

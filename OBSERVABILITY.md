@@ -41,9 +41,9 @@ through the proxy: the app answers `404` to any other `Host`, including
 wrong, not a failure of the app.
 
 ```text
-Probe: tenant-login|https://app.geraicuan.com/login|200|Masuk ke toko Anda|2000
-Probe: platform-login|https://bos.geraicuan.com/login|200|Masuk Super Admin|2000
-Probe: landing|https://geraicuan.com/|200|GeraiCUAN|2000
+Probe: tenant-login|https://app.geraicuan.com/login|200|Masuk ke gerai Anda|2000
+Probe: platform-login|https://bos.geraicuan.com/login|200|Masuk Admin Platform|2000
+Probe: landing|https://geraicuan.com/|200|GeraiCuan|2000
 ```
 
 Inside the server, the images carry their own container checks (T-194): the app
@@ -71,7 +71,7 @@ names the variable; it never contains a value.
 | `RESEND_API_KEY is required in production.` | Set the Resend key (secret). |
 | `BETTER_AUTH_SECRET is required in production.` / `BETTER_AUTH_SECRET must be at least 32 characters.` | Set a random secret of at least 32 characters (e.g. `openssl rand -base64 32`), runtime only, never a build argument. Changing it signs every session out and voids open verification and reset links. |
 | `APP_DATABASE_URL is required in production.` / `APP_DATABASE_URL must not use the migration role.` | Set the runtime login that inherits `geraicuan_app` (DEP-1 § Environments), distinct from the migration `DATABASE_URL`. |
-| `RESEND_FROM_EMAIL is required when RESEND_API_KEY is set.` / `RESEND_FROM_EMAIL must be an email address or "Name <email>".` | Set a sender on the verified domain, e.g. `GeraiCUAN <no-reply@geraicuan.com>`. |
+| `RESEND_FROM_EMAIL is required when RESEND_API_KEY is set.` / `RESEND_FROM_EMAIL must be an email address or "Name <email>".` | Set a sender on the verified domain, e.g. `GeraiCuan <no-reply@geraicuan.com>`. |
 
 A build that stops at "Collecting page data" with `APP_DATABASE_URL is required.`
 or `GERAICUAN_TENANT_ORIGIN is required in production.` has the same cause at

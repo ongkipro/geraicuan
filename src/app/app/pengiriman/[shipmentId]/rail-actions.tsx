@@ -68,7 +68,7 @@ function LockedNote({ children }: { children: ReactNode }) {
     <Alert role="status">
       <ShieldCheck aria-hidden="true" />
       <AlertTitle>{children}</AlertTitle>
-      <AlertDescription>Belum diaktifkan di GeraiCUAN, jadi tidak ada panggilan ke Mengantar. Hubungi admin GeraiCUAN.</AlertDescription>
+      <AlertDescription>Belum diaktifkan di GeraiCuan, jadi tidak ada panggilan ke Mengantar. Hubungi admin GeraiCuan.</AlertDescription>
     </Alert>
   );
 }

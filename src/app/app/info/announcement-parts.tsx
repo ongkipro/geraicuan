@@ -111,7 +111,7 @@ export function AnnouncementFeed({
     return (
       <Card>
         <EmptyState
-          description="Kabar fitur baru, kurir, jadwal pickup dan pemeliharaan dari tim GeraiCUAN akan tampil di sini."
+          description="Kabar fitur baru, kurir, jadwal pickup dan pemeliharaan dari tim GeraiCuan akan tampil di sini."
           icon={Megaphone}
           title="Belum ada info"
         />

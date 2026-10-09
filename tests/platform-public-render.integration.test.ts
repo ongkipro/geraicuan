@@ -66,7 +66,7 @@ describe("public auth markup", () => {
     const html = render(createElement(AuthShell, { surface: "platform", title: "Masuk Admin Platform" } as ComponentProps<typeof AuthShell>, createElement(LoginForm, { destination: "/platform" })));
     expect(html).toContain('data-surface="platform"');
     expect(html).toContain("bg-foreground");
-    expect(html).toContain("Khusus tim GeraiCUAN");
+    expect(html).toContain("Khusus tim GeraiCuan");
     expect((html.match(/<h1/g) ?? []).length).toBe(1);
   });
 
@@ -138,7 +138,7 @@ describe("public auth markup", () => {
     // No stock imagery: the only images are the owner's brand logo files (2026-09-26).
     expect([...tenant.matchAll(/<img[^>]*src="([^"]+)"/g)].map((m) => m[1]).every((src) => src.startsWith("/brand/"))).toBe(true);
     const platform = render(createElement(AuthShell, { surface: "platform", title: "Masuk Admin Platform", visual: true } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")));
-    expect(platform).toContain("Khusus tim GeraiCUAN");
+    expect(platform).toContain("Khusus tim GeraiCuan");
     expect(platform).not.toContain(">Gratis<");
     expect(platform).toMatch(/data-surface="platform"/);
     expect(render(createElement(AuthShell, { surface: "tenant", title: "Lupa kata sandi" } as ComponentProps<typeof AuthShell>, createElement("p", null, "form")))).not.toContain('data-slot="auth-visual"');

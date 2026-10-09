@@ -127,7 +127,7 @@ export const ledgerEntryTypes = [
   "MENGANTAR_INSURANCE_COST",
   /**
    * Retired for new entries by T-178 (migration 0049): the fee it recorded is
-   * Mengantar's, not GeraiCUAN's. Kept valid because the ledger is append-only
+   * Mengantar's, not GeraiCuan's. Kept valid because the ledger is append-only
    * and entries posted before the change keep their type.
    */
   "GERAICUAN_COD_SERVICE_FEE_REVENUE",
@@ -918,7 +918,7 @@ export const shipmentDrafts = pgTable(
     isCod: boolean("is_cod").notNull().default(false),
     /**
      * T-186 / D-12: true only for COD Ongkir — the goods were paid outside
-     * GeraiCUAN and the courier collects a shipping charge alone. The default
+     * GeraiCuan and the courier collects a shipping charge alone. The default
      * keeps every earlier draft, and any writer that does not name it, NON_COD
      * or COD exactly as `is_cod` says (migration 0050).
      */
