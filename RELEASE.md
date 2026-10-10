@@ -6,20 +6,32 @@ Environment: production
 Declared-Risk: R4
 Rollback-Ref: 223beda8db3fd5fbe0903515a025f128bd4e6128
 Rollback-Command: first deploy — stop `geraicuan-app` in Coolify; no earlier release exists to restore, so fix forward (section 4)
-Backup-Proof: NOT_REQUIRED — the first deploy migrates an empty database (0000–0077); every later migration needs a backup reference here
+Backup-Proof: backup://45.77.33.112/root/geraicuan-backups/geraicuan-RC-2-pre-migrate-20261010.dump (pg_dump -Fc of the empty production database before 0000–0077, sha256 c3c2584c3ffbe56461b4deea43e3bd6025d1bfc4e7501ac6ffaabf2fca1da464, 2026-10-10; copied off the server to the operator's device, same hash)
 Status: BLOCKED
 
 ## Why this manifest is BLOCKED
+
+**First production deploy (2026-10-10, T-300).** Owner go-ahead 2026-10-10 ("sisanya kau lanjut sempurnakan"). `main` = `d5404cf` (RC-2 + T-295 preflight + landing T-296–T-299 + CMS brand T-298) runs on the owner's Coolify (Vultr VPS `45.77.33.112`, shared with tokophi): `geraicuan-app` on `https://app.geraicuan.com` and `https://bos.geraicuan.com`, `geraicuan-landing` on `https://geraicuan.com`, PostgreSQL 16 `geraicuan-db` (not public). Gate state after the deploy:
+1. Infrastructure: done except **Resend** (no sending domain or key yet: `RESEND_API_KEY` is a placeholder, so verification, recovery and approval mail fail until the owner supplies a key for a verified `geraicuan.com` domain) and **`www.geraicuan.com`** (no DNS record; the landing serves the apex only).
+2. `pg_trgm`: available (1.6), created by the superuser before migrating.
+3. Platform-default Mengantar credentials: set, from the owner's existing local values (owner 2026-10-10: "pakai env local yang ada"). Live issuance stays off (D-5).
+4. `Backup-Proof`: recorded above (copy off the server verified by hash). Daily Coolify backup 02:00 WIB, 14 kept, on the VPS only (no S3 yet: an open owner item).
+5. `Rollback-Command`: unchanged (prose).
+6. Open tasks: unchanged.
+7. Demo gerai on production with the local fixture password (owner instruction); change it if the demo should not be public.
+
+Section 3 smoke not yet run: host-only cookies, sign-up → verification → approval (needs Resend), the startup-refusal check, `www` redirect, Phase 20 checks 2–4. Run: every Hosts-and-TLS line except `www`, the landing link count (5 `daftar`, 4 `login`), the container health and the `Host`-less `404`.
+The release-level independent review bound to `HEAD` is still missing, so `Status` stays `BLOCKED` as a record, although the deploy has happened. Evidence: `BUILD-LOG.md` → "2026-10-10 — First production deploy (T-300)".
 
 **RC-2 (2026-10-08).** The release is `main` at the commit carrying this manifest (Phase 20 complete, migrations `0000`–`0077`). `Base` is the previous `main` (`223beda`); nothing has ever been deployed to production, so this is the first deploy onto an empty database and `RC-1`'s rollback and backup fields no longer apply. Every Phase 20 task (T-276–T-293) passed its own independent review on its delivery-ledger run.
 
 Release checks rerun on a clean checkout of `0f1b800`: see `BUILD-LOG.md` → "2026-10-08 — RC-2 release checks".
 
 Open before `Status: READY` (owner actions, section 0 and "Owner decisions"):
-1. Production infrastructure: DNS, Resend sending domain, the PostgreSQL resource, `geraicuan-app` and `geraicuan-landing` in Coolify.
-2. `pg_trgm` available on the production PostgreSQL (section 1, step 6).
-3. Platform-default Mengantar credentials: set or left unset (DEP-6).
-4. `Backup-Proof`: `migration-risk` against `Base` is `M3` (the migrations since `Base`, 0020–0077, include destructive or compatibility-sensitive statements), and `rollback-check` refuses `NOT_REQUIRED` at M3 even on an empty database. After creating the production PostgreSQL (section 0, step 2) and before the first migration, take one backup of the empty database and record its structured reference here (`backup://…` / `snapshot://…`).
+1. Production infrastructure: DNS, Resend sending domain, the PostgreSQL resource, `geraicuan-app` and `geraicuan-landing` in Coolify. (2026-10-10: done except Resend and `www`, see above.)
+2. `pg_trgm` available on the production PostgreSQL (section 1, step 6). (2026-10-10: confirmed, 1.6.)
+3. Platform-default Mengantar credentials: set or left unset (DEP-6). (2026-10-10: set.)
+4. `Backup-Proof`: `migration-risk` against `Base` is `M3` (the migrations since `Base`, 0020–0077, include destructive or compatibility-sensitive statements), and `rollback-check` refuses `NOT_REQUIRED` at M3 even on an empty database. After creating the production PostgreSQL (section 0, step 2) and before the first migration, take one backup of the empty database and record its structured reference here (`backup://…` / `snapshot://…`). (2026-10-10: done.)
 5. `Rollback-Command`: `rollback-check` accepts only an executable command (`git`, `docker`, `bash`, `./…`, …). Coolify's stop is a UI action today, so the field stays prose until the owner names an executable stop/rollback for `geraicuan-app`.
 6. Open tasks: T-105, T-153, T-179, T-219, T-227, T-226 and T-245 are still unchecked in TASKS.md, and several checked tasks carry open sub-items (e.g. the `pg_trgm` gate under T-245, the "Open" notes under T-247–T-274); each needs a disposition (in this release, deferred, or dropped).
 
@@ -49,8 +61,9 @@ order. Placeholders in `<angle brackets>` are never real values; never paste a
 secret into this file, a ticket, or a shell history.
 
 The fields above describe `RC-2`, the first deploy: migrations `0000`–`0077` run
-on an empty database before `geraicuan-app` exists, so no stop-the-app window or
-backup applies to it. Both apply to every later release.
+on an empty database before `geraicuan-app` exists, so no stop-the-app window
+applies to it; one backup of the empty database was still taken (M3, gate 4).
+Both apply to every later release.
 
 ### 0. One-time setup (first deploy only)
 1. **DNS** (DEP-2): `A` records for `geraicuan.com`, `app.geraicuan.com`,
@@ -128,7 +141,7 @@ backup applies to it. Both apply to every later release.
    exist yet), **stop `geraicuan-app` for the window** (recommended, T-194; DEP-3 "Migration order for this release").
 5. Build the ops image for the release commit on the server
    (`docker build --target ops -t geraicuan-ops:<commit> .`).
-6. **`pg_trgm` gate (T-245, D-32; open — not confirmed by the owner).** As the
+6. **`pg_trgm` gate (T-245, D-32; confirmed on production 2026-10-10, T-300).** As the
    superuser: `SELECT name, installed_version FROM pg_available_extensions WHERE name = 'pg_trgm';`
    must return a row, and the migration role must be allowed to create it (or the
    superuser runs `CREATE EXTENSION pg_trgm;` first). No row: do not migrate
@@ -168,7 +181,7 @@ credentials and change nothing.
 **Hosts and TLS**
 - [ ] `curl -sI https://app.geraicuan.com/` → `307`, `location: https://app.geraicuan.com/login`.
 - [ ] `curl -sI https://bos.geraicuan.com/` → `307`, `location: https://bos.geraicuan.com/login`.
-- [ ] `curl -s https://app.geraicuan.com/login | grep -c "Masuk ke toko Anda"` → at least `1`; `curl -s https://bos.geraicuan.com/login | grep -c "Masuk Super Admin"` → at least `1`.
+- [ ] `curl -s https://app.geraicuan.com/login | grep -c "Masuk ke gerai Anda"` → at least `1`; `curl -s https://bos.geraicuan.com/login | grep -c "Masuk Admin Platform"` → at least `1`.
 - [ ] Each host answers only its own routes: `curl -s -o /dev/null -w '%{http_code}\n'` on `https://app.geraicuan.com/platform` → `404`; `https://bos.geraicuan.com/app` → `404`; `https://bos.geraicuan.com/daftar` → `404`; `https://app.geraicuan.com/daftar` → `200`.
 - [ ] Old path moves hosts: `curl -sI 'https://app.geraicuan.com/login/super-admin?notice=x'` → `308`, `location: https://bos.geraicuan.com/login?notice=x`.
 - [ ] Forged forwarding header is ignored: `curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-Host: app.geraicuan.com' https://bos.geraicuan.com/app` → `404`.
@@ -177,7 +190,7 @@ credentials and change nothing.
 - [ ] `curl -sI https://www.geraicuan.com/` → `301` or `308` to `https://geraicuan.com/`; `curl -sI https://geraicuan.com/` → `200`.
 
 **Landing**
-- [ ] `curl -s https://geraicuan.com/ | grep -o 'href="https://app.geraicuan.com/[a-z]*"' | sort | uniq -c` → `4 …/daftar"` and `4 …/login"`, and no other origin.
+- [ ] `curl -s https://geraicuan.com/ | grep -o 'href="https://app.geraicuan.com/[a-z]*"' | sort | uniq -c` → `5 …/daftar"` and `4 …/login"` (plus the site's own `https://geraicuan.com/`), and no other origin.
 - [ ] In a browser, "Daftar" opens `https://app.geraicuan.com/daftar` and "Masuk" opens `https://app.geraicuan.com/login`.
 
 **Cookies are host-only**
