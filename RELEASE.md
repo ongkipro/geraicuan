@@ -15,7 +15,7 @@ Status: BLOCKED
 1. Infrastructure: done except **Resend** (no sending domain or key yet: `RESEND_API_KEY` is a placeholder, so verification, recovery and approval mail fail until the owner supplies a key for a verified `geraicuan.com` domain) and **`www.geraicuan.com`** (no DNS record; the landing serves the apex only).
 2. `pg_trgm`: available (1.6), created by the superuser before migrating.
 3. Platform-default Mengantar credentials: set, from the owner's existing local values (owner 2026-10-10: "pakai env local yang ada"). Live issuance stays off (D-5).
-4. `Backup-Proof`: recorded above (copy off the server verified by hash). Daily Coolify backup 02:00 WIB, 14 kept, on the VPS only (no S3 yet: an open owner item).
+4. `Backup-Proof`: recorded above (copy off the server verified by hash). Daily Coolify backup 02:00 WIB, 14 kept on the VPS **and, since 2026-10-10, uploaded to Cloudflare R2** (S3 storage `R2 volumdev-backups`, 30 days); the pre-migrate dump is also pulled to the owner's workstation disk.
 5. `Rollback-Command`: unchanged (prose).
 6. Open tasks: unchanged.
 7. Demo gerai on production with the local fixture password (owner instruction); change it if the demo should not be public.
