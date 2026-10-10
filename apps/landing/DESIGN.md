@@ -48,6 +48,10 @@ Scope: the public Astro site in `apps/landing` (geraicuan.com, PR-63, D-11). The
 - Visual: the closing activation is a plain numbered line (no tinted boxes, no sky badge); slider labels sit at their track positions (100 at 47.4%, within a few pixels of the thumb centre); on a phone the tariff example sits inside step 2; the hero photo is cropped to keep the cashier in view; the phone header shows Masuk + Menu (the menu includes "Daftar gratis"), so the home first screen has one sign-up action (the hero's); `/kontak/` gives WhatsApp the widest column.
 - The visual review cap (5 rounds) was spent in T-296; no new round was run. The gate stays FAIL until the owner's photos replace the illustrations.
 
+## T-301 (2026-10-10): not-found page
+
+- `src/pages/404.astro` replaces nginx's bare page: the subpage header pattern (left-aligned, slate-50) with the five pages and Masuk as a ruled two-column list, noindex and no canonical. Rendered at 390 and 1440 against the built image.
+
 ## Owner content still needed
 
 - Real testimonials or partner logos once gerai are live.

@@ -15,7 +15,7 @@ ARG PUBLIC_APP_ORIGIN=https://app.geraicuan.com
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.31.6-alpine3.24@sha256:b54ac358b83fc6c965793fd271839b4ea4cdb6e99895bb19618cbc2ca152d972
-COPY nginx/redirects.conf /etc/nginx/conf.d/redirects.conf
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /site/dist /usr/share/nginx/html
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

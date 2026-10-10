@@ -1,0 +1,23 @@
+---
+// Not-found page (T-301), served by nginx for any unknown path (nginx/default.conf).
+import Site from "../layouts/Site.astro";
+import { NAV, SIGN_IN_URL } from "../lib/site.mjs";
+
+const title = "Halaman Tidak Ditemukan di Situs Loket Multi-Kurir GeraiCuan";
+const description = "Alamat yang Anda buka tidak ada di situs GeraiCuan. Kembali ke beranda, lihat fitur loket multi-kurir, atau masuk ke gerai Anda.";
+---
+<Site title={title} description={description} path="/404/" noindex>
+  <section class="bg-slate-50 py-16 sm:py-24">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6">
+      <p class="text-base font-bold text-brand-blue">404</p>
+      <h1 class="mt-2 text-3xl font-black leading-[1.15] tracking-tight text-slate-900 sm:text-5xl">Halaman ini tidak ditemukan</h1>
+      <p class="mt-4 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">Tautannya mungkin salah ketik atau halamannya sudah dipindah. Pilih tujuan Anda:</p>
+      <ul role="list" class="mt-8 grid gap-x-8 gap-y-1 sm:grid-cols-2">
+        {NAV.map((item) => (
+          <li><a href={item.href} class="flex min-h-11 items-center border-b border-slate-200 text-base font-semibold text-slate-800 transition-colors hover:text-brand-blue">{item.label}</a></li>
+        ))}
+        <li><a href={SIGN_IN_URL} class="flex min-h-11 items-center border-b border-slate-200 text-base font-semibold text-slate-800 transition-colors hover:text-brand-blue">Masuk ke gerai Anda</a></li>
+      </ul>
+    </div>
+  </section>
+</Site>

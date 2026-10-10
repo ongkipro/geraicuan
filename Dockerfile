@@ -62,6 +62,8 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+# T-301: standalone output leaves public/ out; without it the logo and courier marks 404.
+COPY --from=build --chown=node:node /app/public ./public
 USER node
 EXPOSE 3000
 # Host routing answers 404 to any Host but the configured ones, so the check

@@ -52,6 +52,8 @@ describe("host routing decisions (PR-58)", () => {
     [PLATFORM, "/icon.svg"],
     [TENANT, "/couriers/jne.svg"],
     [PLATFORM, "/couriers/jne.svg"],
+    [TENANT, "/brand/geraicuan-logo-color.svg"],
+    [PLATFORM, "/brand/geraicuan-logo-white.svg"],
   ])("serves the owning surface: %s %s", (host, path) => {
     expect(route(host, path)).toEqual({ kind: "next" });
   });

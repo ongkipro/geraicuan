@@ -8,8 +8,10 @@ interface Props {
   title: string;
   description: string;
   path: string;
+  /** The 404 page: kept out of search results and without a canonical URL. */
+  noindex?: boolean;
 }
-const { title, description, path } = Astro.props;
+const { title, description, path, noindex = false } = Astro.props;
 
 // Owner SEO rule (2026-09-30): title 55-70 characters, description 120-155 ending
 // with a full stop, never "|" or an em dash. A page outside the range fails the build.
@@ -39,8 +41,8 @@ const isCurrent = (href: string) => href === path;
     <meta name="description" content={description} />
     <meta name="author" content={BRAND} />
     <meta name="publisher" content={BRAND} />
-    <link rel="canonical" href={canonical} />
-    <meta name="robots" content="index, follow" />
+    {!noindex && <link rel="canonical" href={canonical} />}
+    <meta name="robots" content={noindex ? "noindex, follow" : "index, follow"} />
     <meta name="theme-color" content="#071E3D" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.png" type="image/png" />
@@ -50,7 +52,7 @@ const isCurrent = (href: string) => href === path;
     <meta property="og:site_name" content={BRAND} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
+    {!noindex && <meta property="og:url" content={canonical} />}
     <meta name="twitter:card" content="summary" />
     <script type="application/ld+json" set:html={JSON.stringify(organization)} />
     <Font cssVariable="--font-inter" preload />

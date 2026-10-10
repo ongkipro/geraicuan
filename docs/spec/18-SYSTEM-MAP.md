@@ -146,7 +146,7 @@ flowchart TD
 
 | Surface | Host / Origin | Routing & Access Invariant |
 |---|---|---|
-| **Public landing** | `https://geraicuan.com` (`GERAICUAN_PUBLIC_ORIGIN`) | Astro site `apps/landing` (five pages, T-296); links to the tenant host's `/daftar` and `/login`, and one WhatsApp contact on `/kontak/`. nginx serves directory pages with relative redirects (`apps/landing/nginx/redirects.conf`). |
+| **Public landing** | `https://geraicuan.com` (`GERAICUAN_PUBLIC_ORIGIN`) | Astro site `apps/landing` (five pages, T-296); links to the tenant host's `/daftar` and `/login`, and one WhatsApp contact on `/kontak/`. nginx serves directory pages with relative redirects and answers unknown paths with the site's own 404 page (`apps/landing/nginx/default.conf`, T-301). |
 | **Tenant CMS** | `https://app.geraicuan.com` (`GERAICUAN_TENANT_ORIGIN`) | Serves `/app/**`, `/login` (→ `/login/tenant`), `/daftar`, `/verifikasi-email/**`, `/lupa-password`, `/atur-ulang-password`. `/platform/**` answers 404. |
 | **Platform CMS** | `https://bos.geraicuan.com` (`GERAICUAN_PLATFORM_ORIGIN`) | Serves `/platform/**`, `/verifikasi-dua-langkah` (T-286), `/login` (→ `/login/super-admin`). `/app/**` answers 404. |
 | **Single-origin dev** | `http://localhost:3000` or Tailscale | No host split; `/` serves `src/app/page.tsx`. |
