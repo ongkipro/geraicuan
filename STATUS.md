@@ -1,6 +1,6 @@
 # Status — geraicuan
 
-Updated: 2026-10-08
+Updated: 2026-10-09
 Status: Active
 State: IMPLEMENTING
 Review-Risk: R4
@@ -33,6 +33,7 @@ in `.delivery/current.json` describes that run rather than this tree.
 
 ## Current — 2026-10-08 (`main` = `feat/phase14-completion`; first Coolify deploy next)
 
+- **2026-10-09 — `production-gate` preflight (T-295).** Fixed the manifest's invalid `Base`/`Rollback-Ref` (`223beda6` → full SHA of `223beda8`). The gate stays `BLOCKED` on owner gates (now six: infrastructure, `pg_trgm`, platform-default credentials, a `backup://` reference of the empty production database because `migration-risk` is M3, an executable Rollback-Command, and a disposition for the seven still-open tasks) and on a release-level independent review bound to `HEAD`. Build and security FAILs are dispositioned in BUILD-LOG (DEP-1 fail-fast without env; heuristic hits on dev/test values only).
 - **Merged to `main` (owner approval 2026-10-08)** and the release manifest re-cut as `RC-2` (T-294), still `BLOCKED` only on owner infrastructure (DNS, Resend, PostgreSQL and both apps in Coolify), `pg_trgm` on the production database and the platform-default credential decision. Release checks rerun on a clean checkout of `0f1b800`: suite 149 files / 1,938 tests, migration upgrade through 0077, lint, production build and tsc all pass. CI's `verify` job was red on `main` because its auth origin disagreed with the suite's; fixed in T-294.
 
 ## Previous — 2026-10-07 (branch `feat/phase14-completion`)
